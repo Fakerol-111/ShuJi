@@ -1,0 +1,21 @@
+# Rust
+shuji-app/src-tauri/target/
+
+# Node
+shuji-app/node_modules/
+shuji-app/dist/
+
+# Python
+.venv/
+
+# Claude
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project test data
+projects/
+test/
+shuji-app/src-tauri/gen/
