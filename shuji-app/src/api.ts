@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Project, ProjectSummary, ChatResponse, ProjectSnapshot } from "./types";
+import type { Project, ProjectSummary, ChatMessage, ProjectSnapshot, DeptLogEntry } from "./types";
 
 export async function createProject(name: string, goal: string, workingDir: string): Promise<Project> {
   return invoke("create_project", { name, goal, workingDir });
@@ -17,10 +17,18 @@ export async function listProjects(): Promise<ProjectSummary[]> {
   return invoke("list_projects");
 }
 
-// Unified chat command — replaces step_workflow + make_decision
-export async function sendMessage(message: string): Promise<ChatResponse> {
+// Send message to engine. Returns immediately (ack string);
+// results come through chat-message events. Old return type preserved
+// for compat — won't be used for state updates anymore.
+export async function sendMessage(message: string): Promise<string> {
   return invoke("send_message", { message });
 }
+
+// Independent discussion with Cabinet — does not affect project state
+export async function discussWithCabinet(message: string): Promise<ChatMessage> {
+  return invoke("discuss_with_cabinet", { message });
+}
+
 
 export async function getSnapshot(): Promise<ProjectSnapshot> {
   return invoke("get_snapshot");
@@ -44,4 +52,27 @@ export async function readLogFile(filename: string): Promise<string[]> {
 
 export async function getRecentDirs(): Promise<string[]> {
   return invoke("get_recent_dirs");
+}
+
+export interface TokenUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  call_count: number;
+}
+
+export async function getTokenStats(): Promise<Record<string, Record<string, TokenUsage>>> {
+  return invoke("get_token_stats");
+}
+
+export async function cancelProcessing(): Promise<void> {
+  return invoke("cancel_processing");
+}
+
+export async function getChatHistory(): Promise<ChatMessage[]> {
+  return invoke("get_chat_history");
+}
+
+export async function getDeptLogs(): Promise<DeptLogEntry[]> {
+  return invoke("get_dept_logs");
 }

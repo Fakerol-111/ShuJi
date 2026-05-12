@@ -12,7 +12,7 @@ impl Message {
         Self {
             role: "user".into(),
             content: content.to_string(),
-            timestamp: chrono::Utc::now().to_rfc3339(),
+            timestamp: chrono::Local::now().to_rfc3339(),
         }
     }
 
@@ -20,7 +20,16 @@ impl Message {
         Self {
             role: "assistant".into(),
             content: content.to_string(),
-            timestamp: chrono::Utc::now().to_rfc3339(),
+            timestamp: chrono::Local::now().to_rfc3339(),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn system(content: &str) -> Self {
+        Self {
+            role: "system".into(),
+            content: content.to_string(),
+            timestamp: chrono::Local::now().to_rfc3339(),
         }
     }
 }

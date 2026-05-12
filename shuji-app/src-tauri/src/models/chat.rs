@@ -1,7 +1,8 @@
+#![allow(dead_code)]
 use serde::{Deserialize, Serialize};
 
 use super::document::Document;
-use crate::orchestrator::engine::ProjectSnapshot;
+use crate::models::project::ProjectSnapshot;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
@@ -32,7 +33,7 @@ impl ChatMessage {
             content: content.to_string(),
             options: vec![],
             documents: vec![],
-            timestamp: chrono::Utc::now().to_rfc3339(),
+            timestamp: chrono::Local::now().to_rfc3339(),
         }
     }
 

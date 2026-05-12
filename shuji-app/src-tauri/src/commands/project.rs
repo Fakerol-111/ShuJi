@@ -1,17 +1,22 @@
-use tauri::State;
+use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use tauri::State;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
+use crate::actor::DeptLogEntry;
+use crate::models::chat::ChatMessage;
 use crate::models::project::{Project, ProjectSummary, OverallStatus};
-use crate::state_machine::states::ProjectState;
 use crate::storage::shuji_dir::ShujiDir;
-use crate::orchestrator::engine::WorkflowEngine;
 
 pub struct AppState {
-    pub engine: Arc<Mutex<WorkflowEngine>>,
     pub current_project: Arc<Mutex<Option<Project>>>,
     pub current_dir: Arc<Mutex<Option<String>>>,
+    pub cancel_flag: Arc<AtomicBool>,
+    pub actor_system: Arc<tokio::sync::Mutex<Option<crate::actor::ActorSystem>>>,
+    pub chat_history: Arc<Mutex<Vec<ChatMessage>>>,
+    pub dept_log_history: Arc<Mutex<Vec<DeptLogEntry>>>,
 }
 
 #[tauri::command]
@@ -27,12 +32,18 @@ pub async fn create_project(
         name,
         goal,
         working_dir: working_dir.clone(),
-        state: ProjectState::GoalReceived,
+        state: "GoalReceived".to_string(),
         overall: OverallStatus::NotStarted,
         phases: vec![],
         phase_count: 3,
-        created_at: chrono::Utc::now().to_rfc3339(),
-        updated_at: chrono::Utc::now().to_rfc3339(),
+        created_at: chrono::Local::now().to_rfc3339(),
+        updated_at: chrono::Local::now().to_rfc3339(),
+        last_neige_msg: String::new(),
+        summary: String::new(),
+        talk: String::new(),
+        task: String::new(),
+        resume: String::new(),
+        summary_prompt: String::new(),
     };
 
     let shuji_dir = ShujiDir::new(&working_dir);
@@ -54,6 +65,8 @@ pub async fn load_project(
     working_dir: String,
 ) -> Result<Project, String> {
     let shuji_dir = ShujiDir::new(&working_dir);
+    let storage_path = Path::new(&working_dir).join(".shuji").join("token_records.json");
+    crate::token_tracker::init(&storage_path);
 
     // Auto-create project if not exists
     let project = match shuji_dir.load_project().await.map_err(|e| e.to_string())? {
@@ -69,25 +82,24 @@ pub async fn load_project(
                 name: dir_name,
                 goal: String::new(),
                 working_dir: working_dir.clone(),
-                state: ProjectState::GoalReceived,
+                state: "GoalReceived".to_string(),
                 overall: OverallStatus::NotStarted,
                 phases: vec![],
                 phase_count: 3,
-                created_at: chrono::Utc::now().to_rfc3339(),
-                updated_at: chrono::Utc::now().to_rfc3339(),
+                created_at: chrono::Local::now().to_rfc3339(),
+                updated_at: chrono::Local::now().to_rfc3339(),
+                last_neige_msg: String::new(),
+                summary: String::new(),
+                talk: String::new(),
+                task: String::new(),
+                resume: String::new(),
+                summary_prompt: String::new(),
             };
             shuji_dir.init().await.map_err(|e| e.to_string())?;
             shuji_dir.save_project(&project).await.map_err(|e| e.to_string())?;
             project
         }
     };
-
-    // Update engine's shuji_dir
-    {
-        let mut engine = state.engine.lock().await;
-        let agents = std::collections::HashMap::new();
-        *engine = WorkflowEngine::new(agents, shuji_dir, 3);
-    }
 
     let mut current = state.current_project.lock().await;
     *current = Some(project.clone());

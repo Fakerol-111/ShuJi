@@ -1,7 +1,8 @@
+#![allow(dead_code)]
 use rand::Rng;
 use crate::models::document::{Document, DocumentType};
 use crate::models::role::Role;
-use crate::agent::r#trait::{Agent, AgentInput, AgentOutput, AgentDecision};
+use crate::agent::r#trait::{Agent, AgentInput, AgentOutput};
 
 /// Mock agent — returns preset content, can randomly reject or inject issues.
 pub struct MockAgent {
@@ -36,45 +37,20 @@ impl Agent for MockAgent {
 
     async fn execute(&self, input: &AgentInput) -> anyhow::Result<AgentOutput> {
         match self.role {
-            Role::Zhongshu => Ok(self.mock_zhongshu(input)),
-            Role::Menxia => Ok(self.mock_mensheng(input)),
+            Role::MenxiaShizhong => Ok(self.mock_mensheng(input)),
             Role::Neige => Ok(self.mock_neige(input)),
-            Role::Shangshu => Ok(self.mock_shangshu(input)),
-            Role::LiBuP => Ok(self.mock_libu_p(input)),
-            Role::Bingbu => Ok(self.mock_bingbu(input)),
-            Role::Gongbu => Ok(self.mock_gongbu(input)),
-            Role::Xingbu => Ok(self.mock_xingbu(input)),
-            Role::LiBuR => Ok(self.mock_libu_r(input)),
-            Role::Hubu => Ok(self.mock_hubu(input)),
+            Role::Shangshuling => Ok(self.mock_shangshu(input)),
+            Role::LiBuShangshu => Ok(self.mock_libu_p(input)),
+            Role::BingbuShangshu => Ok(self.mock_bingbu(input)),
+            Role::GongbuShangshu => Ok(self.mock_gongbu(input)),
+            Role::XingbuShangshu => Ok(self.mock_xingbu(input)),
+            Role::LiBuRShangshu => Ok(self.mock_libu_r(input)),
             Role::Zhisi => Ok(self.mock_zhisi(input)),
+            _ => Ok(AgentOutput::new("(已废弃)".to_string())),
         }
     }
 
-    fn parse_decision(&self, output: &AgentOutput) -> AgentDecision {
-        let content = &output.content;
-        if content.contains("[驳回]") {
-            let count = self.extract_reject_count(content);
-            return AgentDecision::Rejected {
-                reason: content.clone(),
-                count,
-            };
-        }
-        if content.contains("[阻塞]") || content.contains("[需皇帝决策]") {
-            let is_blocking = content.contains("[阻塞]");
-            return AgentDecision::ExecutionIssue {
-                is_blocking,
-                reason: content.clone(),
-            };
-        }
-        if content.contains("[待批]") || content.contains("[奏折]") {
-            if let Some(doc) = output.documents.first() {
-                return AgentDecision::NeedsApproval {
-                    document: doc.clone(),
-                };
-            }
-        }
-        AgentDecision::None
-    }
+    
 }
 
 impl MockAgent {
@@ -131,7 +107,7 @@ impl MockAgent {
 - 阶段三：报表和优化
 
 ---
-*本方案由中书省产出，待门下省审查。*"#,
+<route to="门下省" priority="slow" subject="方案设计完成，请审查" />"#,
             input.task_description
         );
         let doc = Document {
@@ -157,7 +133,8 @@ impl MockAgent {
 3. 未见异常处理方案
 
 ---
-*请中书省修改后重新提交。*"#,
+<route to="内阁" priority="slow" subject="审查驳回通知" />
+<route to="中书省" priority="slow" subject="方案需修改" />"#,
                 input.task_description
             );
             AgentOutput::new(content)
@@ -175,7 +152,7 @@ impl MockAgent {
 - ✅ 阶段规划可执行
 
 ---
-*已通过审查，呈送内阁。*"#,
+<route to="内阁" priority="fast" subject="审查通过，请呈报皇帝" />"#,
                 input.task_description
             );
             let doc = Document {
@@ -189,36 +166,32 @@ impl MockAgent {
     }
 
     fn mock_neige(&self, input: &AgentInput) -> AgentOutput {
-        let content = format!(
-            r#"# 奏折 — 呈皇帝御批
+        // Check if this is a reply (A/B/C) or an initial request
+        let is_decision = input.task_description.contains("A. 同意")
+            || input.task_description.contains("皇帝旨意");
 
-## 事由
-{} 已完成审查，呈请皇帝御批。
+        if is_decision || input.task_description.contains("项目") || input.task_description.contains("系统") || input.task_description.contains("请设计") {
+            // Route to Zhongshu for design
+            let content = format!(
+                r#"收到。现将任务分配给中书省进行方案设计。
 
-## 方案要点
-- 采用 Python + FastAPI + SQLite 技术栈
-- 分为 3 个阶段实施
-- 各阶段模块划分明确
+<route to="中书省" priority="slow" subject="请设计方案" />"#,
+            );
+            AgentOutput::new(content)
+        } else {
+            // General chat — respond directly
+            let content = format!(
+                r#"关于「{}」：
 
-## 门下省意见
-方案已通过审查，准予呈报。
+已收到您的想法。如果这是一个项目需求，我将安排中书省进行方案设计。
+如果只是想讨论，我随时可以陪您聊。
 
 ---
-**皇帝御批选项：**
-- A. 准 — 批准执行
-- B. 准，但 — 批准方向，需微调
-- C. 驳 — 方案不可行，重新设计
-- D. 暂缓 — 方向对但时机不对
-- E. 钦此 — 皇帝另有想法"#,
-            input.task_description
-        );
-        let doc = Document {
-            title: "奏折".to_string(),
-            content: content.clone(),
-            doc_type: DocumentType::Memorial,
-            path: None,
-        };
-        AgentOutput::new(content).with_document(doc)
+<route to="中书省" priority="slow" subject="请设计方案" />"#,
+                input.task_description
+            );
+            AgentOutput::new(content)
+        }
     }
 
     fn mock_shangshu(&self, input: &AgentInput) -> AgentOutput {
@@ -264,7 +237,7 @@ impl MockAgent {
         AgentOutput::new(content).with_document(doc)
     }
 
-    fn mock_bingbu(&self, input: &AgentInput) -> AgentOutput {
+    fn mock_bingbu(&self, _input: &AgentInput) -> AgentOutput {
         // Random chance of finding a blocking issue
         if let Some(is_blocking) = self.random_block() {
             let tag = if is_blocking { "[阻塞]" } else { "[需皇帝决策]" };
@@ -328,20 +301,6 @@ impl MockAgent {
 - ✅ 注释规范：关键逻辑有注释
 
 **结论：** 通过 ✅"#.to_string()
-        )
-    }
-
-    fn mock_hubu(&self, _input: &AgentInput) -> AgentOutput {
-        AgentOutput::new(
-            r#"## 户部执行记录
-
-**已记录日志：**
-- 2026-05-08 11:00 工部 — 编码完成
-- 2026-05-08 11:30 兵部 — 测试通过
-- 2026-05-08 12:00 刑部 — 检查通过
-- 2026-05-08 12:30 礼部 — 检查通过
-
-**归档完成。**"#.to_string()
         )
     }
 

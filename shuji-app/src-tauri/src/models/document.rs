@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,8 +25,8 @@ impl DocumentType {
         match self {
             DocumentType::Design => "设计文档",
             DocumentType::Review => "审查报告",
-            DocumentType::Memorial => "奏折",
-            DocumentType::Edict => "敕令",
+            DocumentType::Memorial => "报告",
+            DocumentType::Edict => "指令",
             DocumentType::Dispatch => "移文",
             DocumentType::Log => "日志",
             DocumentType::TaskBreakdown => "任务清单",

@@ -58,25 +58,24 @@ impl Agent for ApiAgent {
         let response = self.client.send_message(&system_prompt, &messages).await?;
 
         // If this is 门下省, check if the response contains a rejection
-        if self.role == Role::Menxia {
+        if self.role == Role::MenxiaShizhong {
             if response.contains("[驳回]") || response.to_lowercase().contains("不通过") || response.to_lowercase().contains("驳回") {
                 return Ok(AgentOutput::new(response));
             }
         }
 
         // If this is 兵部 or an execution role, check for issues
-        if self.role == Role::Bingbu || self.role == Role::Xingbu {
+        if self.role == Role::BingbuShangshu || self.role == Role::XingbuShangshu {
             if response.contains("[阻塞]") || response.contains("严重问题") || response.contains("无法通过") {
                 return Ok(AgentOutput::new(response));
             }
         }
 
         let doc_type = match self.role {
-            Role::Zhongshu => DocumentType::Design,
-            Role::Menxia => DocumentType::Review,
+            Role::MenxiaShizhong => DocumentType::Review,
             Role::Neige => DocumentType::Memorial,
-            Role::Shangshu => DocumentType::Dispatch,
-            Role::LiBuP => DocumentType::TaskBreakdown,
+            Role::Shangshuling => DocumentType::Dispatch,
+            Role::LiBuShangshu => DocumentType::TaskBreakdown,
             _ => DocumentType::Log,
         };
 
@@ -93,7 +92,7 @@ impl Agent for ApiAgent {
 
     fn parse_decision(&self, output: &AgentOutput) -> AgentDecision {
         let content = &output.content;
-        if self.role == Role::Menxia {
+        if self.role == Role::MenxiaShizhong {
             if content.contains("[驳回]") || content.contains("不通过") || content.contains("驳回") {
                 return AgentDecision::Rejected {
                     reason: content.clone(),
@@ -101,7 +100,7 @@ impl Agent for ApiAgent {
                 };
             }
         }
-        if self.role == Role::Bingbu || self.role == Role::Xingbu {
+        if self.role == Role::BingbuShangshu || self.role == Role::XingbuShangshu {
             if content.contains("[阻塞]") || content.contains("严重问题") || content.contains("无法通过") {
                 let is_blocking = content.contains("[阻塞]") || content.contains("严重问题");
                 return AgentDecision::ExecutionIssue {

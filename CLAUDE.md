@@ -1,125 +1,236 @@
-# ShuJi（署计）
+# 枢机（ShuJi）
 
-> 基于三省六部制的自动化软件开发系统。
+> 基于三省六部制的自动化软件开发系统。Phase 2：Rust + Tauri v2 桌面应用。
 
-## 快速导航
+## Build & Run
 
-项目所有配置、架构定义和行为约束均在 **`claude.json`** 中，以此文件为准。
+```bash
+# Backend (Tauri dev)
+cd shuji-app
+npm install
+npm run tauri dev        # Dev mode with hot-reload
 
-### 核心文件
+# Frontend only (Vite)
+npm run dev              # Browser-only dev
 
-- **[claude.json](./claude.json)** — 系统配置、架构定义、工作流、开发规则、权限设置（唯一配置中心）
-- **[docs/01_philosophy.md](./docs/01_philosophy.md)** — 核心理念、框架设计、完整工作流
-- **[docs/02_agent_roles.md](./docs/02_agent_roles.md)** — 所有 Agent 角色的职责、权力边界、输入输出
-- **[docs/03_process_flow.md](./docs/03_process_flow.md)** — 完整决策流程图（从目标到交付的全路径）
-- **[docs/04_huangming_zuxun.md](./docs/04_huangming_zuxun.md)** — 皇明祖训：门下省审查依据（静态规范 + 动态积累）
-- **[docs/05_logging.md](./docs/05_logging.md)** — 日志规范：统一格式、ID 规则、字段说明
-- **[docs/06_document_specs.md](./docs/06_document_specs.md)** — 传递件规范：敕令、奏折、移文的格式与流转规则
-- **[docs/07_state_machine.md](./docs/07_state_machine.md)** — 项目状态机：所有状态定义与流转规则
+# Build for production
+npm run tauri build
 
-### 架构概览（详见 claude.json）
-
-```
-皇帝（人类）→ 内阁 → 三省六部
-                ↑
-               制司（权限管理）
+# Rust checks
+cd src-tauri
+cargo check              # Fast type-check (preferred)
+cargo build              # Full build
+cargo clippy             # Lint
 ```
 
-- **皇帝** — 人类用户，皇权至上，只管 WHAT/WHY
-- **内阁** — 皇帝的秘书班子，三省与皇帝之间的桥梁
-- **三省** — 中书省（设计）、门下省（审查）、尚书省（执行）
-- **六部** — 吏户礼兵刑工，尚书省下属
-- **制司** — 独立权限管理机构
-- **皇明祖训** — 门下省审查的客观依据
+Set up `.env` in `shuji-app/` or `shuji-app/src-tauri/` before running:
+```
+DEFAULT_API_KEY=sk-xxx
+DEFAULT_API_URL=https://api.deepseek.com/chat/completions
+DEFAULT_MODEL=deepseek-chat
+```
+URL with `anthropic.com` → Anthropic Messages API, otherwise → OpenAI Chat Completions.
 
-### 开发规则
+## Architecture
 
-见 claude.json 中的 `developmentRules` 和 `permission` 字段。
+### Actor Model
 
-### 工作流
+```
+皇帝 → send_message → 内阁(actor) → route_to → 各部门(actor)
+                                                     ├─ 中书令 → 方案设计
+                                                     ├─ 门下侍中/门下给事中 → 审查
+                                                     ├─ 尚书令 → 调度执行
+                                                     │   ├─ 吏部尚书 → 详细设计
+                                                     │   ├─ 兵部尚书 → 测试+契约
+                                                     │   ├─ 工部尚书 → 编码
+                                                     │   ├─ 刑部尚书 → 测试验证
+                                                     │   ├─ 礼部尚书 → 规范检查
+                                                     │   └─ 户部 → 记录归档
+                                                     └─ 制司 → 独立权限
+```
 
-- **正向**: 皇帝目标 → 中书省设计 → 门下省审查 → 内阁报告 → 皇帝批示 → 尚书省执行
-- **反馈**: 执行中发现问题 → 内阁 → 皇帝决策 → 中书省修改（如需要）
+### Message Flow
 
+1. User sends text → `send_message` Tauri command → `ActorSystem` routes to 内阁
+2. 内阁 uses LLM + `<skill>` system to decide workflow → `route_to` other departments
+3. Each department is a `tokio::spawn` actor with an `mpsc::UnboundedReceiver` mailbox
+4. Actors execute tool loops → emit results via `emperor_tx` (→ frontend `chat-message` events)
+5. `dept_log_tx` → frontend `dept-log` events (DeptStatusPanel)
+6. `milestone_tx` → persists project state milestones to `.shuji/state.json`
+
+### Prompt Architecture (内阁 only)
+
+Layered prompt injection, ordered as sent to API:
+
+```
+1. base_prompt (prompt.md)         — role definition, department table, skill reference
+2. skill_prompts (Vec<String>)     — active skill content, injected via Session::new()
+3. history (context_messages)      — talk_history (emperor ↔ cabinet conversation)
+4. user_message                    — current input
+```
+
+- `skill_prompts` are stored in `ActorContext.current_skill` and persist across conversation turns
+- 内阁 switches skills via `<skill>name</skill>` output tag (detected in `neige/mod.rs` loop)
+- Other departments never use skills — they get `skill_prompts: &[]`
+
+### Session / AgentController Split
+
+- **Session** (`api/session.rs`): Pure LLM layer — owns message history, one `step()` = one API round-trip, auto-retries on `finish_reason=length` (halving max_tokens each retry)
+- **AgentController** (`api/control.rs`): Drive loop — calls `session.step()`, executes tools, feeds results back, handles cancel/interrupt/restart, watchdog diagnostics (same-tool repetition, read-without-write, consecutive errors)
+
+## Document-Centric Architecture
+
+Departments communicate via **documents** under `.shuji/`, not via route_to semantics. The `route_to` `subject` is just a document ID — the receiver reads the document to understand what to do.
+
+### Document Types & Directories
+
+| Type | Prefix | Directory | Status Machine |
+|------|--------|-----------|----------------|
+| design | `dsgn` | `.shuji/designs/` | draft → approved → closed |
+| plan | `plan` | `.shuji/designs/` | draft → approved → closed |
+| phase_design | `pdsg` | `.shuji/designs/` | draft → approved → closed |
+| detailed_design | `ddtl` | `.shuji/designs/detail/` | todo → done |
+| review | `revw` | `.shuji/reviews/` | todo → done |
+| task | `task` | `.shuji/tasks/` | todo → done |
+| contract | `ctrt` | `.shuji/contracts/` | todo → done |
+| report | `rprt` | `.shuji/reports/` | todo → done |
+
+### YAML Frontmatter Format
+
+```yaml
 ---
-
-## ShuJi 工作流（MVP 版）
-
-> 当用户（皇帝）提出一个目标后，按照以下流程推进。
-
-### 步骤 0：初始化项目
-
-在 `projects/` 下创建项目文件夹，从 `_template` 复制 `state.json`，填入目标。
-
-### 步骤 1：需求澄清（中书省）
-
-- 以**中书省**的身份分析目标
-- 如果目标模糊 → 出「需求澄清奏折」→ 等待皇帝批复
-- 最多追问 2 轮，仍模糊则出假设版方案
-
-### 步骤 2：整体方案设计（中书省）
-
-- 产出整体方案：架构、模块划分、阶段规划
-- 存入 `designs/overall/`
-- 写入日志 `logs/`
-
-### 步骤 3：方案审查（门下省）
-
-- 切换到**门下省**角色，审查方案
-- 产出审查报告 → 存入 `reviews/`
-- 驳回则退回修改（最多 3 次，超限升级）
-
-### 步骤 4：内阁报告（内阁）
-
-- 切换到**内阁**角色，汇总成奏折
-- 存入 `reports/`，等待皇帝批复
-
-> **等待人间皇帝（用户）批复后**，才能继续。
-
-### 步骤 5：阶段详细设计（中书省）
-
-- 皇帝批复后，出当前阶段的详细设计
-- 接口定义、数据模型、业务规则
-- 经门下省审查 → 内阁报告 → 皇帝批复
-
-### 步骤 6：任务拆解（吏部 → 尚书省）
-
-- 切换到**吏部**角色，拆解任务清单
-- 切换到**尚书省**角色，分配任务
-
-### 步骤 7：执行（兵部 → 工部 → 刑部 → 礼部 → 户部）
-
-- **兵部**：先写测试用例
-- **工部**：编码实现，通过测试
-- **刑部**：检查异常处理和边界
-- **礼部**：检查代码规范
-- **户部**：记录日志
-
-### 步骤 8：交付
-
-- 汇总交付报告
-- 项目状态更新为「已交付」
-
+id: dsgn_003          # auto-assigned via .shuji/_counter
+type: dsgn
+status: draft         # program-validated state machine
+author: 中书令         # mapped from dept name
+timestamp: 2026-05-12T14:30:00
+refs: [1, 3]         # referenced doc IDs (integers, no prefix)
 ---
+content body...
+```
 
-### 角色切换
+### Document Tools
 
-每到一个步骤，明确声明当前身份：
+- **`create_document(type, refs)`** — auto-assigns ID, writes to `.shuji/{dir}/{type}_{id}.md`, returns doc ID
+- **`update_document(id, status?, content?, append?)`** — updates status/content, validates state transitions
 
-> **[中书省]** 正在分析皇帝目标…
-> **[门下省]** 正在审查方案…
-> **[内阁]** 正在准备奏折…
-> **[尚书省]** 正在组织执行…
-> **[吏部]** 正在拆解任务…
-> **[兵部]** 正在编写测试用例…
-> **[工部]** 正在编码实现…
-> **[刑部]** 正在检查异常处理…
-> **[礼部]** 正在检查规范…
-> **[户部]** 正在记录日志…
+## 内阁 Skill System
 
-### 关键规则
+内阁 uses `<skill>name</skill>` to dynamically switch working modes:
 
-- **每一步产出必须存入对应目录**
-- **没有皇帝批复，不能跳到下一步**
-- **发现问题走反馈流程，不能自己悄悄改**
+| Skill | Purpose |
+|-------|---------|
+| `clarify` | Ask emperor questions to understand requirements |
+| `workflow_demo` | Single file, zero deps — route directly to 工部尚书 |
+| `workflow_simple` | Multiple files, straightforward — route to 尚书令 |
+| `workflow_standard` | New business logic — design → review → approval → execution |
+| `workflow_complex` | Multi-stage, multi-module — full pipeline |
+| `discuss` | Free chat mode, no tools |
 
+Skills are loaded via `NeigeAgent::load_skill(name)`, injected into session as `[skill: name]\n{content}` system messages, and accumulate in context (future: context compression).
+
+## Project Structure
+
+```
+shuji-app/
+├── src/                              # Frontend (React + Vite + Tailwind)
+│   ├── pages/
+│   │   ├── WorkspaceSelect.tsx       # Project selection / creation
+│   │   ├── ProjectDashboard.tsx      # Main chat UI + dashboard
+│   │   └── LogsPage.tsx              # Department logs viewer
+│   └── components/
+│       ├── ChatBubble.tsx            # Message bubble with <options>
+│       ├── ChatInput.tsx             # Input box
+│       ├── DeptStatusPanel.tsx        # Real-time department status
+│       └── WorkflowTimeline.tsx      # Progress visualization
+├── assets/defaults/zuxun.md          # Default organizational rules
+└── src-tauri/src/                    # Backend (Rust + Tauri v2)
+    ├── commands/
+    │   ├── project.rs                # create/load/get/list/delete project
+    │   ├── workflow.rs               # send_message → actor system entry
+    │   └── settings.rs               # .env config loader
+    ├── actor/mod.rs                  # Actor system: run_actor, ActorContext, ActorSystem
+    ├── agent/
+    │   ├── trait.rs                  # Agent trait (AgentInput/Output, LoopDecision)
+    │   ├── mock.rs                   # MockAgent for testing
+    │   ├── neige/                    # 内阁 — skill-based workflow dispatcher
+    │   │   ├── mod.rs                # Skill detection loop, inject_skill
+    │   │   ├── prompt.md             # Base prompt (English)
+    │   │   └── skills/               # Skill definitions
+    │   ├── zhongshuling/             # 中书令 — overall design
+    │   ├── menxiashizhong/           # 门下侍中 — design review
+    │   ├── menxiajishizhong/         # 门下给事中 — phase review
+    │   ├── shangshuling/             # 尚书令 — execution dispatch
+    │   ├── libushangshu/             # 吏部尚书 — detailed design
+    │   ├── bingbushangshu/           # 兵部尚书 — tests + contracts
+    │   ├── gongbushangshu/           # 工部尚书 — production code
+    │   ├── xingbushangshu/           # 刑部尚书 — test verification
+    │   ├── liburshangshu/            # 礼部尚书 — standards check
+    │   ├── zhisi/                    # 制司 — independent investigation
+    │   └── hubu/                     # 户部 — logging & archiving
+    ├── api/
+    │   ├── client.rs                 # AnthropicClient (dual-format HTTP)
+    │   ├── session.rs                # LLM session: step(), auto-retry, inject_skill()
+    │   └── control.rs                # AgentController: tool loop, cancel/watchdog
+    ├── tool/
+    │   ├── mod.rs                    # Unified tool dispatch (read/write/edit/delete/rename/append/execute)
+    │   └── documents.rs              # create_document + update_document (YAML frontmatter, ID counter)
+    ├── models/
+    │   ├── role.rs                   # Role enum (13 departments)
+    │   ├── chat.rs                   # ChatMessage + ChatOption / approval_options()
+    │   ├── message.rs                # Message struct
+    │   ├── document.rs               # Document struct (legacy)
+    │   └── project.rs                # Project + phase state enums
+    ├── storage/shuji_dir.rs          # .shuji/ filesystem abstraction
+    ├── logging/logger.rs             # Department-scoped JSONL logging + CONSOLE_LOCK
+    └── token_tracker.rs              # Token usage aggregation + persistence
+```
+
+## Key Technical Decisions
+
+### API Dual-Format
+- URL contains `anthropic.com` → Anthropic Messages API (with `x-api-key` header)
+- Otherwise → OpenAI Chat Completions API (with `Bearer` auth)
+- Same `AnthropicClient` struct, auto-detected per request
+
+### Tool Dispatch
+All agents call `tool::execute_named_tool(name, args, working_dir, dept)` instead of writing their own match blocks. Central dispatch in `tool/mod.rs`. Tools return structured JSON (`ToolOutput { ok, operation, path, message, error_code }`).
+
+### Project State
+- `Project.talk`: Append-only conversation log, auto-trims to ~12 entries (oldest compressed to summary)
+- `Project.task`: Milestones (append-only, never trimmed)
+- `Project.summary`: Compact one-line status (auto-updated via milestone_tx)
+- Persisted to `.shuji/state.json` on every milestone event
+
+### Cancel Mechanism
+- `AtomicBool` flag shared across all actors via `AppState.cancel_flag`
+- Checked at the top of each `AgentController.run()` iteration
+- Sets flag → interrupts current session → saves snapshot → responds to emperor
+
+### Session Limits
+| Setting | Value |
+|---------|-------|
+| write_file agents max_tokens | 2048 |
+| read-only agents max_tokens | 1024 |
+| text-only agents max_tokens | 512 |
+| write_file tool iterations | 60 |
+| read-only tool iterations | 25 |
+| finish_reason=length retries | 5 (halving max_tokens each time) |
+| Consecutive tool errors | 5 → auto-stop |
+| Max plan loop iterations | 6 (工部尚书 only) |
+
+### Edge Cases Handled
+- **Truncated tool calls**: Assistant message is filtered to only include valid `tool_call_id`s before pushing to history (prevents 400 error)
+- **All tool calls broken**: Returns `StepResult::Text` instead of empty `ToolCalls` (prevents infinite loop)
+- **Windows CRLF**: `log_console!` uses `write!` with explicit `\n` instead of `eprintln!` to avoid pipe corruption
+- **Skill loop dedup**: If 内阁 outputs same `<skill>` tag twice, code breaks the loop (prevents infinite skill reload)
+- **Self-routing prevention**: Base prompt explicitly forbids `route_to(to="内阁")`
+
+## Interactive Mode
+
+- 决策 tab: user types → `send_message` → actor system processes → results emitted as `chat-message` events
+- 讨论 tab: user types → `discuss_with_cabinet` → standalone 内阁 LLM call (no project state modification)
+- `<options>` in agent output → rendered as clickable buttons (A/B/C) in ChatBubble
+- Cancel button → sets `cancel_flag` → actors stop at next check point
+- Dashboard sidebar → token usage stats by role (今日/近3天/近7天/汇总)
+- Logs page `/logs` → department-scoped JSONL files in `.shuji/logs/`

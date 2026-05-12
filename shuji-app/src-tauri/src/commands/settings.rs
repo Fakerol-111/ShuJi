@@ -1,48 +1,140 @@
-use tauri::State;
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use std::path::PathBuf;
+#![allow(dead_code)]
+use std::collections::HashMap;
 
-/// Simple JSON config stored next to the app
-fn config_path() -> PathBuf {
-    let mut path = std::env::current_exe()
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .parent()
-        .unwrap_or(std::path::Path::new("."))
-        .to_path_buf();
-    path.push("shuji_config.json");
-    path
+use serde::{Deserialize, Serialize};
+
+fn dotenv_path() -> std::path::PathBuf {
+    std::env::current_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        .join(".env")
 }
 
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
-pub struct AppConfig {
+fn dotenv_path_parent() -> std::path::PathBuf {
+    std::env::current_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .join(".env")
+}
+
+/// Read .env file — supports KEY=VALUE, # comments, skips blanks.
+/// Checks CWD first, then parent directory.
+fn load_dotenv() -> HashMap<String, String> {
+    let paths = [dotenv_path(), dotenv_path_parent()];
+    for path in &paths {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            let mut vars = HashMap::new();
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if trimmed.is_empty() || trimmed.starts_with('#') {
+                    continue;
+                }
+                if let Some(eq) = trimmed.find('=') {
+                    let key = trimmed[..eq].trim().to_string();
+                    let val = trimmed[eq + 1..].trim().to_string();
+                    vars.insert(key, val);
+                }
+            }
+            log_console!("[debug] loaded .env from {} ({} vars)", path.display(), vars.len());
+            return vars;
+        }
+    }
+    log_console!("[debug] no .env found (cwd={})",
+        std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default());
+    HashMap::new()
+}
+
+/// A single role's API endpoint configuration.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RoleEndpoint {
     pub api_key: String,
+    pub api_url: String,
     pub model: String,
 }
 
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            api_key: String::new(),
-            model: "claude-sonnet-4-20250514".into(),
+/// Top-level config loaded entirely from .env.
+/// Each role (including "default") has its own endpoint.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AppConfig {
+    pub roles: HashMap<String, RoleEndpoint>,
+}
+
+impl AppConfig {
+    /// Get config for a specific role, falling back to "default", then a hardcoded default.
+    pub fn for_role(&self, name: &str) -> RoleEndpoint {
+        self.roles.get(name)
+            .cloned()
+            .or_else(|| self.roles.get("default").cloned())
+            .unwrap_or_else(|| RoleEndpoint {
+                api_key: String::new(),
+                api_url: "https://api.anthropic.com/v1/messages".into(),
+                model: "claude-sonnet-4-20250514".into(),
+            })
+    }
+
+    /// Returns true if any role has a non-empty api_key.
+    pub fn has_any_key(&self) -> bool {
+        self.roles.values().any(|r| !r.api_key.is_empty())
+    }
+
+    /// Build AppConfig from parsed .env vars.
+    fn from_dotenv(vars: &HashMap<String, String>) -> Self {
+        let mut roles = HashMap::new();
+
+        // All known roles + default
+        let all_roles = ["default", "menxiashizhong", "menxiajishizhong", "zhongshuling", "neige", "shangshuling",
+                         "libushangshu", "hubu", "liburshangshu", "bingbushangshu", "xingbushangshu", "gongbushangshu", "zhisi"];
+
+        for role in all_roles {
+            let prefix = role.to_uppercase();
+            let key = vars.get(&format!("{}_API_KEY", prefix));
+            let url = vars.get(&format!("{}_API_URL", prefix));
+            let model = vars.get(&format!("{}_MODEL", prefix));
+
+            // Only insert if at least one field is present
+            if key.or(url).or(model).is_some() {
+                roles.insert(role.to_string(), RoleEndpoint {
+                    api_key: key.cloned().unwrap_or_default(),
+                    api_url: url.cloned().unwrap_or_default(),
+                    model: model.cloned().unwrap_or_default(),
+                });
+            }
         }
+
+        Self { roles }
+    }
+
+    /// Serialize back to .env format lines.
+    pub fn to_dotenv_lines(&self) -> Vec<String> {
+        let mut lines = Vec::new();
+        // Sort keys for deterministic output
+        let mut keys: Vec<&String> = self.roles.keys().collect();
+        keys.sort();
+
+        for role in keys {
+            if let Some(ep) = self.roles.get(role) {
+                let prefix = role.to_uppercase();
+                lines.push(format!("# {}", role));
+                lines.push(format!("{}_API_KEY={}", prefix, ep.api_key));
+                lines.push(format!("{}_API_URL={}", prefix, ep.api_url));
+                lines.push(format!("{}_MODEL={}", prefix, ep.model));
+                lines.push(String::new());
+            }
+        }
+        lines
     }
 }
 
-#[tauri::command]
+/// Read config from .env in the working directory (or parent).
 pub async fn get_config() -> Result<AppConfig, String> {
-    let path = config_path();
-    if !tokio::fs::try_exists(&path).await.unwrap_or(false) {
-        return Ok(AppConfig::default());
-    }
-    let data = tokio::fs::read_to_string(&path).await.map_err(|e| e.to_string())?;
-    serde_json::from_str(&data).map_err(|e| e.to_string())
+    let vars = load_dotenv();
+    Ok(AppConfig::from_dotenv(&vars))
 }
 
 #[tauri::command]
 pub async fn save_config(config: AppConfig) -> Result<(), String> {
-    let path = config_path();
-    let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-    tokio::fs::write(&path, &data).await.map_err(|e| e.to_string())?;
+    let path = dotenv_path();
+    let content = config.to_dotenv_lines().join("\n");
+    std::fs::write(&path, &content).map_err(|e| e.to_string())?;
     Ok(())
 }

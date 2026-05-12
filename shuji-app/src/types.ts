@@ -94,3 +94,10 @@ export interface ChatResponse {
   messages: ChatMessage[];
   snapshot: ProjectSnapshot;
 }
+
+// Real-time department status log (from dept-log Tauri event)
+export interface DeptLogEntry {
+  dept: string;
+  action: string;
+  ts: string;
+}
