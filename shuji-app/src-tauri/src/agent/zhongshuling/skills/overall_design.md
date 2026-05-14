@@ -18,19 +18,27 @@ Produce architectural constraints that downstream departments can execute withou
 
 ## Required outputs
 
-Produce exactly two files:
-1. `.shuji/precepts.md`
-2. `.shuji/designs/overall_design.md`
+Produce exactly two documents:
+1. `precepts.md` — via `create_document(type="precepts")`
+2. Design doc — via `create_document(type="dsgn")`
 
-### `.shuji/precepts.md`
-Write 3-8 dynamic rules that are:
+### Precepts (`create_document(type="precepts")`)
+The precepts file is **mandatory**. It defines the unified code style and engineering standards for the entire project. All downstream departments rely on it — 礼部 checks against it, 工部 follows its conventions, and every phase inherits the same rules.
+
+Write 3-8 checkable rules covering:
+- **Architecture constraints** — module boundaries, dependency directions, data flow rules
+- **Code style conventions** — naming conventions, file organization patterns, error handling style, import order, preferred language features. These must apply **consistently across all modules**, not just the current design scope.
+- **Engineering invariants** — anything that must remain true across the task lifecycle
+
+Rules must be:
 - checkable
 - stable across the task
 - phrased as engineering constraints, not slogans
 
 Good examples:
-- "Frontend state must flow through a single store layer; components must not call persistence APIs directly."
-- "All project file mutations must pass through the workspace service; UI components must not write the filesystem directly."
+- "All file mutations must go through the workspace service layer; UI components must not call filesystem APIs directly."
+- "Python: use type hints on all public functions; use `pathlib` instead of `os.path`; prefer dataclasses over plain dicts for structured data."
+- "Error responses must use a consistent `{"error": code, "message": str}` envelope."
 
 Bad examples:
 - "Code should be clean"
@@ -118,8 +126,8 @@ Too coarse:
 
 Write for the next departments:
 - later phase-planning work should be able to split stages without redefining architecture
-- `吏部尚书` should be able to elaborate detailed design without changing the tech stack or boundaries
-- `兵部尚书` and `工部尚书` should be able to infer what kinds of modules and contracts are expected
+- `吏部` should be able to elaborate detailed design without changing the tech stack or boundaries
+- `兵部` and `工部` should be able to infer what kinds of modules and contracts are expected
 
 If downstream readers would still need to guess the system shape, the design is incomplete.
 
@@ -131,8 +139,13 @@ If downstream readers would still need to guess the system shape, the design is 
 
 ## Operational rules
 
-- Max 30 chars natural language per turn, followed immediately by a tool call
-- No verbose analysis, comparison, or long planning text in chat output
+- **CRITICAL: Each `append_document` call must contain 500 characters maximum.**
+- Write documents in small chunks:
+  1. `create_document(type="precepts")` → get ID
+  2. `append_document(id, "Rule 1: ...")` → 500 chars
+  3. `append_document(id, "Rule 2: ...")` → 500 chars
+  4. Repeat until complete
+- Same pattern for design documents: create → append → append → append
 - Read existing design files before rewriting them
 - Write only to `.shuji/designs/` and `.shuji/precepts.md`
 - Do not write implementation details that belong to later departments

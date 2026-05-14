@@ -56,7 +56,7 @@ Depending on the phase, this may include:
 - request/response contracts
 - event payload structures
 
-The contract should be detailed enough for `兵部尚书` to write tests and interface constraints, but should not collapse into raw implementation code.
+The contract should be detailed enough for `兵部` to write tests and interface constraints, but should not collapse into raw implementation code.
 
 5. Produce a task breakdown
 Break the phase into actionable work items that are:
@@ -70,9 +70,9 @@ A good task item states what capability or component must be produced, not vague
 ## Quality bar
 
 A good phase design must satisfy all of the following:
-- `吏部尚书` or equivalent downstream design elaboration can expand it without redefining scope
-- `兵部尚书` can derive contracts/tests from it
-- `工部尚书` can implement against it without architectural guessing
+- `吏部` or equivalent downstream design elaboration can expand it without redefining scope
+- `兵部` can derive contracts/tests from it
+- `工部` can implement against it without architectural guessing
 - scope creep is constrained by explicit in-scope/out-of-scope boundaries
 - dependencies and interfaces are concrete enough to coordinate parallel work
 
@@ -109,13 +109,18 @@ When review feedback arrives:
 
 ## Routing
 
-- Phase design complete -> `route_to(to="门下给事中", subject="{id}: 阶段设计完成，请审查")`
+- Phase design complete -> `route_to(to="门下侍中", subject="{id}: 阶段设计完成，请审查")`
 - Upstream ambiguity blocks design -> `route_to(to="内阁", subject="{id}: 上游约束不清，需澄清")`
 - Revision complete -> route back to `门下给事中`
 
 ## Operational rules
 
-- Max 30 chars natural language per turn, followed immediately by a tool call
+- **CRITICAL: Each `append_document` call must contain 500 characters maximum.**
+- Write phase design in small chunks:
+  1. `create_document(type="pdsg")` → get ID
+  2. `append_document(id, "## Objective\n...")` → 500 chars
+  3. `append_document(id, "## Dependencies\n...")` → 500 chars
+  4. Repeat for each section
 - Strictly follow the overall design and approved phase plan
 - Read from `.shuji/designs/` before writing
 - Write only the current phase design file in `.shuji/designs/`

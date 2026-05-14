@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-use crate::models::document::Document;
 use crate::models::role::Role;
 use crate::models::message::Message;
 use std::path::PathBuf;
@@ -15,12 +14,14 @@ pub struct AgentInput {
     /// and history. Stored as a vec to allow multiple active skills and future
     /// context compression.
     pub skill_prompts: Vec<String>,
+    /// Current skill name from previous turn (内阁 only).
+    /// Used by skill guard to prevent false-positive retries across execution rounds.
+    pub current_skill: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct AgentOutput {
     pub content: String,
-    pub documents: Vec<Document>,
     pub route: Option<crate::api::control::RouteTo>,
     /// Current skill name, used for cross-turn persistence (内阁 only).
     pub skill: Option<String>,
@@ -30,15 +31,9 @@ impl AgentOutput {
     pub fn new(content: String) -> Self {
         Self {
             content,
-            documents: Vec::new(),
             route: None,
             skill: None,
         }
-    }
-
-    pub fn with_document(mut self, doc: Document) -> Self {
-        self.documents.push(doc);
-        self
     }
 
     pub fn with_route(mut self, route: crate::api::control::RouteTo) -> Self {

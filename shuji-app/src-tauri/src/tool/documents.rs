@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use crate::tool::{resolve_scoped_path, ToolOutput};
@@ -89,14 +89,13 @@ fn dept_to_author(dept: &str) -> &'static str {
     match dept {
         "zhongshuling" => "中书令",
         "menxiashizhong" => "门下侍中",
-        "menxiajishizhong" => "门下给事中",
         "neige" => "内阁",
         "shangshuling" => "尚书令",
-        "libushangshu" => "吏部尚书",
-        "bingbushangshu" => "兵部尚书",
-        "gongbushangshu" => "工部尚书",
-        "xingbushangshu" => "刑部尚书",
-        "liburshangshu" => "礼部尚书",
+        "libushangshu" => "吏部",
+        "bingbushangshu" => "兵部",
+        "gongbushangshu" => "工部",
+        "xingbushangshu" => "刑部",
+        "liburshangshu" => "礼部",
         "zhisi" => "制司",
         "hubu" => "户部",
         _ => "未知",
@@ -104,6 +103,8 @@ fn dept_to_author(dept: &str) -> &'static str {
 }
 
 /// Map document type prefix to subdirectory under `.shuji/`.
+/// Returns empty string for root-level files (e.g. precepts).
+/// For reports, returns the reports base dir — dept subfolder is appended separately.
 fn type_to_dir(doc_type: &str) -> &'static str {
     match doc_type {
         "dsgn" | "plan" | "pdsg" => "designs",
@@ -112,8 +113,30 @@ fn type_to_dir(doc_type: &str) -> &'static str {
         "task" => "tasks",
         "ctrt" => "contracts",
         "rprt" => "reports",
+        "precepts" => "",
         _ => "misc",
     }
+}
+
+/// Build the full relative path for a rprt document, scoped to the author department.
+fn rprt_rel_path(dept: &str, doc_id: &str) -> String {
+    format!(".shuji/reports/{}/{}.md", dept, doc_id)
+}
+
+/// Search for a report document across all dept subdirectories.
+fn find_rprt_path(working_dir: &Path, id: &str) -> Option<PathBuf> {
+    let reports_dir = working_dir.join(".shuji/reports");
+    let entries = std::fs::read_dir(&reports_dir).ok()?;
+    for entry in entries.filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if path.is_dir() {
+            let candidate = path.join(format!("{}.md", id));
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
 }
 
 /// Determine initial status for a document type.
@@ -131,7 +154,7 @@ pub fn tool_create_document(working_dir: &Path, args: &serde_json::Value, dept: 
     if doc_type.is_empty() {
         return ToolOutput::error("create_document", "", "empty_type", "文档类型不能为空");
     }
-    let valid_types = ["dsgn", "plan", "pdsg", "ddtl", "task", "ctrt", "rprt", "revw"];
+    let valid_types = ["dsgn", "plan", "pdsg", "ddtl", "task", "ctrt", "rprt", "revw", "precepts"];
     if !valid_types.contains(&doc_type.as_str()) {
         return ToolOutput::error("create_document", "", "invalid_type",
             &format!("无效文档类型: {}，支持的类型: {}", doc_type, valid_types.join(", ")));
@@ -152,8 +175,16 @@ pub fn tool_create_document(working_dir: &Path, args: &serde_json::Value, dept: 
         Err(e) => return ToolOutput::error("create_document", "", "counter_error", &e),
     };
     let doc_id = format!("{}_{}", doc_type, id_num);
-    let dir = type_to_dir(&doc_type);
-    let rel_path = format!(".shuji/{}/{}.md", dir, doc_id);
+    let rel_path = if doc_type == "rprt" {
+        rprt_rel_path(dept, &doc_id)
+    } else {
+        let dir = type_to_dir(&doc_type);
+        if dir.is_empty() {
+            format!(".shuji/{}.md", doc_id)
+        } else {
+            format!(".shuji/{}/{}.md", dir, doc_id)
+        }
+    };
 
     let status = initial_status(&doc_type);
     let author = dept_to_author(dept);
@@ -185,64 +216,137 @@ pub fn tool_create_document(working_dir: &Path, args: &serde_json::Value, dept: 
 
 /// ── update_document ────────────────────────────────────────────────
 
-pub fn tool_update_document(working_dir: &Path, args: &serde_json::Value, _dept: &str) -> String {
+pub fn tool_modify_document(working_dir: &Path, args: &serde_json::Value, _dept: &str) -> String {
     let id = args["id"].as_str().unwrap_or("");
     if id.is_empty() {
-        return ToolOutput::error("update_document", "", "empty_id", "文档 ID 不能为空");
+        return ToolOutput::error("modify_document", "", "empty_id", "文档 ID 不能为空");
     }
 
-    // Parse id to find the file path
     let type_prefix = id.split('_').next().unwrap_or("");
-    let dir = type_to_dir(type_prefix);
-    let rel_path = format!(".shuji/{}/{}.md", dir, id);
-
-    let full = match resolve_scoped_path(working_dir, &rel_path) {
-        Ok(p) => p,
-        Err(e) => return ToolOutput::error("update_document", id, "path_error", &e),
+    let full = if type_prefix == "rprt" {
+        match find_rprt_path(working_dir, id) {
+            Some(p) => p,
+            None => return ToolOutput::error("modify_document", id, "not_found", &format!("文档 {} 不存在", id)),
+        }
+    } else {
+        let dir = type_to_dir(type_prefix);
+        let rel_path = if dir.is_empty() {
+            format!(".shuji/{}.md", id)
+        } else {
+            format!(".shuji/{}/{}.md", dir, id)
+        };
+        match resolve_scoped_path(working_dir, &rel_path) {
+            Ok(p) => p,
+            Err(e) => return ToolOutput::error("modify_document", id, "path_error", &e),
+        }
     };
     if !full.exists() {
-        return ToolOutput::error("update_document", id, "not_found", &format!("文档 {} 不存在", id));
+        return ToolOutput::error("modify_document", id, "not_found", &format!("文档 {} 不存在", id));
     }
 
     let content = match std::fs::read_to_string(&full) {
         Ok(c) => c,
-        Err(e) => return ToolOutput::error("update_document", id, "read_error", &e.to_string()),
+        Err(e) => return ToolOutput::error("modify_document", id, "read_error", &e.to_string()),
     };
 
     let (mut meta, body) = match parse_doc(&content) {
         Ok(m) => m,
-        Err(e) => return ToolOutput::error("update_document", id, "parse_error", &e),
+        Err(e) => return ToolOutput::error("modify_document", id, "parse_error", &e),
     };
 
-    // Apply changes
-    let new_body = if let Some(new_content) = args["content"].as_str() {
-        new_content.to_string()
-    } else if let Some(append) = args["append"].as_str() {
-        if body.is_empty() { append.to_string() } else { format!("{}\n{}", body, append) }
-    } else {
-        body.to_string()
-    };
-
+    // Apply status update (optional)
     if let Some(status) = args["status"].as_str() {
-        // Validate status transition
         let valid = match meta.doc_type.as_str() {
             "dsgn" | "plan" | "pdsg" => matches!(status, "draft" | "approved" | "closed"),
             "ddtl" | "task" | "ctrt" | "rprt" | "revw" => matches!(status, "todo" | "done"),
             _ => true,
         };
         if !valid {
-            return ToolOutput::error("update_document", id, "invalid_status",
+            return ToolOutput::error("modify_document", id, "invalid_status",
                 &format!("类型 {} 不支持状态 {}", meta.doc_type, status));
         }
         meta.status = status.to_string();
     }
 
+    // Apply text replacement (optional)
+    let new_body = if let Some(old_text) = args["old_text"].as_str() {
+        let new_text = args["new_text"].as_str().unwrap_or("");
+        if old_text.is_empty() {
+            return ToolOutput::error("modify_document", id, "empty_old_text", "old_text 不能为空");
+        }
+        if !body.contains(old_text) {
+            return ToolOutput::error("modify_document", id, "not_found",
+                "未在文档正文中找到匹配的文本。请先 read_file 确认内容。");
+        }
+        body.replacen(old_text, new_text, 1)
+    } else {
+        body.to_string()
+    };
+
     meta.timestamp = now_iso();
     let new_content = build_doc(&meta, &new_body);
 
     match std::fs::write(&full, &new_content) {
-        Ok(_) => ToolOutput::success("update_document", id, "更新成功"),
-        Err(e) => ToolOutput::error("update_document", id, "write_error", &e.to_string()),
+        Ok(_) => ToolOutput::success("modify_document", id, "修改成功"),
+        Err(e) => ToolOutput::error("modify_document", id, "write_error", &e.to_string()),
+    }
+}
+
+/// Append content to an existing document's body.
+pub fn tool_append_document(working_dir: &Path, args: &serde_json::Value, _dept: &str) -> String {
+    let id = args["id"].as_str().unwrap_or("");
+    let append_content = args["content"].as_str().unwrap_or("");
+    if id.is_empty() {
+        return ToolOutput::error("append_document", "", "empty_id", "文档 ID 不能为空");
+    }
+    if append_content.is_empty() {
+        return ToolOutput::error("append_document", id, "empty_content", "追加内容不能为空");
+    }
+
+    let type_prefix = id.split('_').next().unwrap_or("");
+    let full = if type_prefix == "rprt" {
+        match find_rprt_path(working_dir, id) {
+            Some(p) => p,
+            None => return ToolOutput::error("append_document", id, "not_found", &format!("文档 {} 不存在", id)),
+        }
+    } else {
+        let dir = type_to_dir(type_prefix);
+        let rel_path = if dir.is_empty() {
+            format!(".shuji/{}.md", id)
+        } else {
+            format!(".shuji/{}/{}.md", dir, id)
+        };
+        match resolve_scoped_path(working_dir, &rel_path) {
+            Ok(p) => p,
+            Err(e) => return ToolOutput::error("append_document", id, "path_error", &e),
+        }
+    };
+    if !full.exists() {
+        return ToolOutput::error("append_document", id, "not_found", &format!("文档 {} 不存在", id));
+    }
+
+    let content = match std::fs::read_to_string(&full) {
+        Ok(c) => c,
+        Err(e) => return ToolOutput::error("append_document", id, "read_error", &e.to_string()),
+    };
+
+    let (mut meta, body) = match parse_doc(&content) {
+        Ok(m) => m,
+        Err(e) => return ToolOutput::error("append_document", id, "parse_error", &e),
+    };
+
+    let new_body = if body.is_empty() {
+        append_content.to_string()
+    } else {
+        format!("{}\n{}", body, append_content)
+    };
+
+    meta.timestamp = now_iso();
+    let new_content = build_doc(&meta, &new_body);
+
+    match std::fs::write(&full, &new_content) {
+        Ok(_) => ToolOutput::success("append_document", id, "追加成功"),
+        Err(e) => ToolOutput::error("append_document", id, "write_error", &e.to_string()),
     }
 }
 
@@ -274,12 +378,12 @@ pub fn create_document_tool_def() -> crate::api::client::ToolDefinition {
     }
 }
 
-pub fn update_document_tool_def() -> crate::api::client::ToolDefinition {
+pub fn modify_document_tool_def() -> crate::api::client::ToolDefinition {
     crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
-            name: "update_document".into(),
-            description: "更新已有文档的状态和/或正文。三个参数都是可选的，只需传需要变更的字段。".into(),
+            name: "modify_document".into(),
+            description: "修改已有文档的正文（find+replace）和/或状态。old_text 必须与文件中完全一致（含空格和缩进）。先用 read_file 确认文件内容，再调用此工具。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -287,17 +391,100 @@ pub fn update_document_tool_def() -> crate::api::client::ToolDefinition {
                         "type": "string",
                         "description": "文档 ID，如 dsgn_003"
                     },
+                    "old_text": {
+                        "type": "string",
+                        "description": "文档正文中现有的文本，必须精确匹配（最多 300 字符）",
+                        "maxLength": 300
+                    },
+                    "new_text": {
+                        "type": "string",
+                        "description": "替换后的新文本（最多 300 字符）",
+                        "maxLength": 300
+                    },
                     "status": {
                         "type": "string",
-                        "description": "新状态。dsgn/plan/pdsg: draft / approved / closed；其他: todo / done"
+                        "description": "可选。新状态。dsgn/plan/pdsg: draft / approved / closed；其他: todo / done"
+                    }
+                },
+                "required": ["id", "old_text", "new_text"]
+            }),
+        },
+    }
+}
+
+pub fn append_document_tool_def() -> crate::api::client::ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "append_document".into(),
+            description: "追加内容到已有文档的正文末尾。CRITICAL: 每次调用的 content 参数必须在 500 字符以内，大文档必须分多次调用写入。".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "文档 ID，如 dsgn_003"
                     },
                     "content": {
                         "type": "string",
-                        "description": "覆盖正文内容"
-                    },
-                    "append": {
+                        "description": "要追加的内容（每次最多 500 字符）",
+                        "maxLength": 500    
+                    }
+                },
+                "required": ["id", "content"]
+            }),
+        },
+    }
+}
+
+/// ── find_document ─────────────────────────────────────────────────
+
+pub fn tool_find_document(working_dir: &Path, args: &serde_json::Value) -> String {
+    let id = args["id"].as_str().unwrap_or("");
+    if id.is_empty() {
+        return ToolOutput::error("find_document", "", "empty_id", "文档 ID 不能为空");
+    }
+
+    let type_prefix = id.split('_').next().unwrap_or("");
+
+    if type_prefix == "rprt" {
+        match find_rprt_path(working_dir, id) {
+            Some(p) => {
+                let rel = p.strip_prefix(working_dir).unwrap_or(&p);
+                ToolOutput::success("find_document", id, &format!("{}", rel.display()))
+            }
+            None => ToolOutput::error("find_document", id, "not_found", &format!("文档 {} 不存在", id)),
+        }
+    } else {
+        let dir = type_to_dir(type_prefix);
+        let rel_path = if dir.is_empty() {
+            format!(".shuji/{}.md", id)
+        } else {
+            format!(".shuji/{}/{}.md", dir, id)
+        };
+        match resolve_scoped_path(working_dir, &rel_path) {
+            Ok(full) if full.exists() => {
+                let rel = full.strip_prefix(working_dir).unwrap_or(&full);
+                ToolOutput::success("find_document", id, &format!("{}", rel.display()))
+            }
+            Ok(_) => ToolOutput::error("find_document", id, "not_found", &format!("文档 {} 不存在", id)),
+            Err(e) => ToolOutput::error("find_document", id, "path_error", &e),
+        }
+    }
+}
+
+pub fn find_document_tool_def() -> crate::api::client::ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "find_document".into(),
+            description: "根据文档ID查找文档的完整路径。使用此工具在不清楚文档位置时定位文档。".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "id": {
                         "type": "string",
-                        "description": "追加到正文末尾"
+                        "description": "文档 ID，如 rprt_32, dsgn_003, task_5"
                     }
                 },
                 "required": ["id"]

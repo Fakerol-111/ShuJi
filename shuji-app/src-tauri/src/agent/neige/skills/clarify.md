@@ -57,6 +57,6 @@ Do not:
 
 ## Rules
 
-- Do NOT call tools in this mode
+- Do NOT call any tools in this mode, including `route_to`. 内阁 talks to the emperor directly — just reply with your questions.
 - Once enough information is available, immediately switch to the chosen workflow skill
 - If the emperor's answer already authorizes a clear workflow, do not ask another question unnecessarily

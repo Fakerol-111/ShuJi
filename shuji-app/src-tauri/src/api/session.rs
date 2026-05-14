@@ -1,6 +1,9 @@
 #![allow(dead_code)]
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
 
 use crate::api::client::AnthropicClient;
 use crate::api::client::ToolDefinition;
@@ -23,10 +26,92 @@ pub enum StepResult {
     ToolCalls(Vec<ToolCallInfo>),
 }
 
+/// Persisted context with 4 separated layers for independent management.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct PersistedContext {
+    /// The base system prompt (prompt.md content).
+    pub base_prompt: String,
+    /// Active skill prompts, each prefixed with `[skill: name]\n`.
+    pub skill_prompts: Vec<String>,
+    /// Compressed summary of early conversation history.
+    pub history_messages: String,
+    /// Recent user/assistant/tool conversation (the last N turns).
+    pub context_messages: Vec<serde_json::Value>,
+}
+
+impl PersistedContext {
+    /// Extract 4 layers from a flat messages array.
+    pub fn from_messages(messages: &[serde_json::Value]) -> Self {
+        let mut base_prompt = String::new();
+        let mut skill_prompts = Vec::new();
+        let mut history_messages = String::new();
+        let mut context_messages = Vec::new();
+
+        for msg in messages {
+            let role = msg["role"].as_str().unwrap_or("");
+            if role == "system" {
+                let content = msg["content"].as_str().unwrap_or("");
+                if base_prompt.is_empty() {
+                    base_prompt = content.to_string();
+                } else if content.starts_with("[skill:") {
+                    skill_prompts.push(content.to_string());
+                } else if content.starts_with("[对话摘要]") {
+                    history_messages = content.to_string();
+                } else {
+                    context_messages.push(msg.clone());
+                }
+            } else {
+                context_messages.push(msg.clone());
+            }
+        }
+
+        Self { base_prompt, skill_prompts, history_messages, context_messages }
+    }
+
+    /// Rebuild flat messages array from the 4 layers.
+    pub fn to_messages(&self) -> Vec<serde_json::Value> {
+        let mut msgs: Vec<serde_json::Value> = Vec::new();
+        msgs.push(serde_json::json!({"role": "system", "content": self.base_prompt}));
+        for sp in &self.skill_prompts {
+            msgs.push(serde_json::json!({"role": "system", "content": sp}));
+        }
+        if !self.history_messages.is_empty() {
+            msgs.push(serde_json::json!({"role": "system", "content": self.history_messages}));
+        }
+        for m in &self.context_messages {
+            msgs.push(m.clone());
+        }
+        msgs
+    }
+
+    /// Save to `.shuji/context/{role}.json`.
+    pub fn save_to(&self, working_dir: &Path, role: &str) {
+        let dir = working_dir.join(".shuji/context");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join(format!("{}.json", role));
+        if let Ok(json) = serde_json::to_string_pretty(&self) {
+            let _ = std::fs::write(&path, json);
+        }
+    }
+
+    /// Load from `.shuji/context/{role}.json`.
+    pub fn load_from(working_dir: &Path, role: &str) -> Option<Self> {
+        let path = working_dir.join(".shuji/context").join(format!("{}.json", role));
+        let data = std::fs::read_to_string(&path).ok()?;
+        serde_json::from_str(&data).ok()
+    }
+}
+
 /// Opaque snapshot of Session internals, used for interrupt/restore.
 #[derive(Clone)]
 pub struct SessionSnapshot {
-    messages: Vec<serde_json::Value>,
+    pub(crate) messages: Vec<serde_json::Value>,
+}
+
+impl SessionSnapshot {
+    pub fn from_messages(messages: Vec<serde_json::Value>) -> Self {
+        Self { messages }
+    }
 }
 
 // ── Session ──────────────────────────────────────────────────
@@ -42,6 +127,11 @@ pub struct Session {
     role: String,
     /// Whether this session has write_file tool (affects retry token floor).
     has_write_file: bool,
+    /// Force tool_choice = "none" when set (e.g. during skill selection).
+    /// Prevents the LLM from calling tools until a mode is selected.
+    tool_choice_none: bool,
+    /// If set, truncated output is written here for debugging.
+    debug_dir: Option<PathBuf>,
 }
 
 impl Session {
@@ -69,9 +159,14 @@ impl Session {
             messages.push(serde_json::json!({"role": "user", "content": "请继续"}));
         }
 
-        let has_write_file = tools.iter().any(|t| t.function.name == "write_file");
+        let has_write_file = tools.iter().any(|t| t.function.name == "create_file");
+        let has_append_document = tools.iter().any(|t| t.function.name == "append_document");
         let max_tokens = if has_write_file {
             2048
+        } else if has_append_document {
+            // 中书令等使用 append_document 的 agent 需要更多 tokens
+            // 因为需要多次调用工具（每次最多 500 chars）
+            1536
         } else if tools.iter().any(|t| t.function.name == "read_file") {
             1024
         } else {
@@ -85,19 +180,22 @@ impl Session {
             tool_type: "function".into(),
             function: crate::api::client::ToolFunction {
                 name: "route_to".into(),
-                description: "路由到其他部门：指定目标部门、消息类型、主题内容。消息类型：task（新任务）、replace（中断当前任务并替换）、interrupt（仅中断）。".into(),
+                description: "向其他部门发送任务或消息。ONLY for cross-department communication — NEVER use this to switch skills or modes. To switch skills, output a <skill>name</skill> tag in your text response instead. 消息类型：task（新任务）、replace（中断当前任务并替换）、interrupt（仅中断）。".into(),
                 parameters: serde_json::json!({
                     "type": "object",
                     "properties": {
                         "to": {
                             "type": "string",
-                            "enum": ["中书令", "门下侍中", "门下给事中", "内阁", "尚书令", "吏部尚书", "工部尚书", "兵部尚书", "刑部尚书", "礼部尚书", "制司"]
+                            "enum": ["中书令", "门下侍中", "内阁", "尚书令", "吏部", "工部", "兵部", "刑部", "礼部", "制司"]
                         },
                         "type": {
                             "type": "string",
                             "enum": ["task", "replace", "interrupt"]
                         },
-                        "subject": { "type": "string" }
+                        "subject": {
+                        "type": "string",
+                        "description": "文档ID（如 task_5, dsgn_003），接收部门会读取该文档理解任务。必须用文档ID，不能写自然语言描述。先 create_document 拿到ID再路由。"
+                    }
                     },
                     "required": ["to", "type", "subject"]
                 }),
@@ -113,7 +211,9 @@ impl Session {
             client: client.clone(),
             max_tokens,
             role: "session".to_string(),
-            has_write_file,
+            has_write_file: has_write_file || has_append_document,
+            tool_choice_none: false,
+            debug_dir: None,
         }
     }
 
@@ -121,6 +221,24 @@ impl Session {
     pub fn with_role(mut self, role: &str) -> Self {
         self.role = role.to_string();
         self
+    }
+
+    /// Override the auto-detected max_tokens value.
+    pub fn with_max_tokens(mut self, tokens: u32) -> Self {
+        self.max_tokens = tokens;
+        self
+    }
+
+    /// Enable truncation debug output to `.shuji/debug/truncated.md`.
+    pub fn with_debug_dir(mut self, dir: PathBuf) -> Self {
+        self.debug_dir = Some(dir);
+        self
+    }
+
+    /// Force tool_choice to "none", preventing the LLM from calling tools.
+    /// Used during skill selection to force text-only responses.
+    pub fn set_tool_choice_none(&mut self, force: bool) {
+        self.tool_choice_none = force;
     }
 
     /// One complete API round-trip.  Builds the request, sends it,
@@ -140,8 +258,22 @@ impl Session {
                 "model": self.model,
                 "max_tokens": self.max_tokens,
                 "messages": self.messages,
+                "temperature": 0.1,
+                "top_p": 0.9,
+                "frequency_penalty": 0.1,
+                "seed": 42,
             });
-            body["tools"] = serde_json::to_value(&self.tools).unwrap_or_default();
+            if self.tool_choice_none {
+                body["tool_choice"] = serde_json::json!("none");
+                if !self.tools.is_empty() {
+                    body["tools"] = serde_json::to_value(&self.tools).unwrap_or_default();
+                    body["parallel_tool_calls"] = serde_json::json!(false);
+                    body["temperature"] = serde_json::json!(0.0);
+                }
+            } else if !self.tools.is_empty() {
+                body["tools"] = serde_json::to_value(&self.tools).unwrap_or_default();
+                body["tool_choice"] = serde_json::json!("auto");
+            }
 
             log_console!("[{}] step: sending {} messages", self.role, self.messages.len());
 
@@ -178,8 +310,28 @@ impl Session {
                 }
             }
 
+            // Log completion content for debugging
+            {
+                let text = msg["content"].as_str().unwrap_or("");
+                let has_tools = msg["tool_calls"].as_array().map_or(false, |a| !a.is_empty());
+                if has_tools {
+                    let tool_names: Vec<&str> = msg["tool_calls"].as_array().unwrap()
+                        .iter().filter_map(|tc| tc["function"]["name"].as_str()).collect();
+                    if text.is_empty() {
+                        log_console!("[{}] → tools: {:?}", self.role, tool_names);
+                    } else {
+                        let preview = Self::preview(text);
+                        log_console!("[{}] → {} | tools: {:?}", self.role, preview, tool_names);
+                    }
+                } else if !text.is_empty() {
+                    log_console!("[{}] → {}", self.role, Self::preview(text));
+                }
+            }
+
             // Handle truncated responses: auto-continue when text was cut off
             if finish_reason == "length" {
+                self.write_debug_truncated(msg, length_retries);
+
                 // First pass: parse tool calls to see which ones have valid JSON
                 let raw_tcs = msg["tool_calls"].as_array();
                 let valid_tool_count = raw_tcs.map(|tcs| {
@@ -196,21 +348,18 @@ impl Session {
 
                 if !has_valid_calls && length_retries < MAX_LENGTH_RETRIES {
                     length_retries += 1;
-                    // 每次折半，写 agent 下限 1024（工具调用需空间），其他下限 256
-                    let floor = if self.has_write_file { 1024 } else { 256 };
-                    self.max_tokens = std::cmp::max(floor, self.max_tokens / 2);
                     log_console!(
-                        "[{}] finish_reason=length (retry {}/{}), max_tokens cut to {}",
-                        self.role, length_retries, MAX_LENGTH_RETRIES, self.max_tokens
+                        "[{}] finish_reason=length (retry {}/{})",
+                        self.role, length_retries, MAX_LENGTH_RETRIES
                     );
                     self.messages.push(serde_json::json!({
                         "role": "assistant",
                         "content": msg["content"].as_str().unwrap_or("")
                     }));
                     let instruction = if length_retries >= 3 {
-                        "上一轮输出再次因长度截断。你现在只剩 256 token 的输出空间。\n必须立即调用一个最小必要工具并输出最简参数。\n禁止任何解释、禁止任何分析、禁止任何计划。"
+                        "上一轮输出再次因长度截断。你现在只剩 256 token 的输出空间。\n必须立即调用一个最小必要工具并输出最简参数（每个参数最多 150 字符）。\n禁止任何解释、禁止任何分析、禁止任何计划。\n如果是 append_document，每次只写 150 字符。"
                     } else {
-                        "上一轮输出因长度截断。不要继续解释，不要继续分析，不要重复计划。\n下一轮必须执行以下之一：\n1. 立即调用一个最小必要工具；\n2. 若无法调用工具，只能用一句话说明下一步要调用哪个工具以及原因。\n禁止输出长文本。"
+                        "上一轮输出因长度截断。不要继续解释，不要继续分析，不要重复计划。\n下一轮必须执行以下之一：\n1. 立即调用一个最小必要工具（每个参数最多 150-200 字符）；\n2. 若无法调用工具，只能用一句话说明下一步要调用哪个工具以及原因。\n禁止输出长文本。如果是 append_document，每次只写 150-200 字符。"
                     };
                     self.messages.push(serde_json::json!({
                         "role": "user",
@@ -348,6 +497,26 @@ impl Session {
         }));
     }
 
+    /// Truncate content for log preview, safe for multi-byte text (e.g. Chinese).
+    fn preview(s: &str) -> String {
+        let char_count = s.chars().count();
+        if char_count <= 80 {
+            return s.to_string();
+        }
+        let lines: Vec<&str> = s.lines().collect();
+        if lines.len() <= 1 {
+            // Single line: show first 30 chars + "..." + last 30 chars
+            let head: String = s.chars().take(30).collect();
+            let tail: String = s.chars().skip(char_count.saturating_sub(30)).collect();
+            format!("{}...{}", head, tail)
+        } else {
+            // Multi-line: show first 20 chars of first line + last 20 chars of last line
+            let first: String = lines[0].chars().take(20).collect();
+            let last: String = lines[lines.len()-1].chars().rev().take(20).collect::<String>().chars().rev().collect();
+            format!("{}...{} ({}行)", first, last, lines.len())
+        }
+    }
+
     /// Send API request, returning the response JSON on success.
     async fn api_request(
         client: &AnthropicClient,
@@ -377,6 +546,60 @@ impl Session {
         }
 
         Ok(resp.json().await?)
+    }
+
+    /// Write truncated output to `.shuji/debug/truncated.md` for debugging.
+    fn write_debug_truncated(&self, msg: &serde_json::Value, retry: u32) {
+        let dir = match self.debug_dir {
+            Some(ref d) => d.clone(),
+            None => return,
+        };
+        let path = dir.join("debug").join("truncated.md");
+        let _ = std::fs::create_dir_all(path.parent().unwrap());
+
+        let sep = "─".repeat(60);
+        let content = msg["content"].as_str().unwrap_or("");
+        let mut lines = vec![
+            sep.clone(),
+            "# Truncated Output".to_string(),
+            format!("Timestamp: {}", chrono::Local::now().format("%Y-%m-%dT%H:%M:%S")),
+            format!("Role: {}", self.role),
+            format!("Model: {}", self.model),
+            format!("Max Tokens: {}", self.max_tokens),
+            format!("Retry: {}/5", retry + 1),
+            String::new(),
+            "## Content".to_string(),
+            if content.is_empty() { "(empty)".to_string() } else { content.to_string() },
+            String::new(),
+        ];
+
+        if let Some(tcs) = msg["tool_calls"].as_array() {
+            if !tcs.is_empty() {
+                lines.push("## Tool Calls".to_string());
+                for (i, tc) in tcs.iter().enumerate() {
+                    let name = tc["function"]["name"].as_str().unwrap_or("?");
+                    let args_raw = tc["function"]["arguments"].as_str().unwrap_or("(non-string)");
+                    lines.push(format!("{}. {} — args ({} chars):", i + 1, name, args_raw.len()));
+                    if args_raw.len() > 500 {
+                        let truncated: String = args_raw.chars().take(500).collect();
+                        lines.push(format!("{}...", truncated));
+                    } else {
+                        lines.push(args_raw.to_string());
+                    }
+                    lines.push(String::new());
+                }
+            }
+        }
+
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .write(true)
+            .open(&path)
+            .and_then(|mut f| {
+                use std::io::Write;
+                writeln!(f, "{}", lines.join("\n"))
+            });
     }
 
     /// Snapshot the current message history (for interrupt/restore).

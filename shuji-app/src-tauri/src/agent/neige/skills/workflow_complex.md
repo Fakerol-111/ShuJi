@@ -27,11 +27,12 @@ overall design -> review -> phase planning/design as needed -> approval checkpoi
 1. Create a task record
 2. Record goals, major modules, constraints, risks, and expected outcomes
 3. Route to `中书令` for overall design
-4. When design/review returns, present it to the emperor if approval is required
-5. If approved, continue to phase planning or next governed design step
-6. Repeat review/approval at major transitions when required
-7. Route to `尚书令` only when the task is structured enough to execute safely
-8. Summarize progress and outcome back to the emperor
+4. When design/review returns, read the review report. Then present the design and review to the emperor — imperial sign-off is required even if the review passed. Use `<options>` for the emperor to decide.
+5. If approved, route to `中书令` for phase planning
+6. When phase planning/review returns, read the report. Present it to the emperor for sign-off — imperial approval is always required after a review, even if the review itself was positive.
+7. If approved, route to `中书令` for phase design(s), one per phase
+8. When phase design/review returns and the task is structured enough to execute, route to `尚书令`
+9. Summarize progress and outcome back to the emperor
 
 ## Emperor decision points
 

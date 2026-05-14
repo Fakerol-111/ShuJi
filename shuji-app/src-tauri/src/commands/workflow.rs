@@ -14,7 +14,6 @@ use crate::agent::gongbushangshu::GongbuShangshuAgent;
 use crate::agent::libushangshu::LibuShangshuAgent;
 use crate::agent::liburshangshu::LibuRShangshuAgent;
 use crate::agent::menxiashizhong::MenxiaShizhongAgent;
-use crate::agent::menxiajishizhong::MenxiaJishizhongAgent;
 use crate::agent::neige::NeigeAgent;
 use crate::agent::shangshuling::ShangshulingAgent;
 use crate::agent::xingbushangshu::XingbuShangshuAgent;
@@ -36,15 +35,6 @@ fn build_agents(config: &AppConfig, cancel: Arc<AtomicBool>) -> HashMap<Role, Bo
         MenxiaShizhongAgent::new(
             AnthropicClient::new(menxiashizhong_ep.api_key, menxiashizhong_ep.api_url),
             &menxiashizhong_ep.model,
-            cancel.clone(),
-        )
-    ));
-
-    let menxiajishizhong_ep = config.for_role("menxiajishizhong");
-    agents.insert(Role::MenxiaJishizhong, Box::new(
-        MenxiaJishizhongAgent::new(
-            AnthropicClient::new(menxiajishizhong_ep.api_key, menxiajishizhong_ep.api_url),
-            &menxiajishizhong_ep.model,
             cancel.clone(),
         )
     ));
@@ -186,8 +176,8 @@ pub async fn send_message(
     {
         let mut sys_lock = state.actor_system.lock().await;
         if sys_lock.is_none() {
-            let (emperor_tx, mut emperor_rx) = mpsc::unbounded_channel();
-            let (dept_log_tx, mut dept_log_rx) = mpsc::unbounded_channel();
+            let (emperor_tx, mut emperor_rx) = mpsc::unbounded_channel::<ChatMessage>();
+            let (dept_log_tx, mut dept_log_rx) = mpsc::unbounded_channel::<DeptLogEntry>();
             let (milestone_tx, mut milestone_rx): (mpsc::UnboundedSender<String>, _) = mpsc::unbounded_channel();
             let app_handle = app.clone();
 
@@ -195,22 +185,46 @@ pub async fn send_message(
             let chat_hist = state.chat_history.clone();
             let dept_log_hist = state.dept_log_history.clone();
 
-            // Forward actor output to frontend + buffer
+            // Persist chat messages to `.shuji/chat.jsonl`
+            let chat_persist_dir = p_working_dir.clone();
+
+            // Forward actor output to frontend + buffer + persist
             tokio::spawn(async move {
                 while let Some(msg) = emperor_rx.recv().await {
                     let _ = app_handle.emit("chat-message", &msg);
                     let mut hist = chat_hist.lock().await;
-                    hist.push(msg);
+                    hist.push(msg.clone());
+                    // Append to persistent chat log
+                    let log_dir = std::path::Path::new(&chat_persist_dir).join(".shuji");
+                    let _ = std::fs::create_dir_all(&log_dir);
+                    let chat_path = log_dir.join("chat.jsonl");
+                    if let Ok(json) = serde_json::to_string(&msg) {
+                        use std::io::Write;
+                        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&chat_path) {
+                            let _ = writeln!(f, "{}", json);
+                        }
+                    }
                 }
             });
 
-            // Forward department logs to frontend + buffer
+            // Forward department logs to frontend + buffer + persist
             let app2 = app.clone();
+            let dept_log_dir = p_working_dir.clone();
             tokio::spawn(async move {
                 while let Some(entry) = dept_log_rx.recv().await {
                     let _ = app2.emit("dept-log", &entry);
                     let mut hist = dept_log_hist.lock().await;
-                    hist.push(entry);
+                    hist.push(entry.clone());
+                    // Persist to .shuji/dept-log.jsonl
+                    let log_dir = std::path::Path::new(&dept_log_dir).join(".shuji");
+                    let _ = std::fs::create_dir_all(&log_dir);
+                    let log_path = log_dir.join("dept-log.jsonl");
+                    if let Ok(json) = serde_json::to_string(&entry) {
+                        use std::io::Write;
+                        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&log_path) {
+                            let _ = writeln!(f, "{}", json);
+                        }
+                    }
                 }
             });
 
@@ -303,6 +317,7 @@ pub async fn discuss_with_cabinet(
         project_dir: std::path::PathBuf::from(&working_dir),
         working_dir: std::path::PathBuf::from(&working_dir),
         skill_prompts: vec![],
+        current_skill: None,
     };
 
     let output = neige.execute(&input).await.map_err(|e| e.to_string())?;

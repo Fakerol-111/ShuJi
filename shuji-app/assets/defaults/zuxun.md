@@ -1,29 +1,29 @@
-# 项目审查标准
+# Project Standards
 
-通用的项目规范，适用于所有项目。
+General project conventions applicable to all projects.
 
-## 一、方案完整性
-- 必须有明确的目标和范围界定
-- 必须列明技术选型及选择理由
-- 必须给出整体架构描述
+## I. Completeness
+- Must have a clear goal and scope definition
+- Must specify technology choices and rationale
+- Must provide an overall architecture description
 
-## 二、可行性
-- 技术路线应有先例可参考，不能凭空臆造
-- 工期估算应留有余地
-- 资源需求应如实列出
+## II. Feasibility
+- Technical approach should have precedents or references — do not fabricate unproven approaches
+- Timeline estimates must include buffer
+- Resource requirements must be listed honestly
 
-## 三、安全要求
-- 用户数据必须加密存储和传输
-- 权限操作必须有校验且不可绕过
-- 外部接口必须有输入校验和异常处理
+## III. Security
+- User data must be encrypted at rest and in transit
+- Privileged operations must have validation that cannot be bypassed
+- External interfaces must have input validation and error handling
 
-## 四、结构清晰
-- 模块划分合理，职责分明
-- 模块间依赖关系明确，不能循环引用
-- 数据流和状态变更可追踪
+## IV. Structure
+- Module boundaries must be well-defined with clear responsibilities
+- Inter-module dependencies must be explicit with no circular references
+- Data flow and state changes must be traceable
 
-## 五、基本规范
-- 前端不能直连数据库，必须通过后端接口
-- 密钥、令牌等敏感信息不能硬编码
-- 数据库必须有索引和迁移策略
-- 日志必须记录关键操作，不能遗漏也不能过度
+## V. Conventions
+- Frontend must not connect directly to databases; always use backend APIs
+- Secrets, tokens, and other sensitive information must not be hardcoded
+- Databases must have indexes and migration strategies
+- Logging must record critical operations — neither missing nor excessive

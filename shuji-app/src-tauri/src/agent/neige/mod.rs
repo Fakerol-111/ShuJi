@@ -3,6 +3,7 @@ use std::sync::atomic::AtomicBool;
 use std::path::Path;
 
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput};
+use crate::agent::util::{extract_skill, strip_skill_tag};
 use crate::api::client::{AnthropicClient, ToolDefinition};
 use crate::models::message::Message;
 use crate::models::role::Role;
@@ -23,7 +24,9 @@ impl NeigeAgent {
             crate::tool::read_file_tool_def("读取项目目录下的设计文档、日志、状态文件等"),
             crate::tool::list_dir_tool_def(),
             crate::tool::documents::create_document_tool_def(),
-            crate::tool::documents::update_document_tool_def(),
+            crate::tool::documents::modify_document_tool_def(),
+            crate::tool::documents::append_document_tool_def(),
+            crate::tool::documents::find_document_tool_def(),
             crate::tool::summarize_logs_tool_def(),
         ]
     }
@@ -84,27 +87,6 @@ impl NeigeAgent {
     }
 }
 
-/// Extract the first `<skill>xxx</skill>` tag from text.
-fn extract_skill(text: &str) -> Option<String> {
-    let start = text.find("<skill>")?;
-    let after = &text[start + 7..];
-    let end = after.find("</skill>")?;
-    if end > 50 {
-        return None;
-    }
-    Some(after[..end].to_string())
-}
-
-/// Remove `<skill>xxx</skill>` tag from text.
-fn strip_skill_tag(mut text: String) -> String {
-    if let Some(start) = text.find("<skill>") {
-        if let Some(end) = text[start..].find("</skill>") {
-            text.replace_range(start..start + end + 8, "");
-        }
-    }
-    text.trim().to_string()
-}
-
 #[async_trait::async_trait]
 impl Agent for NeigeAgent {
     fn role(&self) -> Role { Role::Neige }
@@ -121,53 +103,83 @@ impl Agent for NeigeAgent {
         let mut session = crate::api::session::Session::new(
             system_prompt, &msgs, &self.model, &tools, &client,
             &input.skill_prompts,
-        ).with_role(self.role().name());
+        ).with_role(self.role().name()).with_debug_dir(input.working_dir.clone());
+
+        // Restore saved context from previous invocation, compacting if needed
+        if let Some(mut ctx) = crate::api::session::PersistedContext::load_from(&working_dir, "neige") {
+            log_console!("[内阁] loading context: base={} chars, skills={}, summary={} chars, recent={} msgs",
+                ctx.base_prompt.len(), ctx.skill_prompts.len(), ctx.history_messages.len(), ctx.context_messages.len());
+
+            // Compact iteratively: context first, then history. Persist after each step.
+            loop {
+                let mut changed = false;
+
+                if let Some(result) = crate::api::compact::maybe_compact(
+                    &self.client, &self.model, &ctx.history_messages, &ctx.context_messages,
+                ).await {
+                    ctx.history_messages = result.new_history;
+                    ctx.context_messages = result.kept_context;
+                    ctx.save_to(&working_dir, "neige");
+                    changed = true;
+                }
+
+                if let Some(merged) = crate::api::compact::maybe_compact_history(
+                    &self.client, &self.model, &ctx.history_messages,
+                ).await {
+                    ctx.history_messages = merged;
+                    ctx.save_to(&working_dir, "neige");
+                    changed = true;
+                }
+
+                if !changed { break; }
+            }
+
+            let mut msgs = ctx.to_messages();
+            msgs.push(serde_json::json!({"role": "user", "content": format!("皇帝新指令：{}", input.task_description)}));
+            let snap = crate::api::session::SessionSnapshot::from_messages(msgs);
+            session.restore(&snap);
+        }
+
         let mut controller = crate::api::control::AgentController::new();
         let exec = |name: &str, args: &serde_json::Value| -> String {
             Self::execute_tool(name, args, &working_dir)
         };
 
-        // Run until no more skill switches:
-        // 1st pass: base prompt → LLM picks a skill → inject skill → loop
-        // 2nd pass: skill loaded → LLM acts → may switch to another skill → loop
         let (mut result, mut route);
-        let mut current_skill = String::new();
-        let mut skill_guard_retries: u32 = 0;
+        let mut current_skill = input.current_skill.clone().unwrap_or_default();
         loop {
             (result, route) = controller.run(
                 &mut session, &exec, &self.cancel, &tools,
             ).await?;
 
+            if route.is_some() {
+                break;
+            }
+
             match extract_skill(&result) {
                 Some(skill_name) if !Self::load_skill(&skill_name).is_empty() => {
                     if skill_name == current_skill {
-                        // Already running this skill — ignore redundant tag and proceed
-                        break;
+                        log_console!("[内阁] skill {} already loaded, prompting continue", skill_name);
+                        session.inject(&format!("[系统] 技能 {} 已在当前会话中。请直接继续执行该技能的指令，不要重复输出 <skill> 标签。", skill_name));
+                        continue;
                     }
                     current_skill = skill_name.clone();
-                    skill_guard_retries = 0;
                     log_console!("[内阁] inject skill: {}", skill_name);
                     session.inject_skill(&skill_name, Self::load_skill(&skill_name));
-                    // If entering summary mode, inject project state + previous summary
+                    session.inject(&format!("[系统] 技能 {} 已加载。请立即按照该技能的指令行动，不要再输出 <skill> 标签。", skill_name));
                     if skill_name == "summary" {
                         Self::inject_project_state(&mut session, &working_dir);
                     }
-                    // Discard this round's output (only the skill tag) and re-run
-                    continue;
-                }
-                _ if current_skill.is_empty() => {
-                    skill_guard_retries += 1;
-                    if skill_guard_retries >= 2 {
-                        log_console!("[内阁] skill guard failed twice; returning text fallback");
-                        break;
-                    }
-                    log_console!("[内阁] skill guard: no skill selected before action; forcing retry");
-                    session.inject("[系统约束] 当前尚未选择工作模式。下一条回复必须且只能是一个 `<skill>...</skill>` 标签，用于选择 clarify / workflow_demo / workflow_simple / workflow_standard / workflow_complex / discuss / summary 之一。禁止调用任何工具，禁止解释，禁止写文件，禁止路由。");
                     continue;
                 }
                 _ => break,
             }
         }
+
+        // Persist context for next invocation (compaction already done at load time)
+        let snap = session.snapshot();
+        let ctx = crate::api::session::PersistedContext::from_messages(&snap.messages);
+        ctx.save_to(&working_dir, "neige");
 
         let clean = strip_skill_tag(result);
         let mut output = AgentOutput::new(clean);

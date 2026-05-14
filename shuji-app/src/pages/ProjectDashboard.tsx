@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { listen } from "@tauri-apps/api/event";
-import { getProject, sendMessage, discussWithCabinet, getSnapshot, getTokenStats, getChatHistory } from "../api";
+import { getProject, sendMessage, discussWithCabinet, getTokenStats, getChatHistory } from "../api";
 import type { TokenUsage } from "../api";
-import type { Project, ChatMessage, ProjectSnapshot } from "../types";
-import WorkflowTimeline from "../components/WorkflowTimeline";
+import type { Project, ChatMessage } from "../types";
 import ChatBubble from "../components/ChatBubble";
 import ChatInput from "../components/ChatInput";
 import DeptStatusPanel from "../components/DeptStatusPanel";
@@ -34,11 +33,9 @@ type Tab = "decision" | "discuss";
 export default function ProjectDashboard() {
   const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
-  const [snapshot, setSnapshot] = useState<ProjectSnapshot | null>(null);
 
   const session = loadSession();
   const [messages, setMessages] = useState<ChatMessage[]>(session?.msgs || []);
-  // sending state removed — actor system always available
 
   const [discussMsgs, setDiscussMsgs] = useState<ChatMessage[]>(session?.discuss || [
     { role: "内阁", content: "想讨论什么？我随时可以聊。", options: [], documents: [], timestamp: new Date().toISOString() },
@@ -66,7 +63,6 @@ export default function ProjectDashboard() {
           options: [], documents: [], timestamp: new Date().toISOString(),
         }]);
       }
-      refreshSnapshot();
     }).catch(() => navigate("/"));
   }, []);
 
@@ -79,7 +75,6 @@ export default function ProjectDashboard() {
     getChatHistory().then((hist) => {
       if (hist.length > 0) {
         setMessages((prev) => {
-          // Deduplicate by timestamp + role: only append entries not in current list
           const existing = new Set(prev.map((m) => `${m.timestamp}|${m.role}|${m.content.slice(0, 40)}`));
           const newMsgs = hist.filter((m) => !existing.has(`${m.timestamp}|${m.role}|${m.content.slice(0, 40)}`));
           return newMsgs.length > 0 ? [...prev, ...newMsgs] : prev;
@@ -88,22 +83,13 @@ export default function ProjectDashboard() {
     }).catch(() => {});
   }, []);
 
-  // Listen for real-time chat-message events from the engine (streamed during processing)
+  // Listen for real-time chat-message events (only 内阁 now)
   useEffect(() => {
     const unlisten = listen<ChatMessage>("chat-message", (event) => {
       setMessages((prev) => [...prev, event.payload]);
     });
     return () => { unlisten.then((f) => f()); };
   }, []);
-
-  const refreshSnapshot = async () => {
-    try {
-      const s = await getSnapshot();
-      setSnapshot(s);
-      const p = await getProject();
-      setProject(p);
-    } catch { /* ignore */ }
-  };
 
   const handleSend = async (text: string) => {
     setError("");
@@ -145,7 +131,7 @@ export default function ProjectDashboard() {
     <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
       {/* Header */}
       <header className="bg-white border-b shadow-sm shrink-0">
-        <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
+        <div className="px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h1 className="text-lg font-bold text-gray-900">{project?.name || "枢机"}</h1>
             <span className="text-xs text-gray-400">{project?.working_dir}</span>
@@ -155,23 +141,21 @@ export default function ProjectDashboard() {
             <button onClick={() => navigate("/logs")} className="text-sm px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50">日志</button>
             <button onClick={async () => {
               try {
-                if (!showDashboard) {
-                  setTokenStats(await getTokenStats());
-                }
+                if (!showDashboard) setTokenStats(await getTokenStats());
                 setShowDashboard(!showDashboard);
               } catch { /* ignore */ }
             }} className="text-sm px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50">仪表盘</button>
           </div>
         </div>
 
-        <div className="max-w-6xl mx-auto px-6 flex gap-0">
+        <div className="px-6 flex gap-0">
           <TabButton active={tab === "decision"} onClick={() => setTab("decision")}>决策</TabButton>
           <TabButton active={tab === "discuss"} onClick={() => setTab("discuss")}>讨论</TabButton>
         </div>
       </header>
 
       {error && (
-        <div className="max-w-6xl mx-auto w-full px-6 pt-2 shrink-0">
+        <div className="w-full px-6 pt-2 shrink-0">
           <div className="bg-red-50 border border-red-300 text-red-800 px-4 py-2 rounded-lg text-sm">
             {error}
             <button onClick={() => setError("")} className="ml-2 text-red-500 hover:text-red-700 font-bold">&times;</button>
@@ -179,18 +163,15 @@ export default function ProjectDashboard() {
         </div>
       )}
 
-      {/* Main content — fixed height, internal scroll */}
-      <div className="flex-1 max-w-6xl mx-auto w-full px-6 py-4 grid grid-cols-3 gap-6 min-h-0 overflow-hidden">
-        <div className="flex flex-col gap-3 min-h-0 overflow-hidden">
-          <div className="overflow-y-auto shrink-0">
-            {snapshot && <WorkflowTimeline overallProgress={snapshot.overall_progress} phases={snapshot.phases} />}
-          </div>
-          <div className="flex-1 overflow-y-auto min-h-0">
-            <DeptStatusPanel />
-          </div>
+      {/* Main content — left log panel + right chat */}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        {/* Left: Log panel */}
+        <div className="w-[35%] min-w-[300px] max-w-[450px] border-r bg-gray-50 flex flex-col shrink-0">
+          <DeptStatusPanel />
         </div>
 
-        <div className="col-span-2 bg-white rounded-lg border shadow-sm flex flex-col min-h-0">
+        {/* Right: Chat */}
+        <div className="flex-1 bg-white flex flex-col min-h-0 min-w-0">
           {tab === "decision" ? (
             <>
               <div className="flex-1 overflow-y-auto p-4 space-y-1">
@@ -209,7 +190,6 @@ export default function ProjectDashboard() {
                 ))}
                 {discussing && <div className="flex items-center justify-center gap-3 py-2">
                   <span className="text-xs text-gray-400">内阁思考中...</span>
-                  <span className="text-xs text-gray-400">（讨论不可取消，请等待）</span>
                 </div>}
                 <div ref={chatEndRef} />
               </div>
@@ -230,7 +210,6 @@ export default function ProjectDashboard() {
             </div>
           </div>
           <div className="flex-1 overflow-y-auto p-5">
-            {/* Time window selector */}
             {tokenStats && Object.keys(tokenStats).length > 0 && (
               <div className="flex gap-1 mb-3 flex-wrap">
                 {Object.keys(tokenStats).map((w) => (

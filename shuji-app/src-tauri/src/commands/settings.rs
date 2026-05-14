@@ -82,7 +82,7 @@ impl AppConfig {
         let mut roles = HashMap::new();
 
         // All known roles + default
-        let all_roles = ["default", "menxiashizhong", "menxiajishizhong", "zhongshuling", "neige", "shangshuling",
+        let all_roles = ["default", "menxiashizhong", "zhongshuling", "neige", "shangshuling",
                          "libushangshu", "hubu", "liburshangshu", "bingbushangshu", "xingbushangshu", "gongbushangshu", "zhisi"];
 
         for role in all_roles {

@@ -100,4 +100,5 @@ export interface DeptLogEntry {
   dept: string;
   action: string;
   ts: string;
+  detail?: string;
 }

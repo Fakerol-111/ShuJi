@@ -104,7 +104,39 @@ pub async fn load_project(
     let mut current = state.current_project.lock().await;
     *current = Some(project.clone());
     let mut dir = state.current_dir.lock().await;
-    *dir = Some(working_dir);
+    *dir = Some(working_dir.clone());
+
+    // Restore persisted chat history into buffer
+    {
+        let mut chat_hist = state.chat_history.lock().await;
+        chat_hist.clear();
+        let chat_path = Path::new(&working_dir).join(".shuji").join("chat.jsonl");
+        if chat_path.exists() {
+            if let Ok(data) = std::fs::read_to_string(&chat_path) {
+                for line in data.lines() {
+                    if let Ok(msg) = serde_json::from_str::<ChatMessage>(line) {
+                        chat_hist.push(msg);
+                    }
+                }
+            }
+        }
+    }
+
+    // Restore persisted dept-log history into buffer
+    {
+        let mut dept_hist = state.dept_log_history.lock().await;
+        dept_hist.clear();
+        let dept_path = Path::new(&working_dir).join(".shuji").join("dept-log.jsonl");
+        if dept_path.exists() {
+            if let Ok(data) = std::fs::read_to_string(&dept_path) {
+                for line in data.lines() {
+                    if let Ok(entry) = serde_json::from_str::<DeptLogEntry>(line) {
+                        dept_hist.push(entry);
+                    }
+                }
+            }
+        }
+    }
 
     Ok(project)
 }

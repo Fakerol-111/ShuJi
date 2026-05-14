@@ -31,7 +31,7 @@ impl Agent for ZhisiAgent {
         let mut session = crate::api::session::Session::new(
             system_prompt, &msgs, &self.model, &tools, &client,
             &[],
-        ).with_role(self.role().name());
+        ).with_role(self.role().name()).with_debug_dir(input.working_dir.clone());
         let mut controller = crate::api::control::AgentController::new();
         let exec = |_name: &str, _args: &serde_json::Value| -> String {
             "制司没有可执行的工具".to_string()

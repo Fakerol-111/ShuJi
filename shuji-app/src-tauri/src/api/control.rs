@@ -6,8 +6,9 @@ use crate::api::session::{Session, SessionSnapshot};
 use crate::models::role::Role;
 
 const MAX_CONSECUTIVE_ERRORS: u32 = 5;
-const MAX_TOOL_ITERATIONS_READONLY: usize = 25;
-const MAX_TOOL_ITERATIONS_WRITE_HEAVY: usize = 60;
+const MAX_TOOL_ITERATIONS_READONLY: usize = 80;
+const MAX_TOOL_ITERATIONS_WRITE_HEAVY: usize = 120;
+const MAX_TOOL_ITERATIONS_DOCUMENT_HEAVY: usize = 100;
 const INTERRUPT_RESPONSE: &str = "\n\n[系统] 当前处理已被皇帝中断";
 
 /// Type of a cross-department routing message.
@@ -40,9 +41,21 @@ pub fn role_from_name(s: &str) -> Option<Role> {
 }
 /// Iteration budget: agents with `write_file` get more rounds.
 fn max_iterations_for_tools(tools: &[ToolDefinition]) -> usize {
-    if tools.iter().any(|t| t.function.name == "write_file") {
+    let has_write_file = tools.iter().any(|t| {
+        matches!(t.function.name.as_str(), "create_file" | "modify_file" | "append_file" | "delete_file" | "rename_file")
+    });
+    let has_append_document = tools.iter().any(|t| {
+        matches!(t.function.name.as_str(), "append_document" | "modify_document")
+    });
+    
+    if has_write_file {
+        // 兵部、工部：写代码文件，需要更多次数（每次 300-500 chars）
         MAX_TOOL_ITERATIONS_WRITE_HEAVY
+    } else if has_append_document {
+        // 中书令、吏部、刑部：写文档，需要较多次数（每次最多 500 chars）
+        MAX_TOOL_ITERATIONS_DOCUMENT_HEAVY
     } else {
+        // 礼部等：主要是读取和少量写入
         MAX_TOOL_ITERATIONS_READONLY
     }
 }
@@ -153,6 +166,18 @@ impl AgentController {
                                 },
                                 subject,
                             );
+
+                            // Feed dummy results for route_to and all remaining calls
+                            // in this batch so the assistant message's tool_calls are
+                            // balanced with tool_results — otherwise the next API
+                            // request returns 400.
+                            let route_call_id = tc.id.clone();
+                            session.feed_tool_result(&route_call_id, "route_to", &summary);
+                            for remaining in calls.iter().filter(|c| c.id != route_call_id) {
+                                session.feed_tool_result(&remaining.id, &remaining.name,
+                                    "已取消：本批任务因路由到其他部门而中断");
+                            }
+
                             let route = RouteTo { target, msg_type, subject };
                             return Ok((summary, Some(route)));
                         }
@@ -168,7 +193,7 @@ impl AgentController {
                         let result = tool_exec(&tc.name, &tc.args);
 
                         // ── Write/read tracking ───────────
-                        let is_write = tc.name.contains("write");
+                        let is_write = tc.name.contains("write") || matches!(tc.name.as_str(), "create_file" | "modify_file" | "append_file" | "delete_file" | "rename_file");
                         let is_read = tc.name.contains("read");
                         if is_write {
                             write_count += 1;

@@ -35,7 +35,7 @@ A phase should usually produce one of the following:
 - integration capability
 - hardening/validation/completion work
 
-3. Order by dependency and risk
+4. Order by dependency and risk
 Prefer this ordering principle:
 - foundation before features
 - stable domain before broad UI expansion
@@ -119,7 +119,12 @@ Do not:
 
 ## Operational rules
 
-- Max 30 chars natural language per turn, followed immediately by a tool call
+- **CRITICAL: Each `append_document` call must contain 500 characters maximum.**
+- Write phase plan in small chunks:
+  1. `create_document(type="plan")` → get ID
+  2. `append_document(id, "## Phase 1\nObjective: ...")` → 500 chars
+  3. `append_document(id, "Scope: ...")` → 500 chars
+  4. Repeat for each phase
 - Strictly follow the overall design; do not re-decide locked architecture
 - Read from `.shuji/designs/` before writing
 - Write only `.shuji/designs/phase_plan.md`

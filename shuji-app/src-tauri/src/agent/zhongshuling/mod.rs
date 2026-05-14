@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput};
+use crate::agent::util::{extract_skill, strip_skill_tag};
 use crate::api::client::{AnthropicClient, ToolDefinition};
 use crate::models::message::Message;
 use crate::models::role::Role;
@@ -21,13 +22,11 @@ impl ZhongshulingAgent {
     fn tools() -> Vec<ToolDefinition> {
         vec![
             crate::tool::read_file_tool_def("读取设计文件或祖训"),
-            crate::tool::write_file_tool_def("新建或覆盖写入设计文件"),
-            crate::tool::append_file_tool_def(),
-            crate::tool::delete_file_tool_def(),
-            crate::tool::rename_file_tool_def(),
             crate::tool::list_dir_tool_def(),
             crate::tool::documents::create_document_tool_def(),
-            crate::tool::documents::update_document_tool_def(),
+            crate::tool::documents::modify_document_tool_def(),
+            crate::tool::documents::append_document_tool_def(),
+            crate::tool::documents::find_document_tool_def(),
         ]
     }
 
@@ -43,27 +42,6 @@ impl ZhongshulingAgent {
             _ => "",
         }
     }
-}
-
-/// Extract the first `<skill>xxx</skill>` tag from text.
-fn extract_skill(text: &str) -> Option<String> {
-    let start = text.find("<skill>")?;
-    let after = &text[start + 7..];
-    let end = after.find("</skill>")?;
-    if end > 50 {
-        return None;
-    }
-    Some(after[..end].to_string())
-}
-
-/// Remove `<skill>xxx</skill>` tag from text.
-fn strip_skill_tag(mut text: String) -> String {
-    if let Some(start) = text.find("<skill>") {
-        if let Some(end) = text[start..].find("</skill>") {
-            text.replace_range(start..start + end + 8, "");
-        }
-    }
-    text.trim().to_string()
 }
 
 #[async_trait::async_trait]
@@ -82,7 +60,16 @@ impl Agent for ZhongshulingAgent {
         let mut session = crate::api::session::Session::new(
             system_prompt, &msgs, &self.model, &tools, &client,
             &input.skill_prompts,
-        ).with_role(self.role().name());
+        ).with_role(self.role().name()).with_max_tokens(1024).with_debug_dir(input.working_dir.clone());
+
+        let role_name = self.role().name().to_string();
+        if let Some(ctx) = crate::api::session::PersistedContext::load_from(&working_dir, &role_name) {
+            let mut msgs = ctx.to_messages();
+            msgs.push(serde_json::json!({"role": "user", "content": input.task_description}));
+            let snap = crate::api::session::SessionSnapshot::from_messages(msgs);
+            session.restore(&snap);
+        }
+
         let mut controller = crate::api::control::AgentController::new();
         let exec = |name: &str, args: &serde_json::Value| -> String {
             Self::execute_tool(name, args, &working_dir)
@@ -90,36 +77,35 @@ impl Agent for ZhongshulingAgent {
 
         let (mut result, mut route);
         let mut current_skill = String::new();
-        let mut skill_guard_retries: u32 = 0;
         loop {
             (result, route) = controller.run(
                 &mut session, &exec, &self.cancel, &tools,
             ).await?;
 
+            if route.is_some() {
+                break;
+            }
+
             match extract_skill(&result) {
                 Some(skill_name) if !Self::load_skill(&skill_name).is_empty() => {
                     if skill_name == current_skill {
-                        break;
+                        log_console!("[中书令] skill {} already loaded, prompting continue", skill_name);
+                        session.inject(&format!("[系统] 技能 {} 已在当前会话中。请直接继续执行该技能的指令，不要重复输出 <skill> 标签。", skill_name));
+                        continue;
                     }
                     current_skill = skill_name.clone();
-                    skill_guard_retries = 0;
                     log_console!("[中书令] replace skill: {}", skill_name);
                     session.replace_skill(&skill_name, Self::load_skill(&skill_name));
-                    continue;
-                }
-                _ if current_skill.is_empty() => {
-                    skill_guard_retries += 1;
-                    if skill_guard_retries >= 2 {
-                        log_console!("[中书令] skill guard failed twice; returning text fallback");
-                        break;
-                    }
-                    log_console!("[中书令] skill guard: no design skill selected before action; forcing retry");
-                    session.inject("[系统约束] 当前尚未选择设计模式。下一条回复必须且只能是一个 `<skill>...</skill>` 标签，用于选择 overall_design / phase_plan / phase_design 之一。禁止调用任何工具，禁止解释，禁止写文件，禁止路由。");
+                    session.inject(&format!("[系统] 模式已切换为 {}。请立即按照该模式的指令开始设计工作，不要再输出 <skill> 标签。", skill_name));
                     continue;
                 }
                 _ => break,
             }
         }
+
+        let snap = session.snapshot();
+        let ctx = crate::api::session::PersistedContext::from_messages(&snap.messages);
+        ctx.save_to(&working_dir, self.role().name());
 
         let clean = strip_skill_tag(result);
         let mut output = AgentOutput::new(clean);

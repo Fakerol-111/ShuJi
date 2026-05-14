@@ -20,11 +20,13 @@ impl XingbuShangshuAgent {
 
         fn tools() -> Vec<ToolDefinition> {
             vec![
-                crate::tool::read_file_tool_def("读取测试文件或源码"),
-                crate::tool::write_file_tool_def("将测试结果报告写入 .shuji/reports/xingbu/ 目录"),
-                crate::tool::append_file_tool_def(),
-                crate::tool::execute_command_tool_def("在项目根目录运行测试命令"),
+                crate::tool::read_file_tool_def("读取任务文档、契约、设计文档"),
                 crate::tool::list_dir_tool_def(),
+                crate::tool::documents::create_document_tool_def(),
+                crate::tool::documents::modify_document_tool_def(),
+                crate::tool::documents::append_document_tool_def(),
+                crate::tool::documents::find_document_tool_def(),
+                crate::tool::execute_command_tool_def("运行测试命令：python -m pytest tests/ -v"),
             ]
         }
 
@@ -49,12 +51,26 @@ impl Agent for XingbuShangshuAgent {
         let mut session = crate::api::session::Session::new(
             system_prompt, &msgs, &self.model, &tools, &client,
             &[],
-        ).with_role(self.role().name());
+        ).with_role(self.role().name()).with_max_tokens(1536).with_debug_dir(input.working_dir.clone());
+
+        let role_name = self.role().name().to_string();
+        if let Some(ctx) = crate::api::session::PersistedContext::load_from(&working_dir, &role_name) {
+            let mut msgs = ctx.to_messages();
+            msgs.push(serde_json::json!({"role": "user", "content": input.task_description}));
+            let snap = crate::api::session::SessionSnapshot::from_messages(msgs);
+            session.restore(&snap);
+        }
+
         let mut controller = crate::api::control::AgentController::new();
         let exec = |name: &str, args: &serde_json::Value| -> String {
             Self::execute_tool(name, args, &working_dir)
         };
         let (result, route) = controller.run(&mut session, &exec, &self.cancel, &tools).await?;
+
+        let snap = session.snapshot();
+        let ctx = crate::api::session::PersistedContext::from_messages(&snap.messages);
+        ctx.save_to(&working_dir, &role_name);
+
         let mut output = AgentOutput::new(result);
         output.route = route;
         Ok(output)

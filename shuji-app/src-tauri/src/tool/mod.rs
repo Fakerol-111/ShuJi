@@ -4,6 +4,7 @@ use std::process::{Command, Stdio};
 use serde::Serialize;
 
 pub mod documents;
+mod tool_log;
 
 /// Resolve a project-relative path against root with safety checks.
 ///
@@ -189,7 +190,7 @@ pub fn append_file_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "append_file".into(),
-            description: "追加内容到已存在的文件末尾，大文件分块写入时使用。先用 write_file 写第一部分，再用 append_file 逐块追加。".into(),
+            description: "追加内容到已存在的文件末尾。CRITICAL: 每次调用的 content 参数必须在 500 字符以内，大文件必须分多次调用写入。先用 create_file 写第一部分，再用 append_file 逐块追加。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -199,7 +200,8 @@ pub fn append_file_tool_def() -> crate::api::client::ToolDefinition {
                     },
                     "content": {
                         "type": "string",
-                        "description": "要追加的内容"
+                        "description": "要追加的内容（每次最多 500 字符）",
+                        "maxLength": 500
                     }
                 },
                 "required": ["path", "content"]
@@ -307,80 +309,53 @@ pub fn rename_file_tool_def() -> crate::api::client::ToolDefinition {
     }
 }
 
-// ── edit_file helper ────────────────────────────────────────────
+// ── modify_file helper ─────────────────────────────────────────
 
-/// Edit a file. Two modes:
-/// 1. Line mode (preferred): provide `start_line` + `end_line` (1-indexed, inclusive) + `new_text`.
-///    Replaces lines start_line..=end_line with new_text.
-/// 2. Text mode (legacy): provide `old_text` + `new_text`. Exact string match.
-pub fn tool_edit_file(working_dir: &Path, args: &serde_json::Value) -> String {
+/// Modify an existing file by replacing matching text (find+replace).
+/// Reads the file, finds `old_text`, replaces it with `new_text` (first
+/// occurrence only).  The LLM should use read_file first to locate the
+/// exact text to replace.
+pub fn tool_modify_file(working_dir: &Path, args: &serde_json::Value) -> String {
     let path = args["path"].as_str().unwrap_or("");
     if path.is_empty() {
-        return ToolOutput::error("edit_file", "", "empty_path", "文件路径为空");
+        return ToolOutput::error("modify_file", "", "empty_path", "文件路径为空");
     }
     let full = match resolve_scoped_path(working_dir, path) {
         Ok(p) => p,
-        Err(e) => return ToolOutput::error("edit_file", path, "path_error", &e),
+        Err(e) => return ToolOutput::error("modify_file", path, "path_error", &e),
     };
     if !full.exists() {
-        return ToolOutput::error("edit_file", path, "not_found", "文件不存在");
+        return ToolOutput::error("modify_file", path, "not_found", "文件不存在");
     }
     let content = match std::fs::read_to_string(&full) {
         Ok(c) => c,
-        Err(e) => return ToolOutput::error("edit_file", path, "read_error", &e.to_string()),
+        Err(e) => return ToolOutput::error("modify_file", path, "read_error", &e.to_string()),
     };
 
+    let old_text = args["old_text"].as_str().unwrap_or("");
     let new_text = args["new_text"].as_str().unwrap_or("");
-    let start_line = args["start_line"].as_u64();
-    let end_line = args["end_line"].as_u64();
+    if old_text.is_empty() {
+        return ToolOutput::error("modify_file", path, "empty_old_text", "old_text 不能为空");
+    }
+    if !content.contains(old_text) {
+        return ToolOutput::error("modify_file", path, "not_found",
+            "未在文件中找到匹配的文本。请先用 read_file 确认文件内容，并确保 old_text 与原文件完全一致（包括空格和缩进）。");
+    }
 
-    let (new_content, replaced_info) = if let (Some(sl), Some(el)) = (start_line, end_line) {
-        // ── Line mode ─────────────────────────────
-        if sl == 0 || el == 0 || sl > el {
-            return ToolOutput::error("edit_file", path, "invalid_range",
-                &format!("无效的行范围: {}-{}，行号从 1 开始", sl, el));
-        }
-        let lines: Vec<&str> = content.lines().collect();
-        let total = lines.len();
-        let start = (sl as usize).saturating_sub(1).min(total);
-        let end = (el as usize).min(total);
-        if start >= end {
-            return ToolOutput::error("edit_file", path, "invalid_range",
-                &format!("行范围 {}-{} 超出文件范围（共 {} 行）", sl, el, total));
-        }
-        let removed: Vec<&str> = lines[start..end].to_vec();
-        let mut new_lines: Vec<&str> = lines[..start].to_vec();
-        // Insert new_text as individual lines
-        for line in new_text.split('\n') {
-            new_lines.push(line);
-        }
-        new_lines.extend_from_slice(&lines[end..]);
-        (new_lines.join("\n"), format!("替换行 {}-{}（共 {} 行）", sl, el, removed.len()))
-    } else {
-        // ── Text mode ─────────────────────────────
-        let old_text = args["old_text"].as_str().unwrap_or("");
-        if old_text.is_empty() {
-            return ToolOutput::error("edit_file", path, "empty_old_text", "old_text 和 start_line 不能同时为空");
-        }
-        if !content.contains(old_text) {
-            return ToolOutput::error("edit_file", path, "not_found", "未在文件中找到匹配的文本，请检查 old_text 是否完全一致");
-        }
-        (content.replacen(old_text, new_text, 1), format!("替换文本（{} 字节）", old_text.len()))
-    };
-
+    let new_content = content.replacen(old_text, new_text, 1);
     match std::fs::write(&full, &new_content) {
-        Ok(_) => ToolOutput::success("edit_file", path, &format!("替换成功：{}", replaced_info)),
-        Err(e) => ToolOutput::error("edit_file", path, "write_error", &e.to_string()),
+        Ok(_) => ToolOutput::success("modify_file", path, &format!("替换成功（替换 {} 字节）", old_text.len())),
+        Err(e) => ToolOutput::error("modify_file", path, "write_error", &e.to_string()),
     }
 }
 
-/// Generate a ToolDefinition for edit_file.
-pub fn edit_file_tool_def() -> crate::api::client::ToolDefinition {
+/// Generate a ToolDefinition for modify_file.
+pub fn modify_file_tool_def() -> crate::api::client::ToolDefinition {
     crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
-            name: "edit_file".into(),
-            description: "替换文件中的指定行或文本。先用 read_file（输出带行号）查看文件确认行号，然后调用此工具。两种模式：1) 行模式：start_line+end_line+new_text，替换行范围；2) 文本模式：old_text+new_text，精确匹配替换。行模式优先。".into(),
+            name: "modify_file".into(),
+            description: "修改已存在的文件：找到 old_text 首次出现的位置，替换为 new_text。CRITICAL: old_text 和 new_text 参数必须在 300 字符以内。old_text 必须与文件中完全一致（含空格和缩进）。先用 read_file 确认文件内容，再调用此工具。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -388,23 +363,18 @@ pub fn edit_file_tool_def() -> crate::api::client::ToolDefinition {
                         "type": "string",
                         "description": "文件路径，相对于项目根目录"
                     },
-                    "start_line": {
-                        "type": "integer",
-                        "description": "起始行号（从 1 开始，包含）。与 end_line 一起使用时为行模式"
-                    },
-                    "end_line": {
-                        "type": "integer",
-                        "description": "结束行号（从 1 开始，包含）。与 start_line 一起使用时为行模式"
-                    },
                     "old_text": {
                         "type": "string",
-                        "description": "要被替换的现有文本（文本模式，当未提供 start_line 时使用）"
+                        "description": "文件中现有的文本，必须精确匹配（最多 300 字符）",
+                        "maxLength": 300
                     },
                     "new_text": {
                         "type": "string",
-                        "description": "替换后的新文本"
+                        "description": "替换后的新文本（最多 300 字符）",
+                        "maxLength":300
                     }
-                }
+                },
+                "required": ["path", "old_text", "new_text"]
             }),
         },
     }
@@ -546,42 +516,31 @@ pub fn tool_read_file(working_dir: &Path, args: &serde_json::Value) -> String {
     ToolOutput::read_file("read_file", path, &result)
 }
 
-/// Write a file, auto-creating parent directories.
-/// Reports under `.shuji/reports/` get a timestamp line prepended to their content.
-pub fn tool_write_file(working_dir: &Path, args: &serde_json::Value) -> String {
+/// Create a new file with initial content. Rejects if the file already exists
+/// (use modify_file or delete+create instead).
+pub fn tool_create_file(working_dir: &Path, args: &serde_json::Value) -> String {
     let path = args["path"].as_str().unwrap_or("");
     let content = args["content"].as_str().unwrap_or("");
     if path.is_empty() {
-        return ToolOutput::error("write_file", "", "empty_path", "文件路径为空");
+        return ToolOutput::error("create_file", "", "empty_path", "文件路径为空");
     }
 
-    // Auto-timestamp filename for reports (prevents overwrite, enables history)
-    let final_path = if path.contains("/reports/") || path.contains("\\reports\\") {
-        let parent = std::path::Path::new(path).parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
-        let file = std::path::Path::new(path).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-        let ts = chrono::Local::now().format("%Y-%m-%d_%H-%M").to_string();
-        if parent.is_empty() { format!("{}_{}", ts, file) } else { format!("{}/{}_{}", parent, ts, file) }
-    } else {
-        path.to_string()
+    let full = match resolve_scoped_path(working_dir, path) {
+        Ok(p) => p,
+        Err(e) => return ToolOutput::error("create_file", path, "path_error", &e),
     };
 
-    let full = match resolve_scoped_path(working_dir, &final_path) {
-        Ok(p) => p,
-        Err(e) => return ToolOutput::error("write_file", path, "path_error", &e),
-    };
+    if full.exists() {
+        return ToolOutput::error("create_file", path, "already_exists",
+            "文件已存在，不允许覆盖。请使用 modify_file 修改内容，或先 delete_file 再 create_file。");
+    }
+
     if let Some(parent) = full.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
     match std::fs::write(&full, content) {
-        Ok(_) => {
-            let saved = if final_path != path {
-                format!("（实际保存为 {}）", final_path)
-            } else {
-                String::new()
-            };
-            ToolOutput::success("write_file", path, &format!("写入成功{}", saved))
-        }
-        Err(e) => ToolOutput::error("write_file", path, "write_error", &e.to_string()),
+        Ok(_) => ToolOutput::success("create_file", path, "写入成功"),
+        Err(e) => ToolOutput::error("create_file", path, "write_error", &e.to_string()),
     }
 }
 
@@ -640,12 +599,12 @@ pub fn read_file_tool_def(description: &str) -> crate::api::client::ToolDefiniti
     }
 }
 
-pub fn write_file_tool_def(description: &str) -> crate::api::client::ToolDefinition {
+pub fn create_file_tool_def(description: &str) -> crate::api::client::ToolDefinition {
     crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
-            name: "write_file".into(),
-            description: description.into(),
+            name: "create_file".into(),
+            description: format!("{}。CRITICAL: content 参数必须在 500 字符以内。大文件必须先用 create_file 写入最小内容，再用 append_file 分块追加。", description),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -655,7 +614,8 @@ pub fn write_file_tool_def(description: &str) -> crate::api::client::ToolDefinit
                     },
                     "content": {
                         "type": "string",
-                        "description": "文件内容"
+                        "description": "初始文件内容（最多 500 字符）",
+                        "maxLength": 500
                     }
                 },
                 "required": ["path", "content"]
@@ -777,16 +737,19 @@ pub fn execute_command_tool_def(description: &str) -> crate::api::client::ToolDe
 
 /// Central tool dispatch: all agents call this instead of writing their own match block.
 pub fn execute_named_tool(name: &str, working_dir: &Path, args: &serde_json::Value, dept: &str) -> String {
+    tool_log::log_tool_call(dept, name, args, working_dir);
     match name {
         "read_file" => tool_read_file(working_dir, args),
-        "write_file" => tool_write_file(working_dir, args),
+        "create_file" => tool_create_file(working_dir, args),
         "list_dir" => tool_list_dir(working_dir, args),
         "append_file" => tool_append_file(working_dir, args),
         "delete_file" => tool_delete_file(working_dir, args),
         "rename_file" => tool_rename_file(working_dir, args),
-        "edit_file" => tool_edit_file(working_dir, args),
+        "modify_file" => tool_modify_file(working_dir, args),
         "create_document" => documents::tool_create_document(working_dir, args, dept),
-        "update_document" => documents::tool_update_document(working_dir, args, dept),
+        "modify_document" => documents::tool_modify_document(working_dir, args, dept),
+        "append_document" => documents::tool_append_document(working_dir, args, dept),
+        "find_document" => documents::tool_find_document(working_dir, args),
         "execute_command" => tool_execute_command(working_dir, args, dept),
         "summarize_logs" => tool_summarize_logs(working_dir, args),
         "route" => ToolOutput::success_raw("route",

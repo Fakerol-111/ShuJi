@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
 use crate::agent::r#trait::{Agent, AgentInput};
@@ -15,11 +15,13 @@ use crate::models::chat::ChatMessage;
 use crate::models::role::Role;
 
 /// A real-time department log entry emitted to the frontend status panel.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeptLogEntry {
     pub dept: String,
     pub action: String,
     pub ts: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
 }
 
 impl DeptLogEntry {
@@ -28,6 +30,16 @@ impl DeptLogEntry {
             dept: dept.to_string(),
             action: action.to_string(),
             ts: chrono::Local::now().format("%H:%M:%S").to_string(),
+            detail: None,
+        }
+    }
+
+    pub fn with_detail(dept: &str, action: &str, detail: &str) -> Self {
+        Self {
+            dept: dept.to_string(),
+            action: action.to_string(),
+            ts: chrono::Local::now().format("%H:%M:%S").to_string(),
+            detail: Some(detail.to_string()),
         }
     }
 }
@@ -194,6 +206,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
                     &format!("{} 计划循环超过次数限制（可能是计划无法收敛），请重新路由", role_name)));
                 break 'exec;
             }
+            let current_skill = ctx.current_skill.lock().ok().and_then(|s| s.clone());
             let input = AgentInput {
                 role: ctx.role,
                 task_description: content.clone(),
@@ -201,6 +214,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
                 project_dir: ctx.project_dir.clone(),
                 working_dir: ctx.working_dir.clone(),
                 skill_prompts: skill_prompts.clone(),
+                current_skill,
             };
 
             let step_result = {
@@ -217,7 +231,6 @@ pub async fn run_actor(mut ctx: ActorContext) {
                         break 'exec;
                     }
 
-                    log_dept(&ctx, &role_name, "处理完成");
                     let milestone = format!("{} | {}", role_name, summary);
                     let _ = ctx.milestone_tx.send(milestone);
                     if let Ok(mut shared) = ctx.shared_context.lock() {
@@ -227,8 +240,11 @@ pub async fn run_actor(mut ctx: ActorContext) {
                         if let Ok(mut talk) = ctx.talk_history.lock() {
                             talk.push(format!("内阁: {}", output.content));
                         }
+                        self::emit_to_emperor(&ctx.emperor_tx, ctx.role, &output.content);
+                    } else {
+                        // Non-内阁 output → dept-log only, not chat
+                        log_dept(&ctx, &role_name, &format!("→ {}", output.content));
                     }
-                    self::emit_to_emperor(&ctx.emperor_tx, ctx.role, &output.content);
 
                     // Persist current skill for next turn (内阁 only)
                     if let Some(skill_name) = &output.skill {
@@ -236,6 +252,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
                             *s = Some(skill_name.clone());
                         }
                     }
+
 
                     // If summary mode, save output to summary_prompt in state.json
                     if output.skill.as_deref() == Some("summary") {
@@ -269,6 +286,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
                                 "执行计划已输出".to_string()
                             };
                             let _ = ctx.dept_log_tx.send(DeptLogEntry::new(&role_name, &plan_action));
+                            let _ = ctx.dept_log_tx.send(DeptLogEntry::with_detail(&role_name, "计划", &ctx_msg));
                             let _ = ctx.milestone_tx.send(format!("{} | {}", role_name, plan_action));
                             context_msgs.push(crate::models::message::Message::user(&ctx_msg));
                             continue 'exec;
@@ -281,8 +299,10 @@ pub async fn run_actor(mut ctx: ActorContext) {
                 Err(e) => {
                     let err_msg = format!("执行错误: {}", e);
                     ctx.logger.log_agent(ctx.role, &err_msg).await;
-                    log_dept(&ctx, &role_name, &err_msg);
-                    let _ = ctx.emperor_tx.send(ChatMessage::new("系统", &format!("{} {}", role_name, err_msg)));
+                    log_dept(&ctx, &role_name, &format!("❌ {}", err_msg));
+                    if ctx.role == Role::Neige {
+                        let _ = ctx.emperor_tx.send(ChatMessage::new("系统", &err_msg));
+                    }
                     break 'exec;
                 }
             }
@@ -302,7 +322,7 @@ async fn forward_route(ctx: &ActorContext, route: RouteTo) {
     };
 
     let target_name = route.target.name();
-    log_dept(ctx, ctx.role.name(), &format!("路由到{}: {}", target_name, subject));
+    log_dept(ctx, ctx.role.name(), &format!("→ {}", subject));
 
     // Log routing event to activity log
     ctx.logger.log_route(ctx.role.name(), &target_name, &subject).await;

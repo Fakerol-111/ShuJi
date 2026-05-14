@@ -21,15 +21,31 @@ cd src-tauri
 cargo check              # Fast type-check (preferred)
 cargo build              # Full build
 cargo clippy             # Lint
+
+# Frontend type-check
+npm run build            # tsc + vite build
 ```
 
-Set up `.env` in `shuji-app/` or `shuji-app/src-tauri/` before running:
+Set up `.env` in `shuji-app/` or `shuji-app/src-tauri/` before running (copy from `.env.template`):
 ```
 DEFAULT_API_KEY=sk-xxx
 DEFAULT_API_URL=https://api.deepseek.com/chat/completions
 DEFAULT_MODEL=deepseek-chat
 ```
 URL with `anthropic.com` → Anthropic Messages API, otherwise → OpenAI Chat Completions.
+
+Per-role keys override `DEFAULT_API_KEY`:
+```
+NEIGE_API_KEY=sk-xxx
+ZHONGSHULING_API_KEY=sk-xxx
+MENXIASHIZHONG_API_KEY=sk-xxx
+SHANGSHULING_API_KEY=sk-xxx
+LIBUSHANGSHU_API_KEY=sk-xxx
+BINGBUSHANGSHU_API_KEY=sk-xxx
+GONGBUSHANGSHU_API_KEY=sk-xxx
+XINGBUSHANGSHU_API_KEY=sk-xxx
+LIBURSHANGSHU_API_KEY=sk-xxx
+```
 
 ## Architecture
 
@@ -58,7 +74,7 @@ URL with `anthropic.com` → Anthropic Messages API, otherwise → OpenAI Chat C
 5. `dept_log_tx` → frontend `dept-log` events (DeptStatusPanel)
 6. `milestone_tx` → persists project state milestones to `.shuji/state.json`
 
-### Prompt Architecture (内阁 only)
+### Prompt Architecture
 
 Layered prompt injection, ordered as sent to API:
 
@@ -69,9 +85,9 @@ Layered prompt injection, ordered as sent to API:
 4. user_message                    — current input
 ```
 
-- `skill_prompts` are stored in `ActorContext.current_skill` and persist across conversation turns
-- 内阁 switches skills via `<skill>name</skill>` output tag (detected in `neige/mod.rs` loop)
-- Other departments never use skills — they get `skill_prompts: &[]`
+- **内阁**: `skill_prompts` injected from `ActorContext.current_skill` (persists across turns). Switches via `<skill>name</skill>` output tag detected in `neige/mod.rs` loop.
+- **中书令**: Self-managed skills — detects `<skill>` tag in its own `mod.rs` loop, calls `session.replace_skill()` directly (not via `ActorContext`). Has its own skill set: `overall_design`, `phase_plan`, `phase_design`.
+- Other departments get `skill_prompts: &[]` — no skill system.
 
 ### Session / AgentController Split
 
@@ -126,6 +142,7 @@ content body...
 | `workflow_standard` | New business logic — design → review → approval → execution |
 | `workflow_complex` | Multi-stage, multi-module — full pipeline |
 | `discuss` | Free chat mode, no tools |
+| `summary` | Summarize work done, produce completion report |
 
 Skills are loaded via `NeigeAgent::load_skill(name)`, injected into session as `[skill: name]\n{content}` system messages, and accumulate in context (future: context compression).
 
@@ -152,22 +169,20 @@ shuji-app/
     ├── actor/mod.rs                  # Actor system: run_actor, ActorContext, ActorSystem
     ├── agent/
     │   ├── trait.rs                  # Agent trait (AgentInput/Output, LoopDecision)
-    │   ├── mock.rs                   # MockAgent for testing
+    │   ├── util.rs                   # Shared helpers (extract_tag, etc.)
     │   ├── neige/                    # 内阁 — skill-based workflow dispatcher
     │   │   ├── mod.rs                # Skill detection loop, inject_skill
     │   │   ├── prompt.md             # Base prompt (English)
-    │   │   └── skills/               # Skill definitions
-    │   ├── zhongshuling/             # 中书令 — overall design
-    │   ├── menxiashizhong/           # 门下侍中 — design review
-    │   ├── menxiajishizhong/         # 门下给事中 — phase review
+    │   │   └── skills/               # Skill definitions (7 skills)
+    │   ├── zhongshuling/             # 中书令 — design (3 skills: overall_design, phase_plan, phase_design)
+    │   ├── menxiashizhong/           # 门下侍中 — design review (merged: was 侍中 + 给事中)
     │   ├── shangshuling/             # 尚书令 — execution dispatch
     │   ├── libushangshu/             # 吏部尚书 — detailed design
     │   ├── bingbushangshu/           # 兵部尚书 — tests + contracts
     │   ├── gongbushangshu/           # 工部尚书 — production code
     │   ├── xingbushangshu/           # 刑部尚书 — test verification
     │   ├── liburshangshu/            # 礼部尚书 — standards check
-    │   ├── zhisi/                    # 制司 — independent investigation
-    │   └── hubu/                     # 户部 — logging & archiving
+    │   └── zhisi/                    # 制司 — independent investigation
     ├── api/
     │   ├── client.rs                 # AnthropicClient (dual-format HTTP)
     │   ├── session.rs                # LLM session: step(), auto-retry, inject_skill()
@@ -208,16 +223,25 @@ All agents call `tool::execute_named_tool(name, args, working_dir, dept)` instea
 - Sets flag → interrupts current session → saves snapshot → responds to emperor
 
 ### Session Limits
-| Setting | Value |
-|---------|-------|
-| write_file agents max_tokens | 2048 |
-| read-only agents max_tokens | 1024 |
-| text-only agents max_tokens | 512 |
-| write_file tool iterations | 60 |
-| read-only tool iterations | 25 |
-| finish_reason=length retries | 5 (halving max_tokens each time) |
-| Consecutive tool errors | 5 → auto-stop |
-| Max plan loop iterations | 6 (工部尚书 only) |
+| Setting | Value | Agent |
+|---------|-------|-------|
+| write_file agents max_tokens | 2048 | 兵部、工部 |
+| append_document agents max_tokens | 1536 | 中书令、吏部、刑部 |
+| read-only agents max_tokens | 1024 | 礼部 |
+| text-only agents max_tokens | 512 | (未使用) |
+| **Tool iterations** | | |
+| write_file tool iterations | 120 | 兵部、工部 |
+| append_document tool iterations | 100 | 中书令、吏部、刑部 |
+| read-only tool iterations | 80 | 礼部 |
+| finish_reason=length retries | 5 (halving max_tokens each time) | 所有 |
+| Consecutive tool errors | 5 → auto-stop | 所有 |
+| Max plan loop iterations | 6 (工部尚书 only) | 工部 |
+| **Tool argument limits** | | |
+| append_document content | 500 chars per call | 中书令、吏部、刑部 |
+| modify_document text | 400 chars per parameter | 中书令、吏部 |
+| create_file content | 500 chars per call | 兵部、工部 |
+| append_file content | 500 chars per call | 兵部、工部 |
+| modify_file text | 500 chars per parameter | 兵部、工部 |
 
 ### Edge Cases Handled
 - **Truncated tool calls**: Assistant message is filtered to only include valid `tool_call_id`s before pushing to history (prevents 400 error)
@@ -234,3 +258,7 @@ All agents call `tool::execute_named_tool(name, args, working_dir, dept)` instea
 - Cancel button → sets `cancel_flag` → actors stop at next check point
 - Dashboard sidebar → token usage stats by role (今日/近3天/近7天/汇总)
 - Logs page `/logs` → department-scoped JSONL files in `.shuji/logs/`
+
+## Project Status
+
+PoC / prototype phase. Core actor system + collaboration flow works end-to-end with the frontend. No automated test suite yet — all verification is manual. When adding tests, prefer integration tests that exercise full agent loops rather than unit tests on individual modules.

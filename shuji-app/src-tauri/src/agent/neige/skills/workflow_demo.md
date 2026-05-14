@@ -17,13 +17,13 @@ Use this mode when most of the following are true:
 
 ## Workflow intent
 
-This is a controlled fast path, not a free-form shortcut. Keep a lightweight task record, then route directly to `工部尚书`.
+This is a controlled fast path, not a free-form shortcut. Keep a lightweight task record, then route to `尚书令` for dispatch.
 
 ## Steps
 
 1. Create a task document
 2. Record the emperor's request and scope
-3. Route directly to `工部尚书`
+3. Route to `尚书令` for execution dispatch
 4. When a result returns, summarize it to the emperor
 
 ## Task record guidance
@@ -36,7 +36,7 @@ Capture only what execution needs:
 
 ## Routing policy
 
-- Implementation start -> `route_to(to="工部尚书", subject="{id}")`
+- Implementation start -> `route_to(to="尚书令", subject="{id}")`
 - Do not introduce design review unless new information shows the task was misclassified
 
 ## Reclassification rule

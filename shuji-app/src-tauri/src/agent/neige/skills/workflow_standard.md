@@ -24,7 +24,7 @@ design -> review -> imperial approval if needed -> execution
 1. Create a task record
 2. Record the emperor's goal, scope, constraints, and success criteria
 3. Route to `中书令` for design
-4. When design/review results return, read them and present them to the emperor if a decision is needed
+4. When design/review results return, read the review report. Then present the design and review to the emperor — imperial sign-off is required even if the review passed. Use `<options>` for the emperor to decide.
 5. After approval or clear authorization, route to `尚书令`
 6. When execution completes, summarize the outcome
 
