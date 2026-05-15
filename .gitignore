@@ -31,3 +31,9 @@ Thumbs.db
 projects/
 test/
 shuji-app/src-tauri/gen/
+
+# Agent-generated working documents
+.shuji/
+
+# Design docs (local only)
+docs/
