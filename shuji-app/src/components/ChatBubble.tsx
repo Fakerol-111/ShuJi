@@ -8,22 +8,32 @@ export default function ChatBubble({ msg, onOption }: { msg: ChatMessage; onOpti
 
   return (
     <div className={`flex ${isEmperor ? "justify-end" : "justify-start"} mb-3`}>
-      <div className={`max-w-[80%] ${isEmperor ? "order-1" : "order-1"}`}>
-        <div className={`text-xs mb-0.5 ${isEmperor ? "text-right text-gray-400" : "text-gray-500"}`}>
-          {isEmperor ? "皇帝" : msg.role}
+      <div className={`max-w-[80%]`}>
+        <div className={`text-[10px] mb-1 tracking-wide ${isEmperor ? "text-right text-ink-500" : "text-ink-400"}`}>
+          {isEmperor ? "陛下" : msg.role}
         </div>
         <div
           className={`rounded-xl px-4 py-2.5 text-sm leading-relaxed ${
             isEmperor
-              ? "bg-blue-600 text-white rounded-tr-sm"
-              : "bg-gray-100 text-gray-800 rounded-tl-sm"
+              ? "bg-ink-900 text-ink-50 rounded-tr-sm"
+              : "bg-white border border-ink-200 text-ink-800 rounded-tl-sm"
           }`}
         >
           {isEmperor ? (
             <p className="whitespace-pre-wrap">{msg.content}</p>
           ) : (
-            <div className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-a:text-blue-600 prose-code:bg-gray-200 prose-code:px-1 prose-code:rounded prose-pre:bg-gray-800 prose-pre:text-gray-100">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <div className="prose prose-sm max-w-none prose-headings:text-ink-900 prose-a:text-vermillion">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  a: ({ href, children }) => (
+                    <a href={href} target="_blank" rel="noopener noreferrer"
+                       onClick={(e) => { e.preventDefault(); if (href) window.open(href, "_blank"); }}>
+                      {children}
+                    </a>
+                  ),
+                }}
+              >
                 {msg.content}
               </ReactMarkdown>
             </div>
@@ -44,11 +54,11 @@ function OptionGroup({ options, onOption }: { options: ChatOption[]; onOption: (
   if (selectedKey) {
     const opt = options.find((o) => o.key === selectedKey)!;
     return (
-      <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
-        <p className="text-xs font-bold text-blue-800 mb-1">{opt.key}. {opt.label}</p>
-        <p className="text-xs text-blue-600 mb-2">{opt.description}</p>
+      <div className="mt-2 bg-ink-100 border border-ink-200 rounded-lg p-3">
+        <p className="text-xs font-bold text-ink-800 mb-1">{opt.key}. {opt.label}</p>
+        <p className="text-xs text-ink-600 mb-2">{opt.description}</p>
         <textarea
-          className="w-full border border-blue-300 rounded px-3 py-2 text-sm resize-none"
+          className="w-full border border-ink-300 rounded px-3 py-2 text-sm resize-none bg-white text-ink-900 focus:outline-none focus:border-vermillion"
           rows={3}
           placeholder="在此补充御批..."
           value={supplement}
@@ -57,13 +67,13 @@ function OptionGroup({ options, onOption }: { options: ChatOption[]; onOption: (
         <div className="flex gap-2 mt-2">
           <button
             onClick={() => onOption(selectedKey, supplement)}
-            className="bg-blue-600 text-white text-xs font-bold px-4 py-1.5 rounded-lg hover:bg-blue-700"
+            className="bg-vermillion text-white text-xs font-bold px-4 py-1.5 rounded-lg hover:bg-vermillion-dark transition-colors"
           >
-            确认提交
+            确认
           </button>
           <button
             onClick={() => { setSelectedKey(null); setSupplement(""); }}
-            className="text-xs text-gray-500 px-3 py-1.5 hover:text-gray-700"
+            className="text-xs text-ink-500 px-3 py-1.5 hover:text-ink-700"
           >
             取消
           </button>
@@ -84,7 +94,12 @@ function OptionGroup({ options, onOption }: { options: ChatOption[]; onOption: (
               onOption(opt.key);
             }
           }}
-          className={`${BTN_COLORS[opt.key] || "bg-gray-600 hover:bg-gray-700"} text-white text-xs font-bold px-3 py-1.5 rounded-lg transition`}
+          className={`text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${
+            opt.key === "A" ? "bg-jade hover:bg-jade/80" :
+            opt.key === "B" ? "bg-vermillion hover:bg-vermillion-dark" :
+            opt.key === "C" ? "bg-ink-700 hover:bg-ink-800" :
+            `bg-ink-600 hover:bg-ink-700`
+          }`}
           title={opt.description}
         >
           {opt.key}. {opt.label}
@@ -93,11 +108,3 @@ function OptionGroup({ options, onOption }: { options: ChatOption[]; onOption: (
     </div>
   );
 }
-
-const BTN_COLORS: Record<string, string> = {
-  A: "bg-green-600 hover:bg-green-700",
-  B: "bg-blue-600 hover:bg-blue-700",
-  C: "bg-red-600 hover:bg-red-700",
-  D: "bg-yellow-600 hover:bg-yellow-700",
-  E: "bg-purple-600 hover:bg-purple-700",
-};

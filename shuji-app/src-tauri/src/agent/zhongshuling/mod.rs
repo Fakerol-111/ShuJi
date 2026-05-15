@@ -20,14 +20,9 @@ impl ZhongshulingAgent {
     }
 
     fn tools() -> Vec<ToolDefinition> {
-        vec![
-            crate::tool::read_file_tool_def("读取设计文件或祖训"),
-            crate::tool::list_dir_tool_def(),
-            crate::tool::documents::create_document_tool_def(),
-            crate::tool::documents::modify_document_tool_def(),
-            crate::tool::documents::append_document_tool_def(),
-            crate::tool::documents::find_document_tool_def(),
-        ]
+        let mut tools = crate::tool::registry::inspect_tools();
+        tools.extend(crate::tool::registry::document_tools());
+        tools
     }
 
     fn execute_tool(name: &str, args: &serde_json::Value, working_dir: &Path) -> String {
@@ -79,7 +74,7 @@ impl Agent for ZhongshulingAgent {
         let mut current_skill = String::new();
         loop {
             (result, route) = controller.run(
-                &mut session, &exec, &self.cancel, &tools,
+                &mut session, &exec, &self.cancel, &tools, None,
             ).await?;
 
             if route.is_some() {

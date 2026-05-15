@@ -29,7 +29,7 @@ export default function ChatInput({ onSend, disabled, placeholder }: Props) {
   };
 
   return (
-    <div className="flex gap-2 border-t bg-white px-4 py-3">
+    <div className="flex gap-2 border-t border-ink-200 bg-white px-4 py-3">
       <input
         ref={inputRef}
         type="text"
@@ -38,12 +38,12 @@ export default function ChatInput({ onSend, disabled, placeholder }: Props) {
         onKeyDown={handleKeyDown}
         placeholder={placeholder || "输入消息..."}
         disabled={disabled}
-        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+        className="flex-1 px-3 py-2 border border-ink-200 bg-ink-50 rounded-lg text-sm text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-vermillion focus:ring-1 focus:ring-vermillion/30 disabled:opacity-50"
       />
       <button
         onClick={handleSend}
         disabled={disabled || !text.trim()}
-        className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 text-sm font-medium"
+        className="px-5 py-2 bg-ink-900 text-ink-50 rounded-lg hover:bg-ink-800 disabled:opacity-40 text-sm font-medium transition-colors"
       >
         发送
       </button>

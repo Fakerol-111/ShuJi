@@ -19,14 +19,9 @@ impl LibuShangshuAgent {
     }
 
         fn tools() -> Vec<ToolDefinition> {
-            vec![
-                crate::tool::read_file_tool_def("读取阶段设计、接口契约"),
-                crate::tool::documents::create_document_tool_def(),
-                crate::tool::documents::modify_document_tool_def(),
-                crate::tool::documents::append_document_tool_def(),
-                crate::tool::list_dir_tool_def(),
-                crate::tool::documents::find_document_tool_def(),
-            ]
+            let mut tools = crate::tool::registry::inspect_tools();
+            tools.extend(crate::tool::registry::document_tools());
+            tools
         }
 
         fn execute_tool(name: &str, args: &serde_json::Value, working_dir: &Path) -> String {
@@ -64,7 +59,7 @@ impl Agent for LibuShangshuAgent {
         let exec = |name: &str, args: &serde_json::Value| -> String {
             Self::execute_tool(name, args, &working_dir)
         };
-        let (result, route) = controller.run(&mut session, &exec, &self.cancel, &tools).await?;
+        let (result, route) = controller.run(&mut session, &exec, &self.cancel, &tools, None).await?;
 
         let snap = session.snapshot();
         let ctx = crate::api::session::PersistedContext::from_messages(&snap.messages);

@@ -36,7 +36,7 @@ impl Agent for ZhisiAgent {
         let exec = |_name: &str, _args: &serde_json::Value| -> String {
             "制司没有可执行的工具".to_string()
         };
-        let (result, route) = controller.run(&mut session, &exec, &std::sync::atomic::AtomicBool::new(false), &tools).await?;
+        let (result, route) = controller.run(&mut session, &exec, &std::sync::atomic::AtomicBool::new(false), &tools, None).await?;
         let mut output = AgentOutput::new(result);
         output.route = route;
         Ok(output)

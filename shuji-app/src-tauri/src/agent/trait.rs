@@ -56,8 +56,13 @@ pub trait Agent: Send + Sync {
     async fn execute(&self, input: &AgentInput) -> anyhow::Result<AgentOutput>;
 
     /// Called after each execute() round. Default: stop the loop.
-    /// Agents like 工部尚书 can override to continue with plan tracking.
     fn after_execute(&self, _output: &AgentOutput) -> LoopDecision {
         LoopDecision::Done
     }
+
+    /// Reset per-agent plan state (e.g. when a new task arrives).
+    fn reset_plan(&self) {}
+
+    /// Return plan display JSON for the frontend progress card.
+    fn plan_display(&self) -> String { "null".to_string() }
 }

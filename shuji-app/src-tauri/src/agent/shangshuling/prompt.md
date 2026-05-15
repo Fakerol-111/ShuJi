@@ -22,15 +22,19 @@ The standard execution order runs low-cost checks first, expensive validation la
 2. `兵部` → interface contract only (defines signatures, types, behaviors)
 3. `工部` → test code + production code (TDD: tests first, then implementation)
 4. `礼部` → standards check + test coverage audit (reads code, no execution)
-5. `刑部` → test execution (final gate: runs tests, pastes raw output — NO analysis)
+5. `刑部` → unit test execution (runs tests, pastes raw output — NO analysis)
+6. `兵部` → integration test contract (cross-module interaction scenarios)
+7. `工部` → integration test code (writes integration tests per contract)
+8. `刑部` → integration test execution (final gate)
 
-Each step must pass before the next step begins.
+Each step must pass before the next step begins. Steps 6-8 only run when the project has multiple modules that interact.
 
 # Re-check after fixes
 
 When a department reports a failure and a fix is made, you MUST re-validate from the department that found the failure — NOT skip to the next step:
 
-- **刑部 reports test failures** → read the raw test output in the report. **Signature mismatch / wrong types** → route to `兵部` (contract error) → after fix, re-run from `工部` then `礼部` then `刑部`. **Implementation bug / missing function** → route to `工部` → after fix, re-run from `礼部` then `刑部`.
+- **刑部 reports unit test failures** → read the raw test output. **Signature mismatch / wrong types** → route to `兵部` (contract error) → after fix, re-run from `工部` then `礼部` then `刑部`. **Implementation bug / missing function** → route to `工部` → after fix, re-run from `礼部` then `刑部`.
+- **刑部 reports integration test failures** → read the raw test output. **Cross-module contract error** → route to `兵部` (contract error). **Implementation bug** → route to `工部`. After fix, re-run from `刑部` (integration tests).
 - **礼部 reports standards violations** → route to `工部` → after fix, re-run from `礼部`, then `刑部`.
 - **礼部 reports test coverage gaps** → route to `工部` (missing tests) → after fix, re-run from `礼部`, then `刑部`.
 - When a department reports success → proceed to the next department in the chain.
@@ -47,7 +51,7 @@ Core rule: after any re-work, re-check at the step that discovered the problem, 
 6. Decide next step based on report content:
    - **Success** → move to next department in the chain
    - **Failures** → route to the responsible department for fixes. After the fix, re-check from the department that found the failure — then re-run all downstream steps
-7. When 刑部 passes (final gate), create a `rprt` document and route to 内阁
+7. After unit tests pass: if the project has multiple interacting modules, proceed to integration test (steps 6-8). Otherwise, the unit test gate is the final gate. When the final gate passes, create a `rprt` document and route to 内阁.
 
 ## Task documents
 
@@ -79,7 +83,7 @@ Use `create_document(type="rprt")` to summarize execution status. Include:
 | `read_file` | Read task documents, design files, reports | `.shuji/tasks/`, `.shuji/designs/`, `.shuji/reports/`, `.shuji/contracts/` |
 | `list_dir` | Browse `.shuji/` directory structure | No restriction |
 | `create_document` | Create task or report documents | System-managed (type="task" → `.shuji/tasks/`, type="rprt" → `.shuji/reports/`) |
-| `modify_document` | Update document status or content (find+replace) | System-managed |
+| `modify_document` | Modify document content (find+replace) | System-managed |
 | `append_document` | Add content to an existing document | System-managed |
 | `find_document` | Find a document's path by its ID. Use when you receive a report/task ID and need to read it. | Returns relative path |
 
@@ -92,7 +96,6 @@ Use `create_document(type="rprt")` to summarize execution status. Include:
 
 ## Important notes
 
-- You create and manage document status via `modify_document` for task lifecycle tracking.
 - Task documents are created via `create_document(type="task")`, not via file tools.
 - Read the document in the route subject first before deciding next steps.
 - Prefer creating separate task docs over long routing messages.

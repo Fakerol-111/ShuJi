@@ -1,12 +1,10 @@
-/// Synchronized console logging macro.
-/// Holds CONSOLE_LOCK to prevent interleaved output from concurrent actors.
-/// Uses write! with explicit \n to avoid Windows CRLF pipe corruption.
+/// Console logging via a dedicated writer task.
+/// Sends formatted lines through an mpsc channel; a single background
+/// task drains and writes to stderr sequentially, preventing interleaving.
 #[macro_export]
 macro_rules! log_console {
     ($($arg:tt)*) => {{
-        let _lock = $crate::logging::logger::CONSOLE_LOCK.lock().unwrap();
-        use std::io::Write;
-        let _ = write!(std::io::stderr(), "{}\n", format!($($arg)*));
+        $crate::logging::logger::console_send(format!($($arg)*));
     }};
 }
 

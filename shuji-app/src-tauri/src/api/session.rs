@@ -174,35 +174,8 @@ impl Session {
         };
 
         // Inject the cross-department route_to tool for every agent.
-        // The control layer (AgentController) intercepts it and converts
-        // to a structured ActorMessage — never passed to tool_exec.
-        let route_to_def = crate::api::client::ToolDefinition {
-            tool_type: "function".into(),
-            function: crate::api::client::ToolFunction {
-                name: "route_to".into(),
-                description: "向其他部门发送任务或消息。ONLY for cross-department communication — NEVER use this to switch skills or modes. To switch skills, output a <skill>name</skill> tag in your text response instead. 消息类型：task（新任务）、replace（中断当前任务并替换）、interrupt（仅中断）。".into(),
-                parameters: serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "to": {
-                            "type": "string",
-                            "enum": ["中书令", "门下侍中", "内阁", "尚书令", "吏部", "工部", "兵部", "刑部", "礼部", "制司"]
-                        },
-                        "type": {
-                            "type": "string",
-                            "enum": ["task", "replace", "interrupt"]
-                        },
-                        "subject": {
-                        "type": "string",
-                        "description": "文档ID（如 task_5, dsgn_003），接收部门会读取该文档理解任务。必须用文档ID，不能写自然语言描述。先 create_document 拿到ID再路由。"
-                    }
-                    },
-                    "required": ["to", "type", "subject"]
-                }),
-            },
-        };
         let mut all_tools = tools.to_vec();
-        all_tools.push(route_to_def);
+        all_tools.push(crate::tool::registry::route_tool());
 
         Self {
             messages,

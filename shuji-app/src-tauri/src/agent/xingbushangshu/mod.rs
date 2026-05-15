@@ -19,15 +19,10 @@ impl XingbuShangshuAgent {
     }
 
         fn tools() -> Vec<ToolDefinition> {
-            vec![
-                crate::tool::read_file_tool_def("读取任务文档、契约、设计文档"),
-                crate::tool::list_dir_tool_def(),
-                crate::tool::documents::create_document_tool_def(),
-                crate::tool::documents::modify_document_tool_def(),
-                crate::tool::documents::append_document_tool_def(),
-                crate::tool::documents::find_document_tool_def(),
-                crate::tool::execute_command_tool_def("运行测试命令：python -m pytest tests/ -v"),
-            ]
+            let mut tools = crate::tool::registry::inspect_tools();
+            tools.extend(crate::tool::registry::document_tools());
+            tools.extend(crate::tool::registry::execute_command_tool());
+            tools
         }
 
         fn execute_tool(name: &str, args: &serde_json::Value, working_dir: &Path) -> String {
@@ -65,7 +60,7 @@ impl Agent for XingbuShangshuAgent {
         let exec = |name: &str, args: &serde_json::Value| -> String {
             Self::execute_tool(name, args, &working_dir)
         };
-        let (result, route) = controller.run(&mut session, &exec, &self.cancel, &tools).await?;
+        let (result, route) = controller.run(&mut session, &exec, &self.cancel, &tools, None).await?;
 
         let snap = session.snapshot();
         let ctx = crate::api::session::PersistedContext::from_messages(&snap.messages);

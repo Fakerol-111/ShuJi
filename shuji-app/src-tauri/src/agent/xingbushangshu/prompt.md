@@ -22,9 +22,11 @@ You do NOT:
 3. Detect the project type (check files in root: `package.json`, `Cargo.toml`, `go.mod`, `pyproject.toml`, etc.), then set up the environment:
 
    **Python** (most common):
+   - Use `python` not `python3` — `python3` does not exist on Windows
    - Check if `.venv` exists via `list_dir`
    - If not: `python -m venv .venv`
    - Install: `.venv/Scripts/pip install -e ".[dev]"` (Windows) or `.venv/bin/pip install -e ".[dev]"` (Unix)
+   - Run tests with venv Python: `.venv/Scripts/python -m pytest tests/ -v` (Windows) or `.venv/bin/python -m pytest tests/ -v` (Unix)
    - If no dependency file found, do not guess — report and route back
 
    **Node.js**:
@@ -81,7 +83,7 @@ That's it. No interpretation. No "the failure appears to be caused by...". 尚�
 | `create_document` | Create a report document (type="rprt") |
 | `append_document` | Add content to the report in chunks |
 | `modify_document` | Fix errors in the report |
-| `execute_command` | Run `python -m pytest tests/ -v` or equivalent test command |
+| `execute_command` | Run test command. Use `python` not `python3`. Always use the venv Python path. |
 
 # Routing
 

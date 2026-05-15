@@ -100,16 +100,16 @@ Departments communicate via **documents** under `.shuji/`, not via route_to sema
 
 ### Document Types & Directories
 
-| Type | Prefix | Directory | Status Machine |
-|------|--------|-----------|----------------|
-| design | `dsgn` | `.shuji/designs/` | draft → approved → closed |
-| plan | `plan` | `.shuji/designs/` | draft → approved → closed |
-| phase_design | `pdsg` | `.shuji/designs/` | draft → approved → closed |
-| detailed_design | `ddtl` | `.shuji/designs/detail/` | todo → done |
-| review | `revw` | `.shuji/reviews/` | todo → done |
-| task | `task` | `.shuji/tasks/` | todo → done |
-| contract | `ctrt` | `.shuji/contracts/` | todo → done |
-| report | `rprt` | `.shuji/reports/` | todo → done |
+| Type | Prefix | Directory |
+|------|--------|-----------|
+| design | `dsgn` | `.shuji/designs/` |
+| plan | `plan` | `.shuji/designs/` |
+| phase_design | `pdsg` | `.shuji/designs/` |
+| detailed_design | `ddtl` | `.shuji/designs/detail/` |
+| review | `revw` | `.shuji/reviews/` |
+| task | `task` | `.shuji/tasks/` |
+| contract | `ctrt` | `.shuji/contracts/` |
+| report | `rprt` | `.shuji/reports/` |
 
 ### YAML Frontmatter Format
 
@@ -117,7 +117,6 @@ Departments communicate via **documents** under `.shuji/`, not via route_to sema
 ---
 id: dsgn_003          # auto-assigned via .shuji/_counter
 type: dsgn
-status: draft         # program-validated state machine
 author: 中书令         # mapped from dept name
 timestamp: 2026-05-12T14:30:00
 refs: [1, 3]         # referenced doc IDs (integers, no prefix)
@@ -128,7 +127,8 @@ content body...
 ### Document Tools
 
 - **`create_document(type, refs)`** — auto-assigns ID, writes to `.shuji/{dir}/{type}_{id}.md`, returns doc ID
-- **`update_document(id, status?, content?, append?)`** — updates status/content, validates state transitions
+- **`modify_document(id, old_text, new_text)`** — find+replace text in document body
+- **`append_document(id, content)`** — append content to document body
 
 ## 内阁 Skill System
 

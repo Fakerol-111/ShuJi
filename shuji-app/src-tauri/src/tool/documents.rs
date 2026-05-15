@@ -28,7 +28,6 @@ fn next_id(working_dir: &Path) -> Result<u64, String> {
 struct DocMeta {
     id: String,
     doc_type: String,
-    status: String,
     author: String,
     timestamp: String,
     refs: String,
@@ -44,7 +43,6 @@ fn parse_doc(content: &str) -> Result<(DocMeta, &str), String> {
 
     let mut id = String::new();
     let mut doc_type = String::new();
-    let mut status = String::new();
     let mut author = String::new();
     let mut timestamp = String::new();
     let mut refs = String::from("[-1]");
@@ -55,7 +53,6 @@ fn parse_doc(content: &str) -> Result<(DocMeta, &str), String> {
             match key {
                 "id" => id = val.to_string(),
                 "type" => doc_type = val.to_string(),
-                "status" => status = val.to_string(),
                 "author" => author = val.to_string(),
                 "timestamp" => timestamp = val.to_string(),
                 "refs" => refs = val.to_string(),
@@ -68,14 +65,14 @@ fn parse_doc(content: &str) -> Result<(DocMeta, &str), String> {
         return Err("文档缺少 id 字段".to_string());
     }
 
-    Ok((DocMeta { id, doc_type, status, author, timestamp, refs }, body_text))
+    Ok((DocMeta { id, doc_type, author, timestamp, refs }, body_text))
 }
 
 /// Build a full document string from metadata and body.
 fn build_doc(meta: &DocMeta, body: &str) -> String {
     format!(
-        "---\nid: {}\ntype: {}\nstatus: {}\nauthor: {}\ntimestamp: {}\nrefs: {}\n---\n{}",
-        meta.id, meta.doc_type, meta.status, meta.author, meta.timestamp, meta.refs, body
+        "---\nid: {}\ntype: {}\nauthor: {}\ntimestamp: {}\nrefs: {}\n---\n{}",
+        meta.id, meta.doc_type, meta.author, meta.timestamp, meta.refs, body
     )
 }
 
@@ -139,14 +136,6 @@ fn find_rprt_path(working_dir: &Path, id: &str) -> Option<PathBuf> {
     None
 }
 
-/// Determine initial status for a document type.
-fn initial_status(doc_type: &str) -> &'static str {
-    match doc_type {
-        "dsgn" | "plan" | "pdsg" => "draft",
-        _ => "todo",
-    }
-}
-
 /// ── create_document ────────────────────────────────────────────────
 
 pub fn tool_create_document(working_dir: &Path, args: &serde_json::Value, dept: &str) -> String {
@@ -186,14 +175,12 @@ pub fn tool_create_document(working_dir: &Path, args: &serde_json::Value, dept: 
         }
     };
 
-    let status = initial_status(&doc_type);
     let author = dept_to_author(dept);
     let ts = now_iso();
 
     let meta = DocMeta {
         id: doc_id.clone(),
         doc_type: doc_type.clone(),
-        status: status.to_string(),
         author: author.to_string(),
         timestamp: ts,
         refs,
@@ -254,21 +241,7 @@ pub fn tool_modify_document(working_dir: &Path, args: &serde_json::Value, _dept:
         Err(e) => return ToolOutput::error("modify_document", id, "parse_error", &e),
     };
 
-    // Apply status update (optional)
-    if let Some(status) = args["status"].as_str() {
-        let valid = match meta.doc_type.as_str() {
-            "dsgn" | "plan" | "pdsg" => matches!(status, "draft" | "approved" | "closed"),
-            "ddtl" | "task" | "ctrt" | "rprt" | "revw" => matches!(status, "todo" | "done"),
-            _ => true,
-        };
-        if !valid {
-            return ToolOutput::error("modify_document", id, "invalid_status",
-                &format!("类型 {} 不支持状态 {}", meta.doc_type, status));
-        }
-        meta.status = status.to_string();
-    }
-
-    // Apply text replacement (optional)
+    // Apply text replacement
     let new_body = if let Some(old_text) = args["old_text"].as_str() {
         let new_text = args["new_text"].as_str().unwrap_or("");
         if old_text.is_empty() {
@@ -383,7 +356,7 @@ pub fn modify_document_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "modify_document".into(),
-            description: "修改已有文档的正文（find+replace）和/或状态。old_text 必须与文件中完全一致（含空格和缩进）。先用 read_file 确认文件内容，再调用此工具。".into(),
+            description: "修改已有文档的正文（find+replace）。old_text 必须与文件中完全一致（含空格和缩进）。先用 read_file 确认文件内容，再调用此工具。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -400,10 +373,6 @@ pub fn modify_document_tool_def() -> crate::api::client::ToolDefinition {
                         "type": "string",
                         "description": "替换后的新文本（最多 300 字符）",
                         "maxLength": 300
-                    },
-                    "status": {
-                        "type": "string",
-                        "description": "可选。新状态。dsgn/plan/pdsg: draft / approved / closed；其他: todo / done"
                     }
                 },
                 "required": ["id", "old_text", "new_text"]

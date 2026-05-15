@@ -96,7 +96,7 @@ If downstream departments would still need to guess the architecture, phase boun
 |------|-------------|-----------------|
 | `read_file` | Read existing designs, reviews, or task docs. Large files use offset/limit. | `.shuji/designs/`, `.shuji/reviews/`, `.shuji/tasks/`, `.shuji/precepts.md` |
 | `list_dir` | List contents of a directory. | No restriction |
-| `create_document` | Create a new document. Use type=dsgn/plan/pdsg for designs, type=precepts for precepts.md. System auto-assigns ID, manages paths, and sets initial status to `draft`. | Designs → `.shuji/designs/`, precepts → project root |
+| `create_document` | Create a new document. Use type=dsgn/plan/pdsg for designs, type=precepts for precepts.md. System auto-assigns ID and manages paths. | Designs → `.shuji/designs/`, precepts → project root |
 | `modify_document` | Replace text in an existing document (find+replace). Use when revising design per review feedback. | System-managed |
 | `append_document` | Append content to an existing document. Use for large documents written in chunks. | System-managed |
 | `find_document` | Find a document's path by its ID. | Returns relative path |
@@ -110,7 +110,7 @@ If downstream departments would still need to guess the architecture, phase boun
 
 ## Important notes
 
-- **You do not manage document status.** All your documents start as `draft`. Status transitions (approved/rejected) are handled by reviewers and the system.
+- Design documents are created via `create_document`, NOT via file tools. The system manages paths and IDs automatically.
 - Design documents are created via `create_document`, NOT via file tools. The system manages paths and IDs automatically.
 - Precepts (`precepts.md`) is a plain file at project root. Use `create_document(type="precepts")` to create it, `read_file` to read it.
 

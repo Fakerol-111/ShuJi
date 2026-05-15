@@ -15,8 +15,19 @@ shuji-app/dist/
 .DS_Store
 Thumbs.db
 
+# IDE
+.vscode/
+.idea/
+
+# Env files (keep .env.template)
+.env
+.env.*
+!.env.template
+
+# Logs
+*.log
+
 # Project test data
 projects/
 test/
 shuji-app/src-tauri/gen/
-shuji-app/.env

@@ -1,42 +1,108 @@
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput, LoopDecision};
 use crate::api::client::{AnthropicClient, ToolDefinition};
 use crate::models::message::Message;
 use crate::models::role::Role;
 
+// ── Plan state ───────────────────────────────────────────────
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PlanBatch {
+    pub name: String,
+    pub goal: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct PlanState {
+    pub batches: Vec<PlanBatch>,
+    pub current: usize,
+    pub complete: bool,
+    /// True when the batch just advanced — next execute() starts fresh.
+    pub fresh_batch: bool,
+    /// Session snapshot captured at submit_plan time. Contains pre-plan
+    /// analysis context (contract reads, design analysis). Restored at the
+    /// start of every batch so the LLM remembers the task understanding.
+    pub baseline: Option<Vec<serde_json::Value>>,
+}
+
+impl PlanState {
+    fn from_batches(batches: Vec<PlanBatch>) -> Self {
+        Self { batches, current: 0, complete: false, fresh_batch: true, baseline: None }
+    }
+
+    fn current_batch(&self) -> Option<&PlanBatch> {
+        self.batches.get(self.current)
+    }
+
+    fn advance(&mut self) -> bool {
+        self.current += 1;
+        self.fresh_batch = true;
+        if self.current >= self.batches.len() {
+            self.complete = true;
+            true
+        } else {
+            false
+        }
+    }
+}
+
+// ── Agent ────────────────────────────────────────────────────
+
 pub struct GongbuShangshuAgent {
     client: AnthropicClient,
     model: String,
     cancel: Arc<AtomicBool>,
+    plan: Arc<Mutex<Option<PlanState>>>,
 }
 
 impl GongbuShangshuAgent {
     pub fn new(client: AnthropicClient, model: &str, cancel: Arc<AtomicBool>) -> Self {
-        Self { client, model: model.to_string(), cancel }
+        Self {
+            client,
+            model: model.to_string(),
+            cancel,
+            plan: Arc::new(Mutex::new(None)),
+        }
     }
 
-        fn tools() -> Vec<ToolDefinition> {
-            vec![
-                crate::tool::read_file_tool_def("读取接口契约、详细设计、审查报告等"),
-                crate::tool::create_file_tool_def("写入代码文件到项目目录"),
-                crate::tool::append_file_tool_def(),
-                crate::tool::delete_file_tool_def(),
-                crate::tool::rename_file_tool_def(),
-                crate::tool::modify_file_tool_def(),
-                crate::tool::list_dir_tool_def(),
-                crate::tool::documents::create_document_tool_def(),
-                crate::tool::documents::modify_document_tool_def(),
-                crate::tool::documents::append_document_tool_def(),
-                crate::tool::documents::find_document_tool_def(),
-            ]
-        }
+    fn tools() -> Vec<ToolDefinition> {
+        let mut tools = crate::tool::registry::inspect_tools();
+        tools.extend(crate::tool::registry::file_write_tools());
+        tools.extend(crate::tool::registry::document_tools());
+        tools.push(crate::tool::registry::submit_plan_tool());
+        tools.push(crate::tool::registry::complete_task_tool());
+        tools
+    }
 
-        fn execute_tool(name: &str, args: &serde_json::Value, working_dir: &Path) -> String {
-            crate::tool::execute_named_tool(name, working_dir, args, "gongbushangshu")
+    fn execute_tool(name: &str, args: &serde_json::Value, working_dir: &Path) -> String {
+        crate::tool::execute_named_tool(name, working_dir, args, "gongbushangshu")
+    }
+
+    fn build_plan_prompt(plan: &PlanState) -> String {
+        let mut lines = vec![format!("总计划（共 {} 批）：", plan.batches.len())];
+        for (i, b) in plan.batches.iter().enumerate() {
+            let marker = if i == plan.current { "← 当前" }
+                else if i < plan.current { "✓" }
+                else { "" };
+            lines.push(format!("  {}. {} — {} {}", i + 1, b.name, b.goal, marker));
         }
+        lines.join("\n")
+    }
+
+    fn build_task_prompt(plan: &PlanState) -> String {
+        let batch = plan.current_batch().unwrap();
+        format!(
+            "当前批次（第 {} 批/共 {} 批）：{}\n目标：{}\n\n请完成本批任务。完成后调用 complete_task。",
+            plan.current + 1,
+            plan.batches.len(),
+            batch.name,
+            batch.goal,
+        )
+    }
 }
 
 #[async_trait::async_trait]
@@ -58,19 +124,126 @@ impl Agent for GongbuShangshuAgent {
         ).with_role(self.role().name()).with_max_tokens(2048).with_debug_dir(input.working_dir.clone());
 
         let role_name = self.role().name().to_string();
-        if let Some(ctx) = crate::api::session::PersistedContext::load_from(&working_dir, &role_name) {
-            let mut msgs = ctx.to_messages();
-            msgs.push(serde_json::json!({"role": "user", "content": input.task_description}));
-            let snap = crate::api::session::SessionSnapshot::from_messages(msgs);
-            session.restore(&snap);
+
+        // Track whether this is the first round of a new batch.
+        // On fresh batch: start clean (no restore), inject plan + task.
+        // On continuation within a batch: restore previous coding context.
+        let is_fresh = {
+            let mut plan_guard = self.plan.lock().unwrap();
+            if let Some(ref mut plan) = *plan_guard {
+                if plan.fresh_batch {
+                    plan.fresh_batch = false;
+                    true
+                } else { false }
+            } else { false }
+        };
+
+        if is_fresh {
+            // New batch: restore from baseline (pre-plan analysis + submit_plan call)
+            // so the LLM remembers the task understanding. Old coding context is discarded.
+            let baseline = {
+                let plan_guard = self.plan.lock().unwrap();
+                plan_guard.as_ref().and_then(|p| p.baseline.clone())
+            };
+            if let Some(msgs) = baseline {
+                let snap = crate::api::session::SessionSnapshot::from_messages(msgs);
+                session.restore(&snap);
+            }
+            // Inject the current task_description (may have changed across batches)
+            session.inject(&format!("继续执行。当前任务：{}", input.task_description));
+        } else {
+            // Continuation within a batch: restore full coding context from previous round.
+            if let Some(ctx) = crate::api::session::PersistedContext::load_from(&working_dir, &role_name) {
+                let mut msgs = ctx.to_messages();
+                msgs.push(serde_json::json!({"role": "user", "content": input.task_description}));
+                let snap = crate::api::session::SessionSnapshot::from_messages(msgs);
+                session.restore(&snap);
+            }
+        }
+
+        // Inject plan + task only on the first round of a batch
+        {
+            let plan_guard = self.plan.lock().unwrap();
+            if let Some(ref plan) = *plan_guard {
+                if !plan.complete && is_fresh {
+                    session.inject(&Self::build_plan_prompt(plan));
+                    session.inject(&Self::build_task_prompt(plan));
+                } else if plan.complete {
+                    session.inject("所有批次任务已完成。请创建报告文档并路由回尚书令。");
+                }
+            }
         }
 
         let mut controller = crate::api::control::AgentController::new();
-        let exec = |name: &str, args: &serde_json::Value| -> String {
-            Self::execute_tool(name, args, &working_dir)
+        let plan_ref = self.plan.clone();
+        let wd = working_dir.clone();
+        let force_stop = Arc::new(AtomicBool::new(false));
+        let force_stop_clone = force_stop.clone();
+        let exec = move |name: &str, args: &serde_json::Value| -> String {
+            match name {
+                "submit_plan" => {
+                    {
+                        let guard = plan_ref.lock().unwrap();
+                        if guard.is_some() {
+                            return r#"{"ok":false,"message":"计划已存在。请使用 complete_task 推进批次，不要重复提交计划。"}"#.to_string();
+                        }
+                    }
+                    let batches: Vec<PlanBatch> = match args.get("batches") {
+                        Some(b) => serde_json::from_value(b.clone()).unwrap_or_default(),
+                        None => vec![],
+                    };
+                    if batches.is_empty() {
+                        return r#"{"ok":false,"message":"batches 参数为空或格式错误"}"#.to_string();
+                    }
+                    let count = batches.len();
+                    let mut guard = plan_ref.lock().unwrap();
+                    *guard = Some(PlanState::from_batches(batches));
+                    force_stop_clone.store(true, Ordering::SeqCst);
+                    log_console!("[工部] submit_plan: {} batches — force-stopping controller", count);
+                    serde_json::json!({"ok":true,"message":format!("计划已提交：{} 个批次。请等待系统推进到第一个批次。", count)}).to_string()
+                }
+                "complete_task" => {
+                    let mut guard = plan_ref.lock().unwrap();
+                    match *guard {
+                        Some(ref mut plan) => {
+                            if plan.complete {
+                                return r#"{"ok":false,"message":"所有批次已完成，请写报告并路由"}"#.to_string();
+                            }
+                            let all_done = plan.advance();
+                            if all_done {
+                                log_console!("[工部] complete_task: all batches done");
+                                r#"{"ok":true,"message":"所有批次已完成。请创建报告并路由回尚书令。"}"#.to_string()
+                            } else {
+                                // Force-stop to prevent the LLM from continuing
+                                // to code the new batch in the same run. The next
+                                // execute() will start fresh with clean baseline.
+                                force_stop_clone.store(true, Ordering::SeqCst);
+                                log_console!("[工部] complete_task: batch {}/{} done — force-stopping",
+                                    plan.current, plan.batches.len());
+                                serde_json::json!({"ok":true,"message":format!("第 {} 批完成，已推进到第 {} 批。请等待系统注入下一批次上下文。", plan.current, plan.current + 1)}).to_string()
+                            }
+                        }
+                        None => r#"{"ok":false,"message":"没有活跃计划。如需分批，先调用 submit_plan。"}"#.to_string(),
+                    }
+                }
+                _ => Self::execute_tool(name, args, &wd),
+            }
         };
-        let (result, route) = controller.run(&mut session, &exec, &self.cancel, &tools).await?;
+        let (result, route) = controller.run(&mut session, &exec, &self.cancel, &tools, Some(&force_stop)).await?;
 
+        // Capture baseline after submit_plan: save the pre-plan analysis context
+        // so every batch can restore from this shared understanding.
+        {
+            let mut plan_guard = self.plan.lock().unwrap();
+            if let Some(ref mut plan) = *plan_guard {
+                if plan.baseline.is_none() {
+                    plan.baseline = Some(session.snapshot().messages);
+                    log_console!("[工部] baseline captured: {} messages", plan.baseline.as_ref().unwrap().len());
+                }
+            }
+        }
+
+        // Persist for continuation within the batch
         let snap = session.snapshot();
         let ctx = crate::api::session::PersistedContext::from_messages(&snap.messages);
         ctx.save_to(&working_dir, &role_name);
@@ -80,22 +253,39 @@ impl Agent for GongbuShangshuAgent {
         Ok(output)
     }
 
-    fn after_execute(&self, output: &AgentOutput) -> crate::agent::r#trait::LoopDecision {
-        let mut items: Vec<String> = Vec::new();
-        let mut all_done = true;
-        for line in output.content.lines() {
-            let t = line.trim();
-            if t.starts_with("- [") || t.starts_with("* [") {
-                if !(t.contains("[x]") || t.contains("[X]")) { all_done = false; }
-                items.push(t.to_string());
+    fn after_execute(&self, _output: &AgentOutput) -> LoopDecision {
+        let plan_guard = self.plan.lock().unwrap();
+        match *plan_guard {
+            Some(ref p) if !p.complete => {
+                LoopDecision::Continue("请继续完成当前批次任务。完成后调用 complete_task。".to_string())
             }
+            _ => LoopDecision::Done,
         }
-        if items.is_empty() { return LoopDecision::Done; }
-        if all_done { return LoopDecision::Done; }
-        let plan_text = format!(
-            "## 当前任务计划\n{}\n\n每次只完成一个任务项，完成后重新输出完整计划并标记 `[x]`。全部完成后调用 route_to。",
-            items.join("\n")
-        );
-        LoopDecision::Continue(plan_text)
+    }
+
+    fn reset_plan(&self) {
+        let mut guard = self.plan.lock().unwrap();
+        *guard = None;
+        log_console!("[工部] plan cleared for new task");
+    }
+
+    fn plan_display(&self) -> String {
+        let guard = self.plan.lock().unwrap();
+        match *guard {
+            Some(ref plan) => {
+                let batches: Vec<serde_json::Value> = plan.batches.iter().enumerate().map(|(i, b)| {
+                    let status = if i < plan.current { "done" }
+                        else if i == plan.current && !plan.complete { "current" }
+                        else { "pending" };
+                    serde_json::json!({"name": b.name, "goal": b.goal, "status": status})
+                }).collect();
+                serde_json::json!({
+                    "batches": batches,
+                    "current": plan.current,
+                    "complete": plan.complete
+                }).to_string()
+            }
+            None => "null".to_string(),
+        }
     }
 }

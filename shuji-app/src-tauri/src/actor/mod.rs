@@ -73,16 +73,18 @@ pub struct ActorContext {
     pub peers: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
     pub emperor_tx: mpsc::UnboundedSender<ChatMessage>,
     pub dept_log_tx: mpsc::UnboundedSender<DeptLogEntry>,
+    pub plan_tx: mpsc::UnboundedSender<serde_json::Value>,
     pub milestone_tx: mpsc::UnboundedSender<String>,
     pub project_dir: PathBuf,
     pub working_dir: PathBuf,
     pub cancel: Arc<AtomicBool>,
+    /// Cancel flags for ALL agents. Only populated for 内阁.
+    /// 内阁 uses this to interrupt other agents via the `cancel_agent` tool.
+    pub cancel_map: Option<Arc<std::sync::Mutex<HashMap<Role, Arc<AtomicBool>>>>>,
     pub logger: Logger,
     /// Shared context across all actors — stores last output per role.
-    /// Used by 内阁 to see what other agents asked/said.
     pub shared_context: Arc<Mutex<HashMap<Role, String>>>,
     /// Full conversation history between 内阁 and emperor.
-    /// Only populated for 内阁's context.
     pub talk_history: Arc<Mutex<Vec<String>>>,
     /// Per-agent task plan (populated by 工部尚书 actor for multi-step execution).
     pub plan: Arc<Mutex<Vec<String>>>,
@@ -99,7 +101,9 @@ pub struct ActorSystem {
     pub emperor_tx: mpsc::UnboundedSender<ChatMessage>,
     /// Sender for department log entries (→ frontend DeptStatusPanel).
     pub dept_log_tx: mpsc::UnboundedSender<DeptLogEntry>,
-    /// Cancel flag shared by all actors (for emergency stop).
+    /// Per-agent cancel flags, indexed by Role.
+    pub cancel_map: Arc<std::sync::Mutex<HashMap<Role, Arc<AtomicBool>>>>,
+    /// Global cancel flag for the frontend cancel button.
     pub cancel: Arc<AtomicBool>,
 }
 
@@ -108,9 +112,10 @@ impl ActorSystem {
         senders: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
         emperor_tx: mpsc::UnboundedSender<ChatMessage>,
         dept_log_tx: mpsc::UnboundedSender<DeptLogEntry>,
+        cancel_map: Arc<std::sync::Mutex<HashMap<Role, Arc<AtomicBool>>>>,
         cancel: Arc<AtomicBool>,
     ) -> Self {
-        Self { senders, emperor_tx, dept_log_tx, cancel }
+        Self { senders, emperor_tx, dept_log_tx, cancel_map, cancel }
     }
 
     /// Send a message to a role's actor.
@@ -150,7 +155,9 @@ pub async fn run_actor(mut ctx: ActorContext) {
                 // 不 continue！直接 fall through 到执行逻辑，
                 // 让 pending_replace 立即生效
             }
-            ActorMessage::Task { .. } => {}
+            ActorMessage::Task { .. } => {
+                ctx.agent.reset_plan();
+            }
         }
 
         // ── Reset cancel ──────────────────────────────
@@ -240,9 +247,11 @@ pub async fn run_actor(mut ctx: ActorContext) {
                         if let Ok(mut talk) = ctx.talk_history.lock() {
                             talk.push(format!("内阁: {}", output.content));
                         }
-                        self::emit_to_emperor(&ctx.emperor_tx, ctx.role, &output.content);
+                        // Don't emit routing-only messages to chat — they go to the log panel
+                        if output.route.is_none() && !output.content.starts_with("已路由") {
+                            self::emit_to_emperor(&ctx.emperor_tx, ctx.role, &output.content);
+                        }
                     } else {
-                        // Non-内阁 output → dept-log only, not chat
                         log_dept(&ctx, &role_name, &format!("→ {}", output.content));
                     }
 
@@ -288,6 +297,11 @@ pub async fn run_actor(mut ctx: ActorContext) {
                             let _ = ctx.dept_log_tx.send(DeptLogEntry::new(&role_name, &plan_action));
                             let _ = ctx.dept_log_tx.send(DeptLogEntry::with_detail(&role_name, "计划", &ctx_msg));
                             let _ = ctx.milestone_tx.send(format!("{} | {}", role_name, plan_action));
+                            // Emit structured plan progress for frontend card
+                            let plan_json = ctx.agent.plan_display();
+                            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&plan_json) {
+                                let _ = ctx.plan_tx.send(value);
+                            }
                             context_msgs.push(crate::models::message::Message::user(&ctx_msg));
                             continue 'exec;
                         }

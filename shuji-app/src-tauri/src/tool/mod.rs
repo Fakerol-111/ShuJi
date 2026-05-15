@@ -4,6 +4,7 @@ use std::process::{Command, Stdio};
 use serde::Serialize;
 
 pub mod documents;
+pub mod registry;
 mod tool_log;
 
 /// Resolve a project-relative path against root with safety checks.

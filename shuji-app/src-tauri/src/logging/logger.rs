@@ -1,14 +1,50 @@
 #![allow(dead_code)]
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
+use tokio::sync::mpsc;
 
 use crate::models::role::Role;
 
-/// Global mutex for console output serialization across all tokio actors.
-/// Prevents interleaved `eprintln!` from concurrent tasks.
-pub static CONSOLE_LOCK: Mutex<()> = Mutex::new(());
+/// Global channel for serialized console output.
+/// Lazily initialized on first `log_console!` call — after the tokio runtime is active.
+static CONSOLE_TX: OnceLock<mpsc::UnboundedSender<String>> = OnceLock::new();
+/// Prevent multiple concurrent initializations.
+static INIT_LOCK: Mutex<()> = Mutex::new(());
+
+/// Ensure the console writer task is running. Safe to call multiple times.
+fn ensure_console_writer() {
+    let _guard = INIT_LOCK.lock().unwrap();
+    if CONSOLE_TX.get().is_some() {
+        return;
+    }
+    // Try to get a tokio runtime handle. If we're inside a runtime, spawn the writer.
+    // If not, fall back to direct stderr writes via the sender (which will be a no-op).
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+        CONSOLE_TX.set(tx).ok();
+        handle.spawn(async move {
+            use std::io::Write;
+            while let Some(line) = rx.recv().await {
+                let _ = writeln!(std::io::stderr(), "{}", line);
+            }
+        });
+    }
+}
+
+/// Send a line to the console writer (non-blocking, lock-free).
+/// Falls back to direct stderr if the writer hasn't started yet.
+pub fn console_send(line: String) {
+    ensure_console_writer();
+    if let Some(tx) = CONSOLE_TX.get() {
+        let _ = tx.send(line);
+    } else {
+        // Fallback: write directly if tokio runtime isn't available yet
+        use std::io::Write;
+        let _ = writeln!(std::io::stderr(), "{}", line);
+    }
+}
 
 /// Single-file activity log. All departments append to the same file,
 /// so entries are naturally chronological. Entry format:

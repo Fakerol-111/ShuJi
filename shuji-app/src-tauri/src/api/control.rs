@@ -89,6 +89,7 @@ impl AgentController {
         tool_exec: &(dyn Fn(&str, &serde_json::Value) -> String + Sync),
         cancel: &AtomicBool,
         tools: &[ToolDefinition],
+        force_stop: Option<&AtomicBool>,
     ) -> anyhow::Result<(String, Option<RouteTo>)> {
         let max_iter = max_iterations_for_tools(tools);
         let mut last_text = String::new();
@@ -102,10 +103,14 @@ impl AgentController {
         let mut read_without_write: u32 = 0;
 
         for iter in 0..max_iter {
-            // ── Interrupt check ──────────────────────────────
+            // ── Interrupt / force-stop check ────────────────
             if cancel.load(Ordering::SeqCst) {
                 self.interrupt(session).await;
                 let result = format!("{}{}", last_text, INTERRUPT_RESPONSE);
+                return Ok((result, None));
+            }
+            if force_stop.is_some_and(|f| f.load(Ordering::SeqCst)) {
+                let result = if last_text.is_empty() { "已停止".to_string() } else { last_text };
                 return Ok((result, None));
             }
 
@@ -123,7 +128,7 @@ impl AgentController {
                 }
 
                 crate::api::session::StepResult::ToolCalls(calls) => {
-                    for tc in &calls {
+                    for (idx, tc) in calls.iter().enumerate() {
                         // ── Same-tool watchdog ─────────────
                         let key_arg = tc.args.get("path")
                             .or_else(|| tc.args.get("command"))
@@ -233,6 +238,12 @@ impl AgentController {
                                     || result.contains("未知工具")
                             });
 
+                        let tool_content = if progress_note.is_empty() {
+                            result.clone()
+                        } else {
+                            format!("{}{}", result.clone(), progress_note)
+                        };
+
                         if is_error {
                             consecutive_errors += 1;
                             let first_line =
@@ -253,17 +264,18 @@ impl AgentController {
                                     "工具连续出错{}次，终止调用。最后错误：{}",
                                     MAX_CONSECUTIVE_ERRORS, result
                                 );
+                                // Feed the current tool result before returning
+                                session.feed_tool_result(&tc.id, &tc.name, &tool_content);
+                                // Feed dummy results for remaining unprocessed tools
+                                for remaining in &calls[idx + 1..] {
+                                    session.feed_tool_result(&remaining.id, &remaining.name,
+                                        "已取消：工具连续错误，终止调用");
+                                }
                                 return Ok((last_text, None));
                             }
                         } else {
                             consecutive_errors = 0;
                         }
-
-                        let tool_content = if progress_note.is_empty() {
-                            result
-                        } else {
-                            format!("{}{}", result, progress_note)
-                        };
 
                         session.feed_tool_result(&tc.id, &tc.name, &tool_content);
                     }

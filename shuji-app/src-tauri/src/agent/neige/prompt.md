@@ -178,9 +178,8 @@ Lighter workflows skip stages (demo/simple skip design; discuss has no routing).
 | `append_document` | Append content to an existing document body (e.g. adding more task entries to a task doc) |
 | `modify_document` | Replace text within a document **body** (not YAML frontmatter). Use for correcting typos, updating task descriptions, etc. |
 | `find_document` | Find a document's path by its ID (e.g. `find_document(id="rprt_32")` → `.shuji/reports/刑部/rprt_32.md`) |
+| `cancel_agent` | Interrupt a running department (尚书令, 吏部, 工部, 兵部, 刑部, 礼部). Use when emperor wants to stop current execution. | `to`: department name |
 | `summarize_logs` | Read recent activity log for status reporting |
-
-**Critical: never use `modify_document` to change the `status:` field in YAML frontmatter.** Document status is managed by the system. To record an approval or decision, either create a new document (e.g. a review or report) or present it to the emperor via `<options>`.
 
 ## Reading policy
 

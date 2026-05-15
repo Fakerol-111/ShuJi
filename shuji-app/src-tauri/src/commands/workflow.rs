@@ -27,7 +27,11 @@ use crate::models::role::Role;
 
 // ── Build agents (used by actor system startup) ─────────────
 
-fn build_agents(config: &AppConfig, cancel: Arc<AtomicBool>) -> HashMap<Role, Box<dyn Agent>> {
+fn build_agents(
+    config: &AppConfig,
+    cancel: Arc<AtomicBool>,
+    cancel_map: Arc<std::sync::Mutex<HashMap<Role, Arc<AtomicBool>>>>,
+) -> HashMap<Role, Box<dyn Agent>> {
     let mut agents: HashMap<Role, Box<dyn Agent>> = HashMap::new();
 
     let menxiashizhong_ep = config.for_role("menxiashizhong");
@@ -54,6 +58,7 @@ fn build_agents(config: &AppConfig, cancel: Arc<AtomicBool>) -> HashMap<Role, Bo
             AnthropicClient::new(neige_ep.api_key, neige_ep.api_url),
             &neige_ep.model,
             cancel.clone(),
+            Some(cancel_map),
         )
     ));
 
@@ -97,9 +102,14 @@ async fn start_actor_system(
     cancel: Arc<AtomicBool>,
     emperor_tx: mpsc::UnboundedSender<ChatMessage>,
     dept_log_tx: mpsc::UnboundedSender<DeptLogEntry>,
+    plan_tx: mpsc::UnboundedSender<serde_json::Value>,
     milestone_tx: mpsc::UnboundedSender<String>,
 ) -> ActorSystem {
-    let agents = build_agents(config, cancel.clone());
+    // Per-agent cancel flags — 内阁 gets access to cancel any agent
+    let cancel_map: Arc<std::sync::Mutex<HashMap<Role, Arc<AtomicBool>>>> =
+        Arc::new(std::sync::Mutex::new(HashMap::new()));
+
+    let agents = build_agents(config, cancel.clone(), cancel_map.clone());
     let mut senders: HashMap<Role, mpsc::UnboundedSender<ActorMessage>> = HashMap::new();
     let mut contexts: Vec<(Role, Box<dyn Agent>, mpsc::UnboundedReceiver<ActorMessage>)> = Vec::new();
 
@@ -121,10 +131,15 @@ async fn start_actor_system(
             }
         }
 
+        // Each agent gets its own cancel flag
+        let agent_cancel = Arc::new(AtomicBool::new(false));
+        cancel_map.lock().unwrap().insert(role, agent_cancel.clone());
+
         let logger = crate::logging::logger::Logger::new(
             &working_dir.join(".shuji"),
         );
 
+        let is_neige = role == Role::Neige;
         let ctx = ActorContext {
             role,
             agent,
@@ -132,11 +147,13 @@ async fn start_actor_system(
             peers,
             emperor_tx: emperor_tx.clone(),
             dept_log_tx: dept_log_tx.clone(),
+            plan_tx: plan_tx.clone(),
             plan: Arc::new(std::sync::Mutex::new(Vec::new())),
             milestone_tx: milestone_tx.clone(),
             project_dir: project_dir.to_path_buf(),
             working_dir: working_dir.to_path_buf(),
-            cancel: cancel.clone(),
+            cancel: agent_cancel,
+            cancel_map: if is_neige { Some(cancel_map.clone()) } else { None },
             logger,
             shared_context: shared_context.clone(),
             talk_history: talk_history.clone(),
@@ -150,6 +167,7 @@ async fn start_actor_system(
         senders: all_senders,
         emperor_tx,
         dept_log_tx,
+        cancel_map,
         cancel,
     }
 }
@@ -178,6 +196,7 @@ pub async fn send_message(
         if sys_lock.is_none() {
             let (emperor_tx, mut emperor_rx) = mpsc::unbounded_channel::<ChatMessage>();
             let (dept_log_tx, mut dept_log_rx) = mpsc::unbounded_channel::<DeptLogEntry>();
+            let (plan_tx, mut plan_rx) = mpsc::unbounded_channel::<serde_json::Value>();
             let (milestone_tx, mut milestone_rx): (mpsc::UnboundedSender<String>, _) = mpsc::unbounded_channel();
             let app_handle = app.clone();
 
@@ -228,6 +247,15 @@ pub async fn send_message(
                 }
             });
 
+            // Forward plan updates to frontend (工部 batch progress)
+            let app_plan = app.clone();
+            tokio::spawn(async move {
+                while let Some(plan_json) = plan_rx.recv().await {
+                    // Emit as raw JSON string; frontend parses it
+                    let _ = app_plan.emit("plan-update", &plan_json);
+                }
+            });
+
             // Update project state on milestones
             let app3 = app.clone();
             let wd = p_working_dir.clone();
@@ -258,6 +286,7 @@ pub async fn send_message(
                 state.cancel_flag.clone(),
                 emperor_tx,
                 dept_log_tx,
+                plan_tx,
                 milestone_tx,
             ).await;
 
@@ -305,7 +334,7 @@ pub async fn discuss_with_cabinet(
 
     let ep = config.for_role("neige");
     let client = AnthropicClient::new(ep.api_key, ep.api_url);
-    let neige = NeigeAgent::new(client, &ep.model, Arc::new(AtomicBool::new(false)));
+    let neige = NeigeAgent::new(client, &ep.model, Arc::new(AtomicBool::new(false)), None);
 
     let input = AgentInput {
         role: Role::Neige,

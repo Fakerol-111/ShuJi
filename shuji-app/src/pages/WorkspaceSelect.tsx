@@ -42,15 +42,15 @@ export default function WorkspaceSelect() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-8">
+    <div className="min-h-screen bg-ink-50 flex items-center justify-center">
+      <div className="bg-white rounded-xl shadow-lg shadow-ink-200/50 border border-ink-200 w-full max-w-md p-8">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">枢机</h1>
-          <p className="text-gray-500">三省六部制自动化软件开发系统</p>
+          <h1 className="text-3xl font-bold text-ink-900 mb-2 tracking-wide">枢机</h1>
+          <p className="text-ink-500 text-sm">三省六部制自动化软件开发系统</p>
         </div>
 
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-xs font-medium text-ink-500 mb-1 tracking-wide">
             工作目录
           </label>
           <div className="flex gap-2">
@@ -60,18 +60,18 @@ export default function WorkspaceSelect() {
               value={dirPath}
               onChange={(e) => setDirPath(e.target.value)}
               placeholder="选择一个文件夹..."
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
+              className="flex-1 px-3 py-2 border border-ink-200 bg-ink-50 rounded-lg text-sm font-mono text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-ink-500"
             />
             <button
               onClick={handleBrowse}
-              className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 text-sm"
+              className="px-3 py-2 border border-ink-200 rounded-lg text-ink-600 hover:bg-ink-100 text-sm transition-colors"
             >
               浏览
             </button>
             <button
               onClick={() => handleOpen()}
               disabled={loading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
+              className="px-4 py-2 bg-ink-900 text-ink-50 rounded-lg hover:bg-ink-800 disabled:opacity-40 text-sm transition-colors"
             >
               {loading ? "打开中..." : "打开"}
             </button>
@@ -80,15 +80,15 @@ export default function WorkspaceSelect() {
 
         {recentDirs.length > 0 && (
           <div>
-            <label className="block text-sm font-medium text-gray-500 mb-1">
+            <label className="block text-xs font-medium text-ink-400 mb-1 tracking-wide">
               最近目录
             </label>
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {recentDirs.map((dir, i) => (
                 <button
                   key={i}
                   onClick={() => handleOpen(dir)}
-                  className="block w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded truncate"
+                  className="block w-full text-left px-3 py-1.5 text-sm text-ink-600 hover:bg-ink-100 rounded truncate transition-colors"
                 >
                   {dir}
                 </button>
@@ -98,7 +98,7 @@ export default function WorkspaceSelect() {
         )}
 
         {error && (
-          <div className="mt-3 text-sm text-red-600 bg-red-50 p-2 rounded">{error}</div>
+          <div className="mt-3 text-sm text-vermillion-dark bg-vermillion-light border border-vermillion/20 p-2 rounded">{error}</div>
         )}
       </div>
     </div>

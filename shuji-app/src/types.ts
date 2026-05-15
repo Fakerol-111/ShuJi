@@ -102,3 +102,16 @@ export interface DeptLogEntry {
   ts: string;
   detail?: string;
 }
+
+// 工部 plan progress (from plan-update Tauri event)
+export interface PlanBatch {
+  name: string;
+  goal: string;
+  status: "done" | "current" | "pending";
+}
+
+export interface PlanInfo {
+  batches: PlanBatch[];
+  current: number;
+  complete: boolean;
+}

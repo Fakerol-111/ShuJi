@@ -1,4 +1,5 @@
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::sync::atomic::AtomicBool;
 use std::path::Path;
 
@@ -12,23 +13,25 @@ pub struct NeigeAgent {
     client: AnthropicClient,
     model: String,
     cancel: Arc<AtomicBool>,
+    cancel_map: Option<Arc<Mutex<HashMap<Role, Arc<AtomicBool>>>>>,
 }
 
 impl NeigeAgent {
-    pub fn new(client: AnthropicClient, model: &str, cancel: Arc<AtomicBool>) -> Self {
-        Self { client, model: model.to_string(), cancel }
+    pub fn new(
+        client: AnthropicClient,
+        model: &str,
+        cancel: Arc<AtomicBool>,
+        cancel_map: Option<Arc<Mutex<HashMap<Role, Arc<AtomicBool>>>>>,
+    ) -> Self {
+        Self { client, model: model.to_string(), cancel, cancel_map }
     }
 
     fn tools() -> Vec<ToolDefinition> {
-        vec![
-            crate::tool::read_file_tool_def("读取项目目录下的设计文档、日志、状态文件等"),
-            crate::tool::list_dir_tool_def(),
-            crate::tool::documents::create_document_tool_def(),
-            crate::tool::documents::modify_document_tool_def(),
-            crate::tool::documents::append_document_tool_def(),
-            crate::tool::documents::find_document_tool_def(),
-            crate::tool::summarize_logs_tool_def(),
-        ]
+        let mut tools = crate::tool::registry::inspect_tools();
+        tools.extend(crate::tool::registry::document_tools());
+        tools.extend(crate::tool::registry::summarize_logs_tool());
+        tools.push(crate::tool::registry::cancel_agent_tool());
+        tools
     }
 
     fn execute_tool(name: &str, args: &serde_json::Value, working_dir: &Path) -> String {
@@ -141,7 +144,24 @@ impl Agent for NeigeAgent {
         }
 
         let mut controller = crate::api::control::AgentController::new();
+        let cancel_map = self.cancel_map.clone();
         let exec = |name: &str, args: &serde_json::Value| -> String {
+            if name == "cancel_agent" {
+                if let Some(ref map) = cancel_map {
+                    let target = args["to"].as_str().unwrap_or("");
+                    if let Some(role) = Role::from_name(target) {
+                        if let Ok(guard) = map.lock() {
+                            if let Some(flag) = guard.get(&role) {
+                                flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                                log_console!("[内阁] cancel_agent → {} interrupted", target);
+                                return serde_json::json!({"ok": true, "message": format!("已中断 {} 的当前操作", target)}).to_string();
+                            }
+                        }
+                    }
+                    return serde_json::json!({"ok": false, "message": format!("无法中断: {}", target)}).to_string();
+                }
+                return serde_json::json!({"ok": false, "message": "cancel_map 不可用"}).to_string();
+            }
             Self::execute_tool(name, args, &working_dir)
         };
 
@@ -149,7 +169,7 @@ impl Agent for NeigeAgent {
         let mut current_skill = input.current_skill.clone().unwrap_or_default();
         loop {
             (result, route) = controller.run(
-                &mut session, &exec, &self.cancel, &tools,
+                &mut session, &exec, &self.cancel, &tools, None,
             ).await?;
 
             if route.is_some() {

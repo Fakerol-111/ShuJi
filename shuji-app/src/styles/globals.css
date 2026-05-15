@@ -1,2 +1,37 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
+
+@theme {
+  --color-ink-950: #1A1512;
+  --color-ink-900: #2C2416;
+  --color-ink-800: #3D3328;
+  --color-ink-700: #5C4F3E;
+  --color-ink-600: #8B7355;
+  --color-ink-500: #A8926D;
+  --color-ink-400: #C4B8A2;
+  --color-ink-300: #D9D0C1;
+  --color-ink-200: #EBE5D9;
+  --color-ink-100: #F5F1EB;
+  --color-ink-50: #FBF7F0;
+
+  --color-vermillion: #C41E3A;
+  --color-vermillion-light: #FDE8EC;
+  --color-vermillion-dark: #9B172E;
+
+  --color-gold: #B8860B;
+  --color-gold-light: #FFF8E7;
+
+  --color-jade: #2D5A3F;
+  --color-jade-light: #EDF5F0;
+
+  --font-serif: "Noto Serif SC", "Source Han Serif SC", "SimSun", serif;
+  --font-sans: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+@layer base {
+  html, body {
+    font-family: var(--font-sans);
+    background-color: var(--color-ink-50);
+    color: var(--color-ink-900);
+  }
+}

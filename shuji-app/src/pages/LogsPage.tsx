@@ -24,34 +24,36 @@ export default function LogsPage() {
   };
 
   return (
-    <div className="h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white border-b shadow-sm shrink-0">
-        <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
-          <h1 className="text-lg font-bold text-gray-900">日志</h1>
-          <div className="flex items-center gap-2">
-            <button onClick={refresh} className="text-sm px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50">刷新</button>
-            <button onClick={() => navigate("/project")} className="text-sm text-gray-500 hover:text-gray-700">← 返回</button>
+    <div className="h-screen bg-ink-50 flex flex-col">
+      <header className="bg-ink-900 border-b border-ink-800 shrink-0">
+        <div className="px-5 py-2.5 flex items-center justify-between">
+          <h1 className="text-base font-bold text-ink-50 tracking-wide">日志</h1>
+          <div className="flex items-center gap-1.5">
+            <button onClick={refresh} className="text-xs px-2.5 py-1.5 text-ink-400 hover:text-ink-200 hover:bg-ink-800 rounded transition-colors">刷新</button>
+            <button onClick={() => navigate("/project")} className="text-xs px-2.5 py-1.5 text-ink-400 hover:text-ink-200 hover:bg-ink-800 rounded transition-colors">← 返回</button>
           </div>
         </div>
       </header>
-      <div className="flex-1 max-w-6xl mx-auto w-full px-6 py-4 flex gap-4 min-h-0 overflow-hidden">
-        <div className="w-48 shrink-0 space-y-1 overflow-y-auto">
+      <div className="flex-1 px-5 py-4 flex gap-4 min-h-0 overflow-hidden">
+        <div className="w-48 shrink-0 space-y-0.5 overflow-y-auto">
           {logFiles.map((f) => (
             <button
               key={f}
               onClick={() => selectFile(f)}
-              className={`block w-full text-left text-xs px-3 py-2 rounded ${
-                selectedLog === f ? "bg-gray-800 text-white" : "bg-white text-gray-700 hover:bg-gray-100 border"
+              className={`block w-full text-left text-xs px-3 py-1.5 rounded transition-colors ${
+                selectedLog === f
+                  ? "bg-ink-900 text-ink-50"
+                  : "bg-white text-ink-700 hover:bg-ink-100 border border-ink-200"
               }`}
             >
               {f.replace(".jsonl", "")}
             </button>
           ))}
         </div>
-        <div className="flex-1 bg-gray-900 text-gray-100 rounded-lg p-4 overflow-y-auto">
-          {!selectedLog && <p className="text-xs text-gray-500">选择左侧日志文件查看</p>}
+        <div className="flex-1 bg-ink-900 text-ink-200 rounded-lg p-4 overflow-y-auto font-mono">
+          {!selectedLog && <p className="text-xs text-ink-600">选择左侧日志文件查看</p>}
           {logContent.map((line, i) => (
-            <pre key={i} className="text-xs leading-relaxed font-mono whitespace-pre-wrap">
+            <pre key={i} className="text-xs leading-relaxed whitespace-pre-wrap">
               {(() => { try { return JSON.stringify(JSON.parse(line), null, 1); } catch { return line; } })()}
             </pre>
           ))}
