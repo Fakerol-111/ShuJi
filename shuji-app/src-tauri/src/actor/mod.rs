@@ -204,13 +204,28 @@ pub async fn run_actor(mut ctx: ActorContext) {
         log_dept(&ctx, &role_name, "开始处理");
 
         let mut exec_iterations: u32 = 0;
+        let mut last_plan_current: Option<usize> = None;
+        const MAX_EXEC_ITERATIONS: u32 = 20;
         'exec: loop {
             exec_iterations += 1;
-            // Safety: break if stuck in a read loop (no plan generated after 6 rounds)
-            if exec_iterations > 6 {
-                log_console!("[actor] {}: plan loop exceeded 6 iterations, forcing exit", role_name);
+            // Safety: break if stuck without plan progress.
+            // If the plan's current batch has changed, the agent is making
+            // legitimate progress → reset the counter.
+            if let Ok(plan_json) = serde_json::from_str::<serde_json::Value>(&ctx.agent.plan_display()) {
+                if let Some(cur) = plan_json["current"].as_u64() {
+                    let cur_usize = cur as usize;
+                    if last_plan_current.map_or(true, |prev| cur_usize != prev) {
+                        // Batch changed — progress is being made, reset counter
+                        exec_iterations = 1;
+                        last_plan_current = Some(cur_usize);
+                    }
+                }
+            }
+            if exec_iterations > MAX_EXEC_ITERATIONS {
+                log_console!("[actor] {}: plan loop exceeded {} iterations without batch progress, forcing exit",
+                    role_name, MAX_EXEC_ITERATIONS);
                 let _ = ctx.emperor_tx.send(ChatMessage::new("系统",
-                    &format!("{} 计划循环超过次数限制（可能是计划无法收敛），请重新路由", role_name)));
+                    &format!("{} 计划循环超过次数限制（同一批次内 {} 轮未推进），请重新路由", role_name, MAX_EXEC_ITERATIONS)));
                 break 'exec;
             }
             let current_skill = ctx.current_skill.lock().ok().and_then(|s| s.clone());
