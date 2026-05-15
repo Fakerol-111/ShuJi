@@ -152,12 +152,22 @@ impl Agent for GongbuShangshuAgent {
             // Inject the current task_description (may have changed across batches)
             session.inject(&format!("继续执行。当前任务：{}", input.task_description));
         } else {
-            // Continuation within a batch: restore full coding context from previous round.
-            if let Some(ctx) = crate::api::session::PersistedContext::load_from(&working_dir, &role_name) {
-                let mut msgs = ctx.to_messages();
-                msgs.push(serde_json::json!({"role": "user", "content": input.task_description}));
-                let snap = crate::api::session::SessionSnapshot::from_messages(msgs);
-                session.restore(&snap);
+            // Check whether there's an active plan. If plan was reset (new task
+            // arrived), the old persisted context from the previous task is stale
+            // — delete it and start the session fresh.
+            let has_plan = self.plan.lock().unwrap().is_some();
+            if has_plan {
+                // Continuation within a batch: restore full coding context from previous round.
+                if let Some(ctx) = crate::api::session::PersistedContext::load_from(&working_dir, &role_name) {
+                    let mut msgs = ctx.to_messages();
+                    msgs.push(serde_json::json!({"role": "user", "content": input.task_description}));
+                    let snap = crate::api::session::SessionSnapshot::from_messages(msgs);
+                    session.restore(&snap);
+                }
+            } else {
+                // New task: remove stale context so the next save starts clean.
+                let ctx_path = working_dir.join(".shuji/context").join(format!("{}.json", role_name));
+                let _ = std::fs::remove_file(&ctx_path);
             }
         }
 
