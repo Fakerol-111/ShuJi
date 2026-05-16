@@ -110,6 +110,7 @@ fn type_to_dir(doc_type: &str) -> &'static str {
         "task" => "tasks",
         "ctrt" => "contracts",
         "rprt" => "reports",
+        "anls" => "analysis",
         "precepts" => "",
         _ => "misc",
     }
@@ -143,7 +144,7 @@ pub fn tool_create_document(working_dir: &Path, args: &serde_json::Value, dept: 
     if doc_type.is_empty() {
         return ToolOutput::error("create_document", "", "empty_type", "文档类型不能为空");
     }
-    let valid_types = ["dsgn", "plan", "pdsg", "ddtl", "task", "ctrt", "rprt", "revw", "precepts"];
+    let valid_types = ["dsgn", "plan", "pdsg", "ddtl", "task", "ctrt", "rprt", "revw", "precepts", "anls"];
     if !valid_types.contains(&doc_type.as_str()) {
         return ToolOutput::error("create_document", "", "invalid_type",
             &format!("无效文档类型: {}，支持的类型: {}", doc_type, valid_types.join(", ")));
@@ -336,8 +337,8 @@ pub fn create_document_tool_def() -> crate::api::client::ToolDefinition {
                 "properties": {
                     "type": {
                         "type": "string",
-                        "enum": ["dsgn", "plan", "pdsg", "ddtl", "task", "ctrt", "rprt", "revw"],
-                        "description": "文档类型。dsgn=整体设计, plan=阶段规划, pdsg=阶段设计, ddtl=详细设计, revw=审查报告, task=任务, ctrt=协议(接口契约), rprt=报告"
+                        "enum": ["dsgn", "plan", "pdsg", "ddtl", "task", "ctrt", "rprt", "revw", "anls"],
+                        "description": "文档类型。dsgn=整体设计, plan=阶段规划, pdsg=阶段设计, ddtl=详细设计, revw=审查报告, task=任务, ctrt=协议(接口契约), rprt=报告, anls=分析报告"
                     },
                     "refs": {
                         "type": "array",

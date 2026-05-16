@@ -126,6 +126,7 @@ impl AppConfig {
 }
 
 /// Read config from .env in the working directory (or parent).
+#[tauri::command]
 pub async fn get_config() -> Result<AppConfig, String> {
     let vars = load_dotenv();
     Ok(AppConfig::from_dotenv(&vars))

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { open } from "@tauri-apps/plugin-dialog";
-import { loadProject, getRecentDirs } from "../api";
+import { loadProject, getRecentDirs, getConfig } from "../api";
 
 export default function WorkspaceSelect() {
   const navigate = useNavigate();
@@ -12,6 +12,16 @@ export default function WorkspaceSelect() {
   const dirInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    // Check if API keys are configured; redirect to setup on first run
+    getConfig()
+      .then((cfg) => {
+        const def = cfg.roles?.default;
+        if (!def?.api_key) {
+          navigate("/setup", { replace: true });
+          return;
+        }
+      })
+      .catch(() => {});
     getRecentDirs().then(setRecentDirs).catch(() => {});
   }, []);
 

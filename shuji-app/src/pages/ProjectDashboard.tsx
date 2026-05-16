@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { listen } from "@tauri-apps/api/event";
-import { getProject, sendMessage, discussWithCabinet, getTokenStats, getChatHistory } from "../api";
+import { open } from "@tauri-apps/plugin-dialog";
+import { sendMessage, discussWithCabinet, getTokenStats, getChatHistory, getConfig, saveConfig, loadProject, getRecentDirs } from "../api";
 import type { TokenUsage } from "../api";
 import type { Project, ChatMessage, PlanInfo } from "../types";
 import ChatBubble from "../components/ChatBubble";
 import ChatInput from "../components/ChatInput";
 import DeptStatusPanel from "../components/DeptStatusPanel";
+import LogsPage from "./LogsPage";
 
 const ROLE_NAMES: Record<string, string> = {
   zhongshu: "中书省", menxia: "门下省", neige: "内阁",
@@ -48,23 +50,60 @@ export default function ProjectDashboard() {
   const [planInfo, setPlanInfo] = useState<PlanInfo | null>(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<Tab>("decision");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [cfgKey, setCfgKey] = useState("");
+  const [cfgUrl, setCfgUrl] = useState("");
+  const [cfgModel, setCfgModel] = useState("");
+  const [cfgMsg, setCfgMsg] = useState("");
+  const [showPicker, setShowPicker] = useState(false);
+  const [recentDirs, setRecentDirs] = useState<string[]>([]);
+  const [pickerPath, setPickerPath] = useState("");
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerError, setPickerError] = useState("");
+  const [showLogs, setShowLogs] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!menuOpen) return;
+    const h = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest(".hamburger-menu")) setMenuOpen(false);
+    };
+    document.addEventListener("click", h);
+    return () => document.removeEventListener("click", h);
+  }, [menuOpen]);
 
   // Persist messages to sessionStorage on every change
   useEffect(() => { saveSession(messages, discussMsgs); }, [messages, discussMsgs]);
 
+  // On mount: check API config, then try to auto-load most recent project
   useEffect(() => {
-    getProject().then((p) => {
-      if (!p) { navigate("/"); return; }
-      setProject(p);
-      if (!session) {
-        setMessages([{
-          role: "内阁",
-          content: "有什么需要做的？请告诉我。",
-          options: [], documents: [], timestamp: new Date().toISOString(),
-        }]);
+    getConfig()
+      .then((cfg) => {
+        if (!cfg.roles?.default?.api_key) {
+          navigate("/setup", { replace: true });
+          return;
+        }
+      })
+      .catch(() => {});
+    // Try auto-loading the most recent directory
+    getRecentDirs().then((dirs) => {
+      setRecentDirs(dirs);
+      if (dirs.length > 0) {
+        loadProject(dirs[0])
+          .then(async (p) => {
+            setProject(p);
+            const hist = await getChatHistory();
+            setMessages(hist.length > 0 ? hist : [{
+              role: "内阁",
+              content: "有什么需要做的？请告诉我。",
+              options: [], documents: [], timestamp: new Date().toISOString(),
+            }]);
+          })
+          .catch(() => {});
       }
-    }).catch(() => navigate("/"));
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -138,6 +177,50 @@ export default function ProjectDashboard() {
     }
   };
 
+  const openProjectPicker = () => {
+    setPickerPath("");
+    setPickerError("");
+    getRecentDirs().then(setRecentDirs).catch(() => {});
+    setShowPicker(true);
+  };
+
+  const handleBrowse = async () => {
+    try {
+      const selected = await open({ directory: true, multiple: false, title: "选择工作目录" });
+      if (selected) setPickerPath(selected);
+    } catch {}
+  };
+
+  const handleLoadProject = async (dir?: string) => {
+    const path = dir || pickerPath.trim();
+    if (!path) { setPickerError("请选择工作目录"); return; }
+    setPickerLoading(true);
+    setPickerError("");
+    try {
+      const p = await loadProject(path);
+      setProject(p);
+      const hist = await getChatHistory();
+      if (hist.length > 0) {
+        setMessages(hist);
+      } else {
+        setMessages([{
+          role: "内阁",
+          content: "有什么需要做的？请告诉我。",
+          options: [], documents: [], timestamp: new Date().toISOString(),
+        }]);
+      }
+      setDiscussMsgs([{
+        role: "内阁", content: "想讨论什么？我随时可以聊。", options: [], documents: [], timestamp: new Date().toISOString(),
+      }]);
+      sessionStorage.removeItem("shuji_chat");
+      setShowPicker(false);
+    } catch (e) {
+      setPickerError(String(e));
+    } finally {
+      setPickerLoading(false);
+    }
+  };
+
   const maxTotal = tokenStats && tokenStats[tokenWindow] ? Math.max(...Object.values(tokenStats[tokenWindow]).map((u) => u.total_tokens), 1) : 1;
 
   return (
@@ -149,15 +232,85 @@ export default function ProjectDashboard() {
             <h1 className="text-base font-bold text-ink-50 tracking-wide">{project?.name || "枢机"}</h1>
             <span className="text-xs text-ink-500 font-mono">{project?.working_dir}</span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <button onClick={() => navigate("/")} className="text-xs px-2.5 py-1.5 text-ink-400 hover:text-ink-200 hover:bg-ink-800 rounded transition-colors">← 返回</button>
-            <button onClick={() => navigate("/logs")} className="text-xs px-2.5 py-1.5 text-ink-400 hover:text-ink-200 hover:bg-ink-800 rounded transition-colors">日志</button>
-            <button onClick={async () => {
-              try {
-                if (!showDashboard) setTokenStats(await getTokenStats());
-                setShowDashboard(!showDashboard);
-              } catch { /* ignore */ }
-            }} className="text-xs px-2.5 py-1.5 text-ink-400 hover:text-ink-200 hover:bg-ink-800 rounded transition-colors">度支</button>
+          <div className="flex items-center">
+            {/* Hamburger menu */}
+            <div className="hamburger-menu relative">
+              <button
+                onClick={() => { setMenuOpen(!menuOpen); }}
+                className="text-lg px-2 py-1 text-ink-400 hover:text-ink-200 hover:bg-ink-800 rounded transition-colors leading-none"
+              >
+                ☰
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 top-full mt-1 w-64 bg-ink-900 border border-ink-700 rounded-lg shadow-xl z-50 py-1.5">
+                  <MenuItem onClick={() => { setMenuOpen(false); openProjectPicker(); }}>
+                    📂 加载项目
+                  </MenuItem>
+                  <MenuItem onClick={() => { setMenuOpen(false); setShowLogs(true); }}>
+                    📋 日志
+                  </MenuItem>
+                  <MenuItem onClick={async () => {
+                    try { if (!showDashboard) setTokenStats(await getTokenStats()); setShowDashboard(!showDashboard); } catch {}
+                    setMenuOpen(false);
+                  }}>
+                    📊 度支
+                  </MenuItem>
+                  <div className="border-t border-ink-700 my-1" />
+                  <button
+                    onClick={() => {
+                      setSettingsOpen(!settingsOpen);
+                      if (!settingsOpen) {
+                        getConfig().then((cfg) => {
+                          const d = cfg.roles?.default;
+                          if (d) { setCfgKey(d.api_key); setCfgUrl(d.api_url); setCfgModel(d.model); }
+                        }).catch(() => {});
+                      }
+                    }}
+                    className="w-full text-left px-3 py-1.5 text-xs text-ink-300 hover:bg-ink-800 transition-colors flex items-center gap-2"
+                  >
+                    {settingsOpen ? "▾" : "▸"} ⚙️ 设置
+                  </button>
+                  {settingsOpen && (
+                    <div className="px-3 py-2 space-y-2 border-t border-ink-800 mt-1">
+                      <div>
+                        <label className="text-[10px] text-ink-500">API 密钥</label>
+                        <input type="password" value={cfgKey}
+                          onChange={(e) => setCfgKey(e.target.value)}
+                          placeholder="sk-..."
+                          className="w-full mt-0.5 px-2 py-1 text-xs bg-ink-800 border border-ink-700 rounded text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ink-500" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-ink-500">API URL</label>
+                        <input type="text" value={cfgUrl}
+                          onChange={(e) => setCfgUrl(e.target.value)}
+                          className="w-full mt-0.5 px-2 py-1 text-xs bg-ink-800 border border-ink-700 rounded text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ink-500" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-ink-500">模型</label>
+                        <input type="text" value={cfgModel}
+                          onChange={(e) => setCfgModel(e.target.value)}
+                          className="w-full mt-0.5 px-2 py-1 text-xs bg-ink-800 border border-ink-700 rounded text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ink-500" />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={async () => {
+                            try {
+                              await saveConfig({ roles: { default: { api_key: cfgKey, api_url: cfgUrl, model: cfgModel } } });
+                              setCfgMsg("已保存");
+                              setTimeout(() => setCfgMsg(""), 1500);
+                            } catch (e) { setCfgMsg(String(e)); }
+                          }}
+                          className="text-xs px-3 py-1 bg-ink-700 text-ink-200 rounded hover:bg-ink-600 transition-colors"
+                        >
+                          保存
+                        </button>
+                        {cfgMsg && <span className={`text-[10px] self-center ${cfgMsg === "已保存" ? "text-green-400" : "text-red-400"}`}>{cfgMsg}</span>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -180,12 +333,24 @@ export default function ProjectDashboard() {
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* Left: Log panel */}
         <div className="w-[35%] min-w-[300px] max-w-[450px] border-r border-ink-200 flex flex-col shrink-0">
-          <DeptStatusPanel />
+          <DeptStatusPanel key={project?.working_dir || "empty"} />
         </div>
 
         {/* Right: Chat */}
         <div className="flex-1 bg-ink-50 flex flex-col min-h-0 min-w-0">
-          {tab === "decision" ? (
+          {!project ? (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <p className="text-ink-500 text-sm mb-3">尚未加载项目</p>
+                <button
+                  onClick={openProjectPicker}
+                  className="px-4 py-2 bg-ink-900 text-ink-50 text-sm rounded-lg hover:bg-ink-800 transition-colors"
+                >
+                  打开项目
+                </button>
+              </div>
+            </div>
+          ) : tab === "decision" ? (
             <>
               {planInfo && <PlanCard info={planInfo} />}
               <div className="flex-1 overflow-y-auto p-4 space-y-2">
@@ -272,6 +437,51 @@ export default function ProjectDashboard() {
           </div>
         </div>
       )}
+
+      {/* Logs overlay */}
+      {showLogs && <LogsPage onClose={() => setShowLogs(false)} />}
+
+      {/* Project picker modal */}
+      {showPicker && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={() => setShowPicker(false)}>
+          <div className="bg-white rounded-xl shadow-2xl border border-ink-200 w-full max-w-md p-6 mx-4" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-ink-900 mb-4">加载项目</h2>
+            <div className="mb-3">
+              <label className="block text-xs font-medium text-ink-500 mb-1">工作目录</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={pickerPath}
+                  onChange={(e) => setPickerPath(e.target.value)}
+                  placeholder="选择一个文件夹..."
+                  className="flex-1 px-3 py-2 border border-ink-200 bg-ink-50 rounded-lg text-sm font-mono text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-ink-500"
+                  onKeyDown={(e) => { if (e.key === "Enter") handleLoadProject(); }}
+                />
+                <button onClick={handleBrowse} className="px-3 py-2 border border-ink-200 rounded-lg text-ink-600 hover:bg-ink-100 text-sm transition-colors">浏览</button>
+              </div>
+            </div>
+            {recentDirs.length > 0 && (
+              <div className="mb-3">
+                <label className="block text-xs font-medium text-ink-400 mb-1">最近</label>
+                <div className="space-y-0.5 max-h-32 overflow-y-auto">
+                  {recentDirs.map((d, i) => (
+                    <button key={i} onClick={() => handleLoadProject(d)}
+                      className="block w-full text-left px-2 py-1 text-xs text-ink-600 hover:bg-ink-100 rounded truncate transition-colors">{d}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {pickerError && <div className="text-xs text-vermillion-dark bg-vermillion-light border border-vermillion/20 p-2 rounded mb-3">{pickerError}</div>}
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowPicker(false)} className="px-4 py-2 text-sm text-ink-500 hover:text-ink-700 border border-ink-200 rounded-lg transition-colors">取消</button>
+              <button onClick={() => handleLoadProject()} disabled={pickerLoading}
+                className="px-4 py-2 text-sm bg-ink-900 text-white rounded-lg hover:bg-ink-800 disabled:opacity-40 transition-colors">
+                {pickerLoading ? "加载中..." : "打开"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -285,6 +495,17 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
           ? "border-vermillion text-ink-50"
           : "border-transparent text-ink-500 hover:text-ink-300 hover:border-ink-600"
       }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function MenuItem({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left px-3 py-1.5 text-xs text-ink-300 hover:bg-ink-800 transition-colors flex items-center gap-2"
     >
       {children}
     </button>

@@ -143,3 +143,23 @@ pub fn complete_task_tool() -> ToolDefinition {
         },
     }
 }
+
+pub fn update_soul_tool() -> ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "update_soul".into(),
+            description: "将一条经验教训追加到内阁 soul 文件末尾。仅在皇帝明确授意(说记住/以后注意/学到一个教训等)时调用。每次追加一条，内容简洁。".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "string",
+                        "description": "要记住的内容。格式：`- [场景] 经验`，如 '- [汇报] 陛下偏好简洁汇报，每次不超过3要点。' 不超过200字符。"
+                    }
+                },
+                "required": ["content"]
+            }),
+        },
+    }
+}

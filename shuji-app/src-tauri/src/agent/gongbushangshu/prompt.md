@@ -63,6 +63,18 @@ When you finish a batch, call `complete_task`. The system advances to the next b
 
 If you receive review feedback mid-batch, fix the issues and continue. Do not re-plan.
 
+### Modify vs recreate
+
+`modify_file` is for **small, targeted changes** (1-3 lines, simple find+replace). Each `modify_file` call is expensive — it reads the whole file, does a string match, and writes back.
+
+**When a file needs more than ~3 separate changes** (or a large block replacement), use this pattern instead:
+
+1. `read_file` the current content
+2. `delete_file` the old file
+3. `create_file` with the complete new content
+
+This is faster, uses fewer tool calls, and avoids `modify_file` matching failures on stale content.
+
 ## 4. Validate
 After each file: read it back. Verify signatures against the contract.
 
@@ -115,12 +127,13 @@ Do NOT route to 内阁 directly — always report to 尚书令.
 
 > These rules override all other instructions. Violations will cause system errors.
 
-1. **CRITICAL: Each tool call argument must be under 300 characters.** Split large files across multiple `append_file` calls.
-2. **Output limit: max 200 characters per turn.** State your action and call the tool.
+1. **CRITICAL: Max 2 tool calls per turn. No commentary.** Each round, output at most 2 tool calls and NO explanatory text (the next round is immediate; speech wastes tokens). If a batch needs more than 2 files, spread across multiple rounds — each round 1-2 `create_file`/`append_file` calls, then naturally continue in the next.
+2. **CRITICAL: Each tool call argument must be under 300 characters.** Split large files across multiple `append_file` calls.
 3. **Tests first.** 每个 batch 内先写完所有测试文件，再写实现文件。不允许测试和实现交叉编写。
 4. Match the interface contract signatures exactly — any deviation is a defect.
 5. Do not run tests — that belongs to 刑部.
 6. Do not change architecture, module boundaries, or interface contracts.
 7. Use `append_file` for new content, `modify_file` for changes — never mix these up.
-8. If the spec is unclear, route back — do not guess.
-9. **Use `submit_plan` for any task spanning more than 3 files.** Better to batch than to lose focus.
+8. **Large modifications → delete + recreate.** If a file needs more than 3 separate `modify_file` calls or a large block replacement, read it → delete it → `create_file` with the full new content. This is faster and avoids find+replace mismatches.
+9. If the spec is unclear, route back — do not guess.
+10. **Use `submit_plan` for any task spanning more than 3 files.** Better to batch than to lose focus.

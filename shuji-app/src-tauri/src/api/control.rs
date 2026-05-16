@@ -144,12 +144,21 @@ impl AgentController {
 
                         // ── Cross-department routing ──────
                         if tc.name == "route_to" {
-                            let target = match role_from_name(
-                                tc.args["to"].as_str().unwrap_or("")
-                            ) {
+                            let to_name = tc.args["to"].as_str().unwrap_or("");
+                            // Block self-routing: an agent cannot route to itself
+                            let my_role = session.role();
+                            if role_from_name(to_name).map_or(false, |r| r.name() == my_role) {
+                                let msg = format!(
+                                    "禁止路由给自己（{}）。请路由到其他部门，或直接输出结果而非继续路由。",
+                                    my_role
+                                );
+                                session.feed_tool_result(&tc.id, &tc.name, &msg);
+                                continue;
+                            }
+                            let target = match role_from_name(to_name) {
                                 Some(r) => r,
                                 None => {
-                                    let msg = format!("未知目标部门: {}", tc.args["to"]);
+                                    let msg = format!("未知目标部门: {}", to_name);
                                     session.feed_tool_result(&tc.id, &tc.name, &msg);
                                     continue;
                                 }

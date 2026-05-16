@@ -31,6 +31,7 @@ impl NeigeAgent {
         tools.extend(crate::tool::registry::document_tools());
         tools.extend(crate::tool::registry::summarize_logs_tool());
         tools.push(crate::tool::registry::cancel_agent_tool());
+        tools.push(crate::tool::registry::update_soul_tool());
         tools
     }
 
@@ -76,6 +77,24 @@ impl NeigeAgent {
         session.inject(&parts.join("\n"));
     }
 
+    /// Load soul from `.shuji/soul/neige.md`. If the file doesn't exist,
+    /// bootstrap it from the compile-time default. This allows the soul to
+    /// evolve at runtime (via `update_soul` tool or manual editing).
+    fn load_soul(working_dir: &Path) -> String {
+        let soul_dir = working_dir.join(".shuji").join("soul");
+        let soul_path = soul_dir.join("neige.md");
+        if let Ok(content) = std::fs::read_to_string(&soul_path) {
+            if !content.trim().is_empty() {
+                return content;
+            }
+        }
+        // Bootstrap from compile-time default
+        let default = include_str!("soul.md");
+        let _ = std::fs::create_dir_all(&soul_dir);
+        let _ = std::fs::write(&soul_path, default);
+        default.to_string()
+    }
+
     pub fn load_skill(name: &str) -> &'static str {
         match name {
             "discuss" => include_str!("skills/discuss.md"),
@@ -84,6 +103,10 @@ impl NeigeAgent {
             "workflow_simple" => include_str!("skills/workflow_simple.md"),
             "workflow_standard" => include_str!("skills/workflow_standard.md"),
             "workflow_complex" => include_str!("skills/workflow_complex.md"),
+            "workflow_optimize" => include_str!("skills/workflow_optimize.md"),
+            "workflow_bugfix" => include_str!("skills/workflow_bugfix.md"),
+            "workflow_refactor" => include_str!("skills/workflow_refactor.md"),
+            "workflow_audit" => include_str!("skills/workflow_audit.md"),
             "summary" => include_str!("skills/summary.md"),
             _ => "",
         }
@@ -106,7 +129,9 @@ impl Agent for NeigeAgent {
         let mut session = crate::api::session::Session::new(
             system_prompt, &msgs, &self.model, &tools, &client,
             &input.skill_prompts,
-        ).with_role(self.role().name()).with_debug_dir(input.working_dir.clone());
+        ).with_role(self.role().name())
+         .with_soul(self.role().name(), &Self::load_soul(&input.working_dir))
+         .with_debug_dir(input.working_dir.clone());
 
         // Restore saved context from previous invocation, compacting if needed
         if let Some(mut ctx) = crate::api::session::PersistedContext::load_from(&working_dir, "neige") {
@@ -161,6 +186,30 @@ impl Agent for NeigeAgent {
                     return serde_json::json!({"ok": false, "message": format!("无法中断: {}", target)}).to_string();
                 }
                 return serde_json::json!({"ok": false, "message": "cancel_map 不可用"}).to_string();
+            }
+            if name == "update_soul" {
+                let content = args["content"].as_str().unwrap_or("");
+                if content.is_empty() {
+                    return r#"{"ok": false, "message": "content 不能为空"}"#.to_string();
+                }
+                if content.len() > 300 {
+                    return r#"{"ok": false, "message": "内容过长（最多300字符）"}"#.to_string();
+                }
+                let soul_dir = working_dir.join(".shuji").join("soul");
+                let soul_path = soul_dir.join("neige.md");
+                let _ = std::fs::create_dir_all(&soul_dir);
+                let entry = format!("\n- {}", content);
+                match std::fs::OpenOptions::new().create(true).append(true).write(true).open(&soul_path) {
+                    Ok(mut f) => {
+                        use std::io::Write;
+                        let _ = writeln!(f, "{}", entry);
+                        log_console!("[内阁] update_soul → {}", content);
+                        return r#"{"ok": true, "message": "已记录"}"#.to_string();
+                    }
+                    Err(e) => {
+                        return serde_json::json!({"ok": false, "message": format!("写入失败: {}", e)}).to_string();
+                    }
+                }
             }
             Self::execute_tool(name, args, &working_dir)
         };

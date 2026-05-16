@@ -53,7 +53,7 @@ impl PersistedContext {
                 let content = msg["content"].as_str().unwrap_or("");
                 if base_prompt.is_empty() {
                     base_prompt = content.to_string();
-                } else if content.starts_with("[skill:") {
+                } else if content.starts_with("## Working mode:") {
                     skill_prompts.push(content.to_string());
                 } else if content.starts_with("[对话摘要]") {
                     history_messages = content.to_string();
@@ -162,11 +162,11 @@ impl Session {
         let has_write_file = tools.iter().any(|t| t.function.name == "create_file");
         let has_append_document = tools.iter().any(|t| t.function.name == "append_document");
         let max_tokens = if has_write_file {
-            2048
+            // 工部等 — 每轮 1-2 个工具调用，4096 足够
+            4096
         } else if has_append_document {
-            // 中书令等使用 append_document 的 agent 需要更多 tokens
-            // 因为需要多次调用工具（每次最多 500 chars）
-            1536
+            // 中书令 / 吏部 / 刑部 / 礼部 / 兵部 — 多次 append_document
+            2048
         } else if tools.iter().any(|t| t.function.name == "read_file") {
             1024
         } else {
@@ -193,6 +193,30 @@ impl Session {
     /// Set a role label for logging.
     pub fn with_role(mut self, role: &str) -> Self {
         self.role = role.to_string();
+        self
+    }
+
+    /// Return the role label set via `with_role`.
+    pub fn role(&self) -> &str {
+        &self.role
+    }
+
+    /// Inject a persona system message (`[soul: role]`) right after
+    /// the base prompt, before skill prompts and history messages.
+    pub fn with_soul(mut self, role: &str, content: &str) -> Self {
+        if content.is_empty() {
+            return self;
+        }
+        let soul_msg = serde_json::json!({
+            "role": "system",
+            "content": format!("[soul: {}]\n{}", role, content)
+        });
+        // Insert at index 1 (after base prompt, before skill/history)
+        if self.messages.len() > 1 {
+            self.messages.insert(1, soul_msg);
+        } else {
+            self.messages.push(soul_msg);
+        }
         self
     }
 
@@ -236,6 +260,15 @@ impl Session {
                 "frequency_penalty": 0.1,
                 "seed": 42,
             });
+
+            // Enable thinking mode for OpenAI-compatible APIs (DeepSeek etc.).
+            // Reasoning tokens are separate from max_tokens — they don't
+            // consume output quota, leaving more room for tool calls.
+            // Skip for Anthropic (uses a different thinking format).
+            if !self.client.api_url.contains("anthropic.com") {
+                body["thinking"] = serde_json::json!({"type": "enabled"});
+            }
+
             if self.tool_choice_none {
                 body["tool_choice"] = serde_json::json!("none");
                 if !self.tools.is_empty() {
@@ -317,7 +350,20 @@ impl Session {
                     }).count()
                 }).unwrap_or(0);
 
+                let total_tool_count = raw_tcs.map(|tcs| tcs.len()).unwrap_or(0);
                 let has_valid_calls = valid_tool_count > 0;
+                let broken_count = total_tool_count - valid_tool_count;
+
+                // Collect names of broken tools for the retry hint
+                let broken_names: Vec<&str> = raw_tcs.map(|tcs| {
+                    tcs.iter().filter(|tc| {
+                        match &tc["function"]["arguments"] {
+                            serde_json::Value::String(s) => !serde_json::from_str::<serde_json::Value>(s).is_ok(),
+                            serde_json::Value::Object(_) => false,
+                            _ => true,
+                        }
+                    }).filter_map(|tc| tc["function"]["name"].as_str()).collect()
+                }).unwrap_or_default();
 
                 if !has_valid_calls && length_retries < MAX_LENGTH_RETRIES {
                     length_retries += 1;
@@ -329,10 +375,15 @@ impl Session {
                         "role": "assistant",
                         "content": msg["content"].as_str().unwrap_or("")
                     }));
-                    let instruction = if length_retries >= 3 {
-                        "上一轮输出再次因长度截断。你现在只剩 256 token 的输出空间。\n必须立即调用一个最小必要工具并输出最简参数（每个参数最多 150 字符）。\n禁止任何解释、禁止任何分析、禁止任何计划。\n如果是 append_document，每次只写 150 字符。"
+                    let names_hint = if broken_names.is_empty() {
+                        String::new()
                     } else {
-                        "上一轮输出因长度截断。不要继续解释，不要继续分析，不要重复计划。\n下一轮必须执行以下之一：\n1. 立即调用一个最小必要工具（每个参数最多 150-200 字符）；\n2. 若无法调用工具，只能用一句话说明下一步要调用哪个工具以及原因。\n禁止输出长文本。如果是 append_document，每次只写 150-200 字符。"
+                        format!(" 丢失的调用：{}。", broken_names.join("、"))
+                    };
+                    let instruction = if length_retries >= 3 {
+                        format!("上一轮输出再次因长度截断。现在只剩少量输出空间。\n你必须立即输出 1 个最小必要工具（参数 ≤150 字符），然后停止。{}", names_hint)
+                    } else {
+                        format!("上一轮输出因长度截断。{}\n你必须：\n1. 立即输出被截断的工具调用（本轮最多 1 个）；\n2. 禁止任何解释文字。如果还需要更多工具，后续轮次继续。", names_hint)
                     };
                     self.messages.push(serde_json::json!({
                         "role": "user",
@@ -341,10 +392,23 @@ impl Session {
                     continue;
                 }
 
+                // Mixed case: some valid, some broken. Keep the valid ones,
+                // and inject a hint so the LLM re-issues the broken ones.
+                if broken_count > 0 {
+                    let names_hint = broken_names.join("、");
+                    let hint = format!(
+                        "上一轮输出因长度截断，有 {} 个工具调用丢失（{}）。请重新调用这些工具，本轮最多 1 个。",
+                        broken_count, names_hint
+                    );
+                    self.messages.push(serde_json::json!({
+                        "role": "user",
+                        "content": hint
+                    }));
+                }
+
                 log_console!(
-                    "[{}] WARNING: finish_reason=length — response truncated at {} tokens{}",
-                    self.role, self.max_tokens,
-                    if has_valid_calls { format!(" ({} valid tool calls)", valid_tool_count) } else { " (giving up)".to_string() }
+                    "[{}] WARNING: finish_reason=length — response truncated at {} tokens ({} valid, {} broken)",
+                    self.role, self.max_tokens, valid_tool_count, broken_count
                 );
             }
 
@@ -442,18 +506,18 @@ impl Session {
     /// Append a skill-level system message to the conversation.
     /// Skills accumulate in the context (context compression will handle pruning later).
     pub fn inject_skill(&mut self, skill_name: &str, content: &str) {
-        let formatted = format!("[skill: {}]\n{}", skill_name, content);
+        let formatted = format!("## Working mode: {}\n\n{}", skill_name, content);
         self.messages.push(serde_json::json!({"role": "system", "content": formatted}));
     }
 
     /// Replace the previous skill message with a new one (no accumulation).
-    /// Falls back to append if no prior `[skill:` message exists.
+    /// Falls back to append if no prior `## Working mode:` message exists.
     pub fn replace_skill(&mut self, skill_name: &str, content: &str) {
-        let formatted = format!("[skill: {}]\n{}", skill_name, content);
+        let formatted = format!("## Working mode: {}\n\n{}", skill_name, content);
         let msg = serde_json::json!({"role": "system", "content": formatted});
         if let Some(pos) = self.messages.iter().rposition(|m| {
             m["role"].as_str() == Some("system")
-                && m["content"].as_str().map_or(false, |c| c.starts_with("[skill:"))
+                && m["content"].as_str().map_or(false, |c| c.starts_with("## Working mode:"))
         }) {
             self.messages[pos] = msg;
         } else {
@@ -522,6 +586,8 @@ impl Session {
     }
 
     /// Write truncated output to `.shuji/debug/truncated.md` for debugging.
+    /// Dumps the raw message, partial tool calls, and the last messages of
+    /// session context (so we can see what caused the truncation).
     fn write_debug_truncated(&self, msg: &serde_json::Value, retry: u32) {
         let dir = match self.debug_dir {
             Some(ref d) => d.clone(),
@@ -532,6 +598,9 @@ impl Session {
 
         let sep = "─".repeat(60);
         let content = msg["content"].as_str().unwrap_or("");
+        let finish = msg.get("finish_reason")
+            .and_then(|v| v.as_str()).unwrap_or("?");
+
         let mut lines = vec![
             sep.clone(),
             "# Truncated Output".to_string(),
@@ -539,28 +608,84 @@ impl Session {
             format!("Role: {}", self.role),
             format!("Model: {}", self.model),
             format!("Max Tokens: {}", self.max_tokens),
-            format!("Retry: {}/5", retry + 1),
-            String::new(),
-            "## Content".to_string(),
-            if content.is_empty() { "(empty)".to_string() } else { content.to_string() },
+            format!("Retry: {}/5 — finish_reason: {}", retry + 1, finish),
+            format!("Session messages: {} total", self.messages.len()),
             String::new(),
         ];
 
+        // 1. Dump the truncated response content
+        lines.push("## Response Content".to_string());
+        if content.is_empty() {
+            lines.push("(empty — content was fully truncated)".to_string());
+            // Dump the raw message JSON to see if anything survived
+            lines.push(format!("\nRaw message:\n```json\n{}\n```",
+                serde_json::to_string_pretty(msg).unwrap_or_default()));
+        } else {
+            lines.push(format!("({} chars)", content.chars().count()));
+            lines.push(String::new());
+            lines.push(content.to_string());
+        }
+        lines.push(String::new());
+
+        // 2. Dump tool calls (even partial ones with broken JSON args)
         if let Some(tcs) = msg["tool_calls"].as_array() {
-            if !tcs.is_empty() {
-                lines.push("## Tool Calls".to_string());
-                for (i, tc) in tcs.iter().enumerate() {
-                    let name = tc["function"]["name"].as_str().unwrap_or("?");
-                    let args_raw = tc["function"]["arguments"].as_str().unwrap_or("(non-string)");
-                    lines.push(format!("{}. {} — args ({} chars):", i + 1, name, args_raw.len()));
-                    if args_raw.len() > 500 {
-                        let truncated: String = args_raw.chars().take(500).collect();
-                        lines.push(format!("{}...", truncated));
-                    } else {
-                        lines.push(args_raw.to_string());
-                    }
-                    lines.push(String::new());
+            let valid = tcs.iter().filter(|tc| {
+                match &tc["function"]["arguments"] {
+                    serde_json::Value::String(s) => serde_json::from_str::<serde_json::Value>(s).is_ok(),
+                    serde_json::Value::Object(_) => true,
+                    _ => false,
                 }
+            }).count();
+            lines.push(format!("## Tool Calls ({} total, {} with valid args)", tcs.len(), valid));
+            for (i, tc) in tcs.iter().enumerate() {
+                let name = tc["function"]["name"].as_str().unwrap_or("?");
+                let args_raw = tc["function"]["arguments"].as_str().unwrap_or("");
+                let args_valid = match &tc["function"]["arguments"] {
+                    serde_json::Value::String(s) => serde_json::from_str::<serde_json::Value>(s).is_ok(),
+                    serde_json::Value::Object(_) => true,
+                    _ => false,
+                };
+                let status = if args_valid { "✓" } else { "✗ BROKEN" };
+                lines.push(format!("{}. {} {} — args ({} chars):", i + 1, name, status, args_raw.len()));
+                // Always show the raw args for broken ones; truncate valid ones only if huge
+                if !args_valid || args_raw.len() <= 1000 {
+                    lines.push(format!("```\n{}\n```", args_raw));
+                } else {
+                    let preview: String = args_raw.chars().take(500).collect();
+                    lines.push(format!("```\n{}...\n```", preview));
+                }
+                lines.push(String::new());
+            }
+        } else {
+            lines.push("## Tool Calls".to_string());
+            lines.push("(none)".to_string());
+        }
+        lines.push(String::new());
+
+        // 3. Dump last N session messages to show what led to truncation
+        let last_n = 8usize;
+        let start = self.messages.len().saturating_sub(last_n);
+        lines.push(format!("## Last {} Session Messages (of {})", last_n, self.messages.len()));
+        lines.push("(most recent at bottom — shows what triggered this response)".to_string());
+        lines.push(String::new());
+        for (j, m) in self.messages.iter().enumerate().skip(start) {
+            let role = m["role"].as_str().unwrap_or("");
+            let c = m["content"].as_str().unwrap_or("");
+            let tool_names: Vec<&str> = m["tool_calls"].as_array()
+                .map(|a| a.iter().filter_map(|tc| tc["function"]["name"].as_str()).collect())
+                .unwrap_or_default();
+            let tool_id = m["tool_call_id"].as_str().unwrap_or("");
+
+            if role == "tool" {
+                let preview: String = c.chars().take(150).collect();
+                let suffix = if c.chars().count() > 150 { "..." } else { "" };
+                lines.push(format!("[{}] tool (id={}) → {}{}", j, tool_id, preview, suffix));
+            } else if !tool_names.is_empty() {
+                lines.push(format!("[{}] {} → tools: {:?}", j, role, tool_names));
+            } else {
+                let preview: String = c.chars().take(200).collect();
+                let suffix = if c.chars().count() > 200 { "..." } else { "" };
+                lines.push(format!("[{}] {} → {}{}", j, role, preview, suffix));
             }
         }
 

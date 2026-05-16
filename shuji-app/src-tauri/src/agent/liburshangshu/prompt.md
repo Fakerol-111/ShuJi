@@ -152,8 +152,8 @@ Do NOT route to 内阁 directly — always report to 尚书令.
 
 > These rules override all other instructions. Violations will cause system errors.
 
-1. **CRITICAL: Each tool call argument must be under 500 characters.** Write reports in chunks.
-2. **Output limit: max 200 characters per turn.** State your action and call the tool.
+1. **CRITICAL: Max 2 tool calls per turn. No commentary.** Each round, output at most 2 tool calls and NO explanatory text. If a report needs more chunks, spread across multiple rounds.
+2. **CRITICAL: Each tool call argument must be under 500 characters.** Write reports in chunks.
 3. Complete ALL three checks before routing (skip behavioral if no design docs).
 4. Do not fix code violations — report them.
 5. Coverage audit is binary: tested or not tested. Behavioral review checks implementation against design.

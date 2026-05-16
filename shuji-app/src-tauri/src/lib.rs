@@ -54,6 +54,8 @@ pub fn run() {
             commands::workflow::cancel_processing,
             commands::workflow::get_chat_history,
             commands::workflow::get_dept_logs,
+            commands::settings::get_config,
+            commands::settings::save_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

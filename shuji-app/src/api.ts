@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Project, ProjectSummary, ChatMessage, ProjectSnapshot, DeptLogEntry } from "./types";
+import type { Project, ProjectSummary, ChatMessage, ProjectSnapshot, DeptLogEntry, AppConfig } from "./types";
 
 export async function createProject(name: string, goal: string, workingDir: string): Promise<Project> {
   return invoke("create_project", { name, goal, workingDir });
@@ -75,4 +75,12 @@ export async function getChatHistory(): Promise<ChatMessage[]> {
 
 export async function getDeptLogs(): Promise<DeptLogEntry[]> {
   return invoke("get_dept_logs");
+}
+
+export async function getConfig(): Promise<AppConfig> {
+  return invoke("get_config");
+}
+
+export async function saveConfig(config: AppConfig): Promise<void> {
+  return invoke("save_config", { config });
 }

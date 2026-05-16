@@ -45,7 +45,7 @@ impl Agent for LibuRShangshuAgent {
         let mut session = crate::api::session::Session::new(
             system_prompt, &msgs, &self.model, &tools, &client,
             &[],
-        ).with_role(self.role().name()).with_max_tokens(1024).with_debug_dir(input.working_dir.clone());
+        ).with_role(self.role().name()).with_debug_dir(input.working_dir.clone());
 
         let role_name = self.role().name().to_string();
         if let Some(ctx) = crate::api::session::PersistedContext::load_from(&working_dir, &role_name) {

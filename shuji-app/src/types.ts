@@ -95,6 +95,17 @@ export interface ChatResponse {
   snapshot: ProjectSnapshot;
 }
 
+// API configuration
+export interface RoleEndpoint {
+  api_key: string;
+  api_url: string;
+  model: string;
+}
+
+export interface AppConfig {
+  roles: Record<string, RoleEndpoint>;
+}
+
 // Real-time department status log (from dept-log Tauri event)
 export interface DeptLogEntry {
   dept: string;

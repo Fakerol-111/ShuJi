@@ -34,6 +34,10 @@ impl ZhongshulingAgent {
             "overall_design" => include_str!("skills/overall_design.md"),
             "phase_plan" => include_str!("skills/phase_plan.md"),
             "phase_design" => include_str!("skills/phase_design.md"),
+            "code_analysis" => include_str!("skills/code_analysis.md"),
+            "optimization_plan" => include_str!("skills/optimization_plan.md"),
+            "diagnosis" => include_str!("skills/diagnosis.md"),
+            "impact_assessment" => include_str!("skills/impact_assessment.md"),
             _ => "",
         }
     }
@@ -55,7 +59,7 @@ impl Agent for ZhongshulingAgent {
         let mut session = crate::api::session::Session::new(
             system_prompt, &msgs, &self.model, &tools, &client,
             &input.skill_prompts,
-        ).with_role(self.role().name()).with_max_tokens(1024).with_debug_dir(input.working_dir.clone());
+        ).with_role(self.role().name()).with_debug_dir(input.working_dir.clone());
 
         let role_name = self.role().name().to_string();
         if let Some(ctx) = crate::api::session::PersistedContext::load_from(&working_dir, &role_name) {

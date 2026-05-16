@@ -2,7 +2,11 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { listLogFiles, readLogFile } from "../api";
 
-export default function LogsPage() {
+interface Props {
+  onClose?: () => void;
+}
+
+export default function LogsPage({ onClose }: Props) {
   const navigate = useNavigate();
   const [logFiles, setLogFiles] = useState<string[]>([]);
   const [selectedLog, setSelectedLog] = useState<string | null>(null);
@@ -23,14 +27,16 @@ export default function LogsPage() {
     setLogContent(await readLogFile(f));
   };
 
-  return (
+  const close = onClose || (() => navigate("/"));
+
+  const inner = (
     <div className="h-screen bg-ink-50 flex flex-col">
       <header className="bg-ink-900 border-b border-ink-800 shrink-0">
         <div className="px-5 py-2.5 flex items-center justify-between">
           <h1 className="text-base font-bold text-ink-50 tracking-wide">日志</h1>
           <div className="flex items-center gap-1.5">
             <button onClick={refresh} className="text-xs px-2.5 py-1.5 text-ink-400 hover:text-ink-200 hover:bg-ink-800 rounded transition-colors">刷新</button>
-            <button onClick={() => navigate("/project")} className="text-xs px-2.5 py-1.5 text-ink-400 hover:text-ink-200 hover:bg-ink-800 rounded transition-colors">← 返回</button>
+            <button onClick={close} className="text-xs px-2.5 py-1.5 text-ink-400 hover:text-ink-200 hover:bg-ink-800 rounded transition-colors">← 返回</button>
           </div>
         </div>
       </header>
@@ -61,4 +67,12 @@ export default function LogsPage() {
       </div>
     </div>
   );
+
+  // Overlay mode: fixed full-screen on top of everything
+  if (onClose) {
+    return <div className="fixed inset-0 z-50">{inner}</div>;
+  }
+
+  // Standalone page
+  return inner;
 }

@@ -19,19 +19,11 @@ pub fn messages_to_text(msgs: &[serde_json::Value]) -> String {
         if let Some(tool_calls) = m["tool_calls"].as_array() {
             for tc in tool_calls {
                 let name = tc["function"]["name"].as_str().unwrap_or("?");
-                let args = tc["function"]["arguments"].as_str().unwrap_or("");
-                lines.push(format!("[{} → tool: {} args: {}]", role, name, args));
+                lines.push(format!("[{} → {}]", role, name));
             }
         }
         if role == "tool" {
-            let call_id = m["tool_call_id"].as_str().unwrap_or("");
-            let tool_content = m["content"].as_str().unwrap_or("");
-            let preview = if tool_content.len() > 200 {
-                format!("{}...", &tool_content[..200])
-            } else {
-                tool_content.to_string()
-            };
-            lines.push(format!("[tool_result {}]: {}", call_id, preview));
+            lines.push("[tool_result]".to_string());
         }
     }
     lines.join("\n")
