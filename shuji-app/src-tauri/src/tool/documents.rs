@@ -111,6 +111,7 @@ fn type_to_dir(doc_type: &str) -> &'static str {
         "ctrt" => "contracts",
         "rprt" => "reports",
         "anls" => "analysis",
+        "reqs" => "requirements",
         "precepts" => "",
         _ => "misc",
     }
@@ -144,7 +145,7 @@ pub fn tool_create_document(working_dir: &Path, args: &serde_json::Value, dept: 
     if doc_type.is_empty() {
         return ToolOutput::error("create_document", "", "empty_type", "文档类型不能为空");
     }
-    let valid_types = ["dsgn", "plan", "pdsg", "ddtl", "task", "ctrt", "rprt", "revw", "precepts", "anls"];
+    let valid_types = ["dsgn", "plan", "pdsg", "ddtl", "task", "ctrt", "rprt", "revw", "precepts", "anls", "reqs"];
     if !valid_types.contains(&doc_type.as_str()) {
         return ToolOutput::error("create_document", "", "invalid_type",
             &format!("无效文档类型: {}，支持的类型: {}", doc_type, valid_types.join(", ")));
@@ -337,8 +338,8 @@ pub fn create_document_tool_def() -> crate::api::client::ToolDefinition {
                 "properties": {
                     "type": {
                         "type": "string",
-                        "enum": ["dsgn", "plan", "pdsg", "ddtl", "task", "ctrt", "rprt", "revw", "anls"],
-                        "description": "文档类型。dsgn=整体设计, plan=阶段规划, pdsg=阶段设计, ddtl=详细设计, revw=审查报告, task=任务, ctrt=协议(接口契约), rprt=报告, anls=分析报告"
+                        "enum": ["dsgn", "plan", "pdsg", "ddtl", "task", "ctrt", "rprt", "revw", "anls", "reqs"],
+                        "description": "文档类型。dsgn=整体设计, plan=阶段规划, pdsg=阶段设计, ddtl=详细设计, revw=审查报告, task=任务, ctrt=协议(接口契约), rprt=报告, anls=分析报告, reqs=需求文档"
                     },
                     "refs": {
                         "type": "array",
@@ -387,7 +388,7 @@ pub fn append_document_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "append_document".into(),
-            description: "追加内容到已有文档的正文末尾。CRITICAL: 每次调用的 content 参数必须在 500 字符以内，大文档必须分多次调用写入。".into(),
+            description: "追加内容到已有文档的正文末尾。每次调用的 content 参数不超过 2000 字符，充分利用单次调用容量。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -397,8 +398,8 @@ pub fn append_document_tool_def() -> crate::api::client::ToolDefinition {
                     },
                     "content": {
                         "type": "string",
-                        "description": "要追加的内容（每次最多 500 字符）",
-                        "maxLength": 500    
+                        "description": "要追加的内容（每次最多 2000 字符）",
+                        "maxLength": 2000    
                     }
                 },
                 "required": ["id", "content"]

@@ -120,10 +120,23 @@ impl Agent for GongbuShangshuAgent {
         let client = Arc::new(self.client.clone());
         let mut session = crate::api::session::Session::new(
             system_prompt, &msgs, &self.model, &tools, &client,
-            &[],
+            &[], &input.runtime_config,
         ).with_role(self.role().name()).with_debug_dir(input.working_dir.clone());
 
         let role_name = self.role().name().to_string();
+
+        // Phase-based reasoning control: Planning phase allows thinking,
+        // Execution phase disables it to maximize tool output space.
+        let has_plan = self.plan.lock().unwrap().is_some();
+        if has_plan {
+            // Execution phase: disable reasoning to maximize tool output space.
+            session.set_reasoning(false);
+            log_console!("[工部] 执行阶段：关闭 reasoning，不限制 max_tokens");
+        } else {
+            // Planning phase: allow reasoning while leaving output length to the model/provider.
+            session.set_reasoning(true);
+            log_console!("[工部] 规划阶段：开启 reasoning，不限制 max_tokens");
+        }
 
         // Track whether this is the first round of a new batch.
         // On fresh batch: start clean (no restore), inject plan + task.
@@ -185,6 +198,7 @@ impl Agent for GongbuShangshuAgent {
         }
 
         let mut controller = crate::api::control::AgentController::new();
+        let config = input.runtime_config.clone();
         let plan_ref = self.plan.clone();
         let wd = working_dir.clone();
         let force_stop = Arc::new(AtomicBool::new(false));
@@ -239,7 +253,7 @@ impl Agent for GongbuShangshuAgent {
                 _ => Self::execute_tool(name, args, &wd),
             }
         };
-        let (result, route) = controller.run(&mut session, &exec, &self.cancel, &tools, Some(&force_stop)).await?;
+        let (result, route) = controller.run(&mut session, &exec, &self.cancel, &tools, Some(&force_stop), &config).await?;
 
         // Capture baseline after submit_plan: save the pre-plan analysis context
         // so every batch can restore from this shared understanding.

@@ -32,6 +32,7 @@ impl NeigeAgent {
         tools.extend(crate::tool::registry::summarize_logs_tool());
         tools.push(crate::tool::registry::cancel_agent_tool());
         tools.push(crate::tool::registry::update_soul_tool());
+        tools.push(crate::tool::registry::expand_requirements_tool());
         tools
     }
 
@@ -126,9 +127,10 @@ impl Agent for NeigeAgent {
         msgs.push(Message::user(&input.task_description));
 
         let client = Arc::new(self.client.clone());
+        let model = self.model.clone();
         let mut session = crate::api::session::Session::new(
             system_prompt, &msgs, &self.model, &tools, &client,
-            &input.skill_prompts,
+            &input.skill_prompts, &input.runtime_config,
         ).with_role(self.role().name())
          .with_soul(self.role().name(), &Self::load_soul(&input.working_dir))
          .with_debug_dir(input.working_dir.clone());
@@ -143,7 +145,7 @@ impl Agent for NeigeAgent {
                 let mut changed = false;
 
                 if let Some(result) = crate::api::compact::maybe_compact(
-                    &self.client, &self.model, &ctx.history_messages, &ctx.context_messages,
+                    &self.client, &self.model, &ctx.history_messages, &ctx.context_messages, &input.runtime_config,
                 ).await {
                     ctx.history_messages = result.new_history;
                     ctx.context_messages = result.kept_context;
@@ -152,7 +154,7 @@ impl Agent for NeigeAgent {
                 }
 
                 if let Some(merged) = crate::api::compact::maybe_compact_history(
-                    &self.client, &self.model, &ctx.history_messages,
+                    &self.client, &self.model, &ctx.history_messages, &input.runtime_config,
                 ).await {
                     ctx.history_messages = merged;
                     ctx.save_to(&working_dir, "neige");
@@ -170,6 +172,7 @@ impl Agent for NeigeAgent {
 
         let mut controller = crate::api::control::AgentController::new();
         let cancel_map = self.cancel_map.clone();
+        let config = input.runtime_config.clone();
         let exec = |name: &str, args: &serde_json::Value| -> String {
             if name == "cancel_agent" {
                 if let Some(ref map) = cancel_map {
@@ -211,6 +214,31 @@ impl Agent for NeigeAgent {
                     }
                 }
             }
+            if name == "expand_requirements" {
+                let task_id = args["task_id"].as_str().unwrap_or("");
+                if task_id.is_empty() {
+                    return r#"{"ok": false, "message": "task_id 不能为空"}"#.to_string();
+                }
+                let c = client.clone();
+                let m = model.clone();
+                let wd = working_dir.clone();
+                let tid = task_id.to_string();
+                
+                match tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(
+                        crate::agent::expand_requirements::run(&tid, &wd, &c, &m)
+                    )
+                }) {
+                    Ok(doc_id) => {
+                        log_console!("[内阁] expand_requirements → {}", doc_id);
+                        return serde_json::json!({"ok": true, "document_id": doc_id}).to_string();
+                    }
+                    Err(e) => {
+                        log_console!("[内阁] expand_requirements 失败: {}", e);
+                        return serde_json::json!({"ok": false, "message": e}).to_string();
+                    }
+                }
+            }
             Self::execute_tool(name, args, &working_dir)
         };
 
@@ -218,7 +246,7 @@ impl Agent for NeigeAgent {
         let mut current_skill = input.current_skill.clone().unwrap_or_default();
         loop {
             (result, route) = controller.run(
-                &mut session, &exec, &self.cancel, &tools, None,
+                &mut session, &exec, &self.cancel, &tools, None, &config,
             ).await?;
 
             if route.is_some() {
@@ -244,6 +272,17 @@ impl Agent for NeigeAgent {
                 _ => break,
             }
         }
+
+        // Re-read participation level each turn so /level commands take effect immediately
+        let level_prompt = match std::env::var("PARTICIPATION_LEVEL")
+            .unwrap_or_else(|_| "1".to_string())
+            .as_str()
+        {
+            "3" => include_str!("levels/level3.md"),
+            "2" => include_str!("levels/level2.md"),
+            _ => include_str!("levels/level1.md"),
+        };
+        session.inject(level_prompt);
 
         // Persist context for next invocation (compaction already done at load time)
         let snap = session.snapshot();

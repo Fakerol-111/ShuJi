@@ -49,7 +49,8 @@ struct AnthropicRequest {
 #[derive(Serialize)]
 struct OpenAIRequest {
     model: String,
-    max_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_tokens: Option<u32>,
     messages: Vec<MessageItem>,
 }
 
@@ -108,7 +109,7 @@ impl AnthropicClient {
         let api_messages: Vec<MessageItem> = self.build_messages(messages);
         let body = AnthropicRequest {
             model: model.to_string(),
-            max_tokens: 4096,
+            max_tokens: 32_768,
             system: system_prompt.to_string(),
             messages: api_messages,
         };
@@ -181,7 +182,7 @@ impl AnthropicClient {
 
         let body = OpenAIRequest {
             model: model.to_string(),
-            max_tokens: 4096,
+            max_tokens: None,
             messages: api_messages,
         };
 

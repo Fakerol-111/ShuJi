@@ -10,6 +10,7 @@ use tokio::sync::mpsc;
 
 use crate::agent::r#trait::{Agent, AgentInput};
 use crate::api::control::{RouteMsgType, RouteTo, role_from_name};
+use crate::config::RuntimeConfig;
 use crate::logging::logger::Logger;
 use crate::models::chat::ChatMessage;
 use crate::models::role::Role;
@@ -90,6 +91,8 @@ pub struct ActorContext {
     pub plan: Arc<Mutex<Vec<String>>>,
     /// Current skill name for cross-turn persistence (内阁 only).
     pub current_skill: Arc<Mutex<Option<String>>>,
+    /// Runtime configuration
+    pub runtime_config: Arc<RuntimeConfig>,
 }
 
 /// The central actor system, holding all senders.
@@ -205,7 +208,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
 
         let mut exec_iterations: u32 = 0;
         let mut last_plan_current: Option<usize> = None;
-        const MAX_EXEC_ITERATIONS: u32 = 20;
+        let max_exec_iterations = ctx.runtime_config.actor.max_exec_iterations;
         'exec: loop {
             exec_iterations += 1;
             // Safety: break if stuck without plan progress.
@@ -221,11 +224,11 @@ pub async fn run_actor(mut ctx: ActorContext) {
                     }
                 }
             }
-            if exec_iterations > MAX_EXEC_ITERATIONS {
+            if exec_iterations > max_exec_iterations {
                 log_console!("[actor] {}: plan loop exceeded {} iterations without batch progress, forcing exit",
-                    role_name, MAX_EXEC_ITERATIONS);
+                    role_name, max_exec_iterations);
                 let _ = ctx.emperor_tx.send(ChatMessage::new("系统",
-                    &format!("{} 计划循环超过次数限制（同一批次内 {} 轮未推进），请重新路由", role_name, MAX_EXEC_ITERATIONS)));
+                    &format!("{} 计划循环超过次数限制（同一批次内 {} 轮未推进），请重新路由", role_name, max_exec_iterations)));
                 break 'exec;
             }
             let current_skill = ctx.current_skill.lock().ok().and_then(|s| s.clone());
@@ -237,6 +240,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
                 working_dir: ctx.working_dir.clone(),
                 skill_prompts: skill_prompts.clone(),
                 current_skill,
+                runtime_config: ctx.runtime_config.clone(),
             };
 
             let step_result = {
@@ -281,11 +285,12 @@ pub async fn run_actor(mut ctx: ActorContext) {
                     // If summary mode, save output to summary_prompt in state.json
                     if output.skill.as_deref() == Some("summary") {
                         let state_path = ctx.working_dir.join(".shuji").join("state.json");
-                        if let Ok(content) = std::fs::read_to_string(&state_path) {
+                        if let Ok(content) = tokio::fs::read_to_string(&state_path).await {
                             if let Ok(mut proj) = serde_json::from_str::<serde_json::Value>(&content) {
                                 if let Some(obj) = proj.as_object_mut() {
                                     obj.insert("summary_prompt".into(), serde_json::Value::String(output.content.clone()));
-                                    let _ = std::fs::write(&state_path, serde_json::to_string_pretty(&proj).unwrap_or_default());
+                                    let content = serde_json::to_string_pretty(&proj).unwrap_or_default();
+                                    let _ = tokio::fs::write(&state_path, content).await;
                                 }
                             }
                         }

@@ -42,7 +42,7 @@ impl Agent for ZhisiAgent {
         let client = Arc::new(self.client.clone());
         let mut session = crate::api::session::Session::new(
             system_prompt, &msgs, &self.model, &tools, &client,
-            &[],
+            &[], &input.runtime_config,
         ).with_role(self.role().name()).with_debug_dir(input.working_dir.clone());
 
         let role_name = self.role().name().to_string();
@@ -54,13 +54,14 @@ impl Agent for ZhisiAgent {
         }
 
         let mut controller = crate::api::control::AgentController::new();
+        let config = input.runtime_config.clone();
         let exec = |name: &str, args: &serde_json::Value| -> String {
             Self::execute_tool(name, args, &working_dir)
         };
         let (result, route) = controller.run(
             &mut session, &exec,
             &std::sync::atomic::AtomicBool::new(false),
-            &tools, None,
+            &tools, None, &config,
         ).await?;
 
         let snap = session.snapshot();

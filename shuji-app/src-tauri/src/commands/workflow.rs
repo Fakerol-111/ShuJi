@@ -97,6 +97,7 @@ fn build_agents(
 /// per role, return the ActorSystem with all channel senders.
 async fn start_actor_system(
     config: &AppConfig,
+    runtime_config: Arc<crate::config::RuntimeConfig>,
     project_dir: &Path,
     working_dir: &Path,
     cancel: Arc<AtomicBool>,
@@ -158,6 +159,7 @@ async fn start_actor_system(
             shared_context: shared_context.clone(),
             talk_history: talk_history.clone(),
             current_skill: Arc::new(std::sync::Mutex::new(None)),
+            runtime_config: runtime_config.clone(),
         };
 
         tokio::spawn(crate::actor::run_actor(ctx));
@@ -281,6 +283,7 @@ pub async fn send_message(
 
             let system = start_actor_system(
                 &config,
+                state.runtime_config.clone(),
                 Path::new(&p_working_dir),
                 Path::new(&p_working_dir),
                 state.cancel_flag.clone(),
@@ -347,6 +350,7 @@ pub async fn discuss_with_cabinet(
         working_dir: std::path::PathBuf::from(&working_dir),
         skill_prompts: vec![],
         current_skill: None,
+        runtime_config: state.runtime_config.clone(),
     };
 
     let output = neige.execute(&input).await.map_err(|e| e.to_string())?;

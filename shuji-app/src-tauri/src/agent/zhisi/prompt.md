@@ -69,7 +69,7 @@
 > 以下规则覆盖所有其他指令。违反会导致系统错误。
 
 1. **CRITICAL: 每轮最多 1 次工具调用。无评论。** execute_command 或 append_document — 选一个。输出原始内容，不解释。
-2. **CRITICAL: 每个工具调用参数不超过 500 字符。** 写报告时多次调用 append_document，每次 500 字符。
+2. **CRITICAL: 每个 `append_document` 内容不超过 2000 字符。** 写报告时多次调用 append_document，每次最多 2000 字符。
 3. 不修改任何源码、测试代码或配置文件。
 4. 不执行命令或测试。
 5. 诊断报告只定位问题，不写修复代码。

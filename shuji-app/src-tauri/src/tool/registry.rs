@@ -144,6 +144,26 @@ pub fn complete_task_tool() -> ToolDefinition {
     }
 }
 
+pub fn expand_requirements_tool() -> ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "expand_requirements".into(),
+            description: "唤起需求展开 sub-agent。先 create_document(type=\"task\") 把皇帝需求写成任务文档，再用此工具传入 task_id。sub-agent 读取 task 文档后，从用户视角展开需求，产出用户场景清单(.shuji/requirements/)。返回文档ID。".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "task_id": {
+                        "type": "string",
+                        "description": "包含皇帝需求原文的 task 文档 ID（如 task_5）"
+                    }
+                },
+                "required": ["task_id"]
+            }),
+        },
+    }
+}
+
 pub fn update_soul_tool() -> ToolDefinition {
     crate::api::client::ToolDefinition {
         tool_type: "function".into(),

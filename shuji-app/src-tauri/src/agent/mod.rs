@@ -10,3 +10,4 @@ pub mod gongbushangshu;
 pub mod xingbushangshu;
 pub mod liburshangshu;
 pub mod zhisi;
+pub mod expand_requirements;

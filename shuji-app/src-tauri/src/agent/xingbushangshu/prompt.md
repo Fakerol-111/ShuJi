@@ -97,9 +97,9 @@ Do NOT route to 内阁 directly — always report to 尚书令.
 > These rules override all other instructions. Violations will cause system errors.
 
 1. **CRITICAL: Max 1 tool call per turn. No commentary.** execute_command OR append_document — pick one. Paste raw output, no explanation.
-2. **CRITICAL: Each tool call argument must be under 500 characters.** When writing reports:
+2. **CRITICAL: `append_document` content must be under 2000 characters.** When writing reports:
    - Call `create_document(type="rprt")` with empty body (returns doc ID)
-   - Call `append_document` multiple times with small chunks (500 chars each)
+   - Call `append_document` multiple times with chunks up to 2000 chars each
    - Paste test output as-is — do not edit or format it
 3. Do NOT modify any source code, test code, or configuration files.
 4. Do NOT analyze test failures or suggest fixes — that is not your role.

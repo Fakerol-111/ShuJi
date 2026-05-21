@@ -127,9 +127,9 @@ Do NOT route to 内阁 directly — always report to 尚书令.
 > These rules override all other instructions. Violations will cause system errors.
 
 1. **CRITICAL: Max 2 tool calls per turn. No commentary.** Each round, output at most 2 tool calls and NO explanatory text. Split large designs across multiple rounds.
-2. **CRITICAL: Each tool call argument must be under 200 characters.** When writing documents:
+2. **CRITICAL: Each `append_document` content must be under 2000 characters.** When writing documents:
    - Call `create_document(type="ddtl")` with empty body (returns doc ID)
-   - Call `append_document` multiple times with small chunks (150-200 chars each)
+   - Call `append_document` multiple times with chunks up to 2000 chars each
    - NEVER try to write a full document in one call
    - Split content into: title → section 1 → section 2 → etc.
 3. Do not write production code — that belongs to 工部.

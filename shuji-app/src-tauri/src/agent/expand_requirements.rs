@@ -1,0 +1,74 @@
+//! ???? sub-agent????? `expand_requirements` ?????
+//! ???????????????????????????? ID?
+//! ??????????????
+
+use std::path::Path;
+use std::sync::Arc;
+
+use crate::api::client::AnthropicClient;
+use crate::models::message::Message;
+
+const PROMPT: &str = include_str!("expand_requirements_prompt.md");
+
+/// Run the requirements expansion sub-agent.
+/// `task_id` is the ID of a task document containing the emperor's request.
+/// Returns the document ID on success, or an error description.
+pub async fn run(
+    task_id: &str,
+    working_dir: &Path,
+    client: &Arc<AnthropicClient>,
+    model: &str,
+) -> Result<String, String> {
+    let tools = {
+        let mut t = crate::tool::registry::inspect_tools();
+        t.extend(crate::tool::registry::document_tools());
+        t
+    };
+
+    let prompt = format!("??????????? task ?????? {} ?????", task_id);
+    let msgs = vec![Message::user(&prompt)];
+
+    let config = Arc::new(crate::config::RuntimeConfig::default());
+    
+    let mut session = crate::api::session::Session::new(
+        PROMPT, &msgs, model, &tools, client, &[], &config,
+    )
+    .with_role("requirements_agent")
+    .with_debug_dir(working_dir.to_path_buf());
+
+    let wd = working_dir.to_path_buf();
+    let exec = |name: &str, args: &serde_json::Value| -> String {
+        crate::tool::execute_named_tool(name, &wd, args, "requirements_agent")
+    };
+
+    let mut controller = crate::api::control::AgentController::new();
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+
+    let (result, _route) = controller
+        .run(&mut session, &exec, &cancel, &tools, None, &config)
+        .await
+        .map_err(|e| format!("??????: {}", e))?;
+
+    Ok(result.trim().to_string())
+}
+
+/// Extract a document ID from the agent's response text.
+/// Looks for patterns like `reqs_42` or `anls_42`.
+#[allow(dead_code)]
+pub fn extract_doc_id(text: &str) -> Option<String> {
+    for word in text.split_whitespace() {
+        let w = word.trim_matches(|c: char| !c.is_alphanumeric() && c != '_');
+        if (w.starts_with("reqs_") || w.starts_with("anls_")) && w.len() >= 6 {
+            return Some(w.to_string());
+        }
+    }
+    // Fallback: try to find any doc ID pattern in the full text
+    for prefix in &["reqs_", "anls_"] {
+        if let Some(pos) = text.find(prefix) {
+            let rest = &text[pos..];
+            let end = rest.find(|c: char| c.is_whitespace()).unwrap_or(rest.len());
+            return Some(rest[..end].to_string());
+        }
+    }
+    None
+}

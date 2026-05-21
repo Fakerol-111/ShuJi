@@ -9,23 +9,27 @@ macro_rules! log_console {
 }
 
 mod models;
-mod agent;
+pub mod agent;
 mod storage;
 mod logging;
-mod api;
+pub mod api;
 mod commands;
 mod token_tracker;
-mod actor;
+pub mod actor;
 pub mod tool;
+pub mod config;
 
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use commands::project::AppState;
+use config::RuntimeConfig;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let runtime_config = RuntimeConfig::load_or_default("config.toml");
+    
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -36,6 +40,7 @@ pub fn run() {
             actor_system: Arc::new(tokio::sync::Mutex::new(None)),
             chat_history: Arc::new(tokio::sync::Mutex::new(Vec::new())),
             dept_log_history: Arc::new(tokio::sync::Mutex::new(Vec::new())),
+            runtime_config: Arc::new(runtime_config),
         })
         .invoke_handler(tauri::generate_handler![
             commands::project::create_project,
@@ -56,6 +61,7 @@ pub fn run() {
             commands::workflow::get_dept_logs,
             commands::settings::get_config,
             commands::settings::save_config,
+            commands::settings::set_dotenv_key,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

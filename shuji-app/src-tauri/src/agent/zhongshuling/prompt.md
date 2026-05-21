@@ -167,9 +167,9 @@ If review feedback is received, revise the existing design rather than replacing
 1. **CRITICAL: Max 2 tool calls per turn. No commentary.** Each round, output at most 2 tool calls and NO explanatory text. Split large designs across multiple rounds.
 2. Consider whether a design skill would help. Use `<skill>name</skill>` to load one, or proceed directly without a skill.
 3. To switch skills, output exactly `<skill>name</skill>` and nothing else.
-4. **CRITICAL: Each tool call argument must be under 500 characters.** When writing documents:
+4. **CRITICAL: Each `append_document` content must be under 2000 characters.** When writing documents:
    - Call `create_document` with empty body (returns doc ID)
-   - Call `append_document` multiple times with small chunks (500 chars each)
+   - Call `append_document` multiple times with chunks up to 2000 chars each
    - NEVER try to write a full document in one call
    - Split content into: title → section 1 → section 2 → etc.
 5. `route_to` is for review or clarification dispatch only.

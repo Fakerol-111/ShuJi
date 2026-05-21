@@ -139,3 +139,31 @@ pub async fn save_config(config: AppConfig) -> Result<(), String> {
     std::fs::write(&path, &content).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+/// Set a single .env key. Updates existing key or appends new line.
+#[tauri::command]
+pub async fn set_dotenv_key(key: String, value: String) -> Result<(), String> {
+    let path = dotenv_path();
+    let content = std::fs::read_to_string(&path).unwrap_or_default();
+    let mut lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
+    let target = format!("{}=", key);
+    let mut found = false;
+    for line in lines.iter_mut() {
+        let trimmed = line.trim();
+        if trimmed.starts_with(&target) || trimmed == target.trim_end_matches('=') {
+            *line = format!("{}={}", key, value);
+            found = true;
+            break;
+        }
+    }
+    if !found {
+        // Remove any trailing blank lines, append, then add one blank
+        while lines.last().map_or(false, |l| l.trim().is_empty()) {
+            lines.pop();
+        }
+        lines.push(format!("{}={}", key, value));
+        lines.push(String::new());
+    }
+    std::fs::write(&path, lines.join("\n")).map_err(|e| e.to_string())?;
+    Ok(())
+}

@@ -1,7 +1,9 @@
 #![allow(dead_code)]
+use crate::config::RuntimeConfig;
 use crate::models::role::Role;
 use crate::models::message::Message;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct AgentInput {
@@ -17,6 +19,8 @@ pub struct AgentInput {
     /// Current skill name from previous turn (内阁 only).
     /// Used by skill guard to prevent false-positive retries across execution rounds.
     pub current_skill: Option<String>,
+    /// Runtime configuration
+    pub runtime_config: Arc<RuntimeConfig>,
 }
 
 #[derive(Debug, Clone)]

@@ -1,0 +1,62 @@
+# ShuJi 运行时配置文件
+# 所有配置项都有合理的默认值，可以根据需要调整
+
+[api]
+# API 请求超时时间（秒）
+timeout_secs = 180
+
+# API 请求最大重试次数
+max_retries = 3
+
+# 截断响应最大重试次数
+length_max_retries = 5
+
+[api.max_tokens]
+# 写文件类 agent (工部、兵部) 的 max_tokens
+write_file = 4096
+
+# 追加文档类 agent (中书令、吏部、刑部) 的 max_tokens
+append_document = 2048
+
+# 只读类 agent (礼部) 的 max_tokens
+readonly = 1024
+
+# 纯文本类 agent 的 max_tokens
+text_only = 512
+
+[tool_iterations]
+# 只读操作的最大迭代次数
+readonly = 80
+
+# 写文件密集操作的最大迭代次数
+write_heavy = 120
+
+# 文档操作密集的最大迭代次数
+document_heavy = 100
+
+[context_compaction]
+# 触发压缩的字符数阈值（约 80k tokens）
+char_threshold = 160000
+
+# 压缩后保留的最近消息数
+keep_recent_count = 6
+
+# 历史消息压缩的字符数阈值
+history_char_threshold = 2000
+
+[actor]
+# 单个 actor 执行的最大迭代次数
+max_exec_iterations = 20
+
+# 工部计划循环的最大迭代次数
+max_plan_iterations = 6
+
+[watchdog]
+# 连续错误的最大次数
+max_consecutive_errors = 5
+
+# 触发警告的重复工具调用次数
+same_tool_warning_count = 3
+
+# 触发警告的连续读取次数（无写入）
+read_without_write_warning = 5

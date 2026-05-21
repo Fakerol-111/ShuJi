@@ -1,10 +1,6 @@
 use crate::api::client::AnthropicClient;
+use crate::config::RuntimeConfig;
 use crate::models::message::Message;
-
-/// Threshold: trigger compaction when context_messages exceed ~80k tokens (chars/2).
-const COMPACT_CHAR_THRESHOLD: usize = 160_000;
-/// After compaction, keep the most recent N messages.
-const KEEP_RECENT_COUNT: usize = 6;
 
 /// Build a flat text representation of messages for the summarizer.
 pub fn messages_to_text(msgs: &[serde_json::Value]) -> String {
@@ -42,17 +38,18 @@ pub async fn maybe_compact(
     model: &str,
     history_messages: &str,
     context_messages: &[serde_json::Value],
+    config: &RuntimeConfig,
 ) -> Option<CompactResult> {
     let total_chars: usize = context_messages.iter()
         .map(|m| m.to_string().len())
         .sum();
 
-    if total_chars < COMPACT_CHAR_THRESHOLD {
+    if total_chars < config.context_compaction.char_threshold {
         return None;
     }
 
     // Split: old messages to compress, recent messages to keep
-    let split_at = context_messages.len().saturating_sub(KEEP_RECENT_COUNT);
+    let split_at = context_messages.len().saturating_sub(config.context_compaction.keep_recent_count);
     if split_at == 0 {
         return None;
     }
@@ -105,17 +102,15 @@ pub async fn maybe_compact(
     }
 }
 
-/// Threshold: trigger history compaction when accumulated summaries exceed 2000 chars.
-const HISTORY_COMPACT_CHAR_THRESHOLD: usize = 2000;
-
 /// Merge multiple accumulated summaries into one.
 /// Returns the merged summary, or None if not needed.
 pub async fn maybe_compact_history(
     client: &AnthropicClient,
     model: &str,
     history_messages: &str,
+    config: &RuntimeConfig,
 ) -> Option<String> {
-    if history_messages.len() < HISTORY_COMPACT_CHAR_THRESHOLD {
+    if history_messages.len() < config.context_compaction.history_char_threshold {
         return None;
     }
 

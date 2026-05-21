@@ -6,6 +6,7 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::actor::DeptLogEntry;
+use crate::config::RuntimeConfig;
 use crate::models::chat::ChatMessage;
 use crate::models::project::{Project, ProjectSummary, OverallStatus};
 use crate::storage::shuji_dir::ShujiDir;
@@ -17,6 +18,7 @@ pub struct AppState {
     pub actor_system: Arc<tokio::sync::Mutex<Option<crate::actor::ActorSystem>>>,
     pub chat_history: Arc<Mutex<Vec<ChatMessage>>>,
     pub dept_log_history: Arc<Mutex<Vec<DeptLogEntry>>>,
+    pub runtime_config: Arc<RuntimeConfig>,
 }
 
 #[tauri::command]

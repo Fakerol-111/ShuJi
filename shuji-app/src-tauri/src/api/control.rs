@@ -3,12 +3,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::api::client::ToolDefinition;
 use crate::api::session::{Session, SessionSnapshot};
+use crate::config::RuntimeConfig;
 use crate::models::role::Role;
 
-const MAX_CONSECUTIVE_ERRORS: u32 = 5;
-const MAX_TOOL_ITERATIONS_READONLY: usize = 80;
-const MAX_TOOL_ITERATIONS_WRITE_HEAVY: usize = 120;
-const MAX_TOOL_ITERATIONS_DOCUMENT_HEAVY: usize = 100;
 const INTERRUPT_RESPONSE: &str = "\n\n[系统] 当前处理已被皇帝中断";
 
 /// Type of a cross-department routing message.
@@ -40,7 +37,7 @@ pub fn role_from_name(s: &str) -> Option<Role> {
     Role::from_name(s)
 }
 /// Iteration budget: agents with `write_file` get more rounds.
-fn max_iterations_for_tools(tools: &[ToolDefinition]) -> usize {
+fn max_iterations_for_tools(tools: &[ToolDefinition], config: &RuntimeConfig) -> usize {
     let has_write_file = tools.iter().any(|t| {
         matches!(t.function.name.as_str(), "create_file" | "modify_file" | "append_file" | "delete_file" | "rename_file")
     });
@@ -49,14 +46,11 @@ fn max_iterations_for_tools(tools: &[ToolDefinition]) -> usize {
     });
     
     if has_write_file {
-        // 兵部、工部：写代码文件，需要更多次数（每次 300-500 chars）
-        MAX_TOOL_ITERATIONS_WRITE_HEAVY
+        config.tool_iterations.write_heavy
     } else if has_append_document {
-        // 中书令、吏部、刑部：写文档，需要较多次数（每次最多 500 chars）
-        MAX_TOOL_ITERATIONS_DOCUMENT_HEAVY
+        config.tool_iterations.document_heavy
     } else {
-        // 礼部等：主要是读取和少量写入
-        MAX_TOOL_ITERATIONS_READONLY
+        config.tool_iterations.readonly
     }
 }
 
@@ -90,8 +84,9 @@ impl AgentController {
         cancel: &AtomicBool,
         tools: &[ToolDefinition],
         force_stop: Option<&AtomicBool>,
+        config: &RuntimeConfig,
     ) -> anyhow::Result<(String, Option<RouteTo>)> {
-        let max_iter = max_iterations_for_tools(tools);
+        let max_iter = max_iterations_for_tools(tools, config);
         let mut last_text = String::new();
         let mut consecutive_errors: u32 = 0;
 
@@ -196,7 +191,7 @@ impl AgentController {
                             return Ok((summary, Some(route)));
                         }
 
-                        if same_tool_count == 3 {
+                        if same_tool_count == config.watchdog.same_tool_warning_count {
                             log_console!(
                                 "[control] WATCHDOG: {} repeated {} times",
                                 tc.name, same_tool_count
@@ -214,7 +209,7 @@ impl AgentController {
                             read_without_write = 0;
                         } else if is_read {
                             read_without_write += 1;
-                            if read_without_write == 5 {
+                            if read_without_write == config.watchdog.read_without_write_warning {
                                 log_console!(
                                     "[control] WATCHDOG: {} reads without any write",
                                     read_without_write
@@ -224,10 +219,10 @@ impl AgentController {
 
                         // ── Progress note ─────────────────
                         let mut notes = Vec::new();
-                        if same_tool_count >= 3 {
+                        if same_tool_count >= config.watchdog.same_tool_warning_count {
                             notes.push(format!("重复调用{}", tc.name));
                         }
-                        if read_without_write >= 8 && write_count == 0 {
+                        if read_without_write >= config.watchdog.read_without_write_warning + 3 && write_count == 0 {
                             notes.push(format!("读取{}次未写入", read_without_write));
                         }
                         let progress_note = if notes.is_empty() {
@@ -265,13 +260,13 @@ impl AgentController {
                             };
                             log_console!(
                                 "[control] tool error (consecutive #{}/{})",
-                                consecutive_errors, MAX_CONSECUTIVE_ERRORS
+                                consecutive_errors, config.watchdog.max_consecutive_errors
                             );
                             log_console!("  {}", preview);
-                            if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
+                            if consecutive_errors >= config.watchdog.max_consecutive_errors {
                                 last_text = format!(
                                     "工具连续出错{}次，终止调用。最后错误：{}",
-                                    MAX_CONSECUTIVE_ERRORS, result
+                                    config.watchdog.max_consecutive_errors, result
                                 );
                                 // Feed the current tool result before returning
                                 session.feed_tool_result(&tc.id, &tc.name, &tool_content);

@@ -110,7 +110,7 @@ Use `create_document(type="rprt")` to summarize execution status. Include:
 > These rules override all other instructions. Violations will cause system errors.
 
 1. **CRITICAL: Max 1 tool call per turn. No analysis.** route_to or create_document — pick one and execute. No commentary, no explanation.
-2. **CRITICAL: Each tool call argument must be under 500 characters.** When writing documents, call `create_document` with empty body (returns doc ID), then `append_document` multiple times in small chunks.
+2. **CRITICAL: Each `append_document` content must be under 2000 characters.** When writing documents, call `create_document` with empty body (returns doc ID), then `append_document` multiple times in chunks up to 2000 chars each.
 3. Subject format: use ONLY the document ID — no natural language, no explanations.
 4. Do not write or modify source code, execute commands, or run tests.
 5. Do not route to 内阁 directly from subordinates — always receive reports via 尚书令.

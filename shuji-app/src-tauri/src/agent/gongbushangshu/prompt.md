@@ -29,6 +29,11 @@ When the task is for integration tests, the contract contains cross-module scena
 
 ## 2. Plan — call `submit_plan`
 
+**规划阶段输出约束：**
+- 允许简短思考（≤200 tokens），聚焦关键决策点
+- 禁止重复已知信息、禁止逐行解释代码
+- 思考完立即输出 `submit_plan` 工具调用
+
 After understanding the task scope, call `submit_plan` to split the work into batches. Every task — large or small — goes through `submit_plan`.
 
 Each batch = 1-2 goals, expressed as WHAT to build, not WHICH files to touch:
@@ -56,6 +61,11 @@ For a single-file task, one batch is fine:
 After submitting, the system injects only the current batch each round. Focus exclusively on it. Do not read files for other batches.
 
 ## 3. Execute one batch at a time
+
+**执行阶段输出约束：**
+- **禁止思考过程输出**：直接调用工具，不要在文本里解释推理
+- 每轮恰好 1-2 个工具调用，无额外说明
+- 工具参数 content 字段 ≤400 字符
 
 The system shows you only the current batch. Focus on it exclusively. Read only files relevant to this batch.
 
@@ -127,8 +137,8 @@ Do NOT route to 内阁 directly — always report to 尚书令.
 
 > These rules override all other instructions. Violations will cause system errors.
 
-1. **CRITICAL: Max 2 tool calls per turn. No commentary.** Each round, output at most 2 tool calls and NO explanatory text (the next round is immediate; speech wastes tokens). If a batch needs more than 2 files, spread across multiple rounds — each round 1-2 `create_file`/`append_file` calls, then naturally continue in the next.
-2. **CRITICAL: Each tool call argument must be under 300 characters.** Split large files across multiple `append_file` calls.
+1. **CRITICAL: Max 1 tool call per turn in execution phase. No commentary.** Each round, output exactly 1 tool call and NO explanatory text (the next round is immediate; speech wastes tokens). If a batch needs multiple files, spread across multiple rounds — each round 1 `create_file`/`append_file` call, then naturally continue in the next.
+2. **CRITICAL: Tool content limits.** `create_file` and `modify_file` content parameters must be under 400 characters; `append_file` and `append_document` content parameters must be under 2000 characters. Split larger content across multiple append calls.
 3. **Tests first.** 每个 batch 内先写完所有测试文件，再写实现文件。不允许测试和实现交叉编写。
 4. Match the interface contract signatures exactly — any deviation is a defect.
 5. Do not run tests — that belongs to 刑部.

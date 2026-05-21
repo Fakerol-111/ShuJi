@@ -7,8 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::client::AnthropicClient;
 use crate::api::client::ToolDefinition;
-
-const API_TIMEOUT: Duration = Duration::from_secs(180);
+use crate::config::RuntimeConfig;
 
 // ── Public types ──────────────────────────────────────────────
 
@@ -123,7 +122,7 @@ pub struct Session {
     model: String,
     tools: Vec<ToolDefinition>,
     client: Arc<AnthropicClient>,
-    max_tokens: u32,
+    max_tokens: Option<u32>,
     role: String,
     /// Whether this session has write_file tool (affects retry token floor).
     has_write_file: bool,
@@ -132,6 +131,10 @@ pub struct Session {
     tool_choice_none: bool,
     /// If set, truncated output is written here for debugging.
     debug_dir: Option<PathBuf>,
+    /// Runtime configuration
+    config: Arc<RuntimeConfig>,
+    /// Control reasoning/thinking output (None = auto-detect, Some(true) = enable, Some(false) = disable)
+    reasoning_enabled: Option<bool>,
 }
 
 impl Session {
@@ -146,6 +149,7 @@ impl Session {
         tools: &[ToolDefinition],
         client: &Arc<AnthropicClient>,
         skill_prompts: &[String],
+        config: &Arc<RuntimeConfig>,
     ) -> Self {
         let mut messages: Vec<serde_json::Value> = Vec::new();
         messages.push(serde_json::json!({"role": "system", "content": system}));
@@ -161,16 +165,17 @@ impl Session {
 
         let has_write_file = tools.iter().any(|t| t.function.name == "create_file");
         let has_append_document = tools.iter().any(|t| t.function.name == "append_document");
-        let max_tokens = if has_write_file {
-            // 工部等 — 每轮 1-2 个工具调用，4096 足够
-            4096
+        let max_tokens = match if has_write_file {
+            config.api.max_tokens.write_file
         } else if has_append_document {
-            // 中书令 / 吏部 / 刑部 / 礼部 / 兵部 — 多次 append_document
-            2048
+            config.api.max_tokens.append_document
         } else if tools.iter().any(|t| t.function.name == "read_file") {
-            1024
+            config.api.max_tokens.readonly
         } else {
-            512
+            config.api.max_tokens.text_only
+        } {
+            0 => None,
+            tokens => Some(tokens),
         };
 
         // Inject the cross-department route_to tool for every agent.
@@ -187,6 +192,8 @@ impl Session {
             has_write_file: has_write_file || has_append_document,
             tool_choice_none: false,
             debug_dir: None,
+            config: config.clone(),
+            reasoning_enabled: None,
         }
     }
 
@@ -222,8 +229,22 @@ impl Session {
 
     /// Override the auto-detected max_tokens value.
     pub fn with_max_tokens(mut self, tokens: u32) -> Self {
-        self.max_tokens = tokens;
+        self.max_tokens = (tokens != 0).then_some(tokens);
         self
+    }
+
+    /// Dynamically set max_tokens (for phase-based control).
+    /// Passing 0 removes the request-level max_tokens field for OpenAI-compatible APIs.
+    pub fn set_max_tokens(&mut self, tokens: u32) {
+        self.max_tokens = (tokens != 0).then_some(tokens);
+    }
+
+    /// Enable or disable reasoning/thinking output.
+    /// - None: auto-detect based on API URL (enabled for non-Anthropic)
+    /// - Some(true): force enable
+    /// - Some(false): force disable
+    pub fn set_reasoning(&mut self, enabled: bool) {
+        self.reasoning_enabled = Some(enabled);
     }
 
     /// Enable truncation debug output to `.shuji/debug/truncated.md`.
@@ -246,26 +267,33 @@ impl Session {
     ///   message to the internal history, returns `StepResult::ToolCalls(list)`
     pub async fn step(&mut self) -> anyhow::Result<StepResult> {
         let mut length_retries = 0u32;
-        const MAX_LENGTH_RETRIES: u32 = 5;
+        let max_length_retries = self.config.api.length_max_retries;
         let mut api_retries = 0u32;
-        const MAX_API_RETRIES: u32 = 3;
+        let max_api_retries = self.config.api.max_retries;
 
         loop {
             let mut body = serde_json::json!({
                 "model": self.model,
-                "max_tokens": self.max_tokens,
                 "messages": self.messages,
                 "temperature": 0.1,
                 "top_p": 0.9,
                 "frequency_penalty": 0.1,
                 "seed": 42,
             });
+            if let Some(max_tokens) = self.max_tokens {
+                body["max_tokens"] = serde_json::json!(max_tokens);
+            }
 
             // Enable thinking mode for OpenAI-compatible APIs (DeepSeek etc.).
             // Reasoning tokens are separate from max_tokens — they don't
             // consume output quota, leaving more room for tool calls.
             // Skip for Anthropic (uses a different thinking format).
-            if !self.client.api_url.contains("anthropic.com") {
+            // Can be controlled via set_reasoning() for phase-based control.
+            let should_enable_thinking = match self.reasoning_enabled {
+                Some(enabled) => enabled,
+                None => !self.client.api_url.contains("anthropic.com"),
+            };
+            if should_enable_thinking && !self.client.api_url.contains("anthropic.com") {
                 body["thinking"] = serde_json::json!({"type": "enabled"});
             }
 
@@ -283,12 +311,12 @@ impl Session {
 
             log_console!("[{}] step: sending {} messages", self.role, self.messages.len());
 
-            let data = match Self::api_request(&self.client, &body).await {
+            let data = match Self::api_request(&self.client, &body, self.config.api_timeout()).await {
                 Ok(d) => d,
                 Err(e) => {
                     api_retries += 1;
-                    if api_retries < MAX_API_RETRIES {
-                        log_console!("[{}] API 请求失败 (retry {}/{}), 2s 后重试: {}", self.role, api_retries, MAX_API_RETRIES, e);
+                    if api_retries < max_api_retries {
+                        log_console!("[{}] API 请求失败 (retry {}/{}), 2s 后重试: {}", self.role, api_retries, max_api_retries, e);
                         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                         continue;
                     }
@@ -299,6 +327,10 @@ impl Session {
             let finish_reason = data["choices"][0]["finish_reason"]
                 .as_str()
                 .unwrap_or("");
+            let completion_tokens = data
+                .get("usage")
+                .and_then(|usage| usage["completion_tokens"].as_u64())
+                .unwrap_or(0);
 
             // Log token usage
             if let Some(usage) = data.get("usage") {
@@ -336,7 +368,7 @@ impl Session {
 
             // Handle truncated responses: auto-continue when text was cut off
             if finish_reason == "length" {
-                self.write_debug_truncated(msg, length_retries);
+                self.write_debug_truncated(msg, length_retries).await;
 
                 // First pass: parse tool calls to see which ones have valid JSON
                 let raw_tcs = msg["tool_calls"].as_array();
@@ -365,11 +397,33 @@ impl Session {
                     }).filter_map(|tc| tc["function"]["name"].as_str()).collect()
                 }).unwrap_or_default();
 
-                if !has_valid_calls && length_retries < MAX_LENGTH_RETRIES {
+                if length_retries < max_length_retries {
+                    let previous_max_tokens = self.max_tokens;
+                    self.max_tokens = Some(match self.max_tokens {
+                        Some(tokens) => tokens.saturating_mul(2),
+                        None => completion_tokens
+                            .saturating_mul(2)
+                            .try_into()
+                            .unwrap_or(u32::MAX),
+                    });
+                    let previous_max_tokens_label = previous_max_tokens
+                        .map(|tokens| tokens.to_string())
+                        .unwrap_or_else(|| "unlimited".to_string());
+                    log_console!(
+                        "[{}] finish_reason=length: max_tokens {} → {}",
+                        self.role,
+                        previous_max_tokens_label,
+                        self.max_tokens.unwrap_or(0)
+                    );
+                }
+
+                if !has_valid_calls && length_retries < max_length_retries {
                     length_retries += 1;
                     log_console!(
                         "[{}] finish_reason=length (retry {}/{})",
-                        self.role, length_retries, MAX_LENGTH_RETRIES
+                        self.role,
+                        length_retries,
+                        max_length_retries
                     );
                     self.messages.push(serde_json::json!({
                         "role": "assistant",
@@ -380,11 +434,10 @@ impl Session {
                     } else {
                         format!(" 丢失的调用：{}。", broken_names.join("、"))
                     };
-                    let instruction = if length_retries >= 3 {
-                        format!("上一轮输出再次因长度截断。现在只剩少量输出空间。\n你必须立即输出 1 个最小必要工具（参数 ≤150 字符），然后停止。{}", names_hint)
-                    } else {
-                        format!("上一轮输出因长度截断。{}\n你必须：\n1. 立即输出被截断的工具调用（本轮最多 1 个）；\n2. 禁止任何解释文字。如果还需要更多工具，后续轮次继续。", names_hint)
-                    };
+                    let instruction = format!(
+                        "上一轮输出因长度截断，系统已扩大输出空间，请继续完成。{}\n你必须：\n1. 优先补全被截断的工具调用；\n2. 本轮最多 1 个工具调用；\n3. 禁止任何解释文字。如果还需要更多工具，后续轮次继续。",
+                        names_hint
+                    );
                     self.messages.push(serde_json::json!({
                         "role": "user",
                         "content": instruction
@@ -397,7 +450,7 @@ impl Session {
                 if broken_count > 0 {
                     let names_hint = broken_names.join("、");
                     let hint = format!(
-                        "上一轮输出因长度截断，有 {} 个工具调用丢失（{}）。请重新调用这些工具，本轮最多 1 个。",
+                        "上一轮输出因长度截断，系统已扩大输出空间，有 {} 个工具调用丢失（{}）。请重新调用这些工具，本轮最多 1 个。",
                         broken_count, names_hint
                     );
                     self.messages.push(serde_json::json!({
@@ -406,9 +459,12 @@ impl Session {
                     }));
                 }
 
+                let max_tokens = self.max_tokens
+                    .map(|tokens| tokens.to_string())
+                    .unwrap_or_else(|| "unlimited".to_string());
                 log_console!(
                     "[{}] WARNING: finish_reason=length — response truncated at {} tokens ({} valid, {} broken)",
-                    self.role, self.max_tokens, valid_tool_count, broken_count
+                    self.role, max_tokens, valid_tool_count, broken_count
                 );
             }
 
@@ -558,6 +614,7 @@ impl Session {
     async fn api_request(
         client: &AnthropicClient,
         body: &serde_json::Value,
+        timeout: Duration,
     ) -> anyhow::Result<serde_json::Value> {
         let resp = client
             .http_client
@@ -565,7 +622,7 @@ impl Session {
             .header("Authorization", format!("Bearer {}", client.api_key))
             .header("content-type", "application/json")
             .json(body)
-            .timeout(API_TIMEOUT)
+            .timeout(timeout)
             .send()
             .await
             .map_err(|e| {
@@ -588,18 +645,24 @@ impl Session {
     /// Write truncated output to `.shuji/debug/truncated.md` for debugging.
     /// Dumps the raw message, partial tool calls, and the last messages of
     /// session context (so we can see what caused the truncation).
-    fn write_debug_truncated(&self, msg: &serde_json::Value, retry: u32) {
+    async fn write_debug_truncated(&self, msg: &serde_json::Value, retry: u32) {
         let dir = match self.debug_dir {
             Some(ref d) => d.clone(),
             None => return,
         };
         let path = dir.join("debug").join("truncated.md");
-        let _ = std::fs::create_dir_all(path.parent().unwrap());
+        if let Some(parent) = path.parent() {
+            let _ = tokio::fs::create_dir_all(parent).await;
+        }
 
         let sep = "─".repeat(60);
         let content = msg["content"].as_str().unwrap_or("");
         let finish = msg.get("finish_reason")
             .and_then(|v| v.as_str()).unwrap_or("?");
+
+        let max_tokens = self.max_tokens
+            .map(|tokens| tokens.to_string())
+            .unwrap_or_else(|| "unlimited".to_string());
 
         let mut lines = vec![
             sep.clone(),
@@ -607,7 +670,7 @@ impl Session {
             format!("Timestamp: {}", chrono::Local::now().format("%Y-%m-%dT%H:%M:%S")),
             format!("Role: {}", self.role),
             format!("Model: {}", self.model),
-            format!("Max Tokens: {}", self.max_tokens),
+            format!("Max Tokens: {}", max_tokens),
             format!("Retry: {}/5 — finish_reason: {}", retry + 1, finish),
             format!("Session messages: {} total", self.messages.len()),
             String::new(),
@@ -689,15 +752,16 @@ impl Session {
             }
         }
 
-        let _ = std::fs::OpenOptions::new()
+        if let Ok(mut file) = tokio::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .write(true)
             .open(&path)
-            .and_then(|mut f| {
-                use std::io::Write;
-                writeln!(f, "{}", lines.join("\n"))
-            });
+            .await
+        {
+            use tokio::io::AsyncWriteExt;
+            let _ = file.write_all(format!("{}\n", lines.join("\n")).as_bytes()).await;
+        }
     }
 
     /// Snapshot the current message history (for interrupt/restore).

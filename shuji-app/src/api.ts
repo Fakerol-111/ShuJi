@@ -84,3 +84,7 @@ export async function getConfig(): Promise<AppConfig> {
 export async function saveConfig(config: AppConfig): Promise<void> {
   return invoke("save_config", { config });
 }
+
+export async function setDotenvKey(key: string, value: string): Promise<void> {
+  return invoke("set_dotenv_key", { key, value });
+}
