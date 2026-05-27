@@ -37,3 +37,15 @@ shuji-app/src-tauri/gen/
 
 # Design docs (local only)
 docs/
+
+# Project meta files (local only)
+CLAUDE.md
+MEMORY.md
+ROADMAP.md
+FAILURE_RECOVERY.md
+FRONTEND_REFACTOR.md
+FRONTEND_REVIEW.md
+PRODUCTION_CHECKLIST.md
+
+# Presentations (local only)
+*.pptx
