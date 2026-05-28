@@ -19,6 +19,7 @@ use crate::agent::shangshuling::ShangshulingAgent;
 use crate::agent::xingbushangshu::XingbuShangshuAgent;
 use crate::agent::zhisi::ZhisiAgent;
 use crate::api::client::AnthropicClient;
+use crate::commands::friendly_error::friendly_error;
 use crate::commands::project::AppState;
 use crate::commands::settings::AppConfig;
 use crate::models::chat::ChatMessage;
@@ -186,11 +187,11 @@ pub async fn send_message(
     state: State<'_, AppState>,
     message: String,
 ) -> Result<String, String> {
-    let config = crate::commands::settings::get_config().await.map_err(|e| e.to_string())?;
+    let config = crate::commands::settings::get_config().await.map_err(friendly_error)?;
 
     let p_working_dir = {
         let project_opt = state.current_project.lock().await;
-        let p = project_opt.as_ref().ok_or("没有加载项目")?;
+        let p = project_opt.as_ref().ok_or_else(|| friendly_error("没有加载项目"))?;
         p.working_dir.clone()
     };
 
@@ -301,8 +302,8 @@ pub async fn send_message(
 
     // Send message to 内阁 actor
     let sys_lock = state.actor_system.lock().await;
-    let system = sys_lock.as_ref().ok_or("Actor 系统未初始化")?;
-    system.send(&Role::Neige, ActorMessage::Task { content: message })?;
+    let system = sys_lock.as_ref().ok_or_else(|| friendly_error("Actor 系统未初始化"))?;
+    system.send(&Role::Neige, ActorMessage::Task { content: message }).map_err(friendly_error)?;
 
     Ok("已接收".to_string())
 }
@@ -313,13 +314,13 @@ pub async fn discuss_with_cabinet(
     state: State<'_, AppState>,
     message: String,
 ) -> Result<ChatMessage, String> {
-    let config = crate::commands::settings::get_config().await.map_err(|e| e.to_string())?;
+    let config = crate::commands::settings::get_config().await.map_err(friendly_error)?;
 
     let (working_dir, project_context) = {
         let project_opt = state.current_project.lock().await;
         let p = match project_opt.as_ref() {
             Some(p) => p,
-            None => return Err("没有加载项目".to_string()),
+            None => return Err(friendly_error("没有加载项目")),
         };
         (p.working_dir.clone(), format!(
             r#"━━ 项目目标 ━━
@@ -356,7 +357,7 @@ pub async fn discuss_with_cabinet(
         runtime_config: state.runtime_config.clone(),
     };
 
-    let output = neige.execute(&input).await.map_err(|e| e.to_string())?;
+    let output = neige.execute(&input).await.map_err(friendly_error)?;
     Ok(ChatMessage::new("内阁", &output.content))
 }
 
@@ -364,7 +365,7 @@ pub async fn discuss_with_cabinet(
 #[tauri::command]
 pub async fn get_snapshot(state: State<'_, AppState>) -> Result<ProjectSnapshot, String> {
     let project_opt = state.current_project.lock().await;
-    let project = project_opt.as_ref().ok_or("没有加载项目")?;
+    let project = project_opt.as_ref().ok_or_else(|| friendly_error("没有加载项目"))?;
     Ok(project.snapshot())
 }
 
@@ -377,10 +378,10 @@ pub async fn read_document(
     filename: String,
 ) -> Result<Option<String>, String> {
     let project_opt = state.current_project.lock().await;
-    let working_dir = project_opt.as_ref().ok_or("没有加载项目")?.working_dir.clone();
+    let working_dir = project_opt.as_ref().ok_or_else(|| friendly_error("没有加载项目"))?.working_dir.clone();
     drop(project_opt);
     let shuji_dir = crate::storage::shuji_dir::ShujiDir::new(&working_dir);
-    shuji_dir.read_document(&subdir, &filename).await.map_err(|e| e.to_string())
+    shuji_dir.read_document(&subdir, &filename).await.map_err(friendly_error)
 }
 
 #[tauri::command]
@@ -389,28 +390,28 @@ pub async fn list_documents(
     subdir: String,
 ) -> Result<Vec<String>, String> {
     let project_opt = state.current_project.lock().await;
-    let working_dir = project_opt.as_ref().ok_or("没有加载项目")?.working_dir.clone();
+    let working_dir = project_opt.as_ref().ok_or_else(|| friendly_error("没有加载项目"))?.working_dir.clone();
     drop(project_opt);
     let shuji_dir = crate::storage::shuji_dir::ShujiDir::new(&working_dir);
-    shuji_dir.list_documents(&subdir).await.map_err(|e| e.to_string())
+    shuji_dir.list_documents(&subdir).await.map_err(friendly_error)
 }
 
 #[tauri::command]
 pub async fn list_log_files(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     let project_opt = state.current_project.lock().await;
-    let working_dir = project_opt.as_ref().ok_or("没有加载项目")?.working_dir.clone();
+    let working_dir = project_opt.as_ref().ok_or_else(|| friendly_error("没有加载项目"))?.working_dir.clone();
     drop(project_opt);
     let shuji_dir = crate::storage::shuji_dir::ShujiDir::new(&working_dir);
-    shuji_dir.list_log_files().await.map_err(|e| e.to_string())
+    shuji_dir.list_log_files().await.map_err(friendly_error)
 }
 
 #[tauri::command]
 pub async fn read_log_file(state: State<'_, AppState>, filename: String) -> Result<Vec<String>, String> {
     let project_opt = state.current_project.lock().await;
-    let working_dir = project_opt.as_ref().ok_or("没有加载项目")?.working_dir.clone();
+    let working_dir = project_opt.as_ref().ok_or_else(|| friendly_error("没有加载项目"))?.working_dir.clone();
     drop(project_opt);
     let shuji_dir = crate::storage::shuji_dir::ShujiDir::new(&working_dir);
-    shuji_dir.read_log_file(&filename).await.map_err(|e| e.to_string())
+    shuji_dir.read_log_file(&filename).await.map_err(friendly_error)
 }
 
 #[tauri::command]

@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use crate::config::RuntimeConfig;
 use crate::models::role::Role;
 use crate::models::message::Message;

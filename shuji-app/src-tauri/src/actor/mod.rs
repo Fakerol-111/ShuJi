@@ -1,9 +1,10 @@
-#![allow(dead_code)]
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+
+use std::fmt;
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
@@ -129,6 +130,29 @@ impl ActorSystem {
             Some(tx) => tx.send(msg).map_err(|_| format!("{} actor 已关闭", target.name())),
             None => Err(format!("找不到 {} actor", target.name())),
         }
+    }
+}
+
+impl Drop for ActorSystem {
+    fn drop(&mut self) {
+        // 1. Set the global cancel flag — actors check this between tool iterations
+        self.cancel.store(true, Ordering::SeqCst);
+
+        // 2. Send Interrupt to all actors so they stop cleanly
+        for (_role, tx) in &self.senders {
+            let _ = tx.send(ActorMessage::Interrupt);
+        }
+
+        log_console!("[actor] ActorSystem dropped — cancel flag set, Interrupt sent to all actors");
+    }
+}
+
+impl fmt::Debug for ActorSystem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ActorSystem")
+            .field("actor_count", &self.senders.len())
+            .field("cancel", &self.cancel)
+            .finish()
     }
 }
 

@@ -1,5 +1,4 @@
 /// Translate raw technical errors into user-friendly Chinese messages.
-#[allow(dead_code)]
 pub fn friendly_error(e: impl std::fmt::Display) -> String {
     let msg = e.to_string().to_lowercase();
     if msg.contains("connection refused") || msg.contains("connect error") || msg.contains("tcp connect") {

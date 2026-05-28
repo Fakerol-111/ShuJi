@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::path::PathBuf;
 use tokio::fs;
 
@@ -15,6 +14,7 @@ impl ShujiDir {
         }
     }
 
+    #[allow(dead_code)] // public API for external dir access
     pub fn root(&self) -> PathBuf {
         self.root.clone()
     }
@@ -62,6 +62,7 @@ impl ShujiDir {
 
     /// Read the project zuxun (user-editable) from .shuji/zuxun.md.
     /// Falls back to the compiled default if the file doesn't exist.
+    #[allow(dead_code)] // available for future zuxun display in frontend
     pub async fn read_zuxun(&self) -> String {
         let path = self.root.join("zuxun.md");
         if let Ok(Some(c)) = self.read_document_by_path(&path).await {
@@ -73,6 +74,7 @@ impl ShujiDir {
         )).to_string()
     }
 
+    #[allow(dead_code)] // used by read_zuxun (also currently unused)
     async fn read_document_by_path(&self, path: &std::path::Path) -> anyhow::Result<Option<String>> {
         if !fs::try_exists(&path).await? {
             return Ok(None);
@@ -81,6 +83,7 @@ impl ShujiDir {
         Ok(Some(content))
     }
 
+    #[allow(dead_code)] // available for project existence checks
     pub async fn project_exists(&self) -> bool {
         fs::try_exists(self.root.join("state.json")).await.unwrap_or(false)
     }
@@ -174,6 +177,7 @@ impl ShujiDir {
         Ok(())
     }
 
+    #[allow(dead_code)] // public API for writing arbitrary documents
     pub async fn write_document(&self, subdir: &str, filename: &str, content: &str) -> anyhow::Result<String> {
         let dir = self.root.join(subdir);
         fs::create_dir_all(&dir).await?;

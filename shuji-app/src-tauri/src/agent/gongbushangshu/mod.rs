@@ -172,7 +172,7 @@ impl Agent for GongbuShangshuAgent {
             let has_plan = self.plan.lock().unwrap().is_some();
             if has_plan {
                 // Continuation within a batch: restore full coding context from previous round.
-                if let Some(ctx) = crate::api::session::PersistedContext::load_from(&working_dir, &role_name) {
+                if let Some(ctx) = crate::api::session::PersistedContext::load_from(&working_dir, &role_name).await {
                     let mut msgs = ctx.to_messages();
                     msgs.push(serde_json::json!({"role": "user", "content": input.task_description}));
                     let snap = crate::api::session::SessionSnapshot::from_messages(msgs);
@@ -278,7 +278,7 @@ impl Agent for GongbuShangshuAgent {
         // Persist for continuation within the batch
         let snap = session.snapshot();
         let ctx = crate::api::session::PersistedContext::from_messages(&snap.messages);
-        ctx.save_to(&working_dir, &role_name);
+        ctx.save_to(&working_dir, &role_name).await;
 
         let mut output = AgentOutput::new(result);
         output.route = route;

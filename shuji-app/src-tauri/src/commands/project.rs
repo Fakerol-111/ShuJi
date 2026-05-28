@@ -6,6 +6,7 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::actor::DeptLogEntry;
+use crate::commands::friendly_error::friendly_error;
 use crate::config::RuntimeConfig;
 use crate::models::chat::ChatMessage;
 use crate::models::project::{Project, ProjectSummary, OverallStatus};
@@ -49,8 +50,8 @@ pub async fn create_project(
     };
 
     let shuji_dir = ShujiDir::new(&working_dir);
-    shuji_dir.init().await.map_err(|e| e.to_string())?;
-    shuji_dir.save_project(&project).await.map_err(|e| e.to_string())?;
+    shuji_dir.init().await.map_err(friendly_error)?;
+    shuji_dir.save_project(&project).await.map_err(friendly_error)?;
 
     // Update state
     let mut current = state.current_project.lock().await;
@@ -71,7 +72,7 @@ pub async fn load_project(
     crate::token_tracker::init(&storage_path);
 
     // Auto-create project if not exists
-    let project = match shuji_dir.load_project().await.map_err(|e| e.to_string())? {
+    let project = match shuji_dir.load_project().await.map_err(friendly_error)? {
         Some(p) => p,
         None => {
             let dir_name = std::path::Path::new(&working_dir)
@@ -97,8 +98,8 @@ pub async fn load_project(
                 resume: String::new(),
                 summary_prompt: String::new(),
             };
-            shuji_dir.init().await.map_err(|e| e.to_string())?;
-            shuji_dir.save_project(&project).await.map_err(|e| e.to_string())?;
+            shuji_dir.init().await.map_err(friendly_error)?;
+            shuji_dir.save_project(&project).await.map_err(friendly_error)?;
             project
         }
     };

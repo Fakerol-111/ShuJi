@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -90,19 +89,19 @@ impl PersistedContext {
     }
 
     /// Save to `.shuji/context/{role}.json`.
-    pub fn save_to(&self, working_dir: &Path, role: &str) {
+    pub async fn save_to(&self, working_dir: &Path, role: &str) {
         let dir = working_dir.join(".shuji/context");
-        let _ = std::fs::create_dir_all(&dir);
+        let _ = tokio::fs::create_dir_all(&dir).await;
         let path = dir.join(format!("{}.json", role));
         if let Ok(json) = serde_json::to_string_pretty(&self) {
-            let _ = std::fs::write(&path, json);
+            let _ = tokio::fs::write(&path, &json).await;
         }
     }
 
     /// Load from `.shuji/context/{role}.json`.
-    pub fn load_from(working_dir: &Path, role: &str) -> Option<Self> {
+    pub async fn load_from(working_dir: &Path, role: &str) -> Option<Self> {
         let path = working_dir.join(".shuji/context").join(format!("{}.json", role));
-        let data = std::fs::read_to_string(&path).ok()?;
+        let data = tokio::fs::read_to_string(&path).await.ok()?;
         serde_json::from_str(&data).ok()
     }
 }
@@ -166,6 +165,7 @@ pub struct Session {
     max_tokens: Option<u32>,
     role: String,
     /// Whether this session has write_file tool (affects retry token floor).
+    #[allow(dead_code)] // reserved for retry token floor logic
     has_write_file: bool,
     /// Force tool_choice = "none" when set (e.g. during skill selection).
     /// Prevents the LLM from calling tools until a mode is selected.

@@ -62,7 +62,7 @@ impl Agent for ZhongshulingAgent {
         ).with_role(self.role().name()).with_debug_dir(input.working_dir.clone());
 
         let role_name = self.role().name().to_string();
-        if let Some(ctx) = crate::api::session::PersistedContext::load_from(&working_dir, &role_name) {
+        if let Some(ctx) = crate::api::session::PersistedContext::load_from(&working_dir, &role_name).await {
             let mut msgs = ctx.to_messages();
             msgs.push(serde_json::json!({"role": "user", "content": input.task_description}));
             let snap = crate::api::session::SessionSnapshot::from_messages(msgs);
@@ -109,7 +109,7 @@ impl Agent for ZhongshulingAgent {
 
         let snap = session.snapshot();
         let ctx = crate::api::session::PersistedContext::from_messages(&snap.messages);
-        ctx.save_to(&working_dir, self.role().name());
+        ctx.save_to(&working_dir, self.role().name()).await;
 
         let clean = strip_skill_tag(result);
         let mut output = AgentOutput::new(clean);

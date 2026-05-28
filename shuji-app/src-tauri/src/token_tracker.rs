@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Mutex;
@@ -63,6 +62,7 @@ pub enum TokenWindow {
     Today,
     Last3Days,
     Last7Days,
+    #[allow(dead_code)] // reserved for custom date-range queries
     LastNDays(u64),
     All,
 }
@@ -109,6 +109,7 @@ fn aggregate(records: &[TokenRecord], window: TokenWindow) -> HashMap<String, To
     map
 }
 
+#[allow(dead_code)] // convenience wrapper; snapshot_grouped covers current UI
 pub fn snapshot() -> HashMap<String, TokenUsage> {
     snapshot_window(TokenWindow::All)
 }
@@ -133,6 +134,7 @@ pub fn snapshot_grouped() -> HashMap<String, HashMap<String, TokenUsage>> {
 }
 
 /// Clear all tracked data (memory + file).
+#[allow(dead_code)] // available for future reset functionality
 pub fn clear() {
     if let Ok(mut lock) = RECORDS.lock() {
         *lock = None;

@@ -55,23 +55,3 @@ pub async fn run(
     Ok(result.trim().to_string())
 }
 
-/// Extract a document ID from the agent's response text.
-/// Looks for patterns like `reqs_42` or `anls_42`.
-#[allow(dead_code)]
-pub fn extract_doc_id(text: &str) -> Option<String> {
-    for word in text.split_whitespace() {
-        let w = word.trim_matches(|c: char| !c.is_alphanumeric() && c != '_');
-        if (w.starts_with("reqs_") || w.starts_with("anls_")) && w.len() >= 6 {
-            return Some(w.to_string());
-        }
-    }
-    // Fallback: try to find any doc ID pattern in the full text
-    for prefix in &["reqs_", "anls_"] {
-        if let Some(pos) = text.find(prefix) {
-            let rest = &text[pos..];
-            let end = rest.find(|c: char| c.is_whitespace()).unwrap_or(rest.len());
-            return Some(rest[..end].to_string());
-        }
-    }
-    None
-}

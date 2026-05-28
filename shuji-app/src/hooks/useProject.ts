@@ -20,7 +20,7 @@ export function useProject() {
     }).catch((e) => setError(`读取配置失败：${e}`));
     getRecentDirs().then((dirs) => {
       setRecentDirs(dirs);
-      if (dirs.length > 0) void loadProjectIntoState(dirs[0]).catch(() => {});
+      if (dirs.length > 0) void loadProjectIntoState(dirs[0]).catch((e) => setError(e instanceof Error ? e.message : String(e)));
     }).catch((e) => setError(`读取最近项目失败：${e}`));
   }, []);
 

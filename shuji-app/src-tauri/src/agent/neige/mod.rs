@@ -202,7 +202,7 @@ impl Agent for NeigeAgent {
 
         // ── Normal restore from PersistedContext (skipped when resumed) ──
         if !resumed {
-            if let Some(mut ctx) = crate::api::session::PersistedContext::load_from(&working_dir, "neige") {
+            if let Some(mut ctx) = crate::api::session::PersistedContext::load_from(&working_dir, "neige").await {
                 log_console!("[内阁] loading context: base={} chars, skills={}, summary={} chars, recent={} msgs",
                     ctx.base_prompt.len(), ctx.skill_prompts.len(), ctx.history_messages.len(), ctx.context_messages.len());
 
@@ -215,7 +215,7 @@ impl Agent for NeigeAgent {
                 ).await {
                     ctx.history_messages = result.new_history;
                     ctx.context_messages = result.kept_context;
-                    ctx.save_to(&working_dir, "neige");
+                    ctx.save_to(&working_dir, "neige").await;
                     changed = true;
                 }
 
@@ -223,7 +223,7 @@ impl Agent for NeigeAgent {
                     &self.client, &self.model, &ctx.history_messages, &input.runtime_config,
                 ).await {
                     ctx.history_messages = merged;
-                    ctx.save_to(&working_dir, "neige");
+                    ctx.save_to(&working_dir, "neige").await;
                     changed = true;
                 }
 
@@ -451,7 +451,7 @@ impl Agent for NeigeAgent {
             // Normal: save to PersistedContext
             let snap = session.snapshot();
 	            let ctx = crate::api::session::PersistedContext::from_messages(&snap.messages);
-	            ctx.save_to(&working_dir, "neige");
+	            ctx.save_to(&working_dir, "neige").await;
 	        }
 
 	        let clean = strip_skill_tag(result);

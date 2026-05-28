@@ -1,5 +1,6 @@
-#![allow(dead_code)]
 use std::collections::HashMap;
+
+use crate::commands::friendly_error::friendly_error;
 
 use serde::{Deserialize, Serialize};
 
@@ -73,6 +74,7 @@ impl AppConfig {
     }
 
     /// Returns true if any role has a non-empty api_key.
+    #[allow(dead_code)] // used externally by frontend config check
     pub fn has_any_key(&self) -> bool {
         self.roles.values().any(|r| !r.api_key.is_empty())
     }
@@ -136,7 +138,7 @@ pub async fn get_config() -> Result<AppConfig, String> {
 pub async fn save_config(config: AppConfig) -> Result<(), String> {
     let path = dotenv_path();
     let content = config.to_dotenv_lines().join("\n");
-    std::fs::write(&path, &content).map_err(|e| e.to_string())?;
+    std::fs::write(&path, &content).map_err(friendly_error)?;
     Ok(())
 }
 
@@ -164,6 +166,6 @@ pub async fn set_dotenv_key(key: String, value: String) -> Result<(), String> {
         lines.push(format!("{}={}", key, value));
         lines.push(String::new());
     }
-    std::fs::write(&path, lines.join("\n")).map_err(|e| e.to_string())?;
+    std::fs::write(&path, lines.join("\n")).map_err(friendly_error)?;
     Ok(())
 }

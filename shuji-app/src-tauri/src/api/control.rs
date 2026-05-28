@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};

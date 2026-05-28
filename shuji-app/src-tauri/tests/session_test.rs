@@ -181,24 +181,24 @@ fn test_generate_retry_hint_for_broken_tools() {
     assert!(hint.contains("2 个"));
 }
 
-// ── 测试场景：max_tokens递减逻辑 ──────────────────────────────
+// ── 测试场景：max_tokens翻倍逻辑（匹配生产代码 behavior） ──────
 
 #[test]
-fn test_max_tokens_halving_logic() {
+fn test_max_tokens_doubling_logic() {
     let initial_tokens = 2048u32;
     let mut current_tokens = initial_tokens;
     let mut retry_count = 0;
     const MAX_RETRIES: u32 = 5;
-    
+
     let mut history = vec![initial_tokens];
-    
+
     while retry_count < MAX_RETRIES {
-        current_tokens = current_tokens / 2;
+        current_tokens = current_tokens.saturating_mul(2);
         retry_count += 1;
         history.push(current_tokens);
     }
-    
-    assert_eq!(history, vec![2048, 1024, 512, 256, 128, 64]);
+
+    assert_eq!(history, vec![2048, 4096, 8192, 16384, 32768, 65536]);
     assert_eq!(retry_count, MAX_RETRIES);
 }
 

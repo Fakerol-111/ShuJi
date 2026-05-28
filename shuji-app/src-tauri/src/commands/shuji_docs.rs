@@ -2,6 +2,8 @@ use std::path::{Component, Path, PathBuf};
 
 use serde::Serialize;
 
+use crate::commands::friendly_error::friendly_error;
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ShujiEntry {
     pub name: String,
@@ -22,7 +24,7 @@ pub async fn list_shuji_tree(project_dir: String) -> Result<Vec<ShujiEntry>, Str
     let project = PathBuf::from(project_dir);
     tokio::task::spawn_blocking(move || build_project_tree(&project))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(friendly_error)?
 }
 
 #[tauri::command]
@@ -31,16 +33,16 @@ pub async fn read_shuji_doc(project_dir: String, path: String) -> Result<ShujiDo
     let root = PathBuf::from(project_dir);
     let target = root.join(&rel);
 
-    let root_canon = tokio::fs::canonicalize(&root).await.map_err(|e| e.to_string())?;
-    let target_canon = tokio::fs::canonicalize(&target).await.map_err(|e| e.to_string())?;
+    let root_canon = tokio::fs::canonicalize(&root).await.map_err(friendly_error)?;
+    let target_canon = tokio::fs::canonicalize(&target).await.map_err(friendly_error)?;
     if !target_canon.starts_with(&root_canon) {
-        return Err("路径越界".to_string());
+        return Err(friendly_error("路径越界"));
     }
     if target_canon.is_dir() {
-        return Err("不能读取目录".to_string());
+        return Err(friendly_error("不能读取目录"));
     }
 
-    let content = tokio::fs::read_to_string(&target_canon).await.map_err(|e| e.to_string())?;
+    let content = tokio::fs::read_to_string(&target_canon).await.map_err(friendly_error)?;
     Ok(ShujiDoc { content, path: rel.to_string_lossy().replace('\\', "/") })
 }
 

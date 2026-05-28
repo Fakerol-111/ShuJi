@@ -24,12 +24,4 @@ impl Message {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn system(content: &str) -> Self {
-        Self {
-            role: "system".into(),
-            content: content.to_string(),
-            timestamp: chrono::Local::now().to_rfc3339(),
-        }
-    }
 }

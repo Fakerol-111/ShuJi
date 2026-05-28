@@ -15,7 +15,7 @@ export default function LogBar({ expanded, onExpandedChange }: LogBarProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    getDeptLogs().then((logs) => setLatest(logs.length > 0 ? logs[logs.length - 1] : null)).catch(() => {});
+    getDeptLogs().then((logs) => setLatest(logs.length > 0 ? logs[logs.length - 1] : null)).catch((e) => console.error("日志加载失败:", e));
   }, []);
 
   useEffect(() => {
