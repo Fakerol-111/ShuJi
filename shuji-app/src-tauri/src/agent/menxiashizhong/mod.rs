@@ -66,8 +66,12 @@ impl Agent for MenxiaShizhongAgent {
 
         let mut controller = crate::api::control::AgentController::new();
         let config = input.runtime_config.clone();
-        let exec = |name: &str, args: &serde_json::Value| -> String {
-            Self::execute_tool(name, args, &working_dir)
+        let wd = working_dir.clone();
+        let exec = move |name: &str, args: &serde_json::Value| -> crate::api::control::ToolFuture {
+            let name = name.to_owned();
+            let args = args.clone();
+            let wd = wd.clone();
+            Box::pin(async move { Self::execute_tool(&name, &args, &wd) })
         };
 
         let (mut result, mut route);

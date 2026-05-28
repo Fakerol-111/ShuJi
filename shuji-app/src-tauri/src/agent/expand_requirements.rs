@@ -37,8 +37,11 @@ pub async fn run(
     .with_debug_dir(working_dir.to_path_buf());
 
     let wd = working_dir.to_path_buf();
-    let exec = |name: &str, args: &serde_json::Value| -> String {
-        crate::tool::execute_named_tool(name, &wd, args, "requirements_agent")
+    let exec = move |name: &str, args: &serde_json::Value| -> crate::api::control::ToolFuture {
+        let name = name.to_owned();
+        let args = args.clone();
+        let wd = wd.clone();
+        Box::pin(async move { crate::tool::execute_named_tool(&name, &wd, &args, "requirements_agent") })
     };
 
     let mut controller = crate::api::control::AgentController::new();

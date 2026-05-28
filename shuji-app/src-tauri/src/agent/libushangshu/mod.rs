@@ -57,8 +57,12 @@ impl Agent for LibuShangshuAgent {
 
         let mut controller = crate::api::control::AgentController::new();
         let config = input.runtime_config.clone();
-        let exec = |name: &str, args: &serde_json::Value| -> String {
-            Self::execute_tool(name, args, &working_dir)
+        let wd_clone = working_dir.clone();
+        let exec = move |name: &str, args: &serde_json::Value| -> crate::api::control::ToolFuture {
+            let name = name.to_owned();
+            let args = args.clone();
+            let wd = wd_clone.clone();
+            Box::pin(async move { Self::execute_tool(&name, &args, &wd) })
         };
         let (result, route) = controller.run(&mut session, &exec, &self.cancel, &tools, None, &config).await?;
 

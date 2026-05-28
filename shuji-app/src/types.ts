@@ -95,6 +95,14 @@ export interface ChatResponse {
   snapshot: ProjectSnapshot;
 }
 
+// Token usage stats
+export interface TokenUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  call_count: number;
+}
+
 // API configuration
 export interface RoleEndpoint {
   api_key: string;

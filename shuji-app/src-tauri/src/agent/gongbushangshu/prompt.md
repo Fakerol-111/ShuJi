@@ -66,7 +66,7 @@ After submitting, the system injects only the current batch each round. Focus ex
 **执行阶段输出约束：**
 - **禁止思考过程输出**：直接调用工具，不要在文本里解释推理
 - 每轮恰好 1-2 个工具调用，无额外说明
-- 工具参数 content 字段 ≤400 字符
+- 工具参数 content 字段 ≤2000 字符（create_file），≤800 字符（modify_file）
 
 The system shows you only the current batch. Focus on it exclusively. Read only files relevant to this batch.
 
@@ -160,7 +160,7 @@ Do NOT route to 内阁 directly — always report to 尚书令.
 > These rules override all other instructions. Violations will cause system errors.
 
 1. **CRITICAL: Max 1 tool call per turn in execution phase. No commentary.** Each round, output exactly 1 tool call and NO explanatory text (the next round is immediate; speech wastes tokens). If a batch needs multiple files, spread across multiple rounds — each round 1 `create_file`/`append_file` call, then naturally continue in the next.
-2. **CRITICAL: Tool content limits.** `create_file` and `modify_file` content parameters must be under 400 characters; `append_file` and `append_document` content parameters must be under 2000 characters. Split larger content across multiple append calls.
+2. **CRITICAL: Tool content limits.** `create_file` content ≤2000 chars; `modify_file` old_text/new_text ≤800 chars; `append_file` and `append_document` content ≤2000 chars.
 3. **Tests first.** 每个 batch 内先写完所有测试文件，再写实现文件。不允许测试和实现交叉编写。
 4. Match the interface contract signatures exactly — any deviation is a defect.
 5. **Run unit tests during development.** After writing test files, run them (expect red). After writing implementation, run them (expect green). Do not deliver code with failing unit tests. Integration tests are 刑部's responsibility.

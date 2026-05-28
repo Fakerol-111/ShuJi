@@ -204,8 +204,14 @@ impl Agent for GongbuShangshuAgent {
         let wd = working_dir.clone();
         let force_stop = Arc::new(AtomicBool::new(false));
         let force_stop_clone = force_stop.clone();
-        let exec = move |name: &str, args: &serde_json::Value| -> String {
-            match name {
+        let exec = move |name: &str, args: &serde_json::Value| -> crate::api::control::ToolFuture {
+            let name = name.to_owned();
+            let args = args.clone();
+            let plan_ref = plan_ref.clone();
+            let force_stop_clone = force_stop_clone.clone();
+            let wd = wd.clone();
+            Box::pin(async move {
+            match name.as_str() {
                 "submit_plan" => {
                     {
                         let guard = plan_ref.lock().unwrap();
@@ -251,8 +257,9 @@ impl Agent for GongbuShangshuAgent {
                         None => r#"{"ok":false,"message":"没有活跃计划。如需分批，先调用 submit_plan。"}"#.to_string(),
                     }
                 }
-                _ => Self::execute_tool(name, args, &wd),
+                _ => Self::execute_tool(&name, &args, &wd),
             }
+            })
         };
         let (result, route) = controller.run(&mut session, &exec, &self.cancel, &tools, Some(&force_stop), &config).await?;
 

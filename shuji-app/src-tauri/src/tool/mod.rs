@@ -344,14 +344,14 @@ pub fn tool_modify_file(working_dir: &Path, args: &serde_json::Value) -> String 
     if old_text.is_empty() {
         return ToolOutput::error("modify_file", path, "empty_old_text", "old_text 不能为空");
     }
-    // Hard limit: 400 characters per parameter
-    if old_text.len() > 400 {
+    // Hard limit: 800 characters per parameter
+    if old_text.len() > 800 {
         return ToolOutput::error("modify_file", path, "old_text_too_long",
-            &format!("old_text 长度 {} 超过上限 400 字符。对于大块修改，请使用 read_file → delete_file → create_file + append_file 模式。", old_text.len()));
+            &format!("old_text 长度 {} 超过上限 800 字符。对于大块修改，请使用 read_file → delete_file → create_file 模式。", old_text.len()));
     }
-    if new_text.len() > 400 {
+    if new_text.len() > 800 {
         return ToolOutput::error("modify_file", path, "new_text_too_long",
-            &format!("new_text 长度 {} 超过上限 400 字符。对于大块修改，请使用 read_file → delete_file → create_file + append_file 模式。", new_text.len()));
+            &format!("new_text 长度 {} 超过上限 800 字符。对于大块修改，请使用 read_file → delete_file → create_file 模式。", new_text.len()));
     }
     if !content.contains(old_text) {
         return ToolOutput::error("modify_file", path, "not_found",
@@ -371,7 +371,7 @@ pub fn modify_file_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "modify_file".into(),
-            description: "替换文件中的文本 (find+replace)。old_text/new_text ≤400字符。大块修改用 read→delete→create。".into(),
+            description: "替换文件中的文本 (find+replace)。≤800字符。大块修改用 read→delete→create。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -381,13 +381,13 @@ pub fn modify_file_tool_def() -> crate::api::client::ToolDefinition {
                     },
                     "old_text": {
                         "type": "string",
-                        "description": "待替换文本，须精确匹配（≤400字符）",
-                        "maxLength": 400
+                        "description": "待替换文本（≤800字符）",
+                        "maxLength": 800
                     },
                     "new_text": {
                         "type": "string",
-                        "description": "新文本（≤400字符）",
-                        "maxLength": 400
+                        "description": "新文本（≤800字符）",
+                        "maxLength": 800
                     }
                 },
                 "required": ["path", "old_text", "new_text"]
@@ -546,9 +546,9 @@ pub fn tool_create_file(working_dir: &Path, args: &serde_json::Value) -> String 
         return ToolOutput::error("create_file", "", "empty_path", "文件路径为空");
     }
     // Hard limit: 400 characters per call
-    if content.len() > 400 {
+    if content.len() > 2000 {
         return ToolOutput::error("create_file", path, "content_too_long",
-            &format!("content 长度 {} 超过上限 400 字符。请使用 create_file(≤400) + 多次 append_file(≤400) 分块写入。", content.len()));
+            &format!("content 长度 {} 超过上限 2000 字符。请使用 create_file + append_file 分块写入。", content.len()));
     }
 
     let full = match resolve_scoped_path(working_dir, path) {
@@ -630,7 +630,7 @@ pub fn create_file_tool_def(description: &str) -> crate::api::client::ToolDefini
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "create_file".into(),
-            description: format!("{}。CRITICAL: content 参数必须在 400 字符以内。大文件必须先用 create_file 写入最小内容，再用 append_file 分块追加。", description),
+            description: format!("{}。content ≤2000 字符。大文件用 append_file 分块追加。", description),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -640,8 +640,8 @@ pub fn create_file_tool_def(description: &str) -> crate::api::client::ToolDefini
                     },
                     "content": {
                         "type": "string",
-                        "description": "初始文件内容（最多 400 字符）",
-                        "maxLength": 400
+                        "description": "文件内容（≤2000字符）",
+                        "maxLength": 2000
                     }
                 },
                 "required": ["path", "content"]

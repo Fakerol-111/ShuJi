@@ -6,7 +6,9 @@ import LogsPage from "./pages/LogsPage";
 import SetupPage from "./pages/SetupPage";
 import "./styles/globals.css";
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
+const rootEl = document.getElementById("root");
+if (!rootEl) throw new Error("root element not found");
+ReactDOM.createRoot(rootEl).render(
   <React.StrictMode>
     <BrowserRouter>
       <Routes>

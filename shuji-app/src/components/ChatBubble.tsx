@@ -20,9 +20,9 @@ export default function ChatBubble({ msg, onOption }: { msg: ChatMessage; onOpti
           }`}
         >
           {isEmperor ? (
-            <p className="whitespace-pre-wrap">{msg.content}</p>
+            <p className="whitespace-pre-wrap break-words overflow-hidden">{msg.content}</p>
           ) : (
-            <div className="prose prose-sm max-w-none prose-headings:text-ink-900 prose-a:text-vermillion">
+            <div className="prose prose-sm max-w-none break-words prose-headings:text-ink-900 prose-a:text-vermillion">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
@@ -52,7 +52,8 @@ function OptionGroup({ options, onOption }: { options: ChatOption[]; onOption: (
   const [supplement, setSupplement] = useState("");
 
   if (selectedKey) {
-    const opt = options.find((o) => o.key === selectedKey)!;
+    const opt = options.find((o) => o.key === selectedKey);
+    if (!opt) return null;
     return (
       <div className="mt-2 bg-ink-100 border border-ink-200 rounded-lg p-3">
         <p className="text-xs font-bold text-ink-800 mb-1">{opt.key}. {opt.label}</p>

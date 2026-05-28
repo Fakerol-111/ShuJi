@@ -240,7 +240,15 @@ impl Agent for NeigeAgent {
         let mut controller = crate::api::control::AgentController::new();
         let cancel_map = self.cancel_map.clone();
         let config = input.runtime_config.clone();
-        let exec = |name: &str, args: &serde_json::Value| -> String {
+        let wd = working_dir.clone();
+        let exec = move |name: &str, args: &serde_json::Value| -> crate::api::control::ToolFuture {
+            let name = name.to_owned();
+            let args = args.clone();
+            let client = client.clone();
+            let model = model.clone();
+            let working_dir = wd.clone();
+            let cancel_map = cancel_map.clone();
+            Box::pin(async move {
             if name == "cancel_agent" {
                 if let Some(ref map) = cancel_map {
                     let target = args["to"].as_str().unwrap_or("");
@@ -344,11 +352,7 @@ impl Agent for NeigeAgent {
                 let wd = working_dir.clone();
                 let tid = task_id.to_string();
                 
-                match tokio::task::block_in_place(|| {
-                    tokio::runtime::Handle::current().block_on(
-                        crate::agent::expand_requirements::run(&tid, &wd, &c, &m)
-                    )
-                }) {
+                match crate::agent::expand_requirements::run(&tid, &wd, &c, &m).await {
                     Ok(doc_id) => {
                         log_console!("[内阁] expand_requirements → {}", doc_id);
                         return serde_json::json!({"ok": true, "document_id": doc_id}).to_string();
@@ -389,7 +393,8 @@ impl Agent for NeigeAgent {
                     }
                 }
             }
-            Self::execute_tool(name, args, &working_dir)
+            Self::execute_tool(&name, &args, &working_dir)
+            })
         };
 
         let (mut result, mut route);

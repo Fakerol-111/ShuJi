@@ -22,7 +22,12 @@ pub struct ToolCallInfo {
 /// Outcome of one Session::step().
 pub enum StepResult {
     Text(String),
-    ToolCalls(Vec<ToolCallInfo>),
+    ToolCalls {
+        calls: Vec<ToolCallInfo>,
+        /// Text content from the assistant message that also contained tool_calls.
+        /// The actor layer uses this to display text alongside tool execution results.
+        text: String,
+    },
 }
 
 /// Persisted context with 4 separated layers for independent management.
@@ -80,6 +85,7 @@ impl PersistedContext {
         for m in &self.context_messages {
             msgs.push(m.clone());
         }
+        sanitize_messages(&mut msgs);
         msgs
     }
 
@@ -99,6 +105,41 @@ impl PersistedContext {
         let data = std::fs::read_to_string(&path).ok()?;
         serde_json::from_str(&data).ok()
     }
+}
+
+/// Remove orphaned `tool` role messages that don't have a preceding
+/// `assistant` message with `tool_calls`. Also remove orphaned
+/// `assistant` + `tool_calls` messages that have no subsequent `tool` result.
+/// This prevents 400 errors after context compaction truncates tool sequences.
+fn sanitize_messages(msgs: &mut Vec<serde_json::Value>) {
+    // Phase 1: collect all tool_call_ids from assistant messages
+    let mut pending_ids: Vec<String> = Vec::new();
+    // Phase 2: identify valid tool messages
+    msgs.retain(|msg| {
+        let role = msg["role"].as_str().unwrap_or("");
+        if role == "assistant" {
+            if let Some(tcs) = msg["tool_calls"].as_array() {
+                for tc in tcs {
+                    if let Some(id) = tc["id"].as_str() {
+                        pending_ids.push(id.to_string());
+                    }
+                }
+            }
+            true // always keep assistant messages
+        } else if role == "tool" {
+            let call_id = msg["tool_call_id"].as_str().unwrap_or("");
+            let valid = !call_id.is_empty() && pending_ids.iter().any(|id| id == call_id);
+            if valid {
+                // Consume: remove this id from pending so it's used at most once
+                if let Some(pos) = pending_ids.iter().position(|id| id == call_id) {
+                    pending_ids.remove(pos);
+                }
+            }
+            valid
+        } else {
+            true // keep user/system messages
+        }
+    });
 }
 
 /// Opaque snapshot of Session internals, used for interrupt/restore.
@@ -558,16 +599,12 @@ impl Session {
             let valid_ids: std::collections::HashSet<&str> =
                 calls.iter().map(|c| c.id.as_str()).collect();
             let mut filtered = msg.clone();
-            // Strip reasoning_content — DeepSeek returns this in the message
-            // object, but passing it back in subsequent requests causes 400 errors.
-            if let Some(obj) = filtered.as_object_mut() {
-                obj.remove("reasoning_content");
-            }
             if let Some(arr) = filtered["tool_calls"].as_array_mut() {
                 arr.retain(|tc| valid_ids.contains(tc["id"].as_str().unwrap_or("")));
             }
+            let assistant_text = msg["content"].as_str().unwrap_or_default().to_string();
             self.messages.push(filtered);
-            return Ok(StepResult::ToolCalls(calls));
+            return Ok(StepResult::ToolCalls { calls, text: assistant_text });
         } else {
             return Ok(StepResult::Text(
                 msg["content"].as_str().unwrap_or_default().to_string(),

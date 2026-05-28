@@ -1,10 +1,14 @@
 #![allow(dead_code)]
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::api::client::ToolDefinition;
 use crate::api::session::{Session, SessionSnapshot};
 use crate::config::RuntimeConfig;
 use crate::models::role::Role;
+
+pub type ToolFuture = Pin<Box<dyn Future<Output = String> + Send + 'static>>;
 
 const INTERRUPT_RESPONSE: &str = "\n\n[系统] 当前处理已被皇帝中断";
 
@@ -74,13 +78,10 @@ impl AgentController {
     /// 2. If tool calls → execute each via `tool_exec`, feed results back
     /// 3. If text → return it
     /// 4. If `cancel` is set → `interrupt()` and return intercepted text
-    ///
-    /// The `tool_exec` closure is synchronous by design (all tools in this
-    /// codebase are fast file I/O or command spawning with internal timeout).
     pub async fn run(
         &mut self,
         session: &mut Session,
-        tool_exec: &(dyn Fn(&str, &serde_json::Value) -> String + Sync),
+        tool_exec: &(dyn for<'a> Fn(&'a str, &'a serde_json::Value) -> ToolFuture + Sync),
         cancel: &AtomicBool,
         tools: &[ToolDefinition],
         force_stop: Option<&AtomicBool>,
@@ -119,10 +120,16 @@ impl AgentController {
 
             match step_result {
                 crate::api::session::StepResult::Text(text) => {
-                    return Ok((text, None));
+                    let combined = if last_text.is_empty() { text } else { format!("{}{}", last_text, text) };
+                    last_text.clear();
+                    return Ok((combined, None));
                 }
 
-                crate::api::session::StepResult::ToolCalls(calls) => {
+                crate::api::session::StepResult::ToolCalls { calls, text } => {
+                    // Accumulate text from assistant messages that also carried tool_calls
+                    if !text.is_empty() {
+                        last_text.push_str(&text);
+                    }
                     for (idx, tc) in calls.iter().enumerate() {
                         // ── Same-tool watchdog ─────────────
                         let key_arg = tc.args.get("path")
@@ -188,7 +195,8 @@ impl AgentController {
                             }
 
                             let route = RouteTo { target, msg_type, subject };
-                            return Ok((summary, Some(route)));
+                            let out = if last_text.is_empty() { summary } else { format!("{}{}", last_text, summary) };
+                            return Ok((out, Some(route)));
                         }
 
                         if same_tool_count == config.watchdog.same_tool_warning_count {
@@ -199,7 +207,7 @@ impl AgentController {
                         }
 
                         // ── Execute tool ──────────────────
-                        let result = tool_exec(&tc.name, &tc.args);
+                        let result = tool_exec(&tc.name, &tc.args).await;
 
                         // ── Write/read tracking ───────────
                         let is_write = matches!(tc.name.as_str(), "create_file" | "modify_file" | "append_file" | "delete_file" | "rename_file");
