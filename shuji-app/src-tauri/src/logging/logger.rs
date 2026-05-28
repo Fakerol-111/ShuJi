@@ -66,7 +66,20 @@ impl Logger {
     }
 
     /// Append a log entry. Thread-safe via tokio append.
+    /// Rotates the log file if it exceeds 10 MB.
     async fn append(&self, author: &str, summary: &str) {
+        // Rotate if log file exceeds 10 MB
+        const MAX_LOG_SIZE: u64 = 10 * 1024 * 1024;
+        if let Ok(meta) = tokio::fs::metadata(&self.log_path).await {
+            if meta.len() > MAX_LOG_SIZE {
+                let archive = self.log_path.with_file_name(format!(
+                    "activity-{}.log",
+                    chrono::Local::now().format("%Y%m%d_%H%M%S")
+                ));
+                let _ = tokio::fs::rename(&self.log_path, &archive).await;
+            }
+        }
+
         let entry = serde_json::json!({
             "ts": chrono::Local::now().to_rfc3339(),
             "author": author,

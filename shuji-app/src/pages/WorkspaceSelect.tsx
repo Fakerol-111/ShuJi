@@ -21,8 +21,8 @@ export default function WorkspaceSelect() {
           return;
         }
       })
-      .catch(() => {});
-    getRecentDirs().then(setRecentDirs).catch(() => {});
+      .catch((e) => console.error("读取配置失败:", e));
+    getRecentDirs().then(setRecentDirs).catch((e) => console.error("读取最近目录失败:", e));
   }, []);
 
   const handleBrowse = async () => {

@@ -31,6 +31,8 @@ impl ShujiDir {
             self.root.join("reports"),
             self.root.join("logs"),
             self.root.join("execution"),
+            self.root.join("skills"),
+            self.root.join("soul"),
         ];
         for dir in &dirs {
             fs::create_dir_all(dir).await?;

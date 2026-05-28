@@ -73,6 +73,7 @@ impl GongbuShangshuAgent {
         let mut tools = crate::tool::registry::inspect_tools();
         tools.extend(crate::tool::registry::file_write_tools());
         tools.extend(crate::tool::registry::document_tools());
+        tools.extend(crate::tool::registry::execute_command_tool());
         tools.push(crate::tool::registry::submit_plan_tool());
         tools.push(crate::tool::registry::complete_task_tool());
         tools

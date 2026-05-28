@@ -30,7 +30,7 @@ fn setup_client() -> (Arc<shuji_app_lib::api::client::AnthropicClient>, String) 
     let api_url = std::env::var("DEFAULT_API_URL")
         .unwrap_or_else(|_| "https://api.deepseek.com/chat/completions".into());
     let model = std::env::var("DEFAULT_MODEL")
-        .unwrap_or_else(|_| "deepseek-chat".into());
+        .unwrap_or_else(|_| "deepseek-v4-flash".into());
     (Arc::new(shuji_app_lib::api::client::AnthropicClient::new(api_key, api_url)), model)
 }
 

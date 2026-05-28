@@ -133,8 +133,10 @@ pub struct Session {
     debug_dir: Option<PathBuf>,
     /// Runtime configuration
     config: Arc<RuntimeConfig>,
-    /// Control reasoning/thinking output (None = auto-detect, Some(true) = enable, Some(false) = disable)
+    /// Control reasoning/thinking output (None = use config default, Some = override)
     reasoning_enabled: Option<bool>,
+    /// Reasoning config from RuntimeConfig
+    reasoning_config: crate::config::ReasoningConfig,
 }
 
 impl Session {
@@ -194,6 +196,7 @@ impl Session {
             debug_dir: None,
             config: config.clone(),
             reasoning_enabled: None,
+            reasoning_config: config.api.reasoning.clone(),
         }
     }
 
@@ -284,17 +287,26 @@ impl Session {
                 body["max_tokens"] = serde_json::json!(max_tokens);
             }
 
-            // Enable thinking mode for OpenAI-compatible APIs (DeepSeek etc.).
-            // Reasoning tokens are separate from max_tokens — they don't
-            // consume output quota, leaving more room for tool calls.
-            // Skip for Anthropic (uses a different thinking format).
-            // Can be controlled via set_reasoning() for phase-based control.
-            let should_enable_thinking = match self.reasoning_enabled {
+            // Enable thinking/reasoning mode based on config (configurable per API type).
+            // - Anthropic: `thinking` field with optional budget_tokens
+            // - DeepSeek/OpenAI-compatible: `thinking` field in body (works for models that support it)
+            let thinking_enabled = match self.reasoning_enabled {
                 Some(enabled) => enabled,
-                None => !self.client.api_url.contains("anthropic.com"),
+                None => self.reasoning_config.enabled,
             };
-            if should_enable_thinking && !self.client.api_url.contains("anthropic.com") {
-                body["thinking"] = serde_json::json!({"type": "enabled"});
+            if thinking_enabled {
+                if self.client.api_url.contains("anthropic.com") {
+                    // Anthropic format: extended thinking with optional budget
+                    #[allow(unused_mut)]
+                    let mut thinking = serde_json::json!({"type": "enabled"});
+                    if self.reasoning_config.budget_tokens > 0 {
+                        thinking["budget_tokens"] = serde_json::json!(self.reasoning_config.budget_tokens);
+                    }
+                    body["thinking"] = thinking;
+                } else {
+                    // OpenAI-compatible (DeepSeek etc.): thinking parameter
+                    body["thinking"] = serde_json::json!({"type": "enabled"});
+                }
             }
 
             if self.tool_choice_none {
@@ -327,6 +339,13 @@ impl Session {
             let finish_reason = data["choices"][0]["finish_reason"]
                 .as_str()
                 .unwrap_or("");
+
+            // Log reasoning content length for debugging (DeepSeek reasoning_content field)
+            if let Some(rc) = msg.get("reasoning_content").and_then(|v| v.as_str()) {
+                if !rc.is_empty() {
+                    log_console!("[{}] reasoning: {} chars", self.role, rc.chars().count());
+                }
+            }
             let completion_tokens = data
                 .get("usage")
                 .and_then(|usage| usage["completion_tokens"].as_u64())
@@ -539,6 +558,11 @@ impl Session {
             let valid_ids: std::collections::HashSet<&str> =
                 calls.iter().map(|c| c.id.as_str()).collect();
             let mut filtered = msg.clone();
+            // Strip reasoning_content — DeepSeek returns this in the message
+            // object, but passing it back in subsequent requests causes 400 errors.
+            if let Some(obj) = filtered.as_object_mut() {
+                obj.remove("reasoning_content");
+            }
             if let Some(arr) = filtered["tool_calls"].as_array_mut() {
                 arr.retain(|tc| valid_ids.contains(tc["id"].as_str().unwrap_or("")));
             }

@@ -32,6 +32,7 @@ impl NeigeAgent {
         tools.extend(crate::tool::registry::summarize_logs_tool());
         tools.push(crate::tool::registry::cancel_agent_tool());
         tools.push(crate::tool::registry::update_soul_tool());
+        tools.push(crate::tool::registry::create_skill_tool());
         tools.push(crate::tool::registry::expand_requirements_tool());
         tools
     }
@@ -96,8 +97,20 @@ impl NeigeAgent {
         default.to_string()
     }
 
-    pub fn load_skill(name: &str) -> &'static str {
-        match name {
+    /// Load skill content. Checks `.shuji/skills/{name}.md` first (runtime-
+    /// created skills), then falls back to compile-time embedded skills.
+    /// Returns empty string if the skill is not found in either location.
+    pub fn load_skill(name: &str, working_dir: &Path) -> String {
+        // 1. Check runtime skills on disk
+        let disk_path = working_dir.join(".shuji").join("skills").join(format!("{}.md", name));
+        if let Ok(content) = std::fs::read_to_string(&disk_path) {
+            if !content.trim().is_empty() {
+                log_console!("[内阁] load skill from disk: {}", name);
+                return content;
+            }
+        }
+        // 2. Fall back to compiled-in skills
+        let content: &str = match name {
             "discuss" => include_str!("skills/discuss.md"),
             "clarify" => include_str!("skills/clarify.md"),
             "workflow_demo" => include_str!("skills/workflow_demo.md"),
@@ -109,7 +122,42 @@ impl NeigeAgent {
             "workflow_refactor" => include_str!("skills/workflow_refactor.md"),
             "workflow_audit" => include_str!("skills/workflow_audit.md"),
             "summary" => include_str!("skills/summary.md"),
+            "reflect" => include_str!("skills/reflect.md"),
             _ => "",
+        };
+        content.to_string()
+    }
+
+    /// Save raw session messages for pause/resume.
+    /// These bypass PersistedContext compression so the full session
+    /// context (including <options> decision points) is preserved.
+    fn save_paused_session(messages: &[serde_json::Value], working_dir: &std::path::Path) {
+        let path = working_dir.join(".shuji").join("paused_session.json");
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(json) = serde_json::to_string(messages) {
+            let _ = std::fs::write(&path, &json);
+            log_console!("[内阁] paused session saved ({} messages)", messages.len());
+        }
+    }
+
+    /// Load and delete the paused session file.
+    fn load_paused_session(working_dir: &std::path::Path) -> Option<Vec<serde_json::Value>> {
+        let path = working_dir.join(".shuji").join("paused_session.json");
+        let content = std::fs::read_to_string(&path).ok()?;
+        let messages: Vec<serde_json::Value> = serde_json::from_str(&content).ok()?;
+        let _ = std::fs::remove_file(&path);
+        log_console!("[内阁] paused session loaded ({} messages)", messages.len());
+        Some(messages)
+    }
+
+    /// Clean up paused session file (used on Interrupt/Replace).
+    pub fn clear_paused_session(working_dir: &std::path::Path) {
+        let path = working_dir.join(".shuji").join("paused_session.json");
+        if path.exists() {
+            let _ = std::fs::remove_file(&path);
+            log_console!("[内阁] paused session cleared");
         }
     }
 }
@@ -135,10 +183,28 @@ impl Agent for NeigeAgent {
          .with_soul(self.role().name(), &Self::load_soul(&input.working_dir))
          .with_debug_dir(input.working_dir.clone());
 
-        // Restore saved context from previous invocation, compacting if needed
-        if let Some(mut ctx) = crate::api::session::PersistedContext::load_from(&working_dir, "neige") {
-            log_console!("[内阁] loading context: base={} chars, skills={}, summary={} chars, recent={} msgs",
-                ctx.base_prompt.len(), ctx.skill_prompts.len(), ctx.history_messages.len(), ctx.context_messages.len());
+        // ── Resume from paused session (内阁 waiting for emperor) ──
+        let resumed = if input.resume_paused {
+            match Self::load_paused_session(&working_dir) {
+                Some(messages) => {
+                    session.restore(&crate::api::session::SessionSnapshot::from_messages(messages));
+                    session.inject(&format!("[皇帝回复] {}", input.task_description));
+                    true
+                }
+                None => {
+                    log_console!("[内阁] resume_paused=true but no paused session found, falling back to normal flow");
+                    false
+                }
+            }
+        } else {
+            false
+        };
+
+        // ── Normal restore from PersistedContext (skipped when resumed) ──
+        if !resumed {
+            if let Some(mut ctx) = crate::api::session::PersistedContext::load_from(&working_dir, "neige") {
+                log_console!("[内阁] loading context: base={} chars, skills={}, summary={} chars, recent={} msgs",
+                    ctx.base_prompt.len(), ctx.skill_prompts.len(), ctx.history_messages.len(), ctx.context_messages.len());
 
             // Compact iteratively: context first, then history. Persist after each step.
             loop {
@@ -169,6 +235,7 @@ impl Agent for NeigeAgent {
             let snap = crate::api::session::SessionSnapshot::from_messages(msgs);
             session.restore(&snap);
         }
+        } // end if !resumed
 
         let mut controller = crate::api::control::AgentController::new();
         let cancel_map = self.cancel_map.clone();
@@ -198,16 +265,69 @@ impl Agent for NeigeAgent {
                 if content.len() > 300 {
                     return r#"{"ok": false, "message": "内容过长（最多300字符）"}"#.to_string();
                 }
+                let section = args["section"].as_str();
                 let soul_dir = working_dir.join(".shuji").join("soul");
                 let soul_path = soul_dir.join("neige.md");
                 let _ = std::fs::create_dir_all(&soul_dir);
-                let entry = format!("\n- {}", content);
-                match std::fs::OpenOptions::new().create(true).append(true).write(true).open(&soul_path) {
-                    Ok(mut f) => {
-                        use std::io::Write;
-                        let _ = writeln!(f, "{}", entry);
-                        log_console!("[内阁] update_soul → {}", content);
-                        return r#"{"ok": true, "message": "已记录"}"#.to_string();
+
+                let entry = format!("- {}\n", content);
+                let result = if let Some(sec) = section {
+                    // Insert under the matching ## section heading
+                    match std::fs::read_to_string(&soul_path) {
+                        Ok(existing) => {
+                            let heading = format!("## {}", sec);
+                            if let Some(pos) = existing.find(&heading) {
+                                // Find the end of this section (next ## heading or EOF)
+                                let after_heading = &existing[pos + heading.len()..];
+                                let next_heading = after_heading.find("\n## ");
+                                let insert_pos = pos + heading.len()
+                                    + next_heading.unwrap_or(after_heading.len());
+                                let mut new_content = existing[..insert_pos].to_string();
+                                if !new_content.ends_with('\n') {
+                                    new_content.push('\n');
+                                }
+                                if !new_content.ends_with("\n\n") {
+                                    new_content.push('\n');
+                                }
+                                new_content.push_str(&entry);
+                                new_content.push_str(&existing[insert_pos..]);
+                                std::fs::write(&soul_path, &new_content)
+                                    .map(|_| format!("已记录到「{}」章节", sec))
+                            } else {
+                                // Section heading not found, append heading + entry at end
+                                use std::io::Write;
+                                let mut f = std::fs::OpenOptions::new()
+                                    .create(true).append(true).write(true).open(&soul_path);
+                                let _ = f.as_mut().map(|f| {
+                                    let _ = writeln!(f, "\n## {}\n\n{}", sec, entry);
+                                });
+                                f.map(|_| format!("已创建「{}」章节并记录", sec))
+                            }
+                        }
+                        Err(_) => {
+                            // No soul file yet, write default + entry
+                            let default = include_str!("soul.md");
+                            let with_entry = format!("{}\n{}", default, entry);
+                            std::fs::write(&soul_path, &with_entry)
+                                .map(|_| "已记录".to_string())
+                        }
+                    }
+                } else {
+                    // No section — append to end of file
+                    match std::fs::OpenOptions::new().create(true).append(true).write(true).open(&soul_path) {
+                        Ok(mut f) => {
+                            use std::io::Write;
+                            let _ = writeln!(f, "{}", entry);
+                            Ok("已记录".to_string())
+                        }
+                        Err(e) => Err(e),
+                    }
+                };
+
+                match result {
+                    Ok(msg) => {
+                        log_console!("[内阁] update_soul → {} (section={})", content, section.unwrap_or("末尾"));
+                        return serde_json::json!({"ok": true, "message": msg}).to_string();
                     }
                     Err(e) => {
                         return serde_json::json!({"ok": false, "message": format!("写入失败: {}", e)}).to_string();
@@ -239,6 +359,36 @@ impl Agent for NeigeAgent {
                     }
                 }
             }
+            if name == "create_skill" {
+                let skill_name = args["name"].as_str().unwrap_or("");
+                let description = args["description"].as_str().unwrap_or("");
+                let content = args["content"].as_str().unwrap_or("");
+                if skill_name.is_empty() || content.is_empty() {
+                    return r#"{"ok": false, "message": "name 和 content 不能为空"}"#.to_string();
+                }
+                // Sanitize name: only allow alphanumeric, underscore, hyphen
+                if skill_name.chars().any(|c| !c.is_alphanumeric() && c != '_' && c != '-') {
+                    return r#"{"ok": false, "message": "name 只能包含英文字母、数字、下划线和连字符"}"#.to_string();
+                }
+                let skills_dir = working_dir.join(".shuji").join("skills");
+                let _ = std::fs::create_dir_all(&skills_dir);
+                let skill_path = skills_dir.join(format!("{}.md", skill_name));
+                // Build skill file with frontmatter-style header
+                let file_content = format!("# {}\n\n{}\n\n---\n\n{}", skill_name, description, content);
+                match std::fs::write(&skill_path, &file_content) {
+                    Ok(_) => {
+                        log_console!("[内阁] create_skill → {} ({})", skill_name, description);
+                        return serde_json::json!({
+                            "ok": true,
+                            "message": format!("技能 {} 已创建", skill_name),
+                            "skill_name": skill_name
+                        }).to_string();
+                    }
+                    Err(e) => {
+                        return serde_json::json!({"ok": false, "message": format!("写入失败: {}", e)}).to_string();
+                    }
+                }
+            }
             Self::execute_tool(name, args, &working_dir)
         };
 
@@ -254,7 +404,7 @@ impl Agent for NeigeAgent {
             }
 
             match extract_skill(&result) {
-                Some(skill_name) if !Self::load_skill(&skill_name).is_empty() => {
+                Some(skill_name) if !Self::load_skill(&skill_name, &working_dir).is_empty() => {
                     if skill_name == current_skill {
                         log_console!("[内阁] skill {} already loaded, prompting continue", skill_name);
                         session.inject(&format!("[系统] 技能 {} 已在当前会话中。请直接继续执行该技能的指令，不要重复输出 <skill> 标签。", skill_name));
@@ -262,7 +412,7 @@ impl Agent for NeigeAgent {
                     }
                     current_skill = skill_name.clone();
                     log_console!("[内阁] inject skill: {}", skill_name);
-                    session.inject_skill(&skill_name, Self::load_skill(&skill_name));
+                    session.inject_skill(&skill_name, &Self::load_skill(&skill_name, &working_dir));
                     session.inject(&format!("[系统] 技能 {} 已加载。请立即按照该技能的指令行动，不要再输出 <skill> 标签。", skill_name));
                     if skill_name == "summary" {
                         Self::inject_project_state(&mut session, &working_dir);
@@ -284,17 +434,28 @@ impl Agent for NeigeAgent {
         };
         session.inject(level_prompt);
 
-        // Persist context for next invocation (compaction already done at load time)
-        let snap = session.snapshot();
-        let ctx = crate::api::session::PersistedContext::from_messages(&snap.messages);
-        ctx.save_to(&working_dir, "neige");
+        // ── Pause detection: save raw session when waiting for emperor ──
+        let has_options = result.contains("<options>");
 
-        let clean = strip_skill_tag(result);
-        let mut output = AgentOutput::new(clean);
-        output.route = route;
-        if !current_skill.is_empty() {
-            output.skill = Some(current_skill);
-        }
-        Ok(output)
-    }
-}
+        if has_options && route.is_none() {
+            // Save raw session (bypasses PersistedContext compression)
+            let snap = session.snapshot();
+            Self::save_paused_session(&snap.messages, &working_dir);
+            log_console!("[内阁] <options> detected — session paused, awaiting emperor decision");
+        } else {
+            // Normal: save to PersistedContext
+            let snap = session.snapshot();
+	            let ctx = crate::api::session::PersistedContext::from_messages(&snap.messages);
+	            ctx.save_to(&working_dir, "neige");
+	        }
+
+	        let clean = strip_skill_tag(result);
+	        let mut output = AgentOutput::new(clean);
+	        output.paused = has_options && route.is_none();
+	        output.route = route;
+	        if !current_skill.is_empty() {
+	            output.skill = Some(current_skill);
+	        }
+	        Ok(output)
+	    }
+	}

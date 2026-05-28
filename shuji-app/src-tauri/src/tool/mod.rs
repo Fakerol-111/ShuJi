@@ -29,15 +29,16 @@ pub fn resolve_scoped_path(root: &Path, rel: &str) -> Result<PathBuf, String> {
         return Err(format!("禁止使用绝对路径: {}", rel));
     }
 
-    // Block .. traversal
-    if rel.contains("..") {
+    // Block .. traversal (use path components, not string match)
+    if rel_path.components().any(|c| c == std::path::Component::ParentDir) {
         return Err(format!("禁止使用父目录跳转: {}", rel));
     }
 
-    // Block drive letters (Windows)
-    let lower = rel.to_lowercase();
-    if lower.starts_with("c:") || lower.starts_with("d:") || lower.starts_with("e:") {
-        return Err(format!("禁止使用盘符路径: {}", rel));
+    // Block Windows drive-letter / UNC prefix paths (C:, \\server, etc.)
+    for comp in rel_path.components() {
+        if matches!(comp, std::path::Component::Prefix(_)) {
+            return Err(format!("禁止使用盘符或 UNC 路径: {}", rel));
+        }
     }
 
     let candidate = root.join(rel_path);
@@ -196,7 +197,7 @@ pub fn append_file_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "append_file".into(),
-            description: "追加内容到已存在的文件末尾。CRITICAL: 每次调用的 content 参数必须在 2000 字符以内，大文件必须分多次调用写入。先用 create_file 写第一部分，再用 append_file 逐块追加。".into(),
+            description: "追加内容到文件末尾。content ≤2000 字符，大文件分批写入。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -246,7 +247,7 @@ pub fn delete_file_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "delete_file".into(),
-            description: "删除项目目录下的文件，用于清理旧代码或旧设计文件".into(),
+            description: "删除项目目录下的文件".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -370,7 +371,7 @@ pub fn modify_file_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "modify_file".into(),
-            description: "修改已存在的文件：找到 old_text 首次出现的位置，替换为 new_text。CRITICAL: old_text 和 new_text 参数必须在 400 字符以内。old_text 必须与文件中完全一致（含空格和缩进）。先用 read_file 确认文件内容，再调用此工具。对于大块修改，使用 read_file → delete_file → create_file + append_file 模式。".into(),
+            description: "替换文件中的文本 (find+replace)。old_text/new_text ≤400字符。大块修改用 read→delete→create。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -380,12 +381,12 @@ pub fn modify_file_tool_def() -> crate::api::client::ToolDefinition {
                     },
                     "old_text": {
                         "type": "string",
-                        "description": "文件中现有的文本，必须精确匹配（最多 400 字符）",
+                        "description": "待替换文本，须精确匹配（≤400字符）",
                         "maxLength": 400
                     },
                     "new_text": {
                         "type": "string",
-                        "description": "替换后的新文本（最多 400 字符）",
+                        "description": "新文本（≤400字符）",
                         "maxLength": 400
                     }
                 },
@@ -412,7 +413,12 @@ pub fn tool_execute_command(working_dir: &Path, args: &serde_json::Value, dept: 
     }
 
     let timeout = std::time::Duration::from_secs(120);
-    match execute_with_timeout("bash", &["-l", "-c"], cmd, working_dir, timeout) {
+    let (shell, shell_args) = if cfg!(windows) {
+        ("powershell", vec!["-Command"])
+    } else {
+        ("bash", vec!["-l", "-c"])
+    };
+    match execute_with_timeout(shell, &shell_args, cmd, working_dir, timeout) {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -721,7 +727,7 @@ pub fn summarize_logs_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "summarize_logs".into(),
-            description: "读取 .shuji/logs/activity.log，按行号返回日志记录。不传 since 则读全部，传 since 则只读新行。用于生成项目进展总结报告".into(),
+            description: "读取 activity.log 日志，可按行号增量读取".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

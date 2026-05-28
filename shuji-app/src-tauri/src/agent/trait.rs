@@ -19,6 +19,9 @@ pub struct AgentInput {
     /// Current skill name from previous turn (内阁 only).
     /// Used by skill guard to prevent false-positive retries across execution rounds.
     pub current_skill: Option<String>,
+    /// When true, the agent should resume a previously paused session
+    /// (内阁 waiting for emperor decision) instead of building a new context.
+    pub resume_paused: bool,
     /// Runtime configuration
     pub runtime_config: Arc<RuntimeConfig>,
 }
@@ -29,6 +32,10 @@ pub struct AgentOutput {
     pub route: Option<crate::api::control::RouteTo>,
     /// Current skill name, used for cross-turn persistence (内阁 only).
     pub skill: Option<String>,
+    /// When true, the agent has presented <options> to the emperor and is
+    /// waiting for a decision. The actor should pause the exec loop and
+    /// resume on the next emperor message with resume_paused=true.
+    pub paused: bool,
 }
 
 impl AgentOutput {
@@ -37,11 +44,17 @@ impl AgentOutput {
             content,
             route: None,
             skill: None,
+            paused: false,
         }
     }
 
     pub fn with_route(mut self, route: crate::api::control::RouteTo) -> Self {
         self.route = Some(route);
+        self
+    }
+
+    pub fn with_paused(mut self, paused: bool) -> Self {
+        self.paused = paused;
         self
     }
 }

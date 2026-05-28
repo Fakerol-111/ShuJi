@@ -11,19 +11,28 @@ max_retries = 10
 # 截断响应最大重试次数
 length_max_retries = 5
 
+[api.reasoning]
+# 推理/思考模式（对非Anthropic API默认为开启）
+# 开启后 API 返回中会包含 reasoning_content（思考链）和 content（最终回答）
+enabled = true
+
+# 思考预算 token 数（0 = 使用模型默认值，仅 Anthropic extended thinking 有效）
+budget_tokens = 0
+
 [api.max_tokens]
-# 设为 0 表示 OpenAI 兼容接口请求中不发送 max_tokens，让模型/服务端自行使用可用上限。
-# 写文件类 agent (工部、兵部) 的 max_tokens
+# 设为 0 表示不发送 max_tokens，让模型/服务端自行使用可用上限。
+# 非 0 值则限制输出 token 数，减少 token 浪费。
+# 写文件类 agent (工部、兵部) 的 max_tokens — 0=不限，写代码需要较大输出
 write_file = 0
 
 # 追加文档类 agent (中书令、吏部、刑部) 的 max_tokens
-append_document = 0
+append_document = 4096
 
 # 只读类 agent (礼部) 的 max_tokens
-readonly = 0
+readonly = 2048
 
-# 纯文本类 agent 的 max_tokens
-text_only = 0
+# 纯文本类 agent (内阁、尚书令、门下侍中) 的 max_tokens
+text_only = 1024
 
 [tool_iterations]
 # 只读操作的最大迭代次数
@@ -36,11 +45,11 @@ write_heavy = 60
 document_heavy = 100
 
 [context_compaction]
-# 触发压缩的字符数阈值（约 80k tokens）
-char_threshold = 160000
+# 触发压缩的字符数阈值（约 40k tokens）
+char_threshold = 80000
 
 # 压缩后保留的最近消息数
-keep_recent_count = 6
+keep_recent_count = 10
 
 # 历史消息压缩的字符数阈值
 history_char_threshold = 2000

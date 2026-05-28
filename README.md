@@ -66,7 +66,7 @@
 # 全局默认
 DEFAULT_API_KEY=sk-your-key
 DEFAULT_API_URL=https://api.deepseek.com/chat/completions
-DEFAULT_MODEL=deepseek-chat
+DEFAULT_MODEL=deepseek-v4-flash
 
 # 参与者模式（可选）
 PARTICIPATION_LEVEL=1   # 1=全自动 2=关键节点确认 3=逐步审核

@@ -339,7 +339,7 @@ pub fn create_document_tool_def() -> crate::api::client::ToolDefinition {
                     "type": {
                         "type": "string",
                         "enum": ["dsgn", "plan", "pdsg", "ddtl", "task", "ctrt", "rprt", "revw", "anls", "reqs"],
-                        "description": "文档类型。dsgn=整体设计, plan=阶段规划, pdsg=阶段设计, ddtl=详细设计, revw=审查报告, task=任务, ctrt=协议(接口契约), rprt=报告, anls=分析报告, reqs=需求文档"
+                        "description": "dsgn/plan/pdsg/ddtl/revw/task/ctrt/rprt/anls/reqs"
                     },
                     "refs": {
                         "type": "array",
@@ -358,7 +358,7 @@ pub fn modify_document_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "modify_document".into(),
-            description: "修改已有文档的正文（find+replace）。old_text 必须与文件中完全一致（含空格和缩进）。先用 read_file 确认文件内容，再调用此工具。".into(),
+            description: "替换文档正文中的文本 (find+replace)。≤300字符。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -368,12 +368,12 @@ pub fn modify_document_tool_def() -> crate::api::client::ToolDefinition {
                     },
                     "old_text": {
                         "type": "string",
-                        "description": "文档正文中现有的文本，必须精确匹配（最多 300 字符）",
+                        "description": "待替换文本（≤300字符）",
                         "maxLength": 300
                     },
                     "new_text": {
                         "type": "string",
-                        "description": "替换后的新文本（最多 300 字符）",
+                        "description": "新文本（≤300字符）",
                         "maxLength": 300
                     }
                 },
@@ -449,7 +449,7 @@ pub fn find_document_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "find_document".into(),
-            description: "根据文档ID查找文档的完整路径。使用此工具在不清楚文档位置时定位文档。".into(),
+            description: "根据文档ID查找文档路径".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

@@ -62,6 +62,8 @@ pub fn run() {
             commands::settings::get_config,
             commands::settings::save_config,
             commands::settings::set_dotenv_key,
+            commands::shuji_docs::list_shuji_tree,
+            commands::shuji_docs::read_shuji_doc,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -85,6 +85,8 @@ pub struct ActorContext {
     pub logger: Logger,
     /// Shared context across all actors — stores last output per role.
     pub shared_context: Arc<Mutex<HashMap<Role, String>>>,
+    /// Retry counters for automatic failure fallback, keyed by failing role.
+    pub failure_retries: Arc<Mutex<HashMap<Role, u32>>>,
     /// Full conversation history between 内阁 and emperor.
     pub talk_history: Arc<Mutex<Vec<String>>>,
     /// Per-agent task plan (populated by 工部尚书 actor for multi-step execution).
@@ -142,24 +144,35 @@ pub async fn run_actor(mut ctx: ActorContext) {
     log_console!("[actor] {}: started", role_name);
 
     let mut pending_replace: Option<String> = None;
+    let mut paused_for_decision = false;
 
     while let Some(msg) = ctx.rx.recv().await {
         // ── Interrupt / Replace handling ──────────────
         match &msg {
             ActorMessage::Interrupt => {
                 ctx.cancel.store(true, Ordering::SeqCst);
+                if paused_for_decision {
+                    crate::agent::neige::NeigeAgent::clear_paused_session(&ctx.working_dir);
+                    paused_for_decision = false;
+                }
                 log_dept(&ctx, &role_name, "收到中断信号");
                 continue;
             }
             ActorMessage::Replace { content } => {
                 ctx.cancel.store(true, Ordering::SeqCst);
+                if paused_for_decision {
+                    crate::agent::neige::NeigeAgent::clear_paused_session(&ctx.working_dir);
+                    paused_for_decision = false;
+                }
                 pending_replace = Some(content.clone());
                 log_dept(&ctx, &role_name, &format!("收到替换指令: {}", content));
                 // 不 continue！直接 fall through 到执行逻辑，
                 // 让 pending_replace 立即生效
             }
             ActorMessage::Task { .. } => {
-                ctx.agent.reset_plan();
+                if !paused_for_decision {
+                    ctx.agent.reset_plan();
+                }
             }
         }
 
@@ -180,7 +193,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
             ctx.current_skill.lock().ok()
                 .and_then(|s| s.clone())
                 .map(|name| {
-                    let content = crate::agent::neige::NeigeAgent::load_skill(&name);
+                    let content = crate::agent::neige::NeigeAgent::load_skill(&name, &ctx.working_dir);
                     format!("[skill: {}]\n{}", name, content)
                 })
                 .into_iter()
@@ -240,6 +253,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
                 working_dir: ctx.working_dir.clone(),
                 skill_prompts: skill_prompts.clone(),
                 current_skill,
+                resume_paused: paused_for_decision,
                 runtime_config: ctx.runtime_config.clone(),
             };
 
@@ -262,12 +276,16 @@ pub async fn run_actor(mut ctx: ActorContext) {
                     if let Ok(mut shared) = ctx.shared_context.lock() {
                         shared.insert(ctx.role, output.content.clone());
                     }
+                    if !is_failure_fallback(&content) {
+                        reset_failure_retry(&ctx);
+                    }
                     if ctx.role == Role::Neige {
                         if let Ok(mut talk) = ctx.talk_history.lock() {
                             talk.push(format!("内阁: {}", output.content));
                         }
-                        // Don't emit routing-only messages to chat — they go to the log panel
-                        if output.route.is_none() && !output.content.starts_with("已路由") {
+                        // Emit content to emperor (even when paired with route_to),
+                        // but suppress purely internal routing notifications
+                        if !output.content.starts_with("已路由") {
                             self::emit_to_emperor(&ctx.emperor_tx, ctx.role, &output.content);
                         }
                     } else {
@@ -281,6 +299,17 @@ pub async fn run_actor(mut ctx: ActorContext) {
                         }
                     }
 
+                    // ── Pause for emperor decision ──
+                    if output.paused {
+                        if !paused_for_decision {
+                            paused_for_decision = true;
+                            log_console!("[actor] {}: paused for emperor decision", role_name);
+                        }
+                        break 'exec;
+                    } else if paused_for_decision {
+                        paused_for_decision = false;
+                        log_console!("[actor] {}: resumed from pause", role_name);
+                    }
 
                     // If summary mode, save output to summary_prompt in state.json
                     if output.skill.as_deref() == Some("summary") {
@@ -336,6 +365,8 @@ pub async fn run_actor(mut ctx: ActorContext) {
                     log_dept(&ctx, &role_name, &format!("❌ {}", err_msg));
                     if ctx.role == Role::Neige {
                         let _ = ctx.emperor_tx.send(ChatMessage::new("系统", &err_msg));
+                    } else {
+                        fallback_to_dispatcher(&ctx, &role_name, &e.to_string()).await;
                     }
                     break 'exec;
                 }
@@ -344,6 +375,78 @@ pub async fn run_actor(mut ctx: ActorContext) {
     }
 
     log_console!("[actor] {}: stopped", role_name);
+}
+
+const MAX_FAILURE_RETRIES: u32 = 3;
+
+fn is_failure_fallback(content: &str) -> bool {
+    content.trim_start().starts_with("[失败回退")
+}
+
+fn reset_failure_retry(ctx: &ActorContext) {
+    if let Ok(mut retries) = ctx.failure_retries.lock() {
+        retries.remove(&ctx.role);
+    }
+}
+
+async fn fallback_to_dispatcher(ctx: &ActorContext, role_name: &str, error: &str) {
+    if ctx.role == Role::Shangshuling {
+        let _ = ctx.emperor_tx.send(ChatMessage::new(
+            "系统",
+            &format!("{} 执行失败，无法自回退。错误: {}", ctx.role.name(), error),
+        ));
+        return;
+    }
+
+    let retry_count = match ctx.failure_retries.lock() {
+        Ok(mut retries) => {
+            let next = retries.get(&ctx.role).copied().unwrap_or(0) + 1;
+            retries.insert(ctx.role, next);
+            next
+        }
+        Err(_) => {
+            let _ = ctx.emperor_tx.send(ChatMessage::new(
+                "系统",
+                &format!("{} 执行失败，且无法记录重试次数。错误: {}", ctx.role.name(), error),
+            ));
+            return;
+        }
+    };
+
+    if retry_count > MAX_FAILURE_RETRIES {
+        let _ = ctx.emperor_tx.send(ChatMessage::new(
+            "系统",
+            &format!(
+                "{} 执行失败，已重试 {} 次仍未解决。最后错误: {}\n请人工介入。",
+                ctx.role.name(),
+                MAX_FAILURE_RETRIES,
+                error,
+            ),
+        ));
+        log_dept(ctx, role_name, "失败回退次数耗尽，已上报");
+        return;
+    }
+
+    let fallback_content = format!(
+        "[失败回退|retry={}/{}]\n部门: {}\n错误: {}\n请重新调度到合适的部门修复。",
+        retry_count,
+        MAX_FAILURE_RETRIES,
+        ctx.role.name(),
+        error,
+    );
+
+    match ctx.peers.get(&Role::Shangshuling) {
+        Some(tx) => {
+            let _ = tx.send(ActorMessage::Task { content: fallback_content });
+            log_dept(ctx, role_name, &format!("→ 回退到尚书令 (retry {}/{})", retry_count, MAX_FAILURE_RETRIES));
+        }
+        None => {
+            let _ = ctx.emperor_tx.send(ChatMessage::new(
+                "系统",
+                &format!("{} 执行失败且无法回退（找不到尚书令）: {}", ctx.role.name(), error),
+            ));
+        }
+    }
 }
 
 /// Forward a RouteTo instruction to the target actor.

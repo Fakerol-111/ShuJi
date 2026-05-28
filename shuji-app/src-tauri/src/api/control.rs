@@ -202,8 +202,8 @@ impl AgentController {
                         let result = tool_exec(&tc.name, &tc.args);
 
                         // ── Write/read tracking ───────────
-                        let is_write = tc.name.contains("write") || matches!(tc.name.as_str(), "create_file" | "modify_file" | "append_file" | "delete_file" | "rename_file");
-                        let is_read = tc.name.contains("read");
+                        let is_write = matches!(tc.name.as_str(), "create_file" | "modify_file" | "append_file" | "delete_file" | "rename_file");
+                        let is_read = matches!(tc.name.as_str(), "read_file" | "list_dir" | "find_document");
                         if is_write {
                             write_count += 1;
                             read_without_write = 0;

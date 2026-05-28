@@ -1,6 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Project, ProjectSummary, ChatMessage, ProjectSnapshot, DeptLogEntry, AppConfig } from "./types";
 
+export interface ShujiEntry {
+  name: string;
+  path: string;
+  type_label: string;
+  is_dir: boolean;
+  children: ShujiEntry[];
+}
+
+export interface ShujiDoc {
+  content: string;
+  path: string;
+}
+
 export async function createProject(name: string, goal: string, workingDir: string): Promise<Project> {
   return invoke("create_project", { name, goal, workingDir });
 }
@@ -40,6 +53,14 @@ export async function readDocument(subdir: string, filename: string): Promise<st
 
 export async function listDocuments(subdir: string): Promise<string[]> {
   return invoke("list_documents", { subdir });
+}
+
+export async function listShujiTree(projectDir: string): Promise<ShujiEntry[]> {
+  return invoke("list_shuji_tree", { projectDir });
+}
+
+export async function readShujiDoc(projectDir: string, path: string): Promise<ShujiDoc> {
+  return invoke("read_shuji_doc", { projectDir, path });
 }
 
 export async function listLogFiles(): Promise<string[]> {

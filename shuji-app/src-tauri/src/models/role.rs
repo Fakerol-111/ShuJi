@@ -9,7 +9,7 @@ pub enum Role {
     Neige,
     Shangshuling,
     LiBuShangshu,   // 吏部
-    LiBuRShangshu,   // 礼部
+    LiBuRShangshu,   // 礼部尚书 (Ministry of Rites; 拼音: Lǐ Bù Shàng Shū)
     BingbuShangshu,  // 兵部
     XingbuShangshu,  // 刑部
     GongbuShangshu,  // 工部

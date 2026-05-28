@@ -41,7 +41,7 @@ export default function DeptStatusPanel() {
   useEffect(() => {
     getDeptLogs().then((hist) => {
       if (hist.length > 0) setEntries(hist.slice(-MAX_ENTRIES));
-    }).catch(() => {});
+    }).catch((e) => console.error("部门日志加载失败:", e));
   }, []);
 
   useEffect(() => {

@@ -122,6 +122,7 @@ async fn start_actor_system(
 
     let all_senders = senders.clone();
     let shared_context: Arc<std::sync::Mutex<HashMap<Role, String>>> = Arc::new(std::sync::Mutex::new(HashMap::new()));
+    let failure_retries: Arc<std::sync::Mutex<HashMap<Role, u32>>> = Arc::new(std::sync::Mutex::new(HashMap::new()));
     let talk_history: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(Vec::new()));
 
     for (role, agent, rx) in contexts {
@@ -157,6 +158,7 @@ async fn start_actor_system(
             cancel_map: if is_neige { Some(cancel_map.clone()) } else { None },
             logger,
             shared_context: shared_context.clone(),
+            failure_retries: failure_retries.clone(),
             talk_history: talk_history.clone(),
             current_skill: Arc::new(std::sync::Mutex::new(None)),
             runtime_config: runtime_config.clone(),
@@ -350,6 +352,7 @@ pub async fn discuss_with_cabinet(
         working_dir: std::path::PathBuf::from(&working_dir),
         skill_prompts: vec![],
         current_skill: None,
+        resume_paused: false,
         runtime_config: state.runtime_config.clone(),
     };
 

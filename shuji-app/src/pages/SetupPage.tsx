@@ -34,7 +34,7 @@ export default function SetupPage() {
           navigate("/", { replace: true });
         }
       })
-      .catch(() => {});
+      .catch((e) => console.error("读取配置失败:", e));
   }, []);
 
   const effectiveUrl = apiUrl || customUrl;

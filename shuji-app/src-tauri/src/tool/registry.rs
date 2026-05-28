@@ -57,7 +57,7 @@ pub fn route_tool() -> ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "route_to".into(),
-            description: "向其他部门发送任务或消息。ONLY for cross-department communication — NEVER use this to switch skills or modes. To switch skills, output a <skill>name</skill> tag in your text response instead. 消息类型：task（新任务）、replace（中断当前任务并替换）、interrupt（仅中断）。".into(),
+            description: "向其他部门发送任务。type: task=新任务, replace=中断并替换, interrupt=仅中断。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -71,7 +71,7 @@ pub fn route_tool() -> ToolDefinition {
                     },
                     "subject": {
                         "type": "string",
-                        "description": "文档ID（如 task_5, dsgn_003），接收部门会读取该文档理解任务。必须用文档ID，不能写自然语言描述。先 create_document 拿到ID再路由。"
+                        "description": "文档ID（如 task_5）"
                     }
                 },
                 "required": ["to", "type", "subject"]
@@ -85,7 +85,7 @@ pub fn cancel_agent_tool() -> ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "cancel_agent".into(),
-            description: "中断指定部门的当前操作，使其恢复到操作前状态。可中断中书令、门下侍中及执行链部门（尚书令、吏部、兵部、工部、刑部、礼部）。不能中断内阁和制司。".into(),
+            description: "中断指定部门当前操作。可中断: 中书令、门下侍中、尚书令、吏部、兵部、工部、刑部、礼部。不可中断内阁和制司。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -106,7 +106,7 @@ pub fn submit_plan_tool() -> ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "submit_plan".into(),
-            description: "将大任务拆分为多个批次。仅在任务繁重（超过3个文件的实现）时使用。每批1-2个目标，系统每次只注入当前批的上下文。".into(),
+            description: "将任务拆分为多个批次执行。每批1-2个目标。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -149,7 +149,7 @@ pub fn expand_requirements_tool() -> ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "expand_requirements".into(),
-            description: "唤起需求展开 sub-agent。先 create_document(type=\"task\") 把皇帝需求写成任务文档，再用此工具传入 task_id。sub-agent 读取 task 文档后，从用户视角展开需求，产出用户场景清单(.shuji/requirements/)。返回文档ID。".into(),
+            description: "唤起需求展开 sub-agent。需先 create_document(type=\"task\") 创建任务文档，再传入 task_id。返回需求文档ID。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -164,18 +164,51 @@ pub fn expand_requirements_tool() -> ToolDefinition {
     }
 }
 
+pub fn create_skill_tool() -> ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "create_skill".into(),
+            description: "创建自定义技能文件到 .shuji/skills/。用于固化重复出现的工作流模式。".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "技能标识符（如 workflow_custom），不含 .md"
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "一句话描述（≤50字符）"
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Markdown 格式的完整技能指令"
+                    }
+                },
+                "required": ["name", "description", "content"]
+            }),
+        },
+    }
+}
+
 pub fn update_soul_tool() -> ToolDefinition {
     crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "update_soul".into(),
-            description: "将一条经验教训追加到内阁 soul 文件末尾。仅在皇帝明确授意(说记住/以后注意/学到一个教训等)时调用。每次追加一条，内容简洁。".into(),
+            description: "向 soul 文件写入一条经验/教训/偏好。每次一条。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "content": {
                         "type": "string",
-                        "description": "要记住的内容。格式：`- [场景] 经验`，如 '- [汇报] 陛下偏好简洁汇报，每次不超过3要点。' 不超过200字符。"
+                        "description": "内容，格式: [场景] 描述。≤300字符。"
+                    },
+                    "section": {
+                        "type": "string",
+                        "enum": ["经验", "教训", "偏好"],
+                        "description": "写入章节: 经验/教训/偏好。不指定则追加到末尾。"
                     }
                 },
                 "required": ["content"]

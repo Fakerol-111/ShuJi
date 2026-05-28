@@ -29,6 +29,10 @@ pub struct ApiConfig {
     
     /// 不同类型 agent 的 max_tokens 配置；设为 0 时不发送该字段，让模型/服务端使用可用上限
     pub max_tokens: MaxTokensConfig,
+
+    /// 推理/思考模式配置
+    #[serde(default)]
+    pub reasoning: ReasoningConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -110,27 +114,41 @@ pub struct WatchdogConfig {
     pub read_without_write_warning: u32,
 }
 
+/// 推理/思考模式配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReasoningConfig {
+    /// 是否启用思考模式
+    #[serde(default = "default_reasoning_enabled")]
+    pub enabled: bool,
+    /// 思考预算 token 数（0 = 使用模型默认值；仅 Anthropic API 有效）
+    #[serde(default = "default_reasoning_budget")]
+    pub budget_tokens: u32,
+}
+
 // ── 默认值函数 ────────────────────────────────────────────────
 
 fn default_api_timeout() -> u64 { 180 }
 fn default_api_max_retries() -> u32 { 3 }
 fn default_length_max_retries() -> u32 { 5 }
 
-fn default_write_file_tokens() -> u32 { 0 }
-fn default_append_document_tokens() -> u32 { 0 }
-fn default_readonly_tokens() -> u32 { 0 }
-fn default_text_only_tokens() -> u32 { 0 }
+fn default_write_file_tokens() -> u32 { 0 }       // keep unlimited for code generation
+fn default_append_document_tokens() -> u32 { 4096 }
+fn default_readonly_tokens() -> u32 { 2048 }
+fn default_text_only_tokens() -> u32 { 1024 }
 
 fn default_readonly_iterations() -> usize { 80 }
 fn default_write_heavy_iterations() -> usize { 60 }
 fn default_document_heavy_iterations() -> usize { 100 }
 
-fn default_compact_char_threshold() -> usize { 160_000 }
-fn default_keep_recent_count() -> usize { 6 }
+fn default_compact_char_threshold() -> usize { 80_000 }   // compact earlier (was 160K)
+fn default_keep_recent_count() -> usize { 10 }             // keep more context after compaction (was 6)
 fn default_history_compact_threshold() -> usize { 2_000 }
 
 fn default_max_exec_iterations() -> u32 { 20 }
 fn default_max_plan_iterations() -> u32 { 6 }
+
+fn default_reasoning_enabled() -> bool { true }
+fn default_reasoning_budget() -> u32 { 0 }
 
 fn default_max_consecutive_errors() -> u32 { 5 }
 fn default_same_tool_warning_count() -> u32 { 3 }
@@ -148,6 +166,15 @@ impl Default for RuntimeConfig {
     }
 }
 
+impl Default for ReasoningConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_reasoning_enabled(),
+            budget_tokens: default_reasoning_budget(),
+        }
+    }
+}
+
 impl Default for ApiConfig {
     fn default() -> Self {
         Self {
@@ -155,6 +182,7 @@ impl Default for ApiConfig {
             max_retries: default_api_max_retries(),
             length_max_retries: default_length_max_retries(),
             max_tokens: MaxTokensConfig::default(),
+            reasoning: ReasoningConfig::default(),
         }
     }
 }
