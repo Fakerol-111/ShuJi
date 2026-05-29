@@ -31,14 +31,15 @@ pub struct CompactResult {
     pub kept_context: Vec<serde_json::Value>,
 }
 
-/// Check whether compaction is needed and, if so, run it.
-/// Returns the new history summary + trimmed recent messages, or None.
-pub async fn maybe_compact(
+/// Internal compaction function with configurable prompt.
+async fn maybe_compact_with_prompt(
     client: &AnthropicClient,
     model: &str,
     history_messages: &str,
     context_messages: &[serde_json::Value],
     config: &RuntimeConfig,
+    compact_prompt: &str,
+    tag: &str,
 ) -> Option<CompactResult> {
     let total_chars: usize = context_messages.iter()
         .map(|m| m.to_string().len())
@@ -56,7 +57,6 @@ pub async fn maybe_compact(
     let old_messages = context_messages[..split_at].to_vec();
     let kept_context = context_messages[split_at..].to_vec();
 
-    let compact_prompt = include_str!("prompt.md");
     let existing_summary = if history_messages.is_empty() {
         String::new()
     } else {
@@ -71,14 +71,14 @@ pub async fn maybe_compact(
 
     let msgs = vec![Message::user(&input_text)];
 
-    log_console!("[compact] compressing {} messages ({} chars) → target ≤500 chars summary",
-        old_messages.len(), old_messages.iter().map(|m| m.to_string().len()).sum::<usize>());
+    log_console!("[compact:{}] compressing {} messages ({} chars) → target ≤500 chars summary",
+        tag, old_messages.len(), old_messages.iter().map(|m| m.to_string().len()).sum::<usize>());
 
     match client.send_message(compact_prompt, &msgs, model).await {
         Ok(summary) => {
             let trimmed = summary.trim();
             if trimmed.is_empty() || trimmed.len() < 20 {
-                log_console!("[compact] returned empty or too-short summary, skipping");
+                log_console!("[compact:{}] returned empty or too-short summary, skipping", tag);
                 return None;
             }
             let tagged = if trimmed.starts_with("[对话摘要]") {
@@ -91,15 +91,47 @@ pub async fn maybe_compact(
             } else {
                 format!("{}\n{}", history_messages, tagged)
             };
-            log_console!("[compact] done — summary: {} chars, keeping {} recent msgs",
-                new_history.len(), kept_context.len());
+            log_console!("[compact:{}] done — summary: {} chars, keeping {} recent msgs",
+                tag, new_history.len(), kept_context.len());
             Some(CompactResult { new_history, kept_context })
         }
         Err(e) => {
-            log_console!("[compact] summarization failed: {}", e);
+            log_console!("[compact:{}] summarization failed: {}", tag, e);
             None
         }
     }
+}
+
+/// Check whether compaction is needed and, if so, run it (内阁 version).
+/// Uses the 内阁-specific compaction prompt.
+/// Returns the new history summary + trimmed recent messages, or None.
+pub async fn maybe_compact(
+    client: &AnthropicClient,
+    model: &str,
+    history_messages: &str,
+    context_messages: &[serde_json::Value],
+    config: &RuntimeConfig,
+) -> Option<CompactResult> {
+    maybe_compact_with_prompt(
+        client, model, history_messages, context_messages, config,
+        include_str!("prompt.md"), "cabinet",
+    ).await
+}
+
+/// Check whether compaction is needed and, if so, run it (department version).
+/// Uses a department-generic compaction prompt.
+/// Returns the new history summary + trimmed recent messages, or None.
+pub async fn maybe_compact_dept(
+    client: &AnthropicClient,
+    model: &str,
+    history_messages: &str,
+    context_messages: &[serde_json::Value],
+    config: &RuntimeConfig,
+) -> Option<CompactResult> {
+    maybe_compact_with_prompt(
+        client, model, history_messages, context_messages, config,
+        include_str!("dept_prompt.md"), "dept",
+    ).await
 }
 
 /// Merge multiple accumulated summaries into one.

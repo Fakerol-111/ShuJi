@@ -17,7 +17,7 @@ impl ShujiDir {
     /// Initialize .shuji directory structure for a new project.
     pub async fn init(&self) -> anyhow::Result<()> {
         let dirs = [
-            self.root.join("contexts"),
+            self.root.join("context"),
             self.root.join("designs"),
             self.root.join("designs/detail"),
             self.root.join("reviews"),

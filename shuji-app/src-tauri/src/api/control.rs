@@ -15,6 +15,13 @@ pub type ToolFuture = Pin<Box<dyn Future<Output = String> + Send + 'static>>;
 /// so the async block does not borrow the caller's session.
 pub type CheckpointFn = Box<dyn Fn(SessionSnapshot) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
 
+/// Callback for mid-run context compaction.
+/// Takes the flat messages array and persists a compacted version to disk.
+/// Does NOT modify the in-memory session — the compressed context is loaded
+/// automatically on the next execute() call. This avoids disrupting the
+/// running conversation mid-turn.
+pub type CompactFn = Box<dyn Fn(Vec<serde_json::Value>) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
+
 const INTERRUPT_RESPONSE: &str = "\n\n[系统] 当前处理已被皇帝中断";
 
 /// Type of a cross-department routing message.
@@ -122,17 +129,30 @@ pub struct AgentController {
     saved: Option<SessionSnapshot>,
     checkpoint_fn: Option<CheckpointFn>,
     last_checkpoint: Instant,
+    compact_handler: Option<CompactFn>,
+    compact_iter_interval: u32,
 }
 
 impl AgentController {
     pub fn new() -> Self {
-        Self { saved: None, checkpoint_fn: None, last_checkpoint: Instant::now() }
+        Self { saved: None, checkpoint_fn: None, last_checkpoint: Instant::now(), compact_handler: None, compact_iter_interval: 0 }
     }
 
     /// Register a handler for periodic checkpoint saves.
     /// Called at suspension points when `config.checkpoint.interval_secs` has elapsed.
     pub fn set_checkpoint_handler(&mut self, handler: CheckpointFn) {
         self.checkpoint_fn = Some(handler);
+    }
+
+    /// Register a handler for mid-run context compaction.
+    /// `interval` controls how many tool-call iterations between compactions.
+    /// The handler receives the flat session messages and persists a compressed
+    /// version to disk. The running session is NOT modified — the compressed
+    /// context is loaded automatically on the next execute() call.
+    /// Helps prevent unbounded context growth during long-running agent sessions.
+    pub fn set_compact_handler(&mut self, handler: CompactFn, interval: u32) {
+        self.compact_handler = Some(handler);
+        self.compact_iter_interval = interval;
     }
 
     /// Run the tool-iteration loop.
@@ -186,6 +206,17 @@ impl AgentController {
                     let snap = session.snapshot();
                     handler(snap).await;
                     self.last_checkpoint = Instant::now();
+                }
+            }
+
+            // ── Mid-run compaction: persist compressed context to disk ──
+            // Does NOT restore the session — the compressed version is loaded
+            // on the next execute() call. This avoids disrupting the running
+            // conversation while still reaping the token savings next turn.
+            if let Some(ref handler) = self.compact_handler {
+                if self.compact_iter_interval > 0 && iter > 0 && iter % self.compact_iter_interval as usize == 0 {
+                    let snap = session.snapshot();
+                    handler(snap.messages).await;
                 }
             }
 

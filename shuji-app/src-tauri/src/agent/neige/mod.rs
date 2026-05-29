@@ -205,8 +205,9 @@ impl Agent for NeigeAgent {
         };
 
         // ── Normal restore from PersistedContext (skipped when resumed) ──
+        let role_name = self.role().name().to_string();
         if !resumed {
-            if let Some(mut ctx) = crate::api::session::PersistedContext::load_from(&working_dir, "neige").await {
+            if let Some(mut ctx) = crate::api::session::PersistedContext::load_from(&working_dir, &role_name).await {
                 log_console!("[内阁] loading context: base={} chars, skills={}, summary={} chars, recent={} msgs",
                     ctx.base_prompt.len(), ctx.skill_prompts.len(), ctx.history_messages.len(), ctx.context_messages.len());
 
@@ -219,7 +220,7 @@ impl Agent for NeigeAgent {
                 ).await {
                     ctx.history_messages = result.new_history;
                     ctx.context_messages = result.kept_context;
-                    ctx.save_to(&working_dir, "neige").await;
+                    ctx.save_to(&working_dir, &role_name).await;
                     changed = true;
                 }
 
@@ -227,7 +228,7 @@ impl Agent for NeigeAgent {
                     &self.client, &self.model, &ctx.history_messages, &input.runtime_config,
                 ).await {
                     ctx.history_messages = merged;
-                    ctx.save_to(&working_dir, "neige").await;
+                    ctx.save_to(&working_dir, &role_name).await;
                     changed = true;
                 }
 
@@ -242,6 +243,43 @@ impl Agent for NeigeAgent {
         } // end if !resumed
 
         let mut controller = crate::api::control::AgentController::new();
+
+        // ── Mid-run compaction ──
+        {
+            let client = self.client.clone();
+            let model = self.model.clone();
+            let wd = working_dir.clone();
+            let role = role_name.clone();
+            let cfg = input.runtime_config.clone();
+            controller.set_compact_handler(Box::new(move |messages: Vec<serde_json::Value>| {
+                let client = client.clone();
+                let model = model.clone();
+                let wd = wd.clone();
+                let role = role.clone();
+                let cfg = cfg.clone();
+                Box::pin(async move {
+                    let mut ctx = crate::api::session::PersistedContext::from_messages(&messages);
+                    loop {
+                        let mut changed = false;
+                        if let Some(result) = crate::api::compact::maybe_compact(
+                            &client, &model, &ctx.history_messages, &ctx.context_messages, &cfg,
+                        ).await {
+                            ctx.history_messages = result.new_history;
+                            ctx.context_messages = result.kept_context;
+                            changed = true;
+                        }
+                        if let Some(merged) = crate::api::compact::maybe_compact_history(
+                            &client, &model, &ctx.history_messages, &cfg,
+                        ).await {
+                            ctx.history_messages = merged;
+                            changed = true;
+                        }
+                        if !changed { break; }
+                    }
+                    ctx.save_to(&wd, &role).await;
+                })
+            }), 20);
+        }
 
         // ── Periodic checkpoint ──
         let ckpt_wd = working_dir.clone();
@@ -345,7 +383,7 @@ impl Agent for NeigeAgent {
             // Normal: save to PersistedContext
             let snap = session.snapshot();
 	            let ctx = crate::api::session::PersistedContext::from_messages(&snap.messages);
-	            ctx.save_to(&working_dir, "neige").await;
+	            ctx.save_to(&working_dir, &role_name).await;
 	        }
 
 	        let clean = strip_skill_tag(result);

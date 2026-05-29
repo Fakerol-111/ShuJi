@@ -108,6 +108,24 @@ impl PersistedContext {
         }
     }
 
+    /// Truncate verbose `tool` role results to `max_chars` before persisting.
+    /// This prevents file contents from inflating the saved context — the current
+    /// run is unaffected; only the next `load_from()` sees the trimmed version.
+    pub fn trim_tool_results(&mut self, max_chars: usize) {
+        for msg in &mut self.context_messages {
+            if msg["role"].as_str() == Some("tool") {
+                if let Some(content) = msg["content"].as_str() {
+                    if content.len() > max_chars {
+                        let head: String = content.chars().take(max_chars).collect();
+                        msg["content"] = serde_json::Value::String(
+                            format!("{}...(截断, 原 {} 字符)", head, content.len())
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     /// Load from `.shuji/context/{role}.json`.
     pub async fn load_from(working_dir: &Path, role: &str) -> Option<Self> {
         let path = working_dir.join(".shuji/context").join(format!("{}.json", role));

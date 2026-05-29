@@ -52,7 +52,31 @@ impl Agent for LibuShangshuAgent {
         ).with_role(self.role().name()).with_debug_dir(input.working_dir.clone());
 
         let role_name = self.role().name().to_string();
-        if let Some(ctx) = crate::api::session::PersistedContext::load_from(&working_dir, &role_name).await {
+        if let Some(mut ctx) = crate::api::session::PersistedContext::load_from(&working_dir, &role_name).await {
+            // ── Context compaction (iterative: context → history → repeat) ──
+            loop {
+                let mut changed = false;
+
+                if let Some(result) = crate::api::compact::maybe_compact_dept(
+                    &self.client, &self.model, &ctx.history_messages, &ctx.context_messages, &input.runtime_config,
+                ).await {
+                    ctx.history_messages = result.new_history;
+                    ctx.context_messages = result.kept_context;
+                    ctx.save_to(&working_dir, &role_name).await;
+                    changed = true;
+                }
+
+                if let Some(merged) = crate::api::compact::maybe_compact_history(
+                    &self.client, &self.model, &ctx.history_messages, &input.runtime_config,
+                ).await {
+                    ctx.history_messages = merged;
+                    ctx.save_to(&working_dir, &role_name).await;
+                    changed = true;
+                }
+
+                if !changed { break; }
+            }
+
             let mut msgs = ctx.to_messages();
             msgs.push(serde_json::json!({"role": "user", "content": input.task_description}));
             let snap = crate::api::session::SessionSnapshot::from_messages(msgs);
@@ -60,6 +84,43 @@ impl Agent for LibuShangshuAgent {
         }
 
         let mut controller = crate::api::control::AgentController::new();
+
+        // ── Mid-run compaction ──
+        {
+            let client = self.client.clone();
+            let model = self.model.clone();
+            let wd = working_dir.clone();
+            let role = role_name.clone();
+            let cfg = input.runtime_config.clone();
+            controller.set_compact_handler(Box::new(move |messages: Vec<serde_json::Value>| {
+                let client = client.clone();
+                let model = model.clone();
+                let wd = wd.clone();
+                let role = role.clone();
+                let cfg = cfg.clone();
+                Box::pin(async move {
+                    let mut ctx = crate::api::session::PersistedContext::from_messages(&messages);
+                    loop {
+                        let mut changed = false;
+                        if let Some(result) = crate::api::compact::maybe_compact_dept(
+                            &client, &model, &ctx.history_messages, &ctx.context_messages, &cfg,
+                        ).await {
+                            ctx.history_messages = result.new_history;
+                            ctx.context_messages = result.kept_context;
+                            changed = true;
+                        }
+                        if let Some(merged) = crate::api::compact::maybe_compact_history(
+                            &client, &model, &ctx.history_messages, &cfg,
+                        ).await {
+                            ctx.history_messages = merged;
+                            changed = true;
+                        }
+                        if !changed { break; }
+                    }
+                    ctx.save_to(&wd, &role).await;
+                })
+            }), 20);
+        }
 
         // ── Periodic checkpoint ──
         let ckpt_wd = working_dir.clone();
