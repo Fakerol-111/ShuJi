@@ -56,6 +56,7 @@ pub fn run() {
             commands::workflow::read_log_file,
             commands::workflow::get_recent_dirs,
             commands::workflow::get_token_stats,
+            commands::workflow::get_context_stats,
             commands::workflow::cancel_processing,
             commands::workflow::get_chat_history,
             commands::workflow::get_dept_logs,

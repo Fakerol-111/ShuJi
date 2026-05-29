@@ -1,6 +1,7 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
 use crate::api::client::ToolDefinition;
 use crate::api::session::{Session, SessionSnapshot};
@@ -9,10 +10,15 @@ use crate::models::role::Role;
 
 pub type ToolFuture = Pin<Box<dyn Future<Output = String> + Send + 'static>>;
 
+/// Callback for periodic checkpoint saves.
+/// Receives an owned SessionSnapshot (cloned inside the controller),
+/// so the async block does not borrow the caller's session.
+pub type CheckpointFn = Box<dyn Fn(SessionSnapshot) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
+
 const INTERRUPT_RESPONSE: &str = "\n\n[系统] 当前处理已被皇帝中断";
 
 /// Type of a cross-department routing message.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum RouteMsgType {
     Task,
     Replace,
@@ -25,6 +31,55 @@ pub struct RouteTo {
     pub target: Role,
     pub msg_type: RouteMsgType,
     pub subject: String,
+    /// Optional inline payload for short instructions (bypasses document write).
+    pub payload: Option<String>,
+}
+
+/// Outcome of one AgentController::run() call.
+#[derive(Debug, Clone)]
+pub enum RunResult {
+    /// Agent completed normally (text-only response).
+    Done(String),
+    /// Agent issued a route_to instruction — forward the route.
+    Routed { text: String, route: RouteTo },
+    /// Agent was interrupted / force-stopped / consecutive errors.
+    Stopped(String),
+}
+
+impl RunResult {
+    /// Extract text regardless of variant.
+    pub fn text(&self) -> &str {
+        match self {
+            RunResult::Done(t) | RunResult::Stopped(t) => t,
+            RunResult::Routed { text, .. } => text,
+        }
+    }
+
+    /// Consume and return text.
+    pub fn into_text(self) -> String {
+        match self {
+            RunResult::Done(t) | RunResult::Stopped(t) => t,
+            RunResult::Routed { text, .. } => text,
+        }
+    }
+
+    /// Extract RouteTo if present.
+    pub fn into_route(self) -> Option<RouteTo> {
+        match self {
+            RunResult::Routed { route, .. } => Some(route),
+            _ => None,
+        }
+    }
+
+    /// Consume and return the legacy `(String, Option<RouteTo>)` tuple.
+    /// This is a migration helper — new code should match on the enum directly.
+    pub fn into_tuple(self) -> (String, Option<RouteTo>) {
+        match self {
+            RunResult::Done(text) => (text, None),
+            RunResult::Routed { text, route } => (text, Some(route)),
+            RunResult::Stopped(text) => (text, None),
+        }
+    }
 }
 
 fn route_msg_type_from_str(s: &str) -> Option<RouteMsgType> {
@@ -39,7 +94,8 @@ fn route_msg_type_from_str(s: &str) -> Option<RouteMsgType> {
 pub fn role_from_name(s: &str) -> Option<Role> {
     Role::from_name(s)
 }
-/// Iteration budget: agents with `write_file` get more rounds.
+
+/// Iteration budget based on tool set.
 fn max_iterations_for_tools(tools: &[ToolDefinition], config: &RuntimeConfig) -> usize {
     let has_write_file = tools.iter().any(|t| {
         matches!(t.function.name.as_str(), "create_file" | "modify_file" | "append_file" | "delete_file" | "rename_file")
@@ -47,7 +103,7 @@ fn max_iterations_for_tools(tools: &[ToolDefinition], config: &RuntimeConfig) ->
     let has_append_document = tools.iter().any(|t| {
         matches!(t.function.name.as_str(), "append_document" | "modify_document")
     });
-    
+
     if has_write_file {
         config.tool_iterations.write_heavy
     } else if has_append_document {
@@ -61,22 +117,35 @@ fn max_iterations_for_tools(tools: &[ToolDefinition], config: &RuntimeConfig) ->
 ///
 /// Owns the tool-iteration loop, cancel/interrupt/restart lifecycle,
 /// watchdog diagnostics, and anything related to "how" the LLM is
-/// driven.  The LLM itself is a `Session` — this struct controls it.
+/// driven. The LLM itself is a `Session` — this struct controls it.
 pub struct AgentController {
     saved: Option<SessionSnapshot>,
+    checkpoint_fn: Option<CheckpointFn>,
+    last_checkpoint: Instant,
 }
 
 impl AgentController {
     pub fn new() -> Self {
-        Self { saved: None }
+        Self { saved: None, checkpoint_fn: None, last_checkpoint: Instant::now() }
+    }
+
+    /// Register a handler for periodic checkpoint saves.
+    /// Called at suspension points when `config.checkpoint.interval_secs` has elapsed.
+    pub fn set_checkpoint_handler(&mut self, handler: CheckpointFn) {
+        self.checkpoint_fn = Some(handler);
     }
 
     /// Run the tool-iteration loop.
     ///
     /// 1. Call `session.step()` (one API round-trip)
     /// 2. If tool calls → execute each via `tool_exec`, feed results back
-    /// 3. If text → return it
-    /// 4. If `cancel` is set → `interrupt()` and return intercepted text
+    /// 3. If text → return `RunResult::Done`
+    /// 4. If `cancel` is set → `interrupt()` and return `RunResult::Stopped`
+    ///
+    /// Route detection is output-driven: after executing a tool via `tool_exec`,
+    /// the result JSON is checked for `operation == "route_to"`. This keeps the
+    /// dispatcher generic — any tool can signal a control-flow transition via
+    /// its output, not via pre-execution name matching.
     pub async fn run(
         &mut self,
         session: &mut Session,
@@ -85,7 +154,7 @@ impl AgentController {
         tools: &[ToolDefinition],
         force_stop: Option<&AtomicBool>,
         config: &RuntimeConfig,
-    ) -> anyhow::Result<(String, Option<RouteTo>)> {
+    ) -> anyhow::Result<RunResult> {
         let max_iter = max_iterations_for_tools(tools, config);
         let mut last_text = String::new();
         let mut consecutive_errors: u32 = 0;
@@ -102,11 +171,22 @@ impl AgentController {
             if cancel.load(Ordering::SeqCst) {
                 self.interrupt(session).await;
                 let result = format!("{}{}", last_text, INTERRUPT_RESPONSE);
-                return Ok((result, None));
+                return Ok(RunResult::Stopped(result));
             }
             if force_stop.is_some_and(|f| f.load(Ordering::SeqCst)) {
                 let result = if last_text.is_empty() { "已停止".to_string() } else { last_text };
-                return Ok((result, None));
+                return Ok(RunResult::Stopped(result));
+            }
+
+            // ── Periodic checkpoint ──
+            if let Some(ref handler) = self.checkpoint_fn {
+                if config.checkpoint.interval_secs > 0
+                    && self.last_checkpoint.elapsed() >= Duration::from_secs(config.checkpoint.interval_secs)
+                {
+                    let snap = session.snapshot();
+                    handler(snap).await;
+                    self.last_checkpoint = Instant::now();
+                }
             }
 
             log_console!(
@@ -117,11 +197,17 @@ impl AgentController {
 
             let step_result = session.step().await?;
 
+            // ── Suspension point B: API just returned, don't process if cancelled ──
+            if cancel.load(Ordering::SeqCst) {
+                let result = if last_text.is_empty() { "已中断".to_string() } else { last_text.clone() };
+                return Ok(RunResult::Stopped(result));
+            }
+
             match step_result {
                 crate::api::session::StepResult::Text(text) => {
                     let combined = if last_text.is_empty() { text } else { format!("{}{}", last_text, text) };
                     last_text.clear();
-                    return Ok((combined, None));
+                    return Ok(RunResult::Done(combined));
                 }
 
                 crate::api::session::StepResult::ToolCalls { calls, text } => {
@@ -143,61 +229,6 @@ impl AgentController {
                             last_tool_args = key_arg.to_string();
                         }
 
-                        // ── Cross-department routing ──────
-                        if tc.name == "route_to" {
-                            let to_name = tc.args["to"].as_str().unwrap_or("");
-                            // Block self-routing: an agent cannot route to itself
-                            let my_role = session.role();
-                            if role_from_name(to_name).map_or(false, |r| r.name() == my_role) {
-                                let msg = format!(
-                                    "禁止路由给自己（{}）。请路由到其他部门，或直接输出结果而非继续路由。",
-                                    my_role
-                                );
-                                session.feed_tool_result(&tc.id, &tc.name, &msg);
-                                continue;
-                            }
-                            let target = match role_from_name(to_name) {
-                                Some(r) => r,
-                                None => {
-                                    let msg = format!("未知目标部门: {}", to_name);
-                                    session.feed_tool_result(&tc.id, &tc.name, &msg);
-                                    continue;
-                                }
-                            };
-                            let msg_type = route_msg_type_from_str(
-                                tc.args["type"].as_str().unwrap_or("task")
-                            ).unwrap_or(RouteMsgType::Task);
-                            let subject = tc.args["subject"]
-                                .as_str()
-                                .unwrap_or("")
-                                .to_string();
-                            let summary = format!(
-                                "路由到{}（{}）：{}",
-                                target.name(),
-                                match msg_type {
-                                    RouteMsgType::Task => "新任务",
-                                    RouteMsgType::Replace => "替换",
-                                    RouteMsgType::Interrupt => "中断",
-                                },
-                                subject,
-                            );
-
-                            // Feed dummy results for route_to and all remaining calls
-                            // in this batch so the assistant message's tool_calls are
-                            // balanced with tool_results — otherwise the next API
-                            // request returns 400.
-                            let route_call_id = tc.id.clone();
-                            session.feed_tool_result(&route_call_id, "route_to", &summary);
-                            for remaining in calls.iter().filter(|c| c.id != route_call_id) {
-                                session.feed_tool_result(&remaining.id, &remaining.name,
-                                    "已取消：本批任务因路由到其他部门而中断");
-                            }
-
-                            let route = RouteTo { target, msg_type, subject };
-                            let out = if last_text.is_empty() { summary } else { format!("{}{}", last_text, summary) };
-                            return Ok((out, Some(route)));
-                        }
-
                         if same_tool_count == config.watchdog.same_tool_warning_count {
                             log_console!(
                                 "[control] WATCHDOG: {} repeated {} times",
@@ -205,8 +236,82 @@ impl AgentController {
                             );
                         }
 
-                        // ── Execute tool ──────────────────
+                        // ── Execute tool (unified, no special-case intercept) ──
                         let result = tool_exec(&tc.name, &tc.args).await;
+
+                        // ── Route detection (output-driven) ──
+                        // Check the tool output for operation=="route_to" instead of
+                        // matching tool names before execution. This keeps the dispatcher
+                        // generic — any tool can signal a control-flow transition.
+                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&result) {
+                            if v["operation"].as_str() == Some("route_to") {
+                                let to_name = tc.args["to"].as_str().unwrap_or("");
+                                let my_role = session.role();
+
+                                // Self-routing check
+                                if role_from_name(to_name).map_or(false, |r| r.name() == my_role) {
+                                    let msg = format!(
+                                        "禁止路由给自己（{}）。请路由到其他部门，或直接输出结果而非继续路由。",
+                                        my_role
+                                    );
+                                    session.feed_tool_result(&tc.id, &tc.name, &msg);
+                                    continue;
+                                }
+                                let target = match role_from_name(to_name) {
+                                    Some(r) => r,
+                                    None => {
+                                        let msg = format!("未知目标部门: {}", to_name);
+                                        session.feed_tool_result(&tc.id, &tc.name, &msg);
+                                        continue;
+                                    }
+                                };
+
+                                // Feed route result for this call
+                                session.feed_tool_result(&tc.id, &tc.name, &result);
+
+                                // Feed dummy results for remaining calls in this batch
+                                // so the assistant message's tool_calls are balanced with
+                                // tool_results — otherwise the next API request returns 400.
+                                for remaining in &calls[idx + 1..] {
+                                    session.feed_tool_result(&remaining.id, &remaining.name,
+                                        "已取消：本批任务因路由到其他部门而中断");
+                                }
+
+                                let msg_type = route_msg_type_from_str(
+                                    tc.args["type"].as_str().unwrap_or("task")
+                                ).unwrap_or(RouteMsgType::Task);
+                                let subject = tc.args["subject"]
+                                    .as_str()
+                                    .unwrap_or("")
+                                    .to_string();
+                                let payload = tc.args.get("inline")
+                                    .and_then(|v| v.as_str())
+                                    .filter(|s| !s.is_empty())
+                                    .map(|s| s.to_string());
+                                let route = RouteTo {
+                                    target,
+                                    msg_type: msg_type,
+                                    subject,
+                                    payload,
+                                };
+                                let summary = format!(
+                                    "路由到 {}（{}）：{}",
+                                    target.name(),
+                                    match msg_type {
+                                        RouteMsgType::Task => "新任务",
+                                        RouteMsgType::Replace => "替换",
+                                        RouteMsgType::Interrupt => "中断",
+                                    },
+                                    route.subject,
+                                );
+                                let out = if last_text.is_empty() {
+                                    summary
+                                } else {
+                                    format!("{}{}", last_text, summary)
+                                };
+                                return Ok(RunResult::Routed { text: out, route });
+                            }
+                        }
 
                         // ── Write/read tracking ───────────
                         let is_write = matches!(tc.name.as_str(), "create_file" | "modify_file" | "append_file" | "delete_file" | "rename_file");
@@ -282,7 +387,7 @@ impl AgentController {
                                     session.feed_tool_result(&remaining.id, &remaining.name,
                                         "已取消：工具连续错误，终止调用");
                                 }
-                                return Ok((last_text, None));
+                                return Ok(RunResult::Stopped(last_text));
                             }
                         } else {
                             consecutive_errors = 0;
@@ -319,32 +424,21 @@ impl AgentController {
         } else {
             format!("{}{}", last_text, limit_notice)
         };
-        Ok((result, None))
+        Ok(RunResult::Done(result))
     }
 
     /// Interrupt the current session.
     ///
-    /// 1. Save a snapshot of the current conversation
-    /// 2. Inject a system message "皇帝中断了当前操作"
-    /// 3. Call `step()` once so the LLM acknowledges the interruption
-    ///    (the response is discarded — it's just clean-up)
+    /// Save a snapshot of the current conversation state for
+    /// potential resume. Does NOT make an API call — the LLM
+    /// acknowledges the interruption naturally on the next
+    /// user message.
     pub async fn interrupt(&mut self, session: &mut Session) {
-        log_console!("[control] interrupt: saving snapshot and injecting stop signal");
         self.saved = Some(session.snapshot());
-        session.inject("系统：皇帝已经中断了当前操作，请在当前上下文中中止一切动作，并输出简短确认。");
-        // Let the LLM acknowledge — swallow errors silently
-        match session.step().await {
-            Ok(_) => {}
-            Err(e) => log_console!("[control] interrupt step warning: {}", e),
-        }
-        log_console!("[control] interrupt done");
+        log_console!("[control] interrupt: snapshot saved");
     }
 
     /// Restart from a saved snapshot with a new instruction.
-    ///
-    /// 1. Restore the saved conversation
-    /// 2. Inject "皇帝给出了新指令：..."
-    /// 3. The caller then calls `run()` again with the same session
     pub fn restart_with(&mut self, session: &mut Session, new_instruction: &str) {
         if let Some(snap) = self.saved.take() {
             session.restore(&snap);

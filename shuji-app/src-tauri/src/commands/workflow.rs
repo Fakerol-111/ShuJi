@@ -7,6 +7,7 @@ use tauri::{Emitter, Manager, State};
 use tokio::sync::mpsc;
 
 use crate::actor::{ActorContext, ActorMessage, ActorSystem, DeptLogEntry};
+use crate::api::control::RouteMsgType;
 use crate::agent::r#trait::{Agent, AgentInput};
 use crate::agent::zhongshuling::ZhongshulingAgent;
 use crate::agent::bingbushangshu::BingbuShangshuAgent;
@@ -19,12 +20,32 @@ use crate::agent::shangshuling::ShangshulingAgent;
 use crate::agent::xingbushangshu::XingbuShangshuAgent;
 use crate::agent::zhisi::ZhisiAgent;
 use crate::api::client::AnthropicClient;
+use crate::api::session::PersistedContext;
 use crate::commands::friendly_error::friendly_error;
 use crate::commands::project::AppState;
 use crate::commands::settings::AppConfig;
 use crate::models::chat::ChatMessage;
 use crate::models::project::ProjectSnapshot;
 use crate::models::role::Role;
+
+/// Per-role context usage statistics exposed to the frontend.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ContextStats {
+    /// Number of conversation messages in current context.
+    pub message_count: usize,
+    /// Total characters across all context messages.
+    pub char_count: usize,
+    /// Compression threshold (from config, default 80K).
+    pub char_threshold: usize,
+    /// Characters in the history summary (non-empty = compressed).
+    pub history_char_count: usize,
+    /// History merge threshold (from config, default 2K).
+    pub history_threshold: usize,
+    /// Whether context has been compacted (history summary is non-empty).
+    pub compressed: bool,
+    /// Number of active skill prompts.
+    pub skill_count: usize,
+}
 
 // ── Build agents (used by actor system startup) ─────────────
 
@@ -82,7 +103,7 @@ fn build_agents(
             Role::GongbuShangshu => Box::new(GongbuShangshuAgent::new(client, &ep.model, cancel.clone())),
             Role::XingbuShangshu => Box::new(XingbuShangshuAgent::new(client, &ep.model, cancel.clone())),
             Role::LiBuRShangshu => Box::new(LibuRShangshuAgent::new(client, &ep.model, cancel.clone())),
-            Role::Zhisi => Box::new(ZhisiAgent::new(client, &ep.model)),
+            Role::Zhisi => Box::new(ZhisiAgent::new(client, &ep.model, cancel.clone())),
             Role::Shangshuling => Box::new(ShangshulingAgent::new(client, &ep.model, cancel.clone())),
             _ => continue,
         };
@@ -115,7 +136,14 @@ async fn start_actor_system(
     let mut senders: HashMap<Role, mpsc::UnboundedSender<ActorMessage>> = HashMap::new();
     let mut contexts: Vec<(Role, Box<dyn Agent>, mpsc::UnboundedReceiver<ActorMessage>)> = Vec::new();
 
-    for (role, agent) in agents {
+    for (role, mut agent) in agents {
+        // Create per-actor cancel flag and wire it into the agent so
+        // AgentController.run() checks the same flag that Interrupt
+        // messages and cancel_agent tool set.
+        let actor_flag = Arc::new(AtomicBool::new(false));
+        agent.set_interrupt_flag(actor_flag.clone());
+        cancel_map.lock().unwrap().insert(role, actor_flag);
+
         let (tx, rx) = mpsc::unbounded_channel();
         senders.insert(role, tx);
         contexts.push((role, agent, rx));
@@ -134,9 +162,8 @@ async fn start_actor_system(
             }
         }
 
-        // Each agent gets its own cancel flag
-        let agent_cancel = Arc::new(AtomicBool::new(false));
-        cancel_map.lock().unwrap().insert(role, agent_cancel.clone());
+        // Reuse the per-actor cancel flag created in the agents loop above
+        let actor_flag = cancel_map.lock().unwrap().get(&role).unwrap().clone();
 
         let logger = crate::logging::logger::Logger::new(
             &working_dir.join(".shuji"),
@@ -155,7 +182,7 @@ async fn start_actor_system(
             milestone_tx: milestone_tx.clone(),
             project_dir: project_dir.to_path_buf(),
             working_dir: working_dir.to_path_buf(),
-            cancel: agent_cancel,
+            cancel: actor_flag,
             cancel_map: if is_neige { Some(cancel_map.clone()) } else { None },
             logger,
             shared_context: shared_context.clone(),
@@ -220,12 +247,12 @@ pub async fn send_message(
                     hist.push(msg.clone());
                     // Append to persistent chat log
                     let log_dir = std::path::Path::new(&chat_persist_dir).join(".shuji");
-                    let _ = std::fs::create_dir_all(&log_dir);
+                    let _ = tokio::fs::create_dir_all(&log_dir).await;
                     let chat_path = log_dir.join("chat.jsonl");
                     if let Ok(json) = serde_json::to_string(&msg) {
-                        use std::io::Write;
-                        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&chat_path) {
-                            let _ = writeln!(f, "{}", json);
+                        use tokio::io::AsyncWriteExt;
+                        if let Ok(mut f) = tokio::fs::OpenOptions::new().create(true).append(true).open(&chat_path).await {
+                            let _ = f.write_all(format!("{}\n", json).as_bytes()).await;
                         }
                     }
                 }
@@ -241,12 +268,12 @@ pub async fn send_message(
                     hist.push(entry.clone());
                     // Persist to .shuji/dept-log.jsonl
                     let log_dir = std::path::Path::new(&dept_log_dir).join(".shuji");
-                    let _ = std::fs::create_dir_all(&log_dir);
+                    let _ = tokio::fs::create_dir_all(&log_dir).await;
                     let log_path = log_dir.join("dept-log.jsonl");
                     if let Ok(json) = serde_json::to_string(&entry) {
-                        use std::io::Write;
-                        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&log_path) {
-                            let _ = writeln!(f, "{}", json);
+                        use tokio::io::AsyncWriteExt;
+                        if let Ok(mut f) = tokio::fs::OpenOptions::new().create(true).append(true).open(&log_path).await {
+                            let _ = f.write_all(format!("{}\n", json).as_bytes()).await;
                         }
                     }
                 }
@@ -303,7 +330,7 @@ pub async fn send_message(
     // Send message to 内阁 actor
     let sys_lock = state.actor_system.lock().await;
     let system = sys_lock.as_ref().ok_or_else(|| friendly_error("Actor 系统未初始化"))?;
-    system.send(&Role::Neige, ActorMessage::Task { content: message }).map_err(friendly_error)?;
+    system.send(&Role::Neige, ActorMessage::new(message, RouteMsgType::Task)).map_err(friendly_error)?;
 
     Ok("已接收".to_string())
 }
@@ -429,6 +456,68 @@ pub async fn get_token_stats() -> Result<std::collections::HashMap<String, std::
     Ok(crate::token_tracker::snapshot_grouped())
 }
 
+/// Get per-role context usage statistics.
+#[tauri::command]
+pub async fn get_context_stats(state: State<'_, AppState>) -> Result<HashMap<String, ContextStats>, String> {
+    let dir = match state.current_dir.lock().await.as_ref() {
+        Some(d) => d.clone(),
+        None => return Ok(HashMap::new()),
+    };
+    let config = &state.runtime_config;
+    let char_threshold = config.context_compaction.char_threshold;
+    let history_threshold = config.context_compaction.history_char_threshold;
+
+    let ctx_dir = std::path::Path::new(&dir).join(".shuji/context");
+    let mut entries = match tokio::fs::read_dir(&ctx_dir).await {
+        Ok(e) => e,
+        Err(_) => return Ok(HashMap::new()),
+    };
+
+    let mut result = HashMap::new();
+
+    loop {
+        let entry = match entries.next_entry().await {
+            Ok(Some(e)) => e,
+            Ok(None) => break,
+            Err(_) => continue,
+        };
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        let role = match path.file_stem().and_then(|s| s.to_str()) {
+            Some(r) if !r.is_empty() => r.to_string(),
+            _ => continue,
+        };
+
+        let data = match tokio::fs::read_to_string(&path).await {
+            Ok(d) => d,
+            _ => continue,
+        };
+        let ctx: PersistedContext = match serde_json::from_str(&data) {
+            Ok(c) => c,
+            _ => continue,
+        };
+
+        let char_count: usize = ctx.context_messages.iter()
+            .filter_map(|m| m["content"].as_str())
+            .map(|c| c.chars().count())
+            .sum();
+
+        result.insert(role, ContextStats {
+            message_count: ctx.context_messages.len(),
+            char_count,
+            char_threshold,
+            history_char_count: ctx.history_messages.chars().count(),
+            history_threshold,
+            compressed: !ctx.history_messages.is_empty(),
+            skill_count: ctx.skill_prompts.len(),
+        });
+    }
+
+    Ok(result)
+}
+
 /// Get buffered chat message history (for re-sync after page navigation).
 #[tauri::command]
 pub async fn get_chat_history(state: State<'_, AppState>) -> Result<Vec<ChatMessage>, String> {
@@ -443,11 +532,26 @@ pub async fn get_dept_logs(state: State<'_, AppState>) -> Result<Vec<crate::acto
     Ok(hist.clone())
 }
 
-/// Cancel all running actor processing.  Sets the shared AtomicBool flag;
-/// each actor's AgentController checks it between tool iterations.
+/// Cancel all running actor processing.  Sets all per-actor cancel flags
+/// (checked by AgentController.run() between tool iterations) and sends
+/// Interrupt messages so idle actors don't start new work.
 #[tauri::command]
 pub async fn cancel_processing(state: State<'_, AppState>) -> Result<(), String> {
-    state.cancel_flag.store(true, std::sync::atomic::Ordering::SeqCst);
-    log_console!("[commands] cancel_processing: flag set, actors will stop at next check point");
+    if let Some(sys) = state.actor_system.lock().await.as_ref() {
+        // Set all per-actor cancel flags
+        if let Ok(map) = sys.cancel_map.lock() {
+            for (_role, flag) in map.iter() {
+                flag.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            log_console!("[commands] cancel_processing: all per-actor flags set");
+        }
+
+        // Wake idle actors so they don't start new work
+        for (_role, tx) in &sys.senders {
+            let _ = tx.send(crate::actor::ActorMessage::interrupt());
+        }
+        log_console!("[commands] cancel_processing: Interrupt sent to all actors");
+    }
+
     Ok(())
 }

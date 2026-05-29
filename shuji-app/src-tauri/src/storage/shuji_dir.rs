@@ -14,11 +14,6 @@ impl ShujiDir {
         }
     }
 
-    #[allow(dead_code)] // public API for external dir access
-    pub fn root(&self) -> PathBuf {
-        self.root.clone()
-    }
-
     /// Initialize .shuji directory structure for a new project.
     pub async fn init(&self) -> anyhow::Result<()> {
         let dirs = [
@@ -58,34 +53,6 @@ impl ShujiDir {
         ));
         fs::write(&path, default).await?;
         Ok(())
-    }
-
-    /// Read the project zuxun (user-editable) from .shuji/zuxun.md.
-    /// Falls back to the compiled default if the file doesn't exist.
-    #[allow(dead_code)] // available for future zuxun display in frontend
-    pub async fn read_zuxun(&self) -> String {
-        let path = self.root.join("zuxun.md");
-        if let Ok(Some(c)) = self.read_document_by_path(&path).await {
-            return c;
-        }
-        // Absolute fallback — should not normally happen after init
-        include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"), "/../assets/defaults/zuxun.md"
-        )).to_string()
-    }
-
-    #[allow(dead_code)] // used by read_zuxun (also currently unused)
-    async fn read_document_by_path(&self, path: &std::path::Path) -> anyhow::Result<Option<String>> {
-        if !fs::try_exists(&path).await? {
-            return Ok(None);
-        }
-        let content = fs::read_to_string(&path).await?;
-        Ok(Some(content))
-    }
-
-    #[allow(dead_code)] // available for project existence checks
-    pub async fn project_exists(&self) -> bool {
-        fs::try_exists(self.root.join("state.json")).await.unwrap_or(false)
     }
 
     pub async fn load_project(&self) -> anyhow::Result<Option<Project>> {
@@ -175,15 +142,6 @@ impl ShujiDir {
         let data = serde_json::to_string_pretty(project)?;
         fs::write(&path, &data).await?;
         Ok(())
-    }
-
-    #[allow(dead_code)] // public API for writing arbitrary documents
-    pub async fn write_document(&self, subdir: &str, filename: &str, content: &str) -> anyhow::Result<String> {
-        let dir = self.root.join(subdir);
-        fs::create_dir_all(&dir).await?;
-        let path = dir.join(filename);
-        fs::write(&path, content).await?;
-        Ok(path.to_string_lossy().to_string())
     }
 
     pub async fn read_document(&self, subdir: &str, filename: &str) -> anyhow::Result<Option<String>> {

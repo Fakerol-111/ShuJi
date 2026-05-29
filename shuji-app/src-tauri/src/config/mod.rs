@@ -10,6 +10,7 @@ pub struct RuntimeConfig {
     pub context_compaction: ContextCompactionConfig,
     pub actor: ActorConfig,
     pub watchdog: WatchdogConfig,
+    pub checkpoint: CheckpointConfig,
 }
 
 /// API 相关配置
@@ -114,6 +115,17 @@ pub struct WatchdogConfig {
     pub read_without_write_warning: u32,
 }
 
+/// Checkpoint 保存配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CheckpointConfig {
+    /// 自动 checkpoint 间隔（秒），0 = 不启用自动保存
+    #[serde(default = "default_checkpoint_interval")]
+    pub interval_secs: u64,
+}
+
+/// Checkpoint 默认值
+fn default_checkpoint_interval() -> u64 { 300 }
+
 /// 推理/思考模式配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReasoningConfig {
@@ -154,6 +166,14 @@ fn default_max_consecutive_errors() -> u32 { 5 }
 fn default_same_tool_warning_count() -> u32 { 3 }
 fn default_read_without_write_warning() -> u32 { 5 }
 
+impl Default for CheckpointConfig {
+    fn default() -> Self {
+        Self {
+            interval_secs: default_checkpoint_interval(),
+        }
+    }
+}
+
 impl Default for RuntimeConfig {
     fn default() -> Self {
         Self {
@@ -162,6 +182,7 @@ impl Default for RuntimeConfig {
             context_compaction: ContextCompactionConfig::default(),
             actor: ActorConfig::default(),
             watchdog: WatchdogConfig::default(),
+            checkpoint: CheckpointConfig::default(),
         }
     }
 }

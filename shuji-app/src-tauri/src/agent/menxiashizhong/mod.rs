@@ -25,8 +25,8 @@ impl MenxiaShizhongAgent {
         tools
     }
 
-    fn execute_tool(name: &str, args: &serde_json::Value, working_dir: &Path) -> String {
-        crate::tool::execute_named_tool(name, working_dir, args, "menxiashizhong")
+    async fn execute_tool(name: &str, args: &serde_json::Value, working_dir: &Path) -> String {
+        crate::tool::execute_named_tool(name, working_dir, args, "menxiashizhong").await
     }
 
     pub fn load_skill(name: &str) -> &'static str {
@@ -41,6 +41,10 @@ impl MenxiaShizhongAgent {
 #[async_trait::async_trait]
 impl Agent for MenxiaShizhongAgent {
     fn role(&self) -> Role { Role::MenxiaShizhong }
+
+    fn set_interrupt_flag(&mut self, flag: Arc<AtomicBool>) {
+        self.cancel = flag;
+    }
 
     async fn execute(&self, input: &AgentInput) -> anyhow::Result<AgentOutput> {
         let system_prompt = include_str!("prompt.md");
@@ -65,13 +69,27 @@ impl Agent for MenxiaShizhongAgent {
         }
 
         let mut controller = crate::api::control::AgentController::new();
+
+        // ── Periodic checkpoint ──
+        let ckpt_wd = working_dir.clone();
+        let ckpt_role = self.role().name().to_string();
+        let ckpt_desc = input.task_description.clone();
+        controller.set_checkpoint_handler(Box::new(move |snap| {
+            let wd = ckpt_wd.clone();
+            let role = ckpt_role.clone();
+            let desc = ckpt_desc.clone();
+            Box::pin(async move {
+                crate::storage::checkpoint::save(&wd, &role, &desc, &snap).await;
+            })
+        }));
+
         let config = input.runtime_config.clone();
         let wd = working_dir.clone();
         let exec = move |name: &str, args: &serde_json::Value| -> crate::api::control::ToolFuture {
             let name = name.to_owned();
             let args = args.clone();
             let wd = wd.clone();
-            Box::pin(async move { Self::execute_tool(&name, &args, &wd) })
+            Box::pin(async move { Self::execute_tool(&name, &args, &wd).await })
         };
 
         let (mut result, mut route);
@@ -79,7 +97,7 @@ impl Agent for MenxiaShizhongAgent {
         loop {
             (result, route) = controller.run(
                 &mut session, &exec, &self.cancel, &tools, None, &config,
-            ).await?;
+            ).await?.into_tuple();
 
             if route.is_some() {
                 break;

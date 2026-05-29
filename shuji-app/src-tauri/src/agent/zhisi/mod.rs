@@ -1,5 +1,6 @@
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput};
 use crate::api::client::{AnthropicClient, ToolDefinition};
@@ -9,11 +10,12 @@ use crate::models::role::Role;
 pub struct ZhisiAgent {
     client: AnthropicClient,
     model: String,
+    cancel: Arc<AtomicBool>,
 }
 
 impl ZhisiAgent {
-    pub fn new(client: AnthropicClient, model: &str) -> Self {
-        Self { client, model: model.to_string() }
+    pub fn new(client: AnthropicClient, model: &str, cancel: Arc<AtomicBool>) -> Self {
+        Self { client, model: model.to_string(), cancel }
     }
 
     fn tools() -> Vec<ToolDefinition> {
@@ -22,14 +24,18 @@ impl ZhisiAgent {
         tools
     }
 
-    fn execute_tool(name: &str, args: &serde_json::Value, working_dir: &Path) -> String {
-        crate::tool::execute_named_tool(name, working_dir, args, "zhisi")
+    async fn execute_tool(name: &str, args: &serde_json::Value, working_dir: &Path) -> String {
+        crate::tool::execute_named_tool(name, working_dir, args, "zhisi").await
     }
 }
 
 #[async_trait::async_trait]
 impl Agent for ZhisiAgent {
     fn role(&self) -> Role { Role::Zhisi }
+
+    fn set_interrupt_flag(&mut self, flag: Arc<AtomicBool>) {
+        self.cancel = flag;
+    }
 
     async fn execute(&self, input: &AgentInput) -> anyhow::Result<AgentOutput> {
         let system_prompt = include_str!("prompt.md");
@@ -54,19 +60,33 @@ impl Agent for ZhisiAgent {
         }
 
         let mut controller = crate::api::control::AgentController::new();
+
+        // ── Periodic checkpoint ──
+        let ckpt_wd = working_dir.clone();
+        let ckpt_role = self.role().name().to_string();
+        let ckpt_desc = input.task_description.clone();
+        controller.set_checkpoint_handler(Box::new(move |snap| {
+            let wd = ckpt_wd.clone();
+            let role = ckpt_role.clone();
+            let desc = ckpt_desc.clone();
+            Box::pin(async move {
+                crate::storage::checkpoint::save(&wd, &role, &desc, &snap).await;
+            })
+        }));
+
         let config = input.runtime_config.clone();
         let wd_clone = working_dir.clone();
         let exec = move |name: &str, args: &serde_json::Value| -> crate::api::control::ToolFuture {
             let name = name.to_owned();
             let args = args.clone();
             let wd = wd_clone.clone();
-            Box::pin(async move { Self::execute_tool(&name, &args, &wd) })
+            Box::pin(async move { Self::execute_tool(&name, &args, &wd).await })
         };
         let (result, route) = controller.run(
             &mut session, &exec,
-            &std::sync::atomic::AtomicBool::new(false),
+            &self.cancel,
             &tools, None, &config,
-        ).await?;
+        ).await?.into_tuple();
 
         let snap = session.snapshot();
         let ctx = crate::api::session::PersistedContext::from_messages(&snap.messages);

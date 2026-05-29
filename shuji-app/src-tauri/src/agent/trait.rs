@@ -3,6 +3,7 @@ use crate::models::role::Role;
 use crate::models::message::Message;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 #[derive(Debug, Clone)]
 pub struct AgentInput {
@@ -75,6 +76,11 @@ pub trait Agent: Send + Sync {
     fn after_execute(&self, _output: &AgentOutput) -> LoopDecision {
         LoopDecision::Done
     }
+
+    /// Override the agent's cancel flag with the per-actor flag
+    /// from the actor system. Called during actor system startup
+    /// so that Interrupt/cancel_agent reach AgentController.run().
+    fn set_interrupt_flag(&mut self, _flag: Arc<AtomicBool>) {}
 
     /// Reset per-agent plan state (e.g. when a new task arrives).
     fn reset_plan(&self) {}

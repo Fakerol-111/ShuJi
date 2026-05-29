@@ -79,8 +79,8 @@ impl GongbuShangshuAgent {
         tools
     }
 
-    fn execute_tool(name: &str, args: &serde_json::Value, working_dir: &Path) -> String {
-        crate::tool::execute_named_tool(name, working_dir, args, "gongbushangshu")
+    async fn execute_tool(name: &str, args: &serde_json::Value, working_dir: &Path) -> String {
+        crate::tool::execute_named_tool(name, working_dir, args, "gongbushangshu").await
     }
 
     fn build_plan_prompt(plan: &PlanState) -> String {
@@ -109,6 +109,10 @@ impl GongbuShangshuAgent {
 #[async_trait::async_trait]
 impl Agent for GongbuShangshuAgent {
     fn role(&self) -> Role { Role::GongbuShangshu }
+
+    fn set_interrupt_flag(&mut self, flag: Arc<AtomicBool>) {
+        self.cancel = flag;
+    }
 
     async fn execute(&self, input: &AgentInput) -> anyhow::Result<AgentOutput> {
         let system_prompt = include_str!("prompt.md");
@@ -181,7 +185,7 @@ impl Agent for GongbuShangshuAgent {
             } else {
                 // New task: remove stale context so the next save starts clean.
                 let ctx_path = working_dir.join(".shuji/context").join(format!("{}.json", role_name));
-                let _ = std::fs::remove_file(&ctx_path);
+                let _ = tokio::fs::remove_file(&ctx_path).await;
             }
         }
 
@@ -199,6 +203,20 @@ impl Agent for GongbuShangshuAgent {
         }
 
         let mut controller = crate::api::control::AgentController::new();
+
+        // ── Periodic checkpoint ──
+        let ckpt_wd = working_dir.clone();
+        let ckpt_role = self.role().name().to_string();
+        let ckpt_desc = input.task_description.clone();
+        controller.set_checkpoint_handler(Box::new(move |snap| {
+            let wd = ckpt_wd.clone();
+            let role = ckpt_role.clone();
+            let desc = ckpt_desc.clone();
+            Box::pin(async move {
+                crate::storage::checkpoint::save(&wd, &role, &desc, &snap).await;
+            })
+        }));
+
         let config = input.runtime_config.clone();
         let plan_ref = self.plan.clone();
         let wd = working_dir.clone();
@@ -257,11 +275,11 @@ impl Agent for GongbuShangshuAgent {
                         None => r#"{"ok":false,"message":"没有活跃计划。如需分批，先调用 submit_plan。"}"#.to_string(),
                     }
                 }
-                _ => Self::execute_tool(&name, &args, &wd),
+                _ => Self::execute_tool(&name, &args, &wd).await,
             }
             })
         };
-        let (result, route) = controller.run(&mut session, &exec, &self.cancel, &tools, Some(&force_stop), &config).await?;
+        let (result, route) = controller.run(&mut session, &exec, &self.cancel, &tools, Some(&force_stop), &config).await?.into_tuple();
 
         // Capture baseline after submit_plan: save the pre-plan analysis context
         // so every batch can restore from this shared understanding.

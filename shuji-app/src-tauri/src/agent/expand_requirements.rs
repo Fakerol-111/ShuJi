@@ -41,16 +41,17 @@ pub async fn run(
         let name = name.to_owned();
         let args = args.clone();
         let wd = wd.clone();
-        Box::pin(async move { crate::tool::execute_named_tool(&name, &wd, &args, "requirements_agent") })
+        Box::pin(async move { crate::tool::execute_named_tool(&name, &wd, &args, "requirements_agent").await })
     };
 
     let mut controller = crate::api::control::AgentController::new();
     let cancel = std::sync::atomic::AtomicBool::new(false);
 
-    let (result, _route) = controller
+    let run_result = controller
         .run(&mut session, &exec, &cancel, &tools, None, &config)
         .await
         .map_err(|e| format!("??????: {}", e))?;
+    let result = run_result.into_text();
 
     Ok(result.trim().to_string())
 }

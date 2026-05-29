@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
 use crate::agent::r#trait::{Agent, AgentInput};
-use crate::api::control::{RouteMsgType, RouteTo, role_from_name};
+use crate::api::control::{RouteMsgType, RouteTo};
 use crate::config::RuntimeConfig;
 use crate::logging::logger::Logger;
 use crate::models::chat::ChatMessage;
@@ -48,22 +48,24 @@ impl DeptLogEntry {
 
 /// Messages that actors send to each other.
 #[derive(Debug, Clone)]
-pub enum ActorMessage {
-    /// Start a new task.
-    Task { content: String },
-    /// Interrupt current task and start this instead.
-    Replace { content: String },
-    /// Only interrupt, don't replace.
-    Interrupt,
+pub struct ActorMessage {
+    pub msg_type: RouteMsgType,
+    pub subject: String,
+    pub payload: Option<String>,
+    pub reply_to: Option<mpsc::UnboundedSender<String>>,
 }
 
 impl ActorMessage {
+    pub fn new(subject: impl Into<String>, msg_type: RouteMsgType) -> Self {
+        Self { msg_type, subject: subject.into(), payload: None, reply_to: None }
+    }
+
+    pub fn interrupt() -> Self {
+        Self { msg_type: RouteMsgType::Interrupt, subject: String::new(), payload: None, reply_to: None }
+    }
+
     fn subject(&self) -> &str {
-        match self {
-            ActorMessage::Task { content } => content,
-            ActorMessage::Replace { content } => content,
-            ActorMessage::Interrupt => "",
-        }
+        &self.subject
     }
 }
 
@@ -135,15 +137,19 @@ impl ActorSystem {
 
 impl Drop for ActorSystem {
     fn drop(&mut self) {
-        // 1. Set the global cancel flag — actors check this between tool iterations
-        self.cancel.store(true, Ordering::SeqCst);
+        // 1. Set all per-actor cancel flags
+        if let Ok(map) = self.cancel_map.lock() {
+            for (_role, flag) in map.iter() {
+                flag.store(true, Ordering::SeqCst);
+            }
+        }
 
         // 2. Send Interrupt to all actors so they stop cleanly
         for (_role, tx) in &self.senders {
-            let _ = tx.send(ActorMessage::Interrupt);
+            let _ = tx.send(ActorMessage::interrupt());
         }
 
-        log_console!("[actor] ActorSystem dropped — cancel flag set, Interrupt sent to all actors");
+        log_console!("[actor] ActorSystem dropped — all cancel flags set, Interrupt sent to all actors");
     }
 }
 
@@ -172,35 +178,37 @@ pub async fn run_actor(mut ctx: ActorContext) {
 
     while let Some(msg) = ctx.rx.recv().await {
         // ── Interrupt / Replace handling ──────────────
-        match &msg {
-            ActorMessage::Interrupt => {
+        match msg.msg_type {
+            RouteMsgType::Interrupt => {
                 ctx.cancel.store(true, Ordering::SeqCst);
                 if paused_for_decision {
-                    crate::agent::neige::NeigeAgent::clear_paused_session(&ctx.working_dir);
+                    crate::agent::neige::NeigeAgent::clear_paused_session(&ctx.working_dir).await;
                     paused_for_decision = false;
                 }
                 log_dept(&ctx, &role_name, "收到中断信号");
+                // 清空信箱：中断后所有历史消息都已过时
+                while ctx.rx.try_recv().is_ok() {}
                 continue;
             }
-            ActorMessage::Replace { content } => {
+            RouteMsgType::Replace => {
                 ctx.cancel.store(true, Ordering::SeqCst);
                 if paused_for_decision {
-                    crate::agent::neige::NeigeAgent::clear_paused_session(&ctx.working_dir);
+                    crate::agent::neige::NeigeAgent::clear_paused_session(&ctx.working_dir).await;
                     paused_for_decision = false;
                 }
-                pending_replace = Some(content.clone());
-                log_dept(&ctx, &role_name, &format!("收到替换指令: {}", content));
+                pending_replace = Some(msg.subject.clone());
+                log_dept(&ctx, &role_name, &format!("收到替换指令: {}", msg.subject));
                 // 不 continue！直接 fall through 到执行逻辑，
                 // 让 pending_replace 立即生效
             }
-            ActorMessage::Task { .. } => {
+            RouteMsgType::Task => {
                 if !paused_for_decision {
                     ctx.agent.reset_plan();
                 }
             }
         }
 
-        // ── Reset cancel ──────────────────────────────
+        // ── Reset cancel flag ──────────────────────────
         ctx.cancel.store(false, Ordering::SeqCst);
 
         // If a Replace was queued while we were busy, use that
@@ -214,14 +222,13 @@ pub async fn run_actor(mut ctx: ActorContext) {
 
         // ── Build context (only 内阁 gets talk history + skill prompts) ──
         let skill_prompts: Vec<String> = if ctx.role == crate::models::role::Role::Neige {
-            ctx.current_skill.lock().ok()
-                .and_then(|s| s.clone())
-                .map(|name| {
-                    let content = crate::agent::neige::NeigeAgent::load_skill(&name, &ctx.working_dir);
-                    format!("[skill: {}]\n{}", name, content)
-                })
-                .into_iter()
-                .collect()
+            let mut prompts = Vec::new();
+            let skill_name = ctx.current_skill.lock().ok().and_then(|s| s.clone());
+            if let Some(name) = skill_name {
+                let content = crate::agent::neige::NeigeAgent::load_skill(&name, &ctx.working_dir).await;
+                prompts.push(format!("[skill: {}]\n{}", name, content));
+            }
+            prompts
         } else {
             vec![]
         };
@@ -354,8 +361,6 @@ pub async fn run_actor(mut ctx: ActorContext) {
                         self::forward_route(&ctx, route).await;
                         break 'exec;
                     }
-                    self::parse_legacy_route(&ctx, &output.content);
-
                     // Let agent decide: need another round?
                     match ctx.agent.after_execute(&output) {
                         crate::agent::r#trait::LoopDecision::Continue(ctx_msg) => {
@@ -461,7 +466,7 @@ async fn fallback_to_dispatcher(ctx: &ActorContext, role_name: &str, error: &str
 
     match ctx.peers.get(&Role::Shangshuling) {
         Some(tx) => {
-            let _ = tx.send(ActorMessage::Task { content: fallback_content });
+            let _ = tx.send(ActorMessage::new(fallback_content, RouteMsgType::Task));
             log_dept(ctx, role_name, &format!("→ 回退到尚书令 (retry {}/{})", retry_count, MAX_FAILURE_RETRIES));
         }
         None => {
@@ -476,11 +481,8 @@ async fn fallback_to_dispatcher(ctx: &ActorContext, role_name: &str, error: &str
 /// Forward a RouteTo instruction to the target actor.
 async fn forward_route(ctx: &ActorContext, route: RouteTo) {
     let subject = route.subject.clone();
-    let actor_msg = match route.msg_type {
-        RouteMsgType::Task => ActorMessage::Task { content: route.subject },
-        RouteMsgType::Replace => ActorMessage::Replace { content: route.subject },
-        RouteMsgType::Interrupt => ActorMessage::Interrupt,
-    };
+    let mut actor_msg = ActorMessage::new(route.subject, route.msg_type);
+    actor_msg.payload = route.payload;
 
     let target_name = route.target.name();
     log_dept(ctx, ctx.role.name(), &format!("→ {}", subject));
@@ -498,38 +500,6 @@ async fn forward_route(ctx: &ActorContext, route: RouteTo) {
                 &format!("找不到目标部门: {}", target_name),
             ));
         }
-    }
-}
-
-/// Legacy: parse `<route to="..." subject="..." />` text tags.
-/// Only activates when RouteTo is not present.
-fn parse_legacy_route(ctx: &ActorContext, output: &str) {
-    // Simple search for <route to="...">
-    let marker = "<route to=\"";
-    let mut start = 0;
-    while let Some(pos) = output[start..].find(marker) {
-        let abs_pos = start + pos;
-        let after_to = abs_pos + marker.len();
-        if let Some(end_quote) = output[after_to..].find('\"') {
-            let target_name = &output[after_to..after_to + end_quote];
-            // Find subject="..."
-            let subj_marker = "subject=\"";
-            if let Some(subj_start) = output[after_to + end_quote..].find(subj_marker) {
-                let subj_abs = after_to + end_quote + subj_start + subj_marker.len();
-                if let Some(subj_end) = output[subj_abs..].find('\"') {
-                    let subject = &output[subj_abs..subj_abs + subj_end];
-                    if let Some(target) = role_from_name(target_name) {
-                        if let Some(tx) = ctx.peers.get(&target) {
-                            log_console!("[actor] {} → {} (legacy route)", ctx.role.name(), target_name);
-                            let _ = tx.send(ActorMessage::Task { content: subject.to_string() });
-                        }
-                    }
-                    start = subj_abs + subj_end;
-                    continue;
-                }
-            }
-        }
-        start = abs_pos + 1;
     }
 }
 

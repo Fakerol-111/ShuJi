@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Project, ProjectSummary, ChatMessage, ProjectSnapshot, DeptLogEntry, AppConfig, TokenUsage } from "./types";
+import type { Project, ProjectSummary, ChatMessage, ProjectSnapshot, DeptLogEntry, AppConfig, TokenUsage, ContextStats } from "./types";
 
 export interface ShujiEntry {
   name: string;
@@ -75,9 +75,13 @@ export async function getRecentDirs(): Promise<string[]> {
   return invoke("get_recent_dirs");
 }
 
-export type { TokenUsage };
+export type { TokenUsage, ContextStats };
 export async function getTokenStats(): Promise<Record<string, Record<string, TokenUsage>>> {
   return invoke("get_token_stats");
+}
+
+export async function getContextStats(): Promise<Record<string, ContextStats>> {
+  return invoke("get_context_stats");
 }
 
 export async function cancelProcessing(): Promise<void> {

@@ -29,11 +29,14 @@ pub enum StepResult {
     },
 }
 
-/// Persisted context with 4 separated layers for independent management.
+/// Persisted context with 5 separated layers for independent management.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PersistedContext {
     /// The base system prompt (prompt.md content).
     pub base_prompt: String,
+    /// Soul / persona message injected right after base prompt (`[soul: role]\n...`).
+    #[serde(default)]
+    pub soul_prompt: Option<String>,
     /// Active skill prompts, each prefixed with `[skill: name]\n`.
     pub skill_prompts: Vec<String>,
     /// Compressed summary of early conversation history.
@@ -43,9 +46,10 @@ pub struct PersistedContext {
 }
 
 impl PersistedContext {
-    /// Extract 4 layers from a flat messages array.
+    /// Extract 5 layers from a flat messages array.
     pub fn from_messages(messages: &[serde_json::Value]) -> Self {
         let mut base_prompt = String::new();
+        let mut soul_prompt = None;
         let mut skill_prompts = Vec::new();
         let mut history_messages = String::new();
         let mut context_messages = Vec::new();
@@ -56,6 +60,8 @@ impl PersistedContext {
                 let content = msg["content"].as_str().unwrap_or("");
                 if base_prompt.is_empty() {
                     base_prompt = content.to_string();
+                } else if content.starts_with("[soul:") {
+                    soul_prompt = Some(content.to_string());
                 } else if content.starts_with("## Working mode:") {
                     skill_prompts.push(content.to_string());
                 } else if content.starts_with("[对话摘要]") {
@@ -68,13 +74,17 @@ impl PersistedContext {
             }
         }
 
-        Self { base_prompt, skill_prompts, history_messages, context_messages }
+        Self { base_prompt, soul_prompt, skill_prompts, history_messages, context_messages }
     }
 
-    /// Rebuild flat messages array from the 4 layers.
+    /// Rebuild flat messages array from the 5 layers, preserving
+    /// the original ordering: base → soul → skills → history → context.
     pub fn to_messages(&self) -> Vec<serde_json::Value> {
         let mut msgs: Vec<serde_json::Value> = Vec::new();
         msgs.push(serde_json::json!({"role": "system", "content": self.base_prompt}));
+        if let Some(ref soul) = self.soul_prompt {
+            msgs.push(serde_json::json!({"role": "system", "content": soul}));
+        }
         for sp in &self.skill_prompts {
             msgs.push(serde_json::json!({"role": "system", "content": sp}));
         }
@@ -106,39 +116,78 @@ impl PersistedContext {
     }
 }
 
-/// Remove orphaned `tool` role messages that don't have a preceding
-/// `assistant` message with `tool_calls`. Also remove orphaned
-/// `assistant` + `tool_calls` messages that have no subsequent `tool` result.
-/// This prevents 400 errors after context compaction truncates tool sequences.
+/// Remove orphaned `tool` role messages and strip dangling `tool_calls` from
+/// `assistant` messages. Uses a two-pass approach to avoid ordering-dependent
+/// bugs (tool message before assistant, or assistant tool_calls with no
+/// matching tool result after context compaction). Prevents 400 errors.
 fn sanitize_messages(msgs: &mut Vec<serde_json::Value>) {
-    // Phase 1: collect all tool_call_ids from assistant messages
-    let mut pending_ids: Vec<String> = Vec::new();
-    // Phase 2: identify valid tool messages
-    msgs.retain(|msg| {
-        let role = msg["role"].as_str().unwrap_or("");
-        if role == "assistant" {
-            if let Some(tcs) = msg["tool_calls"].as_array() {
-                for tc in tcs {
-                    if let Some(id) = tc["id"].as_str() {
-                        pending_ids.push(id.to_string());
+    // Pass 1: collect all tool_call_ids announced by assistants and all
+    // tool_call_ids that have a corresponding tool result.
+    let mut assistant_ids: Vec<String> = Vec::new();
+    let mut result_ids: Vec<String> = Vec::new();
+    for msg in msgs.iter() {
+        match msg["role"].as_str().unwrap_or("") {
+            "assistant" => {
+                if let Some(tcs) = msg["tool_calls"].as_array() {
+                    for tc in tcs {
+                        if let Some(id) = tc["id"].as_str() {
+                            assistant_ids.push(id.to_string());
+                        }
                     }
                 }
             }
-            true // always keep assistant messages
-        } else if role == "tool" {
-            let call_id = msg["tool_call_id"].as_str().unwrap_or("");
-            let valid = !call_id.is_empty() && pending_ids.iter().any(|id| id == call_id);
-            if valid {
-                // Consume: remove this id from pending so it's used at most once
-                if let Some(pos) = pending_ids.iter().position(|id| id == call_id) {
-                    pending_ids.remove(pos);
+            "tool" => {
+                if let Some(id) = msg["tool_call_id"].as_str() {
+                    if !id.is_empty() {
+                        result_ids.push(id.to_string());
+                    }
                 }
             }
-            valid
-        } else {
-            true // keep user/system messages
+            _ => {}
         }
-    });
+    }
+
+    // Pass 2: filter / clean messages.
+    //   assistant — strip dangling tool_calls whose id has no tool result
+    //   tool     — keep only if its id was announced by an assistant
+    //   other    — keep as-is
+    *msgs = msgs.iter().filter_map(|msg| {
+        let role = msg["role"].as_str().unwrap_or("");
+        if role == "assistant" {
+            let tcs = match msg["tool_calls"].as_array() {
+                Some(t) if !t.is_empty() => t,
+                _ => return Some(msg.clone()),
+            };
+            let valid: Vec<serde_json::Value> = tcs.iter()
+                .filter(|tc| {
+                    tc["id"].as_str()
+                        .map(|id| result_ids.iter().any(|rid| rid == id))
+                        .unwrap_or(false)
+                })
+                .cloned()
+                .collect();
+            if valid.len() == tcs.len() {
+                Some(msg.clone())
+            } else if valid.is_empty() {
+                let mut cleaned = msg.clone();
+                cleaned.as_object_mut().unwrap().remove("tool_calls");
+                Some(cleaned)
+            } else {
+                let mut cleaned = msg.clone();
+                cleaned.as_object_mut().unwrap().insert(
+                    "tool_calls".to_string(),
+                    serde_json::Value::Array(valid),
+                );
+                Some(cleaned)
+            }
+        } else if role == "tool" {
+            let call_id = msg["tool_call_id"].as_str().unwrap_or("");
+            let valid = !call_id.is_empty() && assistant_ids.iter().any(|id| id == call_id);
+            if valid { Some(msg.clone()) } else { None }
+        } else {
+            Some(msg.clone())
+        }
+    }).collect();
 }
 
 /// Opaque snapshot of Session internals, used for interrupt/restore.

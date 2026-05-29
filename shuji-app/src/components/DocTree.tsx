@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { listShujiTree } from "../api";
 import type { ShujiEntry } from "../api";
@@ -13,6 +13,7 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
   const [tree, setTree] = useState<ShujiEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadTree = useCallback(() => {
     if (!projectDir) return;
@@ -24,12 +25,24 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
       .finally(() => setLoading(false));
   }, [projectDir]);
 
+  // Debounced refresh — coalesces rapid events into one reload
+  const debouncedRefresh = useCallback(() => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => loadTree(), 400);
+  }, [loadTree]);
+
   useEffect(() => { loadTree(); }, [loadTree]);
 
   useEffect(() => {
-    const unlisten = listen("chat-message", () => { loadTree(); });
-    return () => { unlisten.then((f) => f()); };
-  }, [loadTree]);
+    const unlisten1 = listen("chat-message", debouncedRefresh);
+    const unlisten2 = listen("dept-log", debouncedRefresh);
+    const unlisten3 = listen("plan-update", debouncedRefresh);
+    return () => {
+      unlisten1.then((f) => f());
+      unlisten2.then((f) => f());
+      unlisten3.then((f) => f());
+    };
+  }, [debouncedRefresh]);
 
   if (loading) return <div className="p-3 text-xs text-ink-400">加载项目文件...</div>;
   if (error) return <div className="p-3 text-xs text-vermillion">{error}</div>;
@@ -37,7 +50,7 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
 
   return (
     <div className="py-2 text-xs">
-      <div className="px-2 pb-2 flex justify-end">
+      <div className="sticky top-0 z-10 bg-white px-2 pb-2 flex justify-end border-b border-ink-100 mb-1">
         <button onClick={loadTree} className="px-2 py-1 rounded text-[10px] text-ink-500 hover:bg-ink-100 hover:text-ink-800">
           刷新
         </button>

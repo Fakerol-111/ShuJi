@@ -8,19 +8,22 @@ use crate::tool::{resolve_scoped_path, ToolOutput};
 static COUNTER_LOCK: Mutex<()> = Mutex::new(());
 
 /// Get the next ID from the project-local counter at `.shuji/_counter`.
-fn next_id(working_dir: &Path) -> Result<u64, String> {
-    let _lock = COUNTER_LOCK.lock().map_err(|e| format!("计数器锁失败: {}", e))?;
-
+async fn next_id(working_dir: &Path) -> Result<u64, String> {
     let counter_path = working_dir.join(".shuji/_counter");
-    let current: u64 = std::fs::read_to_string(&counter_path)
-        .ok()
-        .and_then(|s| s.trim().parse().ok())
-        .unwrap_or(1);
 
-    std::fs::write(&counter_path, (current + 1).to_string())
-        .map_err(|e| format!("计数器写入失败: {}", e))?;
-
-    Ok(current)
+    // Use spawn_blocking so the std::sync::MutexGuard is never held across .await.
+    tokio::task::spawn_blocking(move || {
+        let _lock = COUNTER_LOCK.lock().map_err(|e| format!("计数器锁失败: {}", e))?;
+        let current: u64 = std::fs::read_to_string(&counter_path)
+            .ok()
+            .and_then(|s| s.trim().parse().ok())
+            .unwrap_or(1);
+        std::fs::write(&counter_path, (current + 1).to_string())
+            .map_err(|e| format!("计数器写入失败: {}", e))?;
+        Ok(current)
+    })
+    .await
+    .map_err(|_| "后台任务异常: next_id".to_string())?
 }
 
 /// ── YAML frontmatter helpers ───────────────────────────────────────
@@ -123,24 +126,27 @@ fn rprt_rel_path(dept: &str, doc_id: &str) -> String {
 }
 
 /// Search for a report document across all dept subdirectories.
-fn find_rprt_path(working_dir: &Path, id: &str) -> Option<PathBuf> {
+async fn find_rprt_path(working_dir: &Path, id: &str) -> Option<PathBuf> {
     let reports_dir = working_dir.join(".shuji/reports");
-    let entries = std::fs::read_dir(&reports_dir).ok()?;
-    for entry in entries.filter_map(|e| e.ok()) {
-        let path = entry.path();
-        if path.is_dir() {
-            let candidate = path.join(format!("{}.md", id));
-            if candidate.exists() {
-                return Some(candidate);
+    let id = id.to_string();
+    tokio::task::spawn_blocking(move || {
+        let entries = std::fs::read_dir(&reports_dir).ok()?;
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if path.is_dir() {
+                let candidate = path.join(format!("{}.md", id));
+                if candidate.exists() {
+                    return Some(candidate);
+                }
             }
         }
-    }
-    None
+        None
+    }).await.ok().flatten()
 }
 
 /// ── create_document ────────────────────────────────────────────────
 
-pub fn tool_create_document(working_dir: &Path, args: &serde_json::Value, dept: &str) -> String {
+pub async fn tool_create_document(working_dir: &Path, args: &serde_json::Value, dept: &str) -> String {
     let doc_type = args["type"].as_str().unwrap_or("").to_string();
     if doc_type.is_empty() {
         return ToolOutput::error("create_document", "", "empty_type", "文档类型不能为空");
@@ -161,7 +167,7 @@ pub fn tool_create_document(working_dir: &Path, args: &serde_json::Value, dept: 
         })
         .unwrap_or_else(|| "[-1]".to_string());
 
-    let id_num = match next_id(working_dir) {
+    let id_num = match next_id(working_dir).await {
         Ok(n) => n,
         Err(e) => return ToolOutput::error("create_document", "", "counter_error", &e),
     };
@@ -190,14 +196,14 @@ pub fn tool_create_document(working_dir: &Path, args: &serde_json::Value, dept: 
     let content = build_doc(&meta, "");
 
     // Resolve the path and write
-    let full = match resolve_scoped_path(working_dir, &rel_path) {
+    let full = match resolve_scoped_path(working_dir, &rel_path).await {
         Ok(p) => p,
         Err(e) => return ToolOutput::error("create_document", &doc_id, "path_error", &e),
     };
     if let Some(parent) = full.parent() {
-        let _ = std::fs::create_dir_all(parent);
+        let _ = tokio::fs::create_dir_all(parent).await;
     }
-    match std::fs::write(&full, &content) {
+    match tokio::fs::write(&full, &content).await {
         Ok(_) => ToolOutput::success("create_document", &doc_id, &format!("文档 {} 创建成功", doc_id)),
         Err(e) => ToolOutput::error("create_document", &doc_id, "write_error", &e.to_string()),
     }
@@ -205,7 +211,7 @@ pub fn tool_create_document(working_dir: &Path, args: &serde_json::Value, dept: 
 
 /// ── update_document ────────────────────────────────────────────────
 
-pub fn tool_modify_document(working_dir: &Path, args: &serde_json::Value, _dept: &str) -> String {
+pub async fn tool_modify_document(working_dir: &Path, args: &serde_json::Value, _dept: &str) -> String {
     let id = args["id"].as_str().unwrap_or("");
     if id.is_empty() {
         return ToolOutput::error("modify_document", "", "empty_id", "文档 ID 不能为空");
@@ -213,7 +219,7 @@ pub fn tool_modify_document(working_dir: &Path, args: &serde_json::Value, _dept:
 
     let type_prefix = id.split('_').next().unwrap_or("");
     let full = if type_prefix == "rprt" {
-        match find_rprt_path(working_dir, id) {
+        match find_rprt_path(working_dir, id).await {
             Some(p) => p,
             None => return ToolOutput::error("modify_document", id, "not_found", &format!("文档 {} 不存在", id)),
         }
@@ -224,7 +230,7 @@ pub fn tool_modify_document(working_dir: &Path, args: &serde_json::Value, _dept:
         } else {
             format!(".shuji/{}/{}.md", dir, id)
         };
-        match resolve_scoped_path(working_dir, &rel_path) {
+        match resolve_scoped_path(working_dir, &rel_path).await {
             Ok(p) => p,
             Err(e) => return ToolOutput::error("modify_document", id, "path_error", &e),
         }
@@ -233,7 +239,7 @@ pub fn tool_modify_document(working_dir: &Path, args: &serde_json::Value, _dept:
         return ToolOutput::error("modify_document", id, "not_found", &format!("文档 {} 不存在", id));
     }
 
-    let content = match std::fs::read_to_string(&full) {
+    let content = match tokio::fs::read_to_string(&full).await {
         Ok(c) => c,
         Err(e) => return ToolOutput::error("modify_document", id, "read_error", &e.to_string()),
     };
@@ -261,14 +267,14 @@ pub fn tool_modify_document(working_dir: &Path, args: &serde_json::Value, _dept:
     meta.timestamp = now_iso();
     let new_content = build_doc(&meta, &new_body);
 
-    match std::fs::write(&full, &new_content) {
+    match tokio::fs::write(&full, &new_content).await {
         Ok(_) => ToolOutput::success("modify_document", id, "修改成功"),
         Err(e) => ToolOutput::error("modify_document", id, "write_error", &e.to_string()),
     }
 }
 
 /// Append content to an existing document's body.
-pub fn tool_append_document(working_dir: &Path, args: &serde_json::Value, _dept: &str) -> String {
+pub async fn tool_append_document(working_dir: &Path, args: &serde_json::Value, _dept: &str) -> String {
     let id = args["id"].as_str().unwrap_or("");
     let append_content = args["content"].as_str().unwrap_or("");
     if id.is_empty() {
@@ -280,7 +286,7 @@ pub fn tool_append_document(working_dir: &Path, args: &serde_json::Value, _dept:
 
     let type_prefix = id.split('_').next().unwrap_or("");
     let full = if type_prefix == "rprt" {
-        match find_rprt_path(working_dir, id) {
+        match find_rprt_path(working_dir, id).await {
             Some(p) => p,
             None => return ToolOutput::error("append_document", id, "not_found", &format!("文档 {} 不存在", id)),
         }
@@ -291,7 +297,7 @@ pub fn tool_append_document(working_dir: &Path, args: &serde_json::Value, _dept:
         } else {
             format!(".shuji/{}/{}.md", dir, id)
         };
-        match resolve_scoped_path(working_dir, &rel_path) {
+        match resolve_scoped_path(working_dir, &rel_path).await {
             Ok(p) => p,
             Err(e) => return ToolOutput::error("append_document", id, "path_error", &e),
         }
@@ -300,7 +306,7 @@ pub fn tool_append_document(working_dir: &Path, args: &serde_json::Value, _dept:
         return ToolOutput::error("append_document", id, "not_found", &format!("文档 {} 不存在", id));
     }
 
-    let content = match std::fs::read_to_string(&full) {
+    let content = match tokio::fs::read_to_string(&full).await {
         Ok(c) => c,
         Err(e) => return ToolOutput::error("append_document", id, "read_error", &e.to_string()),
     };
@@ -319,7 +325,7 @@ pub fn tool_append_document(working_dir: &Path, args: &serde_json::Value, _dept:
     meta.timestamp = now_iso();
     let new_content = build_doc(&meta, &new_body);
 
-    match std::fs::write(&full, &new_content) {
+    match tokio::fs::write(&full, &new_content).await {
         Ok(_) => ToolOutput::success("append_document", id, "追加成功"),
         Err(e) => ToolOutput::error("append_document", id, "write_error", &e.to_string()),
     }
@@ -399,7 +405,7 @@ pub fn append_document_tool_def() -> crate::api::client::ToolDefinition {
                     "content": {
                         "type": "string",
                         "description": "要追加的内容（每次最多 2000 字符）",
-                        "maxLength": 2000    
+                        "maxLength": 2000
                     }
                 },
                 "required": ["id", "content"]
@@ -410,7 +416,7 @@ pub fn append_document_tool_def() -> crate::api::client::ToolDefinition {
 
 /// ── find_document ─────────────────────────────────────────────────
 
-pub fn tool_find_document(working_dir: &Path, args: &serde_json::Value) -> String {
+pub async fn tool_find_document(working_dir: &Path, args: &serde_json::Value) -> String {
     let id = args["id"].as_str().unwrap_or("");
     if id.is_empty() {
         return ToolOutput::error("find_document", "", "empty_id", "文档 ID 不能为空");
@@ -419,7 +425,7 @@ pub fn tool_find_document(working_dir: &Path, args: &serde_json::Value) -> Strin
     let type_prefix = id.split('_').next().unwrap_or("");
 
     if type_prefix == "rprt" {
-        match find_rprt_path(working_dir, id) {
+        match find_rprt_path(working_dir, id).await {
             Some(p) => {
                 let rel = p.strip_prefix(working_dir).unwrap_or(&p);
                 ToolOutput::success("find_document", id, &format!("{}", rel.display()))
@@ -433,7 +439,7 @@ pub fn tool_find_document(working_dir: &Path, args: &serde_json::Value) -> Strin
         } else {
             format!(".shuji/{}/{}.md", dir, id)
         };
-        match resolve_scoped_path(working_dir, &rel_path) {
+        match resolve_scoped_path(working_dir, &rel_path).await {
             Ok(full) if full.exists() => {
                 let rel = full.strip_prefix(working_dir).unwrap_or(&full);
                 ToolOutput::success("find_document", id, &format!("{}", rel.display()))
@@ -463,4 +469,3 @@ pub fn find_document_tool_def() -> crate::api::client::ToolDefinition {
         },
     }
 }
-

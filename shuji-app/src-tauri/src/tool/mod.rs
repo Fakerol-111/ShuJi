@@ -1,11 +1,29 @@
-use std::io::Read;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use tokio::io::AsyncReadExt;
 use serde::Serialize;
+use crate::api::client::AnthropicClient;
+use crate::models::role::Role;
 
 pub mod documents;
 pub mod registry;
 mod tool_log;
+
+// ── Tool context for special tools ─────────────────────────────────
+
+/// Optional context passed to special tools that need access to system
+/// resources beyond the filesystem (API client, cancel map, etc.).
+/// Currently used by 内阁's special tools (cancel_agent, update_soul,
+/// expand_requirements, create_skill).
+pub struct ToolContext {
+    pub working_dir: PathBuf,
+    pub cancel_map: Option<Arc<Mutex<HashMap<Role, Arc<AtomicBool>>>>>,
+    pub client: Option<Arc<AnthropicClient>>,
+    pub model: Option<String>,
+}
 
 /// Resolve a project-relative path against root with safety checks.
 ///
@@ -16,10 +34,11 @@ mod tool_log;
 ///
 /// For files that don't exist yet (write operations), canonicalizes
 /// the parent directory and then appends the filename.
-pub fn resolve_scoped_path(root: &Path, rel: &str) -> Result<PathBuf, String> {
+pub async fn resolve_scoped_path(root: &Path, rel: &str) -> Result<PathBuf, String> {
     // Canonicalize root once for reliable comparison across all code paths.
     // This handles Windows `\\?\` prefix, symlinks, and path normalization.
-    let canon_root = std::fs::canonicalize(root)
+    let canon_root = tokio::fs::canonicalize(root)
+        .await
         .map_err(|e| format!("项目根目录解析失败: {}", e))?;
 
     let rel_path = Path::new(rel);
@@ -45,7 +64,8 @@ pub fn resolve_scoped_path(root: &Path, rel: &str) -> Result<PathBuf, String> {
 
     // For existing paths, canonicalize to detect escapes
     if candidate.exists() {
-        let canon = std::fs::canonicalize(&candidate)
+        let canon = tokio::fs::canonicalize(&candidate)
+            .await
             .map_err(|e| format!("路径解析失败 {}: {}", rel, e))?;
 
         if !canon.starts_with(&canon_root) {
@@ -61,7 +81,8 @@ pub fn resolve_scoped_path(root: &Path, rel: &str) -> Result<PathBuf, String> {
     // For non-existing paths, canonicalize parent directory
     if let Some(parent) = candidate.parent() {
         if parent.exists() {
-            let canon_parent = std::fs::canonicalize(parent)
+            let canon_parent = tokio::fs::canonicalize(parent)
+                .await
                 .map_err(|e| format!("父目录解析失败 {}: {}", rel, e))?;
 
             if !canon_parent.starts_with(&canon_root) {
@@ -79,20 +100,29 @@ pub fn resolve_scoped_path(root: &Path, rel: &str) -> Result<PathBuf, String> {
         }
     }
 
-    // Parent doesn't exist yet — can't canonicalize. Compare against root
-    // (not canon_root, which has Windows \\?\ prefix).
-    let root_normalized = root
-        .components()
-        .collect::<PathBuf>();
-    let normalized = candidate
-        .components()
-        .collect::<PathBuf>();
-
-    if normalized.starts_with(&root_normalized) {
-        Ok(normalized)
-    } else {
-        Err(format!("路径不在项目目录内: {}", rel))
+    // Parent doesn't exist yet — can't canonicalize the full path.
+    // Walk up to find the longest existing ancestor, canonicalize it,
+    // verify it's within the project root, then reconstruct the path.
+    for ancestor in candidate.ancestors() {
+        if ancestor.exists() {
+            let canon_ancestor = tokio::fs::canonicalize(ancestor)
+                .await
+                .map_err(|e| format!("父目录解析失败 {}: {}", rel, e))?;
+            if !canon_ancestor.starts_with(&canon_root) {
+                return Err(format!("路径越界: {}", rel));
+            }
+            let suffix = candidate
+                .strip_prefix(ancestor)
+                .map_err(|_| format!("路径解析内部错误: {}", rel))?;
+            return Ok(canon_ancestor.join(suffix));
+        }
     }
+
+    // Nothing in the path exists. Since rel is already sanitized
+    // (no .., no absolute, no prefix components), root.join(rel) is
+    // guaranteed to be within root. Use canon_root as anchor so
+    // Windows normalization (\\?\ prefix, casing) is applied.
+    Ok(canon_root.join(rel))
 }
 
 // ── Structured tool result ───────────────────────────────────────────
@@ -157,7 +187,7 @@ impl ToolOutput {
 // ── append_file helper ─────────────────────────────────────────────
 
 /// Append content to an existing file. Creates the file if it doesn't exist.
-pub fn tool_append_file(working_dir: &Path, args: &serde_json::Value) -> String {
+pub async fn tool_append_file(working_dir: &Path, args: &serde_json::Value) -> String {
     let path = args["path"].as_str().unwrap_or("");
     let content = args["content"].as_str().unwrap_or("");
     if path.is_empty() {
@@ -171,18 +201,18 @@ pub fn tool_append_file(working_dir: &Path, args: &serde_json::Value) -> String 
         return ToolOutput::error("append_file", path, "content_too_long",
             &format!("content 长度 {} 超过上限 2000 字符。请拆分成多次 append_file 调用，每次 ≤2000 字符。", content.len()));
     }
-    let full = match resolve_scoped_path(working_dir, path) {
+    let full = match resolve_scoped_path(working_dir, path).await {
         Ok(p) => p,
         Err(e) => return ToolOutput::error("append_file", path, "path_error", &e),
     };
     // Create parent directories if needed
     if let Some(parent) = full.parent() {
-        let _ = std::fs::create_dir_all(parent);
+        let _ = tokio::fs::create_dir_all(parent).await;
     }
-    match std::fs::OpenOptions::new().create(true).append(true).open(&full) {
+    match tokio::fs::OpenOptions::new().create(true).append(true).open(&full).await {
         Ok(mut file) => {
-            use std::io::Write;
-            if let Err(e) = writeln!(file, "{}", content) {
+            use tokio::io::AsyncWriteExt;
+            if let Err(e) = file.write_all(format!("{}\n", content).as_bytes()).await {
                 return ToolOutput::error("append_file", path, "write_error", &e.to_string());
             }
             ToolOutput::success("append_file", path, "追加成功")
@@ -220,12 +250,12 @@ pub fn append_file_tool_def() -> crate::api::client::ToolDefinition {
 // ── delete_file helper ────────────────────────────────────────────
 
 /// Delete a file. Returns an error if the path doesn't exist or is a directory.
-pub fn tool_delete_file(working_dir: &Path, args: &serde_json::Value) -> String {
+pub async fn tool_delete_file(working_dir: &Path, args: &serde_json::Value) -> String {
     let path = args["path"].as_str().unwrap_or("");
     if path.is_empty() {
         return ToolOutput::error("delete_file", "", "empty_path", "文件路径为空");
     }
-    let full = match resolve_scoped_path(working_dir, path) {
+    let full = match resolve_scoped_path(working_dir, path).await {
         Ok(p) => p,
         Err(e) => return ToolOutput::error("delete_file", path, "path_error", &e),
     };
@@ -235,7 +265,7 @@ pub fn tool_delete_file(working_dir: &Path, args: &serde_json::Value) -> String 
     if full.is_dir() {
         return ToolOutput::error("delete_file", path, "is_directory", "不能删除目录，请使用文件路径");
     }
-    match std::fs::remove_file(&full) {
+    match tokio::fs::remove_file(&full).await {
         Ok(_) => ToolOutput::success("delete_file", path, "删除成功"),
         Err(e) => ToolOutput::error("delete_file", path, "delete_error", &e.to_string()),
     }
@@ -265,27 +295,27 @@ pub fn delete_file_tool_def() -> crate::api::client::ToolDefinition {
 // ── rename_file helper ────────────────────────────────────────────
 
 /// Rename or move a file. Takes source path and destination path.
-pub fn tool_rename_file(working_dir: &Path, args: &serde_json::Value) -> String {
+pub async fn tool_rename_file(working_dir: &Path, args: &serde_json::Value) -> String {
     let from = args["from"].as_str().unwrap_or("");
     let to = args["to"].as_str().unwrap_or("");
     if from.is_empty() || to.is_empty() {
         return ToolOutput::error("rename_file", "", "empty_path", "from 和 to 都不能为空");
     }
-    let full_from = match resolve_scoped_path(working_dir, from) {
+    let full_from = match resolve_scoped_path(working_dir, from).await {
         Ok(p) => p,
         Err(e) => return ToolOutput::error("rename_file", from, "path_error", &e),
     };
     if !full_from.exists() {
         return ToolOutput::error("rename_file", from, "not_found", "源文件不存在");
     }
-    let full_to = match resolve_scoped_path(working_dir, to) {
+    let full_to = match resolve_scoped_path(working_dir, to).await {
         Ok(p) => p,
         Err(e) => return ToolOutput::error("rename_file", to, "path_error", &e),
     };
     if let Some(parent) = full_to.parent() {
-        let _ = std::fs::create_dir_all(parent);
+        let _ = tokio::fs::create_dir_all(parent).await;
     }
-    match std::fs::rename(&full_from, &full_to) {
+    match tokio::fs::rename(&full_from, &full_to).await {
         Ok(_) => ToolOutput::success("rename_file", to, &format!("从 {} 重命名成功", from)),
         Err(e) => ToolOutput::error("rename_file", to, "rename_error", &e.to_string()),
     }
@@ -322,19 +352,19 @@ pub fn rename_file_tool_def() -> crate::api::client::ToolDefinition {
 /// Reads the file, finds `old_text`, replaces it with `new_text` (first
 /// occurrence only).  The LLM should use read_file first to locate the
 /// exact text to replace.
-pub fn tool_modify_file(working_dir: &Path, args: &serde_json::Value) -> String {
+pub async fn tool_modify_file(working_dir: &Path, args: &serde_json::Value) -> String {
     let path = args["path"].as_str().unwrap_or("");
     if path.is_empty() {
         return ToolOutput::error("modify_file", "", "empty_path", "文件路径为空");
     }
-    let full = match resolve_scoped_path(working_dir, path) {
+    let full = match resolve_scoped_path(working_dir, path).await {
         Ok(p) => p,
         Err(e) => return ToolOutput::error("modify_file", path, "path_error", &e),
     };
     if !full.exists() {
         return ToolOutput::error("modify_file", path, "not_found", "文件不存在");
     }
-    let content = match std::fs::read_to_string(&full) {
+    let content = match tokio::fs::read_to_string(&full).await {
         Ok(c) => c,
         Err(e) => return ToolOutput::error("modify_file", path, "read_error", &e.to_string()),
     };
@@ -359,7 +389,7 @@ pub fn tool_modify_file(working_dir: &Path, args: &serde_json::Value) -> String 
     }
 
     let new_content = content.replacen(old_text, new_text, 1);
-    match std::fs::write(&full, &new_content) {
+    match tokio::fs::write(&full, &new_content).await {
         Ok(_) => ToolOutput::success("modify_file", path, &format!("替换成功（替换 {} 字节）", old_text.len())),
         Err(e) => ToolOutput::error("modify_file", path, "write_error", &e.to_string()),
     }
@@ -400,7 +430,7 @@ pub fn modify_file_tool_def() -> crate::api::client::ToolDefinition {
 
 /// Execute a command with safety checks and timeout.
 /// Used by 兵部 and 刑部 for running test commands.
-pub fn tool_execute_command(working_dir: &Path, args: &serde_json::Value, dept: &str) -> String {
+pub async fn tool_execute_command(working_dir: &Path, args: &serde_json::Value, dept: &str) -> String {
     let cmd = args["command"].as_str().unwrap_or("");
     if cmd.is_empty() {
         return ToolOutput::error("execute_command", "", "empty_command", "命令为空");
@@ -418,7 +448,7 @@ pub fn tool_execute_command(working_dir: &Path, args: &serde_json::Value, dept: 
     } else {
         ("bash", vec!["-l", "-c"])
     };
-    match execute_with_timeout(shell, &shell_args, cmd, working_dir, timeout) {
+    match execute_with_timeout(shell, &shell_args, cmd, working_dir, timeout).await {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -433,14 +463,14 @@ pub fn tool_execute_command(working_dir: &Path, args: &serde_json::Value, dept: 
     }
 }
 
-fn execute_with_timeout(
+async fn execute_with_timeout(
     shell: &str,
     args: &[&str],
     cmd: &str,
     working_dir: &Path,
     timeout: std::time::Duration,
 ) -> Result<std::process::Output, String> {
-    let mut child = Command::new(shell);
+    let mut child = tokio::process::Command::new(shell);
     for a in args {
         child.arg(a);
     }
@@ -452,8 +482,8 @@ fn execute_with_timeout(
         .spawn()
         .map_err(|e| format!("无法启动命令: {}", e))?;
 
-    let start = std::time::Instant::now();
-    let poll_interval = std::time::Duration::from_millis(500);
+    let start = tokio::time::Instant::now();
+    let poll_interval = tokio::time::Duration::from_millis(500);
 
     loop {
         match child.try_wait() {
@@ -461,23 +491,23 @@ fn execute_with_timeout(
                 let mut stdout = Vec::new();
                 let mut stderr = Vec::new();
                 if let Some(ref mut out) = child.stdout {
-                    let _ = out.read_to_end(&mut stdout);
+                    let _ = out.read_to_end(&mut stdout).await;
                 }
                 if let Some(ref mut err) = child.stderr {
-                    let _ = err.read_to_end(&mut stderr);
+                    let _ = err.read_to_end(&mut stderr).await;
                 }
                 return Ok(std::process::Output { status, stdout, stderr });
             }
             Ok(None) => {
                 if start.elapsed() >= timeout {
-                    let _ = child.kill();
-                    let _ = child.wait();
+                    let _ = child.kill().await;
+                    let _ = child.wait().await;
                     return Err(format!(
                         "命令执行超时（超过 {} 秒），进程已终止。",
                         timeout.as_secs()
                     ));
                 }
-                std::thread::sleep(poll_interval);
+                tokio::time::sleep(poll_interval).await;
             }
             Err(e) => return Err(format!("命令执行出错: {}", e)),
         }
@@ -486,11 +516,31 @@ fn execute_with_timeout(
 
 fn check_safe_command(cmd: &str) -> Result<(), &'static str> {
     let c = cmd.trim();
+    let tokens: Vec<&str> = c.split_whitespace().collect();
+    if tokens.is_empty() {
+        return Ok(());
+    }
+
     for &(keyword, reason) in SYSTEM_BLOCKS {
-        if c.to_lowercase().contains(keyword) {
+        let kw_tokens: Vec<&str> = keyword.split_whitespace().collect();
+
+        let matched = if kw_tokens.len() == 1 {
+            // Single-token: match first command token (exact, or prefix for mkfs).
+            if keyword == "mkfs" {
+                tokens[0].starts_with("mkfs")
+            } else {
+                tokens[0] == keyword
+            }
+        } else {
+            // Multi-token: match prefix of command tokens.
+            tokens.len() >= kw_tokens.len() && tokens[..kw_tokens.len()] == kw_tokens[..]
+        };
+
+        if matched {
             return Err(reason);
         }
     }
+
     for &pattern in PATH_ESCAPE {
         if c.to_lowercase().contains(pattern) {
             return Err("禁止操作项目目录之外的文件");
@@ -503,15 +553,15 @@ fn check_safe_command(cmd: &str) -> Result<(), &'static str> {
 
 /// Read a file with optional line range (`offset`, `limit`).
 /// Files over 200 lines require offset/limit to prevent token overflow.
-pub fn tool_read_file(working_dir: &Path, args: &serde_json::Value) -> String {
+pub async fn tool_read_file(working_dir: &Path, args: &serde_json::Value) -> String {
     let path = args["path"].as_str().unwrap_or("");
     let offset = args["offset"].as_u64().unwrap_or(0);
     let limit = args["limit"].as_u64().unwrap_or(u64::MAX);
-    let full = match resolve_scoped_path(working_dir, path) {
+    let full = match resolve_scoped_path(working_dir, path).await {
         Ok(p) => p,
         Err(e) => return ToolOutput::error("read_file", path, "path_error", &e),
     };
-    let content = match std::fs::read_to_string(&full) {
+    let content = match tokio::fs::read_to_string(&full).await {
         Ok(c) => c,
         Err(e) => return ToolOutput::error("read_file", path, "read_error", &e.to_string()),
     };
@@ -539,7 +589,7 @@ pub fn tool_read_file(working_dir: &Path, args: &serde_json::Value) -> String {
 
 /// Create a new file with initial content. Rejects if the file already exists
 /// (use modify_file or delete+create instead).
-pub fn tool_create_file(working_dir: &Path, args: &serde_json::Value) -> String {
+pub async fn tool_create_file(working_dir: &Path, args: &serde_json::Value) -> String {
     let path = args["path"].as_str().unwrap_or("");
     let content = args["content"].as_str().unwrap_or("");
     if path.is_empty() {
@@ -551,7 +601,7 @@ pub fn tool_create_file(working_dir: &Path, args: &serde_json::Value) -> String 
             &format!("content 长度 {} 超过上限 2000 字符。请使用 create_file + append_file 分块写入。", content.len()));
     }
 
-    let full = match resolve_scoped_path(working_dir, path) {
+    let full = match resolve_scoped_path(working_dir, path).await {
         Ok(p) => p,
         Err(e) => return ToolOutput::error("create_file", path, "path_error", &e),
     };
@@ -562,23 +612,27 @@ pub fn tool_create_file(working_dir: &Path, args: &serde_json::Value) -> String 
     }
 
     if let Some(parent) = full.parent() {
-        let _ = std::fs::create_dir_all(parent);
+        let _ = tokio::fs::create_dir_all(parent).await;
     }
-    match std::fs::write(&full, content) {
+    match tokio::fs::write(&full, content).await {
         Ok(_) => ToolOutput::success("create_file", path, "写入成功"),
         Err(e) => ToolOutput::error("create_file", path, "write_error", &e.to_string()),
     }
 }
 
 /// List directory contents.
-pub fn tool_list_dir(working_dir: &Path, args: &serde_json::Value) -> String {
+pub async fn tool_list_dir(working_dir: &Path, args: &serde_json::Value) -> String {
     let path = args["path"].as_str().unwrap_or("");
-    let full = match resolve_scoped_path(working_dir, path) {
+    let full = match resolve_scoped_path(working_dir, path).await {
         Ok(p) => p,
         Err(e) => return ToolOutput::error("list_dir", path, "path_error", &e),
     };
-    match std::fs::read_dir(&full) {
-        Ok(entries) => {
+
+    // Use spawn_blocking for directory listing since it involves sync iteration
+    // of DirEntry results, which doesn't map cleanly to tokio::fs::ReadDir.
+    let full_for_blocking = full.clone();
+    match tokio::task::spawn_blocking(move || std::fs::read_dir(&full_for_blocking)).await {
+        Ok(Ok(entries)) => {
             let items: Vec<String> = entries
                 .filter_map(|e| e.ok())
                 .map(|e| {
@@ -591,7 +645,8 @@ pub fn tool_list_dir(working_dir: &Path, args: &serde_json::Value) -> String {
             let message = if items.is_empty() { "(空目录)".to_string() } else { items.join("\n") };
             ToolOutput::success_raw("list_dir", &message)
         }
-        Err(e) => ToolOutput::error("list_dir", path, "list_error", &e.to_string()),
+        Ok(Err(e)) => ToolOutput::error("list_dir", path, "list_error", &e.to_string()),
+        Err(_) => ToolOutput::error("list_dir", path, "join_error", "后台任务异常"),
     }
 }
 
@@ -672,13 +727,13 @@ pub fn list_dir_tool_def() -> crate::api::client::ToolDefinition {
 
 /// Read `.shuji/logs/activity.log`, parse JSON lines, return as formatted text.
 /// Lines are naturally chronological since it's a single append-only file.
-pub fn tool_summarize_logs(working_dir: &Path, args: &serde_json::Value) -> String {
+pub async fn tool_summarize_logs(working_dir: &Path, args: &serde_json::Value) -> String {
     let log_path = working_dir.join(".shuji").join("logs").join("activity.log");
     if !log_path.exists() {
         return ToolOutput::success_raw("summarize_logs", "暂无日志记录");
     }
 
-    let content = match std::fs::read_to_string(&log_path) {
+    let content = match tokio::fs::read_to_string(&log_path).await {
         Ok(c) => c,
         Err(e) => return ToolOutput::error("summarize_logs", "", "read_error", &e.to_string()),
     };
@@ -762,25 +817,218 @@ pub fn execute_command_tool_def(description: &str) -> crate::api::client::ToolDe
 }
 
 /// Central tool dispatch: all agents call this instead of writing their own match block.
-pub fn execute_named_tool(name: &str, working_dir: &Path, args: &serde_json::Value, dept: &str) -> String {
-    tool_log::log_tool_call(dept, name, args, working_dir);
+pub async fn execute_named_tool(name: &str, working_dir: &Path, args: &serde_json::Value, dept: &str) -> String {
+    tool_log::log_tool_call(dept, name, args, working_dir).await;
     match name {
-        "read_file" => tool_read_file(working_dir, args),
-        "create_file" => tool_create_file(working_dir, args),
-        "list_dir" => tool_list_dir(working_dir, args),
-        "append_file" => tool_append_file(working_dir, args),
-        "delete_file" => tool_delete_file(working_dir, args),
-        "rename_file" => tool_rename_file(working_dir, args),
-        "modify_file" => tool_modify_file(working_dir, args),
-        "create_document" => documents::tool_create_document(working_dir, args, dept),
-        "modify_document" => documents::tool_modify_document(working_dir, args, dept),
-        "append_document" => documents::tool_append_document(working_dir, args, dept),
-        "find_document" => documents::tool_find_document(working_dir, args),
-        "execute_command" => tool_execute_command(working_dir, args, dept),
-        "summarize_logs" => tool_summarize_logs(working_dir, args),
+        "read_file" => tool_read_file(working_dir, args).await,
+        "create_file" => tool_create_file(working_dir, args).await,
+        "list_dir" => tool_list_dir(working_dir, args).await,
+        "append_file" => tool_append_file(working_dir, args).await,
+        "delete_file" => tool_delete_file(working_dir, args).await,
+        "rename_file" => tool_rename_file(working_dir, args).await,
+        "modify_file" => tool_modify_file(working_dir, args).await,
+        "create_document" => documents::tool_create_document(working_dir, args, dept).await,
+        "modify_document" => documents::tool_modify_document(working_dir, args, dept).await,
+        "append_document" => documents::tool_append_document(working_dir, args, dept).await,
+        "find_document" => documents::tool_find_document(working_dir, args).await,
+        "execute_command" => tool_execute_command(working_dir, args, dept).await,
+        "summarize_logs" => tool_summarize_logs(working_dir, args).await,
+        "route_to" => handle_route_to(args, dept),
         "route" => ToolOutput::success_raw("route",
             "请调用 route_to 工具，不要输出文本 route 标签。"),
         _ => ToolOutput::error("unknown_tool", name, "unknown_tool", "未知工具"),
+    }
+}
+
+/// Validate and execute route_to — returns a ToolOutput with `operation: "route_to"`
+/// so the AgentController can detect it in the result and break the tool loop.
+fn handle_route_to(args: &serde_json::Value, dept: &str) -> String {
+    let to_name = args["to"].as_str().unwrap_or("");
+    if to_name.is_empty() {
+        return ToolOutput::error("route_to", "", "missing_target", "缺少目标部门（to 参数）");
+    }
+    let subject = args["subject"].as_str().unwrap_or("");
+    if subject.is_empty() {
+        return ToolOutput::error("route_to", "", "missing_subject", "缺少文档 ID（subject 参数）");
+    }
+    let _type = args["type"].as_str().unwrap_or("task");
+    if !matches!(_type, "task" | "replace" | "interrupt") {
+        return ToolOutput::error("route_to", "", "invalid_type",
+            &format!("无效的路由类型: {}，必须是 task/replace/interrupt", _type));
+    }
+    let _ = dept;
+    ToolOutput::success("route_to", "", &format!("路由到 {}（{}）：{}", to_name, _type, subject))
+}
+
+// ── Special tools (内阁 only) ──────────────────────────────────────
+
+/// Dispatch handler for 内阁's special tools. Returns `Some(result)` if
+/// the tool name matches, `None` to fall through to the normal tool dispatch.
+pub async fn tool_handle_neige_special(
+    name: &str,
+    args: &serde_json::Value,
+    ctx: &ToolContext,
+) -> Option<String> {
+    match name {
+        "cancel_agent" => Some(tool_cancel_agent(args, ctx).await),
+        "update_soul" => Some(tool_update_soul(args, ctx).await),
+        "expand_requirements" => Some(tool_expand_requirements(args, ctx).await),
+        "create_skill" => Some(tool_create_skill(args, ctx).await),
+        _ => None,
+    }
+}
+
+async fn tool_cancel_agent(args: &serde_json::Value, ctx: &ToolContext) -> String {
+    let target = args["to"].as_str().unwrap_or("");
+    if let Some(ref map) = ctx.cancel_map {
+        if let Some(role) = Role::from_name(target) {
+            if let Ok(guard) = map.lock() {
+                if let Some(flag) = guard.get(&role) {
+                    flag.store(true, Ordering::SeqCst);
+                    log_console!("[tool] cancel_agent → {} interrupted", target);
+                    return serde_json::json!({"ok": true, "message": format!("已中断 {} 的当前操作", target)}).to_string();
+                }
+            }
+        }
+        return serde_json::json!({"ok": false, "message": format!("无法中断: {}", target)}).to_string();
+    }
+    serde_json::json!({"ok": false, "message": "cancel_map 不可用"}).to_string()
+}
+
+async fn tool_update_soul(args: &serde_json::Value, ctx: &ToolContext) -> String {
+    let content = args["content"].as_str().unwrap_or("");
+    if content.is_empty() {
+        return r#"{"ok": false, "message": "content 不能为空"}"#.to_string();
+    }
+    if content.len() > 300 {
+        return r#"{"ok": false, "message": "内容过长（最多300字符）"}"#.to_string();
+    }
+    let section = args["section"].as_str();
+    let soul_dir = ctx.working_dir.join(".shuji").join("soul");
+    let soul_path = soul_dir.join("neige.md");
+    let _ = tokio::fs::create_dir_all(&soul_dir).await;
+
+    let entry = format!("- {}\n", content);
+    let result = if let Some(sec) = section {
+        match tokio::fs::read_to_string(&soul_path).await {
+            Ok(existing) => {
+                let heading = format!("## {}", sec);
+                if let Some(pos) = existing.find(&heading) {
+                    let after_heading = &existing[pos + heading.len()..];
+                    let next_heading = after_heading.find("\n## ");
+                    let insert_pos = pos + heading.len()
+                        + next_heading.unwrap_or(after_heading.len());
+                    let mut new_content = existing[..insert_pos].to_string();
+                    if !new_content.ends_with('\n') {
+                        new_content.push('\n');
+                    }
+                    if !new_content.ends_with("\n\n") {
+                        new_content.push('\n');
+                    }
+                    new_content.push_str(&entry);
+                    new_content.push_str(&existing[insert_pos..]);
+                    match tokio::fs::write(&soul_path, &new_content).await {
+                        Ok(_) => Ok(format!("已记录到「{}」章节", sec)),
+                        Err(e) => Err(e),
+                    }
+                } else {
+                    use tokio::io::AsyncWriteExt;
+                    match tokio::fs::OpenOptions::new()
+                        .create(true).append(true).write(true).open(&soul_path).await
+                    {
+                        Ok(mut f) => {
+                            let line = format!("\n## {}\n\n{}", sec, entry);
+                            f.write_all(line.as_bytes()).await.ok();
+                            Ok("已创建章节并记录".to_string())
+                        }
+                        Err(e) => Err(e),
+                    }
+                }
+            }
+            Err(_) => {
+                let default = include_str!("../agent/neige/soul.md");
+                let with_entry = format!("{}\n{}", default, entry);
+                match tokio::fs::write(&soul_path, &with_entry).await {
+                    Ok(_) => Ok("已记录".to_string()),
+                    Err(e) => Err(e),
+                }
+            }
+        }
+    } else {
+        use tokio::io::AsyncWriteExt;
+        match tokio::fs::OpenOptions::new()
+            .create(true).append(true).write(true).open(&soul_path).await
+        {
+            Ok(mut f) => {
+                f.write_all(entry.as_bytes()).await.ok();
+                Ok("已记录".to_string())
+            }
+            Err(e) => Err(e),
+        }
+    };
+
+    match result {
+        Ok(msg) => {
+            log_console!("[tool] update_soul → {} (section={})", content, section.unwrap_or("末尾"));
+            serde_json::json!({"ok": true, "message": msg}).to_string()
+        }
+        Err(e) => {
+            serde_json::json!({"ok": false, "message": format!("写入失败: {}", e)}).to_string()
+        }
+    }
+}
+
+async fn tool_expand_requirements(args: &serde_json::Value, ctx: &ToolContext) -> String {
+    let task_id = args["task_id"].as_str().unwrap_or("");
+    if task_id.is_empty() {
+        return r#"{"ok": false, "message": "task_id 不能为空"}"#.to_string();
+    }
+    let client = match ctx.client.as_ref() {
+        Some(c) => c,
+        None => return serde_json::json!({"ok": false, "message": "API客户端不可用"}).to_string(),
+    };
+    let model = match ctx.model.as_ref() {
+        Some(m) => m,
+        None => return serde_json::json!({"ok": false, "message": "模型不可用"}).to_string(),
+    };
+    match crate::agent::expand_requirements::run(task_id, &ctx.working_dir, client, model).await {
+        Ok(doc_id) => {
+            log_console!("[tool] expand_requirements → {}", doc_id);
+            serde_json::json!({"ok": true, "document_id": doc_id}).to_string()
+        }
+        Err(e) => {
+            log_console!("[tool] expand_requirements 失败: {}", e);
+            serde_json::json!({"ok": false, "message": e}).to_string()
+        }
+    }
+}
+
+async fn tool_create_skill(args: &serde_json::Value, ctx: &ToolContext) -> String {
+    let skill_name = args["name"].as_str().unwrap_or("");
+    let description = args["description"].as_str().unwrap_or("");
+    let content = args["content"].as_str().unwrap_or("");
+    if skill_name.is_empty() || content.is_empty() {
+        return r#"{"ok": false, "message": "name 和 content 不能为空"}"#.to_string();
+    }
+    if skill_name.chars().any(|c| !c.is_alphanumeric() && c != '_' && c != '-') {
+        return r#"{"ok": false, "message": "name 只能包含英文字母、数字、下划线和连字符"}"#.to_string();
+    }
+    let skills_dir = ctx.working_dir.join(".shuji").join("skills");
+    let _ = tokio::fs::create_dir_all(&skills_dir).await;
+    let skill_path = skills_dir.join(format!("{}.md", skill_name));
+    let file_content = format!("# {}\n\n{}\n\n---\n\n{}", skill_name, description, content);
+    match tokio::fs::write(&skill_path, &file_content).await {
+        Ok(_) => {
+            log_console!("[tool] create_skill → {} ({})", skill_name, description);
+            serde_json::json!({
+                "ok": true,
+                "message": format!("技能 {} 已创建", skill_name),
+                "skill_name": skill_name
+            }).to_string()
+        }
+        Err(e) => {
+            serde_json::json!({"ok": false, "message": format!("写入失败: {}", e)}).to_string()
+        }
     }
 }
 
@@ -804,7 +1052,7 @@ const SYSTEM_BLOCKS: &[(&str, &str)] = &[
     ("net user", "禁止管理用户账户"),
     ("net localgroup", "禁止管理用户组"),
     ("cacls", "禁止修改文件权限"),
-    ("wget ", "禁止远程下载执行"),
+    ("wget", "禁止远程下载执行"),
     ("powershell -enc", "禁止编码执行PowerShell"),
     ("certutil -urlcache", "禁止远程下载"),
     ("bitsadmin /transfer", "禁止远程下载"),
@@ -817,4 +1065,6 @@ const PATH_ESCAPE: &[&str] = &[
     "/windows", "/windows/system32", "/program files", "/programdata", "/users",
     "%systemroot%", "%windir%", "%appdata%", "%programfiles%",
 ];
+
+
 

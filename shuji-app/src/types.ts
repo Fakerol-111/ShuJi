@@ -103,6 +103,17 @@ export interface TokenUsage {
   call_count: number;
 }
 
+// Per-role context usage stats
+export interface ContextStats {
+  message_count: number;
+  char_count: number;
+  char_threshold: number;
+  history_char_count: number;
+  history_threshold: number;
+  compressed: boolean;
+  skill_count: number;
+}
+
 // API configuration
 export interface RoleEndpoint {
   api_key: string;

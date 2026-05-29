@@ -73,12 +73,6 @@ impl AppConfig {
             })
     }
 
-    /// Returns true if any role has a non-empty api_key.
-    #[allow(dead_code)] // used externally by frontend config check
-    pub fn has_any_key(&self) -> bool {
-        self.roles.values().any(|r| !r.api_key.is_empty())
-    }
-
     /// Build AppConfig from parsed .env vars.
     fn from_dotenv(vars: &HashMap<String, String>) -> Self {
         let mut roles = HashMap::new();
@@ -138,7 +132,7 @@ pub async fn get_config() -> Result<AppConfig, String> {
 pub async fn save_config(config: AppConfig) -> Result<(), String> {
     let path = dotenv_path();
     let content = config.to_dotenv_lines().join("\n");
-    std::fs::write(&path, &content).map_err(friendly_error)?;
+    tokio::fs::write(&path, &content).await.map_err(friendly_error)?;
     Ok(())
 }
 
@@ -146,7 +140,7 @@ pub async fn save_config(config: AppConfig) -> Result<(), String> {
 #[tauri::command]
 pub async fn set_dotenv_key(key: String, value: String) -> Result<(), String> {
     let path = dotenv_path();
-    let content = std::fs::read_to_string(&path).unwrap_or_default();
+    let content = tokio::fs::read_to_string(&path).await.unwrap_or_default();
     let mut lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
     let target = format!("{}=", key);
     let mut found = false;
@@ -166,6 +160,6 @@ pub async fn set_dotenv_key(key: String, value: String) -> Result<(), String> {
         lines.push(format!("{}={}", key, value));
         lines.push(String::new());
     }
-    std::fs::write(&path, lines.join("\n")).map_err(friendly_error)?;
+    tokio::fs::write(&path, lines.join("\n")).await.map_err(friendly_error)?;
     Ok(())
 }

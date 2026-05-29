@@ -1,3 +1,4 @@
+import { cancelProcessing } from "../api";
 import ChatBubble from "./ChatBubble";
 import ChatInput from "./ChatInput";
 import type { ChatMessage, PlanInfo } from "../types";
@@ -21,6 +22,14 @@ export default function ChatPanel(props: ChatPanelProps) {
       <>
         {planInfo && <PlanCard info={planInfo} />}
         <MessageList messages={messages} onOption={onOption} endRef={endRef} />
+        <div className="shrink-0 px-4 py-2 border-t border-ink-200 bg-white">
+          <button
+            onClick={() => cancelProcessing()}
+            className="w-full px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 active:bg-red-800 rounded transition-colors"
+          >
+            中断所有操作
+          </button>
+        </div>
         <ChatInput onSend={onSend} disabled={false} placeholder="输入指令..." />
       </>
     );
