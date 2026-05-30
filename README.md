@@ -77,17 +77,6 @@ npm run tauri build
 5. `dept_log_tx` → 前端 `dept-log` 事件（DeptStatusPanel 实时面板）
 6. `milestone_tx` → 持久化项目状态里程碑到 `.shuji/state.json`
 
-## 发布
-
-打 tag 推送自动触发 GitHub Actions 构建：
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-构建完成后在 GitHub Releases 页面发布 Draft Release。工作流定义见 `.github/workflows/publish.yml`。
-
 ## 设计理念
 
 - **文档是契约** — 部门间通过文档通信，不靠 LLM 对话传递上下文
