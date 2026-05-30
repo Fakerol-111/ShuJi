@@ -173,9 +173,8 @@ export default function SetupPage() {
             </button>
             {showAdvanced && (
               <div className="mt-2 p-3 bg-ink-50 rounded-lg text-[11px] text-ink-500 space-y-1">
-                <p>如需为各部门单独配置 API key，请在应用启动后编辑生成的 <code className="text-ink-700">.env</code> 文件。</p>
-                <p>格式：<code className="text-ink-700">NEIGE_API_KEY=sk-xxx</code></p>
-                <p className="mt-2">当前默认 key 将被所有部门共享使用。</p>
+                <p>进入主界面后点击右上角 <strong>设置</strong>，可为各部门分别配置 API。</p>
+                <p>当前默认 key 将被所有部门共享，除非在设置中单独覆盖。</p>
               </div>
             )}
           </div>
@@ -206,7 +205,7 @@ export default function SetupPage() {
         </div>
 
         <p className="text-center text-[11px] text-ink-400 mt-6">
-          密钥将写入工作目录的 .env 文件，可在 <a href="https://platform.deepseek.com/api_keys" className="text-ink-500 hover:text-ink-700 underline" target="_blank" rel="noopener noreferrer">DeepSeek</a> 或其他平台获取
+          密钥仅保存在本地，可在进入主界面后随时修改
         </p>
       </div>
     </div>

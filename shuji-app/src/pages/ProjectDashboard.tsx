@@ -49,10 +49,6 @@ export default function ProjectDashboard() {
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [chatWidth, setChatWidth] = useState(400);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [cfgKey, setCfgKey] = useState("");
-  const [cfgUrl, setCfgUrl] = useState("");
-  const [cfgModel, setCfgModel] = useState("");
-  const [cfgMsg, setCfgMsg] = useState("");
   const [showPicker, setShowPicker] = useState(false);
   const [pickerPath, setPickerPath] = useState("");
   const [pickerLoading, setPickerLoading] = useState(false);
@@ -108,7 +104,7 @@ export default function ProjectDashboard() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={openProjectPicker} className="text-xs px-2 py-1 text-ink-400 hover:text-ink-100 hover:bg-ink-800 rounded">打开项目</button>
-          <SettingsMenu open={settingsOpen} setOpen={setSettingsOpen} cfgKey={cfgKey} cfgUrl={cfgUrl} cfgModel={cfgModel} cfgMsg={cfgMsg} setCfgKey={setCfgKey} setCfgUrl={setCfgUrl} setCfgModel={setCfgModel} setCfgMsg={setCfgMsg} />
+          <SettingsMenu open={settingsOpen} setOpen={setSettingsOpen} />
         </div>
       </header>
 
