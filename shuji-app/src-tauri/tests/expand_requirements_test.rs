@@ -1,7 +1,8 @@
-//! 手动测试需求展开 sub-agent。
+//! 手动测试需求展开 sub-agent（需要 .env 中的 API 配置）。
+//! CI 通过 --skip expand_requirements 跳过此文件。
+//!
 //! 运行全部: cd src-tauri && cargo test --test expand_requirements_test -- --nocapture
-//! 运行单个: cargo test --test expand_requirements_test test_NAME -- --nocapture
-//! 需要 .env 中的 API 配置。
+//! 运行单个: cargo test --test expand_requirements_test expand_requirements_1 -- --nocapture
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -76,7 +77,7 @@ fn print_result(doc_id: &str) {
 // ── 测试 1: 极模糊需求 ──────────────────────────────────────────
 
 #[tokio::test]
-async fn test_1_vague() {
+async fn expand_requirements_1_vague() {
     load_env();
     let (client, model) = setup_client();
     setup_task(
@@ -107,7 +108,7 @@ async fn test_1_vague() {
 // ── 测试 2: 较明确需求 ──────────────────────────────────────────
 
 #[tokio::test]
-async fn test_2_clear() {
+async fn expand_requirements_2_clear() {
     load_env();
     let (client, model) = setup_client();
     setup_task(
@@ -143,7 +144,7 @@ async fn test_2_clear() {
 // ── 测试 3: 极宽需求 ────────────────────────────────────────────
 
 #[tokio::test]
-async fn test_3_broad() {
+async fn expand_requirements_3_broad() {
     load_env();
     let (client, model) = setup_client();
     setup_task("task_test3", 300, "皇帝需求：做一个电商系统。");
@@ -170,7 +171,7 @@ async fn test_3_broad() {
 // ── 测试 4: 非功能需求 ──────────────────────────────────────────
 
 #[tokio::test]
-async fn test_4_non_functional() {
+async fn expand_requirements_4_non_functional() {
     load_env();
     let (client, model) = setup_client();
     setup_task(
@@ -201,7 +202,7 @@ async fn test_4_non_functional() {
 // ── 测试 5: 极窄需求 ────────────────────────────────────────────
 
 #[tokio::test]
-async fn test_5_narrow() {
+async fn expand_requirements_5_narrow() {
     load_env();
     let (client, model) = setup_client();
     setup_task(
@@ -232,7 +233,7 @@ async fn test_5_narrow() {
 // ── 测试 6: 开发者需求 ──────────────────────────────────────────
 
 #[tokio::test]
-async fn test_6_dev_internal() {
+async fn expand_requirements_6_dev_internal() {
     load_env();
     let (client, model) = setup_client();
     setup_task(
