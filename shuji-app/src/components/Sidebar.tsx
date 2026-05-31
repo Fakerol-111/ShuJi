@@ -1,6 +1,7 @@
 import DocTree from "./DocTree";
 import TokenPanel from "./TokenPanel";
 import ContextPanel from "./ContextPanel";
+import CheckpointPanel from "./CheckpointPanel";
 import type { ActivitySelection } from "./ActivityBar";
 
 function headerLabel(mode: Exclude<ActivitySelection, null>): string {
@@ -8,6 +9,7 @@ function headerLabel(mode: Exclude<ActivitySelection, null>): string {
     case "files": return "项目文件";
     case "stats": return "Token 统计";
     case "context": return "文脉";
+    case "archives": return "存档";
   }
 }
 
@@ -16,6 +18,7 @@ function panel(mode: Exclude<ActivitySelection, null>, projectDir: string, selec
     case "files": return <DocTree projectDir={projectDir} selectedDoc={selectedDoc} onSelect={onDocSelect} />;
     case "stats": return <TokenPanel />;
     case "context": return <ContextPanel />;
+    case "archives": return <CheckpointPanel />;
   }
 }
 

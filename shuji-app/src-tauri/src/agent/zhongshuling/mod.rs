@@ -236,7 +236,7 @@ impl Agent for ZhongshulingAgent {
             }
 
             (result, route) = controller
-                .run(&mut session, &exec, &self.cancel, &tools, None, &config)
+                .run(&mut session, &exec, &self.cancel, &tools, None, &config, Some(&*input.fast_cancel))
                 .await?
                 .into_tuple();
 

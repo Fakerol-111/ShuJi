@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { open } from "@tauri-apps/plugin-dialog";
-import { loadProject, getRecentDirs, getConfig } from "../api";
+import { loadProject, getRecentDirs, getConfig, createDemoProject } from "../api";
 
 export default function WorkspaceSelect() {
   const navigate = useNavigate();
@@ -57,6 +57,31 @@ export default function WorkspaceSelect() {
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-ink-900 mb-2 tracking-wide">枢机</h1>
           <p className="text-ink-500 text-sm">三省六部制自动化软件开发系统</p>
+        </div>
+
+        {/* ── Quick-start for new users ── */}
+        <button
+          onClick={async () => {
+            setLoading(true);
+            setError("");
+            try {
+              const project = await createDemoProject();
+              await loadProject(project.working_dir);
+              navigate("/project");
+            } catch (e) {
+              setError(String(e));
+              setLoading(false);
+            }
+          }}
+          disabled={loading}
+          className="w-full mb-4 px-4 py-3 bg-vermillion text-white rounded-xl hover:bg-vermillion-dark disabled:opacity-40 text-sm font-bold transition-colors shadow-sm"
+        >
+          {loading ? "创建中..." : "🚀 体验枢机 — 5 分钟上手"}
+        </button>
+
+        <div className="relative mb-4">
+          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-ink-200" /></div>
+          <div className="relative flex justify-center text-xs"><span className="bg-white px-2 text-ink-400">或打开已有项目</span></div>
         </div>
 
         <div className="mb-4">

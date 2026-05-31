@@ -137,11 +137,19 @@ export interface DeptLogEntry {
 export interface RoleContextConfig {
   char_threshold?: number;
   keep_recent_count?: number;
-  history_char_threshold?: number;
+  mid_run_compact?: boolean;
 }
 
 export interface ContextWindowConfig {
   roles: Record<string, RoleContextConfig>;
+}
+
+// Checkpoint entry
+export interface CheckpointEntry {
+  ts: string;
+  role: string;
+  description: string;
+  commit: string;
 }
 
 // 工部 plan progress (from plan-update Tauri event)
@@ -155,4 +163,15 @@ export interface PlanInfo {
   batches: PlanBatch[];
   current: number;
   complete: boolean;
+}
+
+// Live round metrics (from get_round_metrics)
+export interface RoundMetrics {
+  started_at: number;
+  current_role: string;
+  skill: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  dept_iterations: Record<string, number>;
 }

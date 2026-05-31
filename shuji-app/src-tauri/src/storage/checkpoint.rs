@@ -88,6 +88,38 @@ pub async fn load_index(working_dir: &Path) -> Vec<CheckpointEntry> {
     serde_json::from_str(&content).ok().unwrap_or_default()
 }
 
+/// Find a checkpoint entry in the index by commit hash.
+/// Returns (role_name, entry) if found.
+pub async fn find_checkpoint(
+    working_dir: &Path,
+    commit_hash: &str,
+) -> Option<(String, CheckpointEntry)> {
+    let entries = load_index(working_dir).await;
+    entries.into_iter().find_map(|e| {
+        if e.commit == commit_hash {
+            Some((e.role.clone(), e))
+        } else {
+            None
+        }
+    })
+}
+
+/// Load the session snapshot for a specific checkpoint.
+pub async fn load_snapshot(
+    working_dir: &Path,
+    role: &str,
+    commit_hash: &str,
+) -> Option<SessionSnapshot> {
+    let snapshot_path = working_dir
+        .join(".shuji")
+        .join("checkpoints")
+        .join(role)
+        .join(format!("{}.json", commit_hash));
+    let content = tokio::fs::read_to_string(&snapshot_path).await.ok()?;
+    let data: CheckpointData = serde_json::from_str(&content).ok()?;
+    Some(SessionSnapshot::from_messages(data.session))
+}
+
 // ── Internal helpers ─────────────────────────────────────
 
 async fn git_checkpoint(working_dir: &Path, role: &str, description: &str) -> Option<String> {

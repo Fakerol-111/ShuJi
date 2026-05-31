@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 pub mod fixtures;
 
 use std::path::{Path, PathBuf};
@@ -147,8 +149,8 @@ pub fn assert_path_within_root(root: &Path, resolved: &Path) {
     // Normalize by removing \\?\ prefix if present (Windows)
     let normalize = |p: std::path::PathBuf| -> std::path::PathBuf {
         let s = p.to_string_lossy();
-        if s.starts_with(r"\\?\") {
-            std::path::PathBuf::from(&s[4..])
+        if let Some(stripped) = s.strip_prefix(r"\\?\") {
+            std::path::PathBuf::from(stripped)
         } else {
             p
         }

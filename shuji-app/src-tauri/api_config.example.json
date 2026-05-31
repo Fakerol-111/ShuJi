@@ -1,0 +1,9 @@
+{
+  "roles": {
+    "default": {
+      "api_key": "",
+      "api_url": "https://api.deepseek.com/chat/completions",
+      "model": "deepseek-v4-flash"
+    }
+  }
+}

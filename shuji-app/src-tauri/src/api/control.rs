@@ -188,6 +188,7 @@ impl AgentController {
         tools: &[ToolDefinition],
         force_stop: Option<&AtomicBool>,
         config: &RuntimeConfig,
+        fast_cancel: Option<&AtomicBool>,
     ) -> anyhow::Result<RunResult> {
         let max_iter = max_iterations_for_tools(tools, config);
         let mut last_text = String::new();
@@ -201,8 +202,13 @@ impl AgentController {
         let mut read_without_write: u32 = 0;
 
         for iter in 0..max_iter {
-            // ── Interrupt / force-stop check ────────────────
+            // ── Interrupt / force-stop / fast-cancel check ──
             if cancel.load(Ordering::SeqCst) {
+                self.interrupt(session).await;
+                let result = format!("{}{}", last_text, INTERRUPT_RESPONSE);
+                return Ok(RunResult::Stopped(result));
+            }
+            if fast_cancel.is_some_and(|f| f.load(Ordering::SeqCst)) {
                 self.interrupt(session).await;
                 let result = format!("{}{}", last_text, INTERRUPT_RESPONSE);
                 return Ok(RunResult::Stopped(result));
@@ -236,6 +242,7 @@ impl AgentController {
                 if self.compact_iter_interval > 0
                     && iter > 0
                     && iter % self.compact_iter_interval as usize == 0
+                    && config.context_compaction.mid_run_compact
                 {
                     let snap = session.snapshot();
                     handler(snap.messages).await;
@@ -248,6 +255,14 @@ impl AgentController {
 
             // ── Suspension point B: API just returned, don't process if cancelled ──
             if cancel.load(Ordering::SeqCst) {
+                let result = if last_text.is_empty() {
+                    "已中断".to_string()
+                } else {
+                    last_text.clone()
+                };
+                return Ok(RunResult::Stopped(result));
+            }
+            if fast_cancel.is_some_and(|f| f.load(Ordering::SeqCst)) {
                 let result = if last_text.is_empty() {
                     "已中断".to_string()
                 } else {
@@ -273,6 +288,21 @@ impl AgentController {
                         last_text.push_str(&text);
                     }
                     for (idx, tc) in calls.iter().enumerate() {
+                        // ── Fast cancel check before each tool ──
+                        if fast_cancel.is_some_and(|f| f.load(Ordering::SeqCst)) {
+                            self.interrupt(session).await;
+                            // Feed remaining tool results to keep message state consistent
+                            for remaining in &calls[idx..] {
+                                session.feed_tool_result(
+                                    &remaining.id,
+                                    &remaining.name,
+                                    "已取消：收到快速中断信号",
+                                );
+                            }
+                            let result = format!("{}{}", last_text, INTERRUPT_RESPONSE);
+                            return Ok(RunResult::Stopped(result));
+                        }
+
                         // ── Same-tool watchdog ─────────────
                         let key_arg = tc
                             .args
@@ -309,7 +339,7 @@ impl AgentController {
                                 let my_role = session.role();
 
                                 // Self-routing check
-                                if role_from_name(to_name).map_or(false, |r| r.name() == my_role) {
+                                if role_from_name(to_name).is_some_and(|r| r.name() == my_role) {
                                     let msg = format!(
                                         "禁止路由给自己（{}）。请路由到其他部门，或直接输出结果而非继续路由。",
                                         my_role
@@ -353,7 +383,7 @@ impl AgentController {
                                     .map(|s| s.to_string());
                                 let route = RouteTo {
                                     target,
-                                    msg_type: msg_type,
+                                    msg_type,
                                     subject,
                                     payload,
                                 };

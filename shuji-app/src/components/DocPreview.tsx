@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { readShujiDoc } from "../api";
+import { readShujiDoc, setDocumentStatus as apiSetStatus, sendMessage } from "../api";
 
 interface DocPreviewProps {
   projectDir: string;
@@ -12,10 +12,14 @@ export default function DocPreview({ projectDir, docPath }: DocPreviewProps) {
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [approving, setApproving] = useState(false);
+  const [approvalError, setApprovalError] = useState("");
+  const [comment, setComment] = useState("");
 
   useEffect(() => {
     setLoading(true);
     setError("");
+    setApprovalError("");
     readShujiDoc(projectDir, docPath)
       .then((doc) => setContent(doc.content))
       .catch((e) => setError(String(e)))
@@ -26,6 +30,25 @@ export default function DocPreview({ projectDir, docPath }: DocPreviewProps) {
   const isMarkdown = docPath.endsWith(".md");
   const parsed = useMemo(() => parseFrontmatter(content), [content]);
   const parts = docPath.split("/");
+  const docId = isShujiMarkdown && parsed.meta?.id || docPath.split("/").pop()?.replace(/\.md$/, "") || "";
+  const docStatus = parsed.meta?.status || "";
+
+  const handleApproval = async (status: "approved" | "rejected") => {
+    setApproving(true);
+    setApprovalError("");
+    try {
+      const msg = status === "approved" ? `朕已御批。${comment ? " " + comment : ""}` : `驳回。${comment ? " " + comment : ""}`;
+      await apiSetStatus(docId, status, comment || undefined);
+      await sendMessage(msg);
+      // Re-fetch to update banner status
+      const doc = await readShujiDoc(projectDir, docPath);
+      setContent(doc.content);
+    } catch (e) {
+      setApprovalError(String(e));
+    } finally {
+      setApproving(false);
+    }
+  };
 
   if (loading) return <div className="p-6 text-sm text-ink-400">加载文件...</div>;
   if (error) return <div className="p-6 text-sm text-vermillion">{error}</div>;
@@ -40,6 +63,44 @@ export default function DocPreview({ projectDir, docPath }: DocPreviewProps) {
             </span>
           ))}
         </div>
+
+        {/* ── "待陛下朱批" banner ── */}
+        {docStatus === "in_review" && (
+          <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-amber-900">待陛下朱批</h3>
+                <p className="text-xs text-amber-700 mt-0.5">此文档需皇帝御批后方可继续执行</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleApproval("approved")}
+                  disabled={approving}
+                  className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition disabled:opacity-50"
+                >
+                  {approving ? "处理中..." : "批准"}
+                </button>
+                <button
+                  onClick={() => handleApproval("rejected")}
+                  disabled={approving}
+                  className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition disabled:opacity-50"
+                >
+                  驳回
+                </button>
+              </div>
+            </div>
+            <div className="mt-2">
+              <input
+                type="text"
+                placeholder="御批备注（可选）..."
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                className="w-full px-3 py-1.5 border border-amber-300 rounded text-sm bg-white"
+              />
+            </div>
+            {approvalError && <p className="text-xs text-red-600 mt-1">{approvalError}</p>}
+          </div>
+        )}
 
         {isShujiMarkdown && parsed.meta && <FrontmatterCard meta={parsed.meta} />}
 
@@ -134,17 +195,26 @@ function FrontmatterCard({ meta }: { meta: Record<string, string> }) {
     author: "作者",
     timestamp: "时间",
     refs: "引用",
+    status: "状态",
   };
   return (
     <div className="mb-5 rounded-xl border border-ink-200 bg-white p-4 shadow-sm">
       <div className="text-[10px] uppercase tracking-wider text-ink-400 mb-2">Frontmatter</div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {Object.entries(meta).map(([key, value]) => (
-          <div key={key} className="flex text-xs font-mono">
-            <span className="w-20 shrink-0 text-ink-400">{labels[key] || key}</span>
-            <span className="text-ink-700 break-all">{value}</span>
-          </div>
-        ))}
+        {Object.entries(meta).map(([key, value]) => {
+          const statusColor = key === "status" && value === "in_review" ? "text-amber-700 font-bold" :
+            key === "status" && value === "approved" ? "text-green-700 font-bold" :
+            key === "status" && value === "rejected" ? "text-red-700 font-bold" :
+            "text-ink-700";
+          if (key === "notes" && !value) return null;
+          if (key === "status" && !value) return null;
+          return (
+            <div key={key} className="flex text-xs font-mono">
+              <span className="w-20 shrink-0 text-ink-400">{labels[key] || key}</span>
+              <span className={`break-all ${statusColor}`}>{value}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

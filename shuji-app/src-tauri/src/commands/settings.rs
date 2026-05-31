@@ -239,7 +239,7 @@ pub async fn set_dotenv_key(key: String, value: String) -> Result<(), String> {
         }
     }
     if !found {
-        while lines.last().map_or(false, |l| l.trim().is_empty()) {
+        while lines.last().is_some_and(|l| l.trim().is_empty()) {
             lines.pop();
         }
         lines.push(format!("{}={}", key, value));
@@ -294,5 +294,131 @@ pub async fn save_context_config(config: ContextWindowConfig) -> Result<(), Stri
     tokio::fs::write(&path, &content)
         .await
         .map_err(friendly_error)?;
+    Ok(())
+}
+
+/// Reset context_config.json to default (empty overrides).
+#[tauri::command]
+pub async fn reset_context_config() -> Result<(), String> {
+    let path = context_config_path();
+    tokio::fs::write(&path, "{}")
+        .await
+        .map_err(friendly_error)?;
+    log_console!("[debug] reset context_config to defaults");
+    Ok(())
+}
+
+/// Probe the given API endpoint with a minimal chat request.
+/// Returns "ok" on success, or a translated error on failure.
+/// Timeout is 10 seconds — designed for Settings/SetupPage health check.
+#[tauri::command]
+pub async fn check_api_connection(
+    api_key: String,
+    api_url: String,
+    model: String,
+) -> Result<String, String> {
+    use crate::api::client::AnthropicClient;
+    use crate::models::message::Message;
+    use std::time::Duration;
+    use tokio::time::timeout;
+
+    let client = AnthropicClient::new(api_key, api_url.clone());
+
+    let msg = Message::user("ping");
+    let result = timeout(
+        Duration::from_secs(10),
+        client.send_message("respond with pong", &[msg], &model),
+    )
+    .await;
+
+    match result {
+        Ok(Ok(_response)) => Ok("ok".into()),
+        Ok(Err(e)) => Err(friendly_error(e)),
+        Err(_) => Err("连接超时（10 秒），请检查 API URL 和网络连接".to_string()),
+    }
+}
+
+// ── Workflow preset ─────────────────────────────────────────
+
+/// Resolve the workflow_preset file path relative to a project directory.
+fn workflow_preset_path(project_dir: &str) -> std::path::PathBuf {
+    std::path::Path::new(project_dir).join(".shuji").join("workflow_preset.json")
+}
+
+/// Read the current workflow preset. Returns "standard" if not set.
+#[tauri::command]
+pub async fn get_workflow_preset(state: tauri::State<'_, crate::commands::project::AppState>) -> Result<String, String> {
+    let dir = state.current_dir.lock().await.clone().ok_or("没有打开的项目")?;
+    let path = workflow_preset_path(&dir);
+    match tokio::fs::read_to_string(&path).await {
+        Ok(content) => {
+            let val: serde_json::Value = serde_json::from_str(&content).map_err(friendly_error)?;
+            Ok(val["preset"].as_str().unwrap_or("standard").to_string())
+        }
+        Err(_) => Ok("standard".to_string()),
+    }
+}
+
+/// Set the workflow preset. Valid values: full, standard, fast, audit.
+#[tauri::command]
+pub async fn set_workflow_preset(state: tauri::State<'_, crate::commands::project::AppState>, preset: String) -> Result<(), String> {
+    if !matches!(preset.as_str(), "full" | "standard" | "fast" | "audit") {
+        return Err(format!("无效的预设: {}（可选: full, standard, fast, audit）", preset));
+    }
+    let dir = state.current_dir.lock().await.clone().ok_or("没有打开的项目")?;
+    let path = workflow_preset_path(&dir);
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await.map_err(friendly_error)?;
+    }
+    let content = serde_json::json!({ "preset": preset });
+    tokio::fs::write(&path, serde_json::to_string_pretty(&content).map_err(friendly_error)?)
+        .await
+        .map_err(friendly_error)?;
+    log_console!("[settings] workflow preset set to: {}", preset);
+    Ok(())
+}
+
+// ── Soul management ─────────────────────────────────────────────────
+
+fn soul_path(project_dir: &str) -> std::path::PathBuf {
+    std::path::Path::new(project_dir)
+        .join(".shuji")
+        .join("soul")
+        .join("neige.md")
+}
+
+/// Read soul content for the current project.
+#[tauri::command]
+pub async fn get_soul_content(
+    state: tauri::State<'_, crate::commands::project::AppState>,
+) -> Result<String, String> {
+    let dir = state.current_dir.lock().await.clone().ok_or("没有打开的项目")?;
+    let path = soul_path(&dir);
+    if path.exists() {
+        tokio::fs::read_to_string(&path)
+            .await
+            .map_err(friendly_error)
+    } else {
+        Ok(String::new())
+    }
+}
+
+/// Reset soul to the default template (embedded in source).
+#[tauri::command]
+pub async fn clear_soul(
+    state: tauri::State<'_, crate::commands::project::AppState>,
+) -> Result<(), String> {
+    let dir = state.current_dir.lock().await.clone().ok_or("没有打开的项目")?;
+    let path = soul_path(&dir);
+    let default = include_str!("../agent/neige/soul.md");
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(friendly_error)?;
+    }
+    tokio::fs::write(&path, default)
+        .await
+        .map_err(friendly_error)?;
+    log_console!("[settings] soul cleared to default");
     Ok(())
 }

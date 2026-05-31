@@ -38,21 +38,21 @@ fn test_actor_message_interrupt_creation() {
 #[test]
 fn test_cancel_flag_initial_state() {
     let cancel = Arc::new(AtomicBool::new(false));
-    assert_eq!(cancel.load(Ordering::SeqCst), false);
+    assert!(!cancel.load(Ordering::SeqCst));
 }
 
 #[test]
 fn test_cancel_flag_set() {
     let cancel = Arc::new(AtomicBool::new(false));
     cancel.store(true, Ordering::SeqCst);
-    assert_eq!(cancel.load(Ordering::SeqCst), true);
+    assert!(cancel.load(Ordering::SeqCst));
 }
 
 #[test]
 fn test_cancel_flag_reset() {
     let cancel = Arc::new(AtomicBool::new(true));
     cancel.store(false, Ordering::SeqCst);
-    assert_eq!(cancel.load(Ordering::SeqCst), false);
+    assert!(!cancel.load(Ordering::SeqCst));
 }
 
 #[test]
@@ -65,7 +65,7 @@ fn test_cancel_flag_shared_across_threads() {
     });
 
     handle.join().unwrap();
-    assert_eq!(cancel.load(Ordering::SeqCst), true);
+    assert!(cancel.load(Ordering::SeqCst));
 }
 
 // ── DeptLogEntry 测试 ─────────────────────────────────────────

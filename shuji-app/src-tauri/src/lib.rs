@@ -1,3 +1,8 @@
+// 存量 clippy warning 允许项 — 逐文件消解
+#![allow(clippy::type_complexity, clippy::too_many_arguments)]
+#![allow(clippy::new_without_default, clippy::derivable_impls)]
+#![allow(clippy::doc_lazy_continuation)]
+
 /// Console logging via a dedicated writer task.
 /// Sends formatted lines through an mpsc channel; a single background
 /// task drains and writes to stderr sequentially, preventing interleaving.
@@ -15,6 +20,7 @@ mod commands;
 pub mod config;
 mod logging;
 pub mod models;
+mod round_metrics;
 mod storage;
 mod token_tracker;
 pub mod tool;
@@ -60,13 +66,24 @@ pub fn run() {
             commands::workflow::cancel_processing,
             commands::workflow::get_chat_history,
             commands::workflow::get_dept_logs,
+            commands::workflow::get_round_metrics,
+            commands::workflow::set_document_status,
+            commands::demo::create_demo_project,
             commands::settings::get_config,
             commands::settings::save_config,
             commands::settings::set_dotenv_key,
             commands::settings::get_context_config,
             commands::settings::save_context_config,
+            commands::settings::reset_context_config,
+            commands::settings::check_api_connection,
+            commands::settings::get_workflow_preset,
+            commands::settings::set_workflow_preset,
+            commands::settings::get_soul_content,
+            commands::settings::clear_soul,
             commands::shuji_docs::list_shuji_tree,
             commands::shuji_docs::read_shuji_doc,
+            commands::checkpoint::list_checkpoints,
+            commands::checkpoint::restore_checkpoint,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

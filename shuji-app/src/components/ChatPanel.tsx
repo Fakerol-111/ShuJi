@@ -12,11 +12,12 @@ interface ChatPanelProps {
   onOption: (key: string, supplement?: string) => void;
   onSend: (text: string) => void;
   onDiscuss: (text: string) => void;
+  onConvertToCommand: (text: string) => void;
   endRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export default function ChatPanel(props: ChatPanelProps) {
-  const { tab, messages, discussMsgs, discussing, planInfo, onOption, onSend, onDiscuss, endRef } = props;
+  const { tab, messages, discussMsgs, discussing, planInfo, onOption, onSend, onDiscuss, onConvertToCommand, endRef } = props;
   if (tab === "decision") {
     return (
       <>
@@ -37,6 +38,19 @@ export default function ChatPanel(props: ChatPanelProps) {
   return (
     <>
       <MessageList messages={discussMsgs} onOption={() => {}} endRef={endRef} thinking={discussing} />
+      {discussMsgs.length > 0 && !discussing && (
+        <div className="shrink-0 px-4 py-2 border-t border-ink-200 bg-white">
+          <button
+            onClick={() => {
+              const lastUserMsg = [...discussMsgs].reverse().find(m => m.role === "user" || m.role === "皇帝");
+              if (lastUserMsg) onConvertToCommand(lastUserMsg.content);
+            }}
+            className="w-full px-3 py-2 text-xs font-medium text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors"
+          >
+            将此事转为正式敕命
+          </button>
+        </div>
+      )}
       <ChatInput onSend={onDiscuss} disabled={discussing} placeholder="与内阁讨论..." />
     </>
   );

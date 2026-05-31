@@ -1,3 +1,4 @@
+use crate::actor::FastMessage;
 use crate::api::client::AnthropicClient;
 use crate::models::role::Role;
 use serde::Serialize;
@@ -7,6 +8,7 @@ use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::io::AsyncReadExt;
+use tokio::sync::mpsc;
 
 pub mod documents;
 pub mod registry;
@@ -23,6 +25,8 @@ pub struct ToolContext {
     pub cancel_map: Option<Arc<Mutex<HashMap<Role, Arc<AtomicBool>>>>>,
     pub client: Option<Arc<AnthropicClient>>,
     pub model: Option<String>,
+    /// Fast mailbox senders for interrupting departments immediately.
+    pub fast_txs: Option<Arc<HashMap<Role, mpsc::UnboundedSender<FastMessage>>>>,
 }
 
 /// Resolve a project-relative path against root with safety checks.
@@ -370,6 +374,86 @@ pub fn rename_file_tool_def() -> crate::api::client::ToolDefinition {
     }
 }
 
+// ── apply_patch helper ────────────────────────────────────────
+
+/// Apply a unified diff patch to an existing file using the `diffy` crate.
+/// The patch format is standard unified diff (`diff -u old new`).
+/// Supports both creating new files (patch to /dev/null) and modifying
+/// existing files.  Returns the full patched file content on success.
+pub async fn tool_apply_patch(working_dir: &Path, args: &serde_json::Value) -> String {
+    let path = args["path"].as_str().unwrap_or("");
+    let patch_str = args["patch"].as_str().unwrap_or("");
+    if path.is_empty() {
+        return ToolOutput::error("apply_patch", "", "empty_path", "文件路径为空");
+    }
+    if patch_str.is_empty() {
+        return ToolOutput::error("apply_patch", path, "empty_patch", "patch 内容为空");
+    }
+    // Hard limit: 50KB per patch
+    if patch_str.len() > 50_000 {
+        return ToolOutput::error("apply_patch", path, "patch_too_large",
+            &format!("patch 长度 {} 超过上限 50000 字符。请拆分成多次 apply_patch 调用。", patch_str.len()));
+    }
+
+    let full = match resolve_scoped_path(working_dir, path).await {
+        Ok(p) => p,
+        Err(e) => return ToolOutput::error("apply_patch", path, "path_error", &e),
+    };
+
+    // Ensure parent dir exists
+    if let Some(parent) = full.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+
+    // Read current content (empty string if file doesn't exist — /dev/null case)
+    let old_content = tokio::fs::read_to_string(&full).await.unwrap_or_default();
+
+    // Parse and apply the unified diff
+    let patch = match diffy::Patch::from_str(patch_str) {
+        Ok(p) => p,
+        Err(e) => return ToolOutput::error("apply_patch", path, "patch_parse_error",
+            &format!("patch 解析失败: {}\n\npatch 必须是 unified diff 格式（diff -u 输出）。请使用 --- a/file 和 +++ b/file 头。", e)),
+    };
+
+    let new_content = match diffy::apply(&old_content, &patch) {
+        Ok(c) => c,
+        Err(e) => return ToolOutput::error("apply_patch", path, "patch_apply_error",
+            &format!("patch 应用失败: {}。请确认 patch 的上下文行与原文件内容一致。可先用 read_file 确认最新内容再生成 patch。", e)),
+    };
+
+    match tokio::fs::write(&full, &new_content).await {
+        Ok(_) => ToolOutput::success("apply_patch", path,
+            &format!("patch 应用成功（{} 字节 → {} 字节）", old_content.len(), new_content.len())),
+        Err(e) => ToolOutput::error("apply_patch", path, "write_error", &e.to_string()),
+    }
+}
+
+/// Generate a ToolDefinition for apply_patch.
+pub fn apply_patch_tool_def() -> crate::api::client::ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "apply_patch".into(),
+            description:
+                "应用 unified diff patch 到文件。适用于任何幅度的修改：大段替换（>5行）、重构、批量修改。patch 格式为 `diff -u` 输出。注意：patch 的 ---/+++ 行指定旧/新文件名，系统会自动映射到工作目录。".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "文件路径，相对于项目根目录。patch 中的 ---/+++ 文件名会被忽略，实际修改此路径指定的文件。"
+                    },
+                    "patch": {
+                        "type": "string",
+                        "description": "unified diff 格式的 patch 内容",
+                    }
+                },
+                "required": ["path", "patch"]
+            }),
+        },
+    }
+}
+
 // ── modify_file helper ─────────────────────────────────────────
 
 /// Modify an existing file by replacing matching text (find+replace).
@@ -637,14 +721,14 @@ pub async fn tool_create_file(working_dir: &Path, args: &serde_json::Value) -> S
     if path.is_empty() {
         return ToolOutput::error("create_file", "", "empty_path", "文件路径为空");
     }
-    // Hard limit: 400 characters per call
-    if content.len() > 2000 {
+    // Hard limit: 8000 characters per call
+    if content.len() > 8000 {
         return ToolOutput::error(
             "create_file",
             path,
             "content_too_long",
             &format!(
-                "content 长度 {} 超过上限 2000 字符。请使用 create_file + append_file 分块写入。",
+                "content 长度 {} 超过上限 8000 字符。请使用 create_file + append_file 分块写入。",
                 content.len()
             ),
         );
@@ -740,7 +824,7 @@ pub fn create_file_tool_def(description: &str) -> crate::api::client::ToolDefini
         function: crate::api::client::ToolFunction {
             name: "create_file".into(),
             description: format!(
-                "{}。content ≤2000 字符。大文件用 append_file 分块追加。",
+                "{}。content ≤8000 字符。大文件用 apply_patch 一次性写入。",
                 description
             ),
             parameters: serde_json::json!({
@@ -752,8 +836,8 @@ pub fn create_file_tool_def(description: &str) -> crate::api::client::ToolDefini
                     },
                     "content": {
                         "type": "string",
-                        "description": "文件内容（≤2000字符）",
-                        "maxLength": 2000
+                        "description": "文件内容（≤8000字符）",
+                        "maxLength": 8000
                     }
                 },
                 "required": ["path", "content"]
@@ -894,13 +978,41 @@ pub async fn execute_named_tool(
         "delete_file" => tool_delete_file(working_dir, args).await,
         "rename_file" => tool_rename_file(working_dir, args).await,
         "modify_file" => tool_modify_file(working_dir, args).await,
+        "apply_patch" => tool_apply_patch(working_dir, args).await,
         "create_document" => documents::tool_create_document(working_dir, args, dept).await,
         "modify_document" => documents::tool_modify_document(working_dir, args, dept).await,
-        "append_document" => documents::tool_append_document(working_dir, args, dept).await,
+        "set_document_status" => documents::tool_set_document_status(working_dir, args).await,
+        "append_document" => {
+            // Gate: check refs before appending to a document
+            let id = args["id"].as_str().unwrap_or("");
+            if !id.is_empty() {
+                if let Err(msg) = documents::check_doc_refs_approved_for_route(working_dir, id).await {
+                    ToolOutput::error("append_document", id, "doc_not_approved", &msg)
+                } else {
+                    documents::tool_append_document(working_dir, args, dept).await
+                }
+            } else {
+                documents::tool_append_document(working_dir, args, dept).await
+            }
+        }
         "find_document" => documents::tool_find_document(working_dir, args).await,
         "execute_command" => tool_execute_command(working_dir, args, dept).await,
         "summarize_logs" => tool_summarize_logs(working_dir, args).await,
-        "route_to" => handle_route_to(args, dept),
+        "route_to" => {
+            // Gate: check refs before routing to execution departments
+            let exec_depts = ["尚书令", "吏部", "兵部", "工部", "刑部", "礼部"];
+            let to_name = args["to"].as_str().unwrap_or("");
+            let subject = args["subject"].as_str().unwrap_or("");
+            if exec_depts.contains(&to_name) && !subject.is_empty() {
+                if let Err(msg) = documents::check_doc_refs_approved_for_route(working_dir, subject).await {
+                    ToolOutput::error("route_to", subject, "doc_not_approved", &msg)
+                } else {
+                    handle_route_to(args, dept)
+                }
+            } else {
+                handle_route_to(args, dept)
+            }
+        }
         "route" => {
             ToolOutput::success_raw("route", "请调用 route_to 工具，不要输出文本 route 标签。")
         }
@@ -961,20 +1073,26 @@ pub async fn tool_handle_neige_special(
 
 async fn tool_cancel_agent(args: &serde_json::Value, ctx: &ToolContext) -> String {
     let target = args["to"].as_str().unwrap_or("");
-    if let Some(ref map) = ctx.cancel_map {
-        if let Some(role) = Role::from_name(target) {
+    if let Some(role) = Role::from_name(target) {
+        // Set cancel flag
+        if let Some(ref map) = ctx.cancel_map {
             if let Ok(guard) = map.lock() {
                 if let Some(flag) = guard.get(&role) {
                     flag.store(true, Ordering::SeqCst);
-                    log_console!("[tool] cancel_agent → {} interrupted", target);
-                    return serde_json::json!({"ok": true, "message": format!("已中断 {} 的当前操作", target)}).to_string();
                 }
             }
         }
-        return serde_json::json!({"ok": false, "message": format!("无法中断: {}", target)})
-            .to_string();
+        // Send fast interrupt to immediately stop tool execution
+        if let Some(ref fast_txs) = ctx.fast_txs {
+            if let Some(tx) = fast_txs.get(&role) {
+                let _ = tx.send(FastMessage::Interrupt);
+            }
+        }
+        log_console!("[tool] cancel_agent → {} interrupted", target);
+        return serde_json::json!({"ok": true, "message": format!("已中断 {} 的当前操作", target)}).to_string();
     }
-    serde_json::json!({"ok": false, "message": "cancel_map 不可用"}).to_string()
+    serde_json::json!({"ok": false, "message": format!("无法中断: {}", target)})
+        .to_string()
 }
 
 async fn tool_update_soul(args: &serde_json::Value, ctx: &ToolContext) -> String {
@@ -982,8 +1100,8 @@ async fn tool_update_soul(args: &serde_json::Value, ctx: &ToolContext) -> String
     if content.is_empty() {
         return r#"{"ok": false, "message": "content 不能为空"}"#.to_string();
     }
-    if content.len() > 300 {
-        return r#"{"ok": false, "message": "内容过长（最多300字符）"}"#.to_string();
+    if content.len() > 500 {
+        return r#"{"ok": false, "message": "内容过长（最多500字符）"}"#.to_string();
     }
     let section = args["section"].as_str();
     let soul_dir = ctx.working_dir.join(".shuji").join("soul");
@@ -1064,12 +1182,91 @@ async fn tool_update_soul(args: &serde_json::Value, ctx: &ToolContext) -> String
                 content,
                 section.unwrap_or("末尾")
             );
+
+            // Check soul file size and auto-compact if > 8KB
+            if let Ok(metadata) = tokio::fs::metadata(&soul_path).await {
+                if metadata.len() > 8 * 1024 {
+                    log_console!("[tool] soul 超过 8KB（{}），触发自动压缩", metadata.len());
+                    match compact_soul_file(ctx).await {
+                        Ok(compact_msg) => {
+                            let full_msg = format!("{}. {}", msg, compact_msg);
+                            return serde_json::json!({"ok": true, "message": full_msg}).to_string();
+                        }
+                        Err(e) => {
+                            log_console!("[tool] soul 压缩失败: {}", e);
+                        }
+                    }
+                }
+            }
+
             serde_json::json!({"ok": true, "message": msg}).to_string()
         }
         Err(e) => {
             serde_json::json!({"ok": false, "message": format!("写入失败: {}", e)}).to_string()
         }
     }
+}
+
+/// Compact soul file using LLM when it exceeds 8KB.
+/// Summarizes into a concise version with core 10 items max.
+async fn compact_soul_file(ctx: &ToolContext) -> Result<String, String> {
+    let soul_path = ctx.working_dir.join(".shuji").join("soul").join("neige.md");
+    let content = tokio::fs::read_to_string(&soul_path)
+        .await
+        .map_err(|e| format!("读取 soul 失败: {}", e))?;
+
+    let client = ctx.client.clone().ok_or("LLM 客户端未配置，无法压缩 soul")?;
+    let model = ctx.model.clone().ok_or("LLM 模型未配置")?;
+
+    let prompt = format!(
+        r#"你是一个 soul 压缩工具。soul 是内阁首辅的经验/教训/偏好记录。
+
+当前 soul {} 字节，已超过 8KB 上限。请提炼为核心版本，保留最有价值的条目。
+
+要求：
+- 保留 ## 经验 / ## 教训 / ## 偏好 三个章节
+- 每章节不超过 5 条
+- 保持原有格式（每条用 `- ` 开头）
+- 去除重复或相似条目
+- 总字符数不超过 4000
+
+原始 soul：
+{}"#,
+        content.len(),
+        content
+    );
+
+    let msg = crate::models::message::Message::user(&prompt);
+    let compacted = client
+        .send_message(
+            "请压缩 soul 内容，输出精简版 Markdown（包含 ## 经验 / ## 教训 / ## 偏好）",
+            &[msg],
+            &model,
+        )
+        .await
+        .map_err(|e| format!("LLM 压缩请求失败: {}", e))?
+        .trim()
+        .to_string();
+
+    if compacted.is_empty() || compacted.len() >= content.len() {
+        return Err("压缩结果无效或未减小".to_string());
+    }
+
+    tokio::fs::write(&soul_path, &compacted)
+        .await
+        .map_err(|e| format!("写入压缩后 soul 失败: {}", e))?;
+
+    log_console!(
+        "[tool] soul 压缩完成: {} → {} 字节",
+        content.len(),
+        compacted.len()
+    );
+
+    Ok(format!(
+        "soul 已自动压缩（{} → {} 字节）",
+        content.len(),
+        compacted.len()
+    ))
 }
 
 async fn tool_expand_requirements(args: &serde_json::Value, ctx: &ToolContext) -> String {

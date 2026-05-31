@@ -37,6 +37,9 @@ pub fn init(file_path: &Path) {
 
 /// Record token usage for a given role.
 pub fn record(role: &str, prompt: u64, completion: u64) {
+    // Also update live round metrics
+    crate::round_metrics::add_tokens(prompt, completion);
+
     let mut lock = match RECORDS.lock() {
         Ok(l) => l,
         Err(_) => return,
@@ -51,7 +54,7 @@ pub fn record(role: &str, prompt: u64, completion: u64) {
     // Persist to file after each record
     if let Ok(path_lock) = STORAGE_PATH.lock() {
         if let Some(ref path) = *path_lock {
-            let _ = save_to_file(Path::new(path), &records);
+            let _ = save_to_file(Path::new(path), records);
         }
     }
 }
@@ -104,7 +107,7 @@ fn aggregate(records: &[TokenRecord], window: TokenWindow) -> HashMap<String, To
         }
         let entry = map
             .entry(rec.role.clone())
-            .or_insert_with(TokenUsage::default);
+            .or_default();
         entry.prompt_tokens += rec.prompt_tokens;
         entry.completion_tokens += rec.completion_tokens;
         entry.total_tokens += rec.prompt_tokens + rec.completion_tokens;

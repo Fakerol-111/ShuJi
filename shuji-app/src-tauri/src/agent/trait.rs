@@ -28,6 +28,13 @@ pub struct AgentInput {
     pub context_window_config: Arc<HashMap<String, RoleContextConfig>>,
     /// Runtime configuration
     pub runtime_config: Arc<RuntimeConfig>,
+    /// When true, the agent should restrict itself to read-only tools
+    /// (discuss mode — no document creation, routing, or file writes).
+    pub discuss_mode: bool,
+    /// Fast interrupt flag: set to true when the actor's fast mailbox
+    /// receives an Interrupt signal. AgentController::run() checks this
+    /// before each tool execution and between iterations.
+    pub fast_cancel: Arc<AtomicBool>,
 }
 
 #[derive(Debug, Clone)]

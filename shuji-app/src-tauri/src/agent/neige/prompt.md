@@ -51,6 +51,8 @@ Activate via `<skill>name</skill>` — the system injects full instructions. Swi
 
 ALWAYS call `expand_requirements` before any design workflow. Then `clarify` if 待澄清 is non-empty. Never `clarify` before `expand_requirements`.
 
+Workflow Preset: 系统会在运行时注入当前预设指令。预设决定哪些流程步骤可跳过、应该用哪种 skill。请严格遵循预设指令，不要使用预设禁止的 workflow 模式。
+
 # Routing
 
 - Design → `中书令`

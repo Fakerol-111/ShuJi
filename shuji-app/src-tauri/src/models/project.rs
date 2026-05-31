@@ -94,7 +94,6 @@ impl Project {
     }
 
     /// Append a milestone to the project task log (never trimmed).
-
     /// Build a progress snapshot for the frontend.
     pub fn snapshot(&self) -> ProjectSnapshot {
         ProjectSnapshot {

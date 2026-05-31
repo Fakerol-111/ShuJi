@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { getConfig, saveConfig } from "../api";
+import { getConfig, saveConfig, checkApiConnection } from "../api";
 import type { AppConfig } from "../types";
 
 const API_URL_PRESETS = [
@@ -64,6 +64,13 @@ export default function SetupPage() {
         },
       };
       await saveConfig(config);
+
+      // Probe the API endpoint before navigating
+      await checkApiConnection(
+        config.roles.default.api_key,
+        config.roles.default.api_url,
+        config.roles.default.model,
+      );
       navigate("/", { replace: true });
     } catch (e) {
       setError(String(e));

@@ -46,6 +46,15 @@ impl DeptLogEntry {
     }
 }
 
+/// High-priority messages sent via the fast mailbox channel.
+/// Each actor gets a dedicated bounded mpsc channel (capacity 16) for
+/// interrupt signals that bypass the normal message queue.
+#[derive(Debug, Clone)]
+pub enum FastMessage {
+    /// Immediately stop current tool execution and return.
+    Interrupt,
+}
+
 /// Messages that actors send to each other.
 #[derive(Debug, Clone)]
 pub struct ActorMessage {
@@ -84,6 +93,8 @@ pub struct ActorContext {
     pub role: Role,
     pub agent: Box<dyn Agent>,
     pub rx: mpsc::UnboundedReceiver<ActorMessage>,
+    /// Fast mailbox receiver for high-priority interrupt signals.
+    pub fast_rx: tokio::sync::Mutex<mpsc::UnboundedReceiver<FastMessage>>,
     pub peers: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
     pub emperor_tx: mpsc::UnboundedSender<ChatMessage>,
     pub dept_log_tx: mpsc::UnboundedSender<DeptLogEntry>,
@@ -115,6 +126,8 @@ pub struct ActorContext {
 pub struct ActorSystem {
     /// Senders for all department actors, keyed by Role.
     pub senders: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
+    /// Fast mailbox senders for high-priority interrupt signals.
+    pub fast_txs: HashMap<Role, mpsc::UnboundedSender<FastMessage>>,
     /// Sender for emperor-facing chat messages.
     pub emperor_tx: mpsc::UnboundedSender<ChatMessage>,
     /// Sender for department log entries (→ frontend DeptStatusPanel).
@@ -128,6 +141,7 @@ pub struct ActorSystem {
 impl ActorSystem {
     pub fn new(
         senders: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
+        fast_txs: HashMap<Role, mpsc::UnboundedSender<FastMessage>>,
         emperor_tx: mpsc::UnboundedSender<ChatMessage>,
         dept_log_tx: mpsc::UnboundedSender<DeptLogEntry>,
         cancel_map: Arc<std::sync::Mutex<HashMap<Role, Arc<AtomicBool>>>>,
@@ -135,6 +149,7 @@ impl ActorSystem {
     ) -> Self {
         Self {
             senders,
+            fast_txs,
             emperor_tx,
             dept_log_tx,
             cancel_map,
@@ -157,18 +172,23 @@ impl Drop for ActorSystem {
     fn drop(&mut self) {
         // 1. Set all per-actor cancel flags
         if let Ok(map) = self.cancel_map.lock() {
-            for (_role, flag) in map.iter() {
+            for flag in map.values() {
                 flag.store(true, Ordering::SeqCst);
             }
         }
 
-        // 2. Send Interrupt to all actors so they stop cleanly
-        for (_role, tx) in &self.senders {
+        // 2. Send Interrupt via fast mailboxes to all actors
+        for tx in self.fast_txs.values() {
+            let _ = tx.send(FastMessage::Interrupt);
+        }
+
+        // 3. Send Interrupt to all actors via main mailbox
+        for tx in self.senders.values() {
             let _ = tx.send(ActorMessage::interrupt());
         }
 
         log_console!(
-            "[actor] ActorSystem dropped — all cancel flags set, Interrupt sent to all actors"
+            "[actor] ActorSystem dropped — all cancel flags set, FastMessage::Interrupt sent to all actors"
         );
     }
 }
@@ -271,14 +291,42 @@ pub async fn run_actor(mut ctx: ActorContext) {
             }
         }
 
+        // Track current role for round metrics
+        crate::round_metrics::set_role(&role_name);
+
         // ── Execute (with plan loop for 工部尚书) ────
         log_dept(&ctx, &role_name, "开始处理");
 
         let mut exec_iterations: u32 = 0;
         let mut last_plan_current: Option<usize> = None;
         let max_exec_iterations = ctx.runtime_config.actor.max_exec_iterations;
+        // Fast interrupt: set by draining fast_rx, checked by AgentController
+        let fast_cancel = Arc::new(AtomicBool::new(false));
         'exec: loop {
             exec_iterations += 1;
+            crate::round_metrics::tick_iteration(&role_name);
+
+            // ── Drain fast mailbox ──────────────────────────
+            {
+                let mut fast_rx = ctx.fast_rx.lock().await;
+                while let Ok(msg) = fast_rx.try_recv() {
+                    match msg {
+                        FastMessage::Interrupt => {
+                            fast_cancel.store(true, Ordering::SeqCst);
+                            log_console!("[actor] {}: fast interrupt received", role_name);
+                        }
+                    }
+                }
+            }
+            if fast_cancel.load(Ordering::SeqCst) {
+                log_console!("[actor] {}: breaking exec loop (fast interrupt)", role_name);
+                let _ = ctx.emperor_tx.send(ChatMessage::new(
+                    "系统",
+                    &format!("{} 已被皇帝中断", role_name),
+                ));
+                break 'exec;
+            }
+
             // Safety: break if stuck without plan progress.
             // If the plan's current batch has changed, the agent is making
             // legitimate progress → reset the counter.
@@ -287,7 +335,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
             {
                 if let Some(cur) = plan_json["current"].as_u64() {
                     let cur_usize = cur as usize;
-                    if last_plan_current.map_or(true, |prev| cur_usize != prev) {
+                    if last_plan_current != Some(cur_usize) {
                         // Batch changed — progress is being made, reset counter
                         exec_iterations = 1;
                         last_plan_current = Some(cur_usize);
@@ -335,6 +383,8 @@ pub async fn run_actor(mut ctx: ActorContext) {
                 resume_paused: paused_for_decision,
                 context_window_config: context_config.clone(),
                 runtime_config: ctx.runtime_config.clone(),
+                discuss_mode: false,
+                fast_cancel: fast_cancel.clone(),
             };
 
             let step_result = {
@@ -377,6 +427,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
                         if let Ok(mut s) = ctx.current_skill.lock() {
                             *s = Some(skill_name.clone());
                         }
+                        crate::round_metrics::set_skill(skill_name);
                     }
 
                     // ── Pause for emperor decision ──
@@ -567,7 +618,7 @@ async fn forward_route(ctx: &ActorContext, route: RouteTo) {
 
     // Log routing event to activity log
     ctx.logger
-        .log_route(ctx.role.name(), &target_name, &subject)
+        .log_route(ctx.role.name(), target_name, &subject)
         .await;
 
     match ctx.peers.get(&route.target) {

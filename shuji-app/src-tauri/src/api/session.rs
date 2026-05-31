@@ -509,7 +509,7 @@ impl Session {
                 let text = msg["content"].as_str().unwrap_or("");
                 let has_tools = msg["tool_calls"]
                     .as_array()
-                    .map_or(false, |a| !a.is_empty());
+                    .is_some_and(|a| !a.is_empty());
                 if has_tools {
                     let tool_names: Vec<&str> = msg["tool_calls"]
                         .as_array()
@@ -558,7 +558,7 @@ impl Session {
                         tcs.iter()
                             .filter(|tc| match &tc["function"]["arguments"] {
                                 serde_json::Value::String(s) => {
-                                    !serde_json::from_str::<serde_json::Value>(s).is_ok()
+                                    serde_json::from_str::<serde_json::Value>(s).is_err()
                                 }
                                 serde_json::Value::Object(_) => false,
                                 _ => true,
@@ -764,7 +764,7 @@ impl Session {
             m["role"].as_str() == Some("system")
                 && m["content"]
                     .as_str()
-                    .map_or(false, |c| c.starts_with("## Working mode:"))
+                    .is_some_and(|c| c.starts_with("## Working mode:"))
         }) {
             self.messages[pos] = msg;
         } else {

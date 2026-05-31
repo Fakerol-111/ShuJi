@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { getConfig, saveConfig, getContextConfig, saveContextConfig } from "../api";
+import { getConfig, saveConfig, getContextConfig, saveContextConfig, checkApiConnection, getWorkflowPreset as apiGetPreset, setWorkflowPreset as apiSetPreset } from "../api";
 import { ALL_ROLES } from "../constants";
 import type { RoleEndpoint, ContextWindowConfig } from "../types";
 
@@ -36,14 +36,14 @@ const DEFAULT_EMPTY: RoleFormState = { api_key: "", api_url: "", model: "" };
 interface ContextRoleForm {
   char_threshold: number;
   keep_recent_count: number;
-  history_char_threshold: number;
+  mid_run_compact: boolean;
 }
 
 /// Matches default values in config/mod.rs
 const DEFAULT_CONTEXT_VALUES: ContextRoleForm = {
   char_threshold: 80_000,
   keep_recent_count: 10,
-  history_char_threshold: 2_000,
+  mid_run_compact: true,
 };
 
 function initRoleConfigs(cfg: Record<string, RoleEndpoint>): {
@@ -79,6 +79,9 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
   const [useDefault, setUseDefault] = useState<Record<string, boolean>>({});
   const [expandedRole, setExpandedRole] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState("");
+  const [healthStatus, setHealthStatus] = useState<"idle" | "checking" | "ok" | "fail">("idle");
+  const [healthMsg, setHealthMsg] = useState("");
+  const [workflowPreset, setWorkflowPresetLocal] = useState("standard");
 
   // Context window config state
   const [contextOverrides, setContextOverrides] = useState<Record<string, ContextRoleForm>>({});
@@ -112,8 +115,12 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
     }).catch((e) => console.error("读取上下文配置失败:", e));
   };
 
+  const loadWorkflowPreset = () => {
+    apiGetPreset().then(setWorkflowPresetLocal).catch(() => setWorkflowPresetLocal("standard"));
+  };
+
   const toggle = () => {
-    if (!open) { loadConfig(); loadContextConfig(); }
+    if (!open) { loadConfig(); loadContextConfig(); loadWorkflowPreset(); }
     setOpen(!open);
   };
 
@@ -142,7 +149,7 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
     });
   };
 
-  const setContextOverride = (role: string, field: keyof ContextRoleForm, value: number) => {
+  const setContextOverride = (role: string, field: string, value: number | boolean) => {
     setContextOverrides((prev) => ({
       ...prev,
       [role]: { ...(prev[role] ?? DEFAULT_CONTEXT_VALUES), [field]: value },
@@ -174,8 +181,29 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
       }
       await saveContextConfig({ roles: ctxRoles });
 
+      // Save workflow preset
+      await apiSetPreset(workflowPreset);
+
       setSavedMsg("已保存");
       setTimeout(() => setSavedMsg(""), 2000);
+
+      // Probe default endpoint
+      setHealthStatus("checking");
+      setHealthMsg("");
+      try {
+        const def = effectiveRole("default");
+        if (def.api_key && def.api_url && def.model) {
+          await checkApiConnection(def.api_key, def.api_url, def.model);
+          setHealthStatus("ok");
+          setHealthMsg("连接成功");
+        } else {
+          setHealthStatus("idle");
+          setHealthMsg("");
+        }
+      } catch (e) {
+        setHealthStatus("fail");
+        setHealthMsg(String(e));
+      }
     } catch (e) {
       setSavedMsg(String(e));
     }
@@ -275,7 +303,7 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
           <div className="space-y-0.5 pt-2 border-t border-ink-700">
             <span className="text-[11px] font-semibold text-ink-300">上下文窗口配置</span>
             <div className="text-[10px] text-ink-500 px-1 pb-1">
-              全局默认: {DEFAULT_CONTEXT_VALUES.char_threshold.toLocaleString()} token / 保留{DEFAULT_CONTEXT_VALUES.keep_recent_count}条 / {DEFAULT_CONTEXT_VALUES.history_char_threshold.toLocaleString()} token 摘要
+              全局默认: {DEFAULT_CONTEXT_VALUES.char_threshold.toLocaleString()} token / 保留{DEFAULT_CONTEXT_VALUES.keep_recent_count}条 / mid-run: {DEFAULT_CONTEXT_VALUES.mid_run_compact ? "开启" : "关闭"}
             </div>
             {roleList.map((r) => {
               const isExpanded = expandedRole === r.key;
@@ -313,7 +341,22 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
                         <>
                           <ContextInput label="压缩阈值（token）" value={contextOverrides[r.key]?.char_threshold ?? DEFAULT_CONTEXT_VALUES.char_threshold} onChange={(v) => setContextOverride(r.key, "char_threshold", v)} />
                           <ContextInput label="保留最近消息数" value={contextOverrides[r.key]?.keep_recent_count ?? DEFAULT_CONTEXT_VALUES.keep_recent_count} onChange={(v) => setContextOverride(r.key, "keep_recent_count", v)} />
-                          <ContextInput label="历史摘要合并阈值（token）" value={contextOverrides[r.key]?.history_char_threshold ?? DEFAULT_CONTEXT_VALUES.history_char_threshold} onChange={(v) => setContextOverride(r.key, "history_char_threshold", v)} />
+                          <label className="flex items-center gap-2 py-1">
+                            <span className="text-[10px] text-ink-500">mid-run compact</span>
+                            <button
+                              onClick={() => setContextOverride(r.key, "mid_run_compact", !(contextOverrides[r.key]?.mid_run_compact ?? DEFAULT_CONTEXT_VALUES.mid_run_compact))}
+                              className={`relative w-8 h-4 rounded-full transition-colors ${
+                                (contextOverrides[r.key]?.mid_run_compact ?? DEFAULT_CONTEXT_VALUES.mid_run_compact) ? "bg-ink-500" : "bg-ink-700"
+                              }`}
+                            >
+                              <span className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
+                                (contextOverrides[r.key]?.mid_run_compact ?? DEFAULT_CONTEXT_VALUES.mid_run_compact) ? "translate-x-4" : ""
+                              }`} />
+                            </button>
+                            <span className="text-[10px] text-ink-400">
+                              {(contextOverrides[r.key]?.mid_run_compact ?? DEFAULT_CONTEXT_VALUES.mid_run_compact) ? "开启" : "关闭"}
+                            </span>
+                          </label>
                         </>
                       )}
                     </div>
@@ -321,6 +364,98 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
                 </div>
               );
             })}
+            {/* ── 恢复默认按钮 ── */}
+            <button
+              onClick={async () => {
+                try {
+                  const { resetContextConfig } = await import("../api");
+                  await resetContextConfig();
+                  setContextOverrides({});
+                  setContextUseDefault({});
+                  setSavedMsg("上下文配置已恢复默认");
+                  setTimeout(() => setSavedMsg(""), 2000);
+                } catch (e) {
+                  setSavedMsg(String(e));
+                }
+              }}
+              className="text-[10px] px-2 py-1 mt-1 text-ink-400 hover:text-ink-200 border border-ink-700 hover:border-ink-500 rounded transition-colors"
+            >
+              恢复默认
+            </button>
+          </div>
+
+          {/* ── Soul 管理 ── */}
+          <div className="space-y-1 pt-2 border-t border-ink-700">
+            <span className="text-[11px] font-semibold text-ink-300">Soul 管理</span>
+            <div className="flex gap-2 flex-wrap pt-1">
+              <button
+                onClick={async () => {
+                  try {
+                    const { getSoulContent } = await import("../api");
+                    const content = await getSoulContent();
+                    if (!content) {
+                      setSavedMsg("soul 为空或不存在");
+                      setTimeout(() => setSavedMsg(""), 2000);
+                      return;
+                    }
+                    await navigator.clipboard.writeText(content);
+                    setSavedMsg("soul 已复制到剪贴板");
+                    setTimeout(() => setSavedMsg(""), 2000);
+                  } catch (e) {
+                    setSavedMsg(String(e));
+                  }
+                }}
+                className="text-[10px] px-2 py-1 text-ink-400 hover:text-ink-200 border border-ink-700 hover:border-ink-500 rounded transition-colors"
+              >
+                导出 soul（复制）
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const { clearSoul } = await import("../api");
+                    await clearSoul();
+                    setSavedMsg("soul 已重置为默认");
+                    setTimeout(() => setSavedMsg(""), 2000);
+                  } catch (e) {
+                    setSavedMsg(String(e));
+                  }
+                }}
+                className="text-[10px] px-2 py-1 text-red-400 hover:text-red-300 border border-red-800 hover:border-red-600 rounded transition-colors"
+              >
+                清空 soul
+              </button>
+            </div>
+            <div className="text-[10px] text-ink-500 px-1">
+              soul 超 8KB 时将自动压缩。单条经验/教训/偏好 ≤500 字符。
+            </div>
+          </div>
+
+          {/* ── Workflow preset ── */}
+          <div className="space-y-1 pt-2 border-t border-ink-700">
+            <span className="text-[11px] font-semibold text-ink-300">流程预设</span>
+            <div className="flex gap-1 flex-wrap">
+              {(["full", "standard", "fast", "audit"] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setWorkflowPresetLocal(p)}
+                  className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${
+                    workflowPreset === p
+                      ? "bg-ink-700 text-ink-100 border-ink-600"
+                      : "bg-ink-800 text-ink-400 border-ink-700 hover:border-ink-500"
+                  }`}
+                >
+                  {{ full: "完整治理", standard: "标准", fast: "极速", audit: "审计" }[p]}
+                </button>
+              ))}
+            </div>
+            <div className="text-[10px] text-ink-500 px-1">
+              {{
+                full: "所有流程必经审查。适合高复杂度任务。",
+                standard: "跳过门下审查。适合中等复杂度任务。（默认）",
+                fast: "跳过设计/审查，直达执行。适合小改动。",
+                audit: "强制审查和规范检查。适合合规场景。",
+              }[workflowPreset]}
+            </div>
           </div>
 
           {/* ── Save ── */}
@@ -334,6 +469,19 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
               </span>
             )}
           </div>
+
+          {/* ── Health check indicator ── */}
+          {healthStatus !== "idle" && (
+            <div className={`text-[10px] px-2 py-1 rounded ${
+              healthStatus === "checking" ? "text-ink-400 bg-ink-800" :
+              healthStatus === "ok" ? "text-green-400 bg-green-900/20" :
+              "text-red-400 bg-red-900/20"
+            }`}>
+              {healthStatus === "checking" && "⏳ 探测 API 连接中..."}
+              {healthStatus === "ok" && "✔ 连接成功"}
+              {healthStatus === "fail" && `✘ 连接失败: ${healthMsg}`}
+            </div>
+          )}
         </div>
       )}
     </div>

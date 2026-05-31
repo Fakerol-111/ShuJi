@@ -1,0 +1,203 @@
+import { useState, useEffect, useCallback } from "react";
+import { listCheckpoints, restoreCheckpoint } from "../api";
+import type { CheckpointEntry } from "../types";
+
+interface RestoreConfirm {
+  commit: string;
+  desc: string;
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  neige: "内阁",
+  zhongshuling: "中书令",
+  menxiashizhong: "门下侍中",
+  shangshuling: "尚书令",
+  libushangshu: "吏部尚书",
+  bingbushangshu: "兵部尚书",
+  gongbushangshu: "工部尚书",
+  xingbushangshu: "刑部尚书",
+  liburshangshu: "礼部尚书",
+  zhisi: "制司",
+};
+
+function roleLabel(role: string): string {
+  return ROLE_LABELS[role] || role;
+}
+
+function formatTime(ts: string): string {
+  try {
+    const d = new Date(ts);
+    return d.toLocaleString("zh-CN", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return ts;
+  }
+}
+
+export default function CheckpointPanel() {
+  const [entries, setEntries] = useState<CheckpointEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
+  const [restoreMsg, setRestoreMsg] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<RestoreConfirm | null>(null);
+
+  const fetch = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await listCheckpoints();
+      setEntries(data);
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetch(); }, [fetch]);
+
+  const handleRestore = async () => {
+    if (!confirm) return;
+    setRestoring(true);
+    setRestoreMsg(null);
+    try {
+      const msg = await restoreCheckpoint(confirm.commit);
+      setRestoreMsg(msg);
+      setConfirm(null);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  // ── Loading state ──
+  if (loading && entries.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-32 text-xs text-ink-400">
+        加载中...
+      </div>
+    );
+  }
+
+  // ── Error state ──
+  if (error && entries.length === 0) {
+    return (
+      <div className="p-3">
+        <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">
+          {error}
+        </div>
+        <button onClick={fetch} className="mt-2 text-xs text-ink-500 hover:text-ink-700 underline">
+          重试
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full relative">
+      {/* Header */}
+      <div className="h-9 px-3 border-b border-ink-200 flex items-center justify-between bg-ink-50 shrink-0">
+        <span className="text-xs font-semibold text-ink-700">存档</span>
+        <button
+          onClick={fetch}
+          className="text-[11px] text-ink-400 hover:text-ink-600"
+          title="刷新"
+        >
+          刷新
+        </button>
+      </div>
+
+      {/* Restore success message */}
+      {restoreMsg && (
+        <div className="mx-3 mt-2 p-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded">
+          {restoreMsg}
+        </div>
+      )}
+
+      {/* Body */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
+        {/* Empty state */}
+        {entries.length === 0 && !loading && (
+          <div className="text-xs text-ink-400 text-center py-8">
+            暂无存档
+          </div>
+        )}
+
+        {/* Checkpoint list */}
+        {entries.map((entry) => (
+          <div
+            key={entry.commit}
+            className="border border-ink-200 rounded p-2.5 text-xs space-y-1 hover:border-ink-300 transition-colors"
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-ink-700">
+                {roleLabel(entry.role)}
+              </span>
+              <span className="text-[10px] text-ink-400">
+                {formatTime(entry.ts)}
+              </span>
+            </div>
+            <div className="text-ink-600 truncate" title={entry.description}>
+              {entry.description}
+            </div>
+            <div className="flex items-center justify-between">
+              <code className="text-[10px] text-ink-400 font-mono">
+                {entry.commit.slice(0, 7)}
+              </code>
+              <button
+                onClick={() =>
+                  setConfirm({ commit: entry.commit, desc: entry.description })
+                }
+                disabled={restoring}
+                className="text-[10px] px-2 py-0.5 rounded border border-ink-300 text-ink-600 hover:bg-ink-100 hover:border-ink-400 disabled:opacity-40 transition-colors"
+              >
+                恢复
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Restore confirmation dialog */}
+      {confirm && (
+        <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl mx-4 p-4 max-w-sm w-full">
+            <h3 className="text-sm font-semibold text-ink-800 mb-2">
+              确认恢复
+            </h3>
+            <p className="text-xs text-ink-600 mb-3 leading-relaxed">
+              将执行 git checkout 到 <code className="bg-ink-100 px-1 rounded">{confirm.commit.slice(0, 7)}</code>（{confirm.desc}）。
+            </p>
+            <ul className="text-xs text-ink-500 space-y-1 mb-4 list-disc list-inside">
+              <li>工作区将回到该存档点的状态（detached HEAD）</li>
+              <li>未提交的变更将被 git stash 暂存</li>
+              <li>可在之后通过 git stash pop 取回</li>
+            </ul>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirm(null)}
+                disabled={restoring}
+                className="px-3 py-1.5 text-xs rounded border border-ink-300 text-ink-600 hover:bg-ink-50 disabled:opacity-40"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleRestore}
+                disabled={restoring}
+                className="px-3 py-1.5 text-xs rounded bg-vermillion text-white hover:bg-vermillion-dark disabled:opacity-40"
+              >
+                {restoring ? "恢复中..." : "确认恢复"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

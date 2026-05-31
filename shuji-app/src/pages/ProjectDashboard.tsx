@@ -11,8 +11,10 @@ import DeptStatusBar from "../components/DeptStatusBar";
 import LogBar from "../components/LogBar";
 import ProjectOverview from "../components/ProjectOverview";
 import SettingsMenu from "../components/SettingsMenu";
+import HelpDrawer from "../components/HelpDrawer";
 import ProjectPicker from "../components/ProjectPicker";
 import ChatPanel from "../components/ChatPanel";
+import { createDemoProject } from "../api";
 import type { ActivitySelection } from "../components/ActivityBar";
 
 const STORAGE_KEY = "shuji_chat";
@@ -94,6 +96,27 @@ export default function ProjectDashboard() {
   };
 
   const tabLabels: Record<Tab, string> = { decision: "决策", discuss: "讨论" };
+  const tabSubtitles: Record<Tab, string> = { decision: "下达敕令，驱动各部门执行", discuss: "仅与内阁议政，不改代码、不写文档" };
+
+  const handleConvertToCommand = (text: string) => {
+    handleSend(text);
+    setTab("decision");
+  };
+
+  const handleDemoProject = async () => {
+    try {
+      const project = await createDemoProject();
+      await loadProjectIntoState(project.working_dir);
+      setSelectedDoc(null);
+      resetDiscuss();
+      sessionStorage.removeItem(STORAGE_KEY);
+      setTab("decision");
+      // Auto-send a command so the user immediately sees departments working
+      handleSend("修复 calc.py 中的 power 和 factorial 函数中的 bug，确保所有测试通过");
+    } catch (e) {
+      setChatError(String(e));
+    }
+  };
 
   return (
     <div className="h-screen bg-ink-50 flex flex-col overflow-hidden">
@@ -103,7 +126,9 @@ export default function ProjectDashboard() {
           <span className="text-[11px] text-ink-500 font-mono truncate max-w-[520px]">{project?.working_dir}</span>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={handleDemoProject} className="text-xs px-2 py-1 text-vermillion-light hover:text-white hover:bg-vermillion/20 rounded font-medium">🚀 体验枢机</button>
           <button onClick={openProjectPicker} className="text-xs px-2 py-1 text-ink-400 hover:text-ink-100 hover:bg-ink-800 rounded">打开项目</button>
+          <HelpDrawer />
           <SettingsMenu open={settingsOpen} setOpen={setSettingsOpen} />
         </div>
       </header>
@@ -118,12 +143,15 @@ export default function ProjectDashboard() {
         </main>
         <section className="relative bg-ink-50 border-l border-ink-200 flex flex-col min-h-0 shrink-0" style={{ width: chatWidth }}>
           <div onMouseDown={startResize} className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-vermillion/40 transition-colors" />
-          <div className="h-9 border-b border-ink-200 bg-white flex items-center px-3 gap-1 shrink-0">
-            {(["decision", "discuss"] as Tab[]).map((t) => (
-              <button key={t} onClick={() => setTab(t)} className={`px-3 py-1.5 text-xs rounded ${tab === t ? "bg-ink-900 text-white" : "text-ink-500 hover:bg-ink-100"}`}>{tabLabels[t]}</button>
-            ))}
+          <div className="border-b border-ink-200 bg-white shrink-0">
+            <div className="flex items-center px-3 gap-1 pt-2">
+              {(["decision", "discuss"] as Tab[]).map((t) => (
+                <button key={t} onClick={() => setTab(t)} className={`px-3 py-1.5 text-xs rounded ${tab === t ? "bg-ink-900 text-white" : "text-ink-500 hover:bg-ink-100"}`}>{tabLabels[t]}</button>
+              ))}
+            </div>
+            <div className="px-3 pb-1.5 text-[10px] text-ink-400">{tabSubtitles[tab]}</div>
           </div>
-          {!project ? <div className="flex-1 flex items-center justify-center text-sm text-ink-400">请先加载项目</div> : <ChatPanel tab={tab} messages={messages} discussMsgs={discussMsgs} discussing={discussing} planInfo={planInfo} onOption={(key, supplement) => handleSend(supplement ? `${key}\n${supplement}` : key)} onSend={handleSend} onDiscuss={handleDiscuss} endRef={chatEndRef} />}
+          {!project ? <div className="flex-1 flex items-center justify-center text-sm text-ink-400">请先加载项目</div> : <ChatPanel tab={tab} messages={messages} discussMsgs={discussMsgs} discussing={discussing} planInfo={planInfo} onOption={(key, supplement) => handleSend(supplement ? `${key}\n${supplement}` : key)} onSend={handleSend} onDiscuss={handleDiscuss} onConvertToCommand={handleConvertToCommand} endRef={chatEndRef} />}
         </section>
       </div>
 

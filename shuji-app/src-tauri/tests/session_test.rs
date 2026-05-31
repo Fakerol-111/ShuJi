@@ -178,7 +178,7 @@ fn test_mixed_valid_and_broken_tool_calls() {
 
 #[test]
 fn test_generate_retry_hint_for_broken_tools() {
-    let broken_names = vec!["create_file", "modify_file"];
+    let broken_names = ["create_file", "modify_file"];
     let hint = format!(
         "上一轮输出因长度截断，有 {} 个工具调用丢失（{}）。请重新调用这些工具，本轮最多 1 个。",
         broken_names.len(),
@@ -215,7 +215,7 @@ fn test_max_tokens_doubling_logic() {
 
 #[test]
 fn test_filter_tool_calls_by_valid_ids() {
-    let all_tool_calls = vec![
+    let all_tool_calls = [
         serde_json::json!({
             "id": "call_1",
             "function": {"name": "read_file", "arguments": r#"{"path": "a.txt"}"#}

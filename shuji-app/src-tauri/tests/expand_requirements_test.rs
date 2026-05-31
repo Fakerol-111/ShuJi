@@ -65,7 +65,7 @@ fn print_result(doc_id: &str) {
         for entry in entries.flatten() {
             if let Ok(content) = std::fs::read_to_string(entry.path()) {
                 let fname = entry.file_name().to_string_lossy().to_string();
-                if fname.contains(doc_id.split('_').last().unwrap_or("")) {
+                if fname.contains(doc_id.split('_').next_back().unwrap_or("")) {
                     println!("\n[{}]", entry.path().display());
                     println!("{}", content);
                 }

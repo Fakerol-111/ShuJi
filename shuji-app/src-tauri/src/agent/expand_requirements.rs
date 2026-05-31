@@ -49,7 +49,7 @@ pub async fn run(
     let cancel = std::sync::atomic::AtomicBool::new(false);
 
     let run_result = controller
-        .run(&mut session, &exec, &cancel, &tools, None, &config)
+        .run(&mut session, &exec, &cancel, &tools, None, &config, None)
         .await
         .map_err(|e| format!("??????: {}", e))?;
     let result = run_result.into_text();

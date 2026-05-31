@@ -85,6 +85,10 @@ pub struct ContextCompactionConfig {
     /// 历史消息压缩的字符数阈值
     #[serde(default = "default_history_compact_threshold")]
     pub history_char_threshold: usize,
+
+    /// 是否启用运行中上下文压缩（tool 循环中的 mid-run compact）
+    #[serde(default = "default_compact_mid_run_enabled")]
+    pub mid_run_compact: bool,
 }
 
 /// Actor 系统配置
@@ -124,6 +128,8 @@ pub struct RoleContextConfig {
     pub keep_recent_count: Option<usize>,
     #[serde(default)]
     pub history_char_threshold: Option<usize>,
+    #[serde(default)]
+    pub mid_run_compact: Option<bool>,
 }
 
 /// 已解析的上下文压缩阈值（合并了全局默认值与角色覆盖后）
@@ -132,6 +138,7 @@ pub struct CompactThresholds {
     pub char_threshold: usize,
     pub keep_recent_count: usize,
     pub history_char_threshold: usize,
+    pub mid_run_compact: bool,
 }
 
 /// Checkpoint 保存配置
@@ -201,6 +208,10 @@ fn default_keep_recent_count() -> usize {
 } // keep more context after compaction (was 6)
 fn default_history_compact_threshold() -> usize {
     2_000
+}
+
+fn default_compact_mid_run_enabled() -> bool {
+    true
 }
 
 fn default_max_exec_iterations() -> u32 {
@@ -296,6 +307,7 @@ impl Default for ContextCompactionConfig {
             char_threshold: default_compact_char_threshold(),
             keep_recent_count: default_keep_recent_count(),
             history_char_threshold: default_history_compact_threshold(),
+            mid_run_compact: default_compact_mid_run_enabled(),
         }
     }
 }
@@ -333,6 +345,13 @@ impl RuntimeConfig {
         match Self::from_file(path_ref) {
             Ok(config) => {
                 log_console!("[config] 已从 {} 加载配置", path_ref.display());
+                log_console!(
+                    "[debug] 配置值: api.timeout={}, api.max_retries={}, compact.char_threshold={}, compact.mid_run_compact={}",
+                    config.api.timeout_secs,
+                    config.api.max_retries,
+                    config.context_compaction.char_threshold,
+                    config.context_compaction.mid_run_compact,
+                );
                 config
             }
             Err(e) => {
@@ -379,6 +398,9 @@ impl RuntimeConfig {
             history_char_threshold: ov
                 .and_then(|o| o.history_char_threshold)
                 .unwrap_or(self.context_compaction.history_char_threshold),
+            mid_run_compact: ov
+                .and_then(|o| o.mid_run_compact)
+                .unwrap_or(self.context_compaction.mid_run_compact),
         }
     }
 }

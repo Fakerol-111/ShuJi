@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tauri::{Emitter, Manager, State};
 use tokio::sync::mpsc;
 
-use crate::actor::{ActorContext, ActorMessage, ActorSystem, DeptLogEntry};
+use crate::actor::{ActorContext, ActorMessage, ActorSystem, DeptLogEntry, FastMessage};
 use crate::agent::bingbushangshu::BingbuShangshuAgent;
 use crate::agent::gongbushangshu::GongbuShangshuAgent;
 use crate::agent::liburshangshu::LibuRShangshuAgent;
@@ -53,6 +53,7 @@ fn build_agents(
     config: &AppConfig,
     cancel: Arc<AtomicBool>,
     cancel_map: Arc<std::sync::Mutex<HashMap<Role, Arc<AtomicBool>>>>,
+    fast_txs: Arc<HashMap<Role, mpsc::UnboundedSender<FastMessage>>>,
 ) -> HashMap<Role, Box<dyn Agent>> {
     let mut agents: HashMap<Role, Box<dyn Agent>> = HashMap::new();
 
@@ -84,6 +85,7 @@ fn build_agents(
             &neige_ep.model,
             cancel.clone(),
             Some(cancel_map),
+            Some(fast_txs),
         )),
     );
 
@@ -147,7 +149,31 @@ async fn start_actor_system(
     let cancel_map: Arc<std::sync::Mutex<HashMap<Role, Arc<AtomicBool>>>> =
         Arc::new(std::sync::Mutex::new(HashMap::new()));
 
-    let agents = build_agents(config, cancel.clone(), cancel_map.clone());
+    // Create fast mailboxes for all roles before building agents,
+    // so NeigeAgent can reference fast_txs from its constructor.
+    let all_roles = vec![
+        Role::Neige,
+        Role::Zhongshuling,
+        Role::MenxiaShizhong,
+        Role::Shangshuling,
+        Role::LiBuShangshu,
+        Role::BingbuShangshu,
+        Role::GongbuShangshu,
+        Role::XingbuShangshu,
+        Role::LiBuRShangshu,
+        Role::Zhisi,
+    ];
+    let mut fast_txs: HashMap<Role, mpsc::UnboundedSender<FastMessage>> = HashMap::new();
+    let mut fast_rxs: HashMap<Role, tokio::sync::Mutex<mpsc::UnboundedReceiver<FastMessage>>> =
+        HashMap::new();
+    for role in &all_roles {
+        let (fast_tx, fast_rx) = mpsc::unbounded_channel();
+        fast_txs.insert(*role, fast_tx);
+        fast_rxs.insert(*role, tokio::sync::Mutex::new(fast_rx));
+    }
+    let fast_txs = Arc::new(fast_txs);
+
+    let agents = build_agents(config, cancel.clone(), cancel_map.clone(), fast_txs.clone());
     let mut senders: HashMap<Role, mpsc::UnboundedSender<ActorMessage>> = HashMap::new();
     let mut contexts: Vec<(Role, Box<dyn Agent>, mpsc::UnboundedReceiver<ActorMessage>)> =
         Vec::new();
@@ -187,10 +213,12 @@ async fn start_actor_system(
         let logger = crate::logging::logger::Logger::new(&working_dir.join(".shuji"));
 
         let is_neige = role == Role::Neige;
+        let fast_rx = fast_rxs.remove(&role).unwrap();
         let ctx = ActorContext {
             role,
             agent,
             rx,
+            fast_rx,
             peers,
             emperor_tx: emperor_tx.clone(),
             dept_log_tx: dept_log_tx.clone(),
@@ -218,6 +246,7 @@ async fn start_actor_system(
 
     ActorSystem {
         senders: all_senders,
+        fast_txs: (*fast_txs).clone(),
         emperor_tx,
         dept_log_tx,
         cancel_map,
@@ -235,6 +264,9 @@ pub async fn send_message(
     state: State<'_, AppState>,
     message: String,
 ) -> Result<String, String> {
+    // Start a new round metrics cycle
+    crate::round_metrics::start_round();
+
     let config = crate::commands::settings::get_config()
         .await
         .map_err(friendly_error)?;
@@ -369,6 +401,24 @@ pub async fn send_message(
     let system = sys_lock
         .as_ref()
         .ok_or_else(|| friendly_error("Actor 系统未初始化"))?;
+
+    // Interrupt any currently active non-cabinet department via fast mailbox,
+    // so the emperor's new instruction is handled promptly instead of waiting
+    // for the current tool loop to finish.
+    if let Some(current_role) = crate::round_metrics::current_role_name() {
+        if current_role != Role::Neige.name() {
+            if let Some(role) = Role::from_name(&current_role) {
+                if let Some(tx) = system.fast_txs.get(&role) {
+                    let _ = tx.send(FastMessage::Interrupt);
+                    log_console!(
+                        "[commands] send_message: fast-interrupted {}",
+                        current_role
+                    );
+                }
+            }
+        }
+    }
+
     system
         .send(&Role::Neige, ActorMessage::new(message, RouteMsgType::Task))
         .map_err(friendly_error)?;
@@ -413,7 +463,7 @@ pub async fn discuss_with_cabinet(
 
     let ep = config.for_role("neige");
     let client = AnthropicClient::new(ep.api_key, ep.api_url);
-    let neige = NeigeAgent::new(client, &ep.model, Arc::new(AtomicBool::new(false)), None);
+    let neige = NeigeAgent::new(client, &ep.model, Arc::new(AtomicBool::new(false)), None, None);
 
     let input = AgentInput {
         role: Role::Neige,
@@ -429,6 +479,8 @@ pub async fn discuss_with_cabinet(
         resume_paused: false,
         context_window_config: Arc::new(HashMap::new()),
         runtime_config: state.runtime_config.clone(),
+        discuss_mode: true,
+        fast_cancel: Arc::new(AtomicBool::new(false)),
     };
 
     let output = neige.execute(&input).await.map_err(friendly_error)?;
@@ -645,18 +697,70 @@ pub async fn cancel_processing(state: State<'_, AppState>) -> Result<(), String>
     if let Some(sys) = state.actor_system.lock().await.as_ref() {
         // Set all per-actor cancel flags
         if let Ok(map) = sys.cancel_map.lock() {
-            for (_role, flag) in map.iter() {
+            for flag in map.values() {
                 flag.store(true, std::sync::atomic::Ordering::SeqCst);
             }
             log_console!("[commands] cancel_processing: all per-actor flags set");
         }
 
+        // Send fast interrupt to all actors for immediate tool-level preemption
+        for tx in sys.fast_txs.values() {
+            let _ = tx.send(FastMessage::Interrupt);
+        }
+        log_console!("[commands] cancel_processing: FastMessage::Interrupt sent to all actors");
+
         // Wake idle actors so they don't start new work
-        for (_role, tx) in &sys.senders {
+        for tx in sys.senders.values() {
             let _ = tx.send(crate::actor::ActorMessage::interrupt());
         }
         log_console!("[commands] cancel_processing: Interrupt sent to all actors");
     }
 
     Ok(())
+}
+
+/// Get the current round metrics (live workflow state).
+/// Doesn't need AppState — reads from the global static.
+#[tauri::command]
+pub async fn get_round_metrics() -> Result<Option<crate::round_metrics::RoundMetricState>, String> {
+    Ok(crate::round_metrics::snapshot())
+}
+
+/// Set a document's approval status (approved/rejected).
+/// Frontend calls this from the DocPreview "待陛下朱批" banner.
+#[tauri::command]
+pub async fn set_document_status(
+    state: State<'_, AppState>,
+    id: String,
+    status: String,
+    emperor_note: Option<String>,
+) -> Result<String, String> {
+    let working_dir = {
+        let project_opt = state.current_project.lock().await;
+        let p = project_opt
+            .as_ref()
+            .ok_or_else(|| friendly_error("没有加载项目"))?;
+        p.working_dir.clone()
+    };
+
+    let mut args = serde_json::json!({
+        "id": id,
+        "status": status,
+    });
+    if let Some(note) = emperor_note {
+        args["emperor_note"] = serde_json::Value::String(note);
+    }
+
+    let result = crate::tool::documents::tool_set_document_status(
+        std::path::Path::new(&working_dir),
+        &args,
+    ).await;
+
+    let v: serde_json::Value = serde_json::from_str(&result)
+        .map_err(|_| "解析结果失败".to_string())?;
+    if v["ok"].as_bool().unwrap_or(false) {
+        Ok(v["message"].as_str().unwrap_or("ok").to_string())
+    } else {
+        Err(v["message"].as_str().unwrap_or("未知错误").to_string())
+    }
 }

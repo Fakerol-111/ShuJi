@@ -433,6 +433,7 @@ impl Agent for GongbuShangshuAgent {
                 &tools,
                 Some(&force_stop),
                 &config,
+                Some(&*input.fast_cancel),
             )
             .await?
             .into_tuple();

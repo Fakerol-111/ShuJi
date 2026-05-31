@@ -3,6 +3,9 @@ use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
+use tokio::sync::mpsc;
+
+use crate::actor::FastMessage;
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput};
 use crate::agent::util::{extract_skill, strip_skill_tag};
 use crate::api::client::{AnthropicClient, ToolDefinition};
@@ -14,6 +17,7 @@ pub struct NeigeAgent {
     model: String,
     cancel: Arc<AtomicBool>,
     cancel_map: Option<Arc<Mutex<HashMap<Role, Arc<AtomicBool>>>>>,
+    fast_txs: Option<Arc<HashMap<Role, mpsc::UnboundedSender<FastMessage>>>>,
 }
 
 impl NeigeAgent {
@@ -22,12 +26,14 @@ impl NeigeAgent {
         model: &str,
         cancel: Arc<AtomicBool>,
         cancel_map: Option<Arc<Mutex<HashMap<Role, Arc<AtomicBool>>>>>,
+        fast_txs: Option<Arc<HashMap<Role, mpsc::UnboundedSender<FastMessage>>>>,
     ) -> Self {
         Self {
             client,
             model: model.to_string(),
             cancel,
             cancel_map,
+            fast_txs,
         }
     }
 
@@ -39,6 +45,13 @@ impl NeigeAgent {
         tools.push(crate::tool::registry::update_soul_tool());
         tools.push(crate::tool::registry::create_skill_tool());
         tools.push(crate::tool::registry::expand_requirements_tool());
+        tools
+    }
+
+    /// Read-only tool set for discuss mode — no document mutation, no routing.
+    fn discuss_tools() -> Vec<ToolDefinition> {
+        let mut tools = crate::tool::registry::inspect_tools();
+        tools.extend(crate::tool::registry::summarize_logs_tool());
         tools
     }
 
@@ -87,11 +100,17 @@ impl NeigeAgent {
     /// Load soul from `.shuji/soul/neige.md`. If the file doesn't exist,
     /// bootstrap it from the compile-time default. This allows the soul to
     /// evolve at runtime (via `update_soul` tool or manual editing).
+    /// Enforces ≤4000 chars to keep prompt injection size bounded.
     async fn load_soul(working_dir: &Path) -> String {
         let soul_dir = working_dir.join(".shuji").join("soul");
         let soul_path = soul_dir.join("neige.md");
         if let Ok(content) = tokio::fs::read_to_string(&soul_path).await {
             if !content.trim().is_empty() {
+                if content.len() > 4000 {
+                    log_console!("[soul] soul 长度 {} 超过 4000 上限，截断至 4000", content.len());
+                    let truncated: String = content.chars().take(4000).collect();
+                    return truncated;
+                }
                 return content;
             }
         }
@@ -160,6 +179,52 @@ impl NeigeAgent {
         Some(messages)
     }
 
+    /// Read workflow preset from `.shuji/workflow_preset.json` and inject
+    /// behavioral rules into the session.  Guides skill selection and
+    /// workflow routing without hard-coding LLM behavior.
+    async fn inject_workflow_preset(session: &mut crate::api::session::Session, working_dir: &Path) {
+        let path = working_dir.join(".shuji").join("workflow_preset.json");
+        let preset = match tokio::fs::read_to_string(&path).await {
+            Ok(content) => serde_json::from_str::<serde_json::Value>(&content)
+                .ok()
+                .and_then(|v| v["preset"].as_str().map(|s| s.to_string()))
+                .unwrap_or_else(|| "standard".to_string()),
+            Err(_) => "standard".to_string(),
+        };
+
+        let instruction = match preset.as_str() {
+            "full" => "\
+[Workflow Preset: Full — 完整治理]
+- 所有流程必经：需求展开 → 设计 → 门下审查 → 皇帝批复 → 尚书令执行 → 礼部规范检查
+- 必须调用 expand_requirements（除非是极小 bugfix）
+- skill 选择：workflow_standard / workflow_complex（根据复杂度）
+- 门下侍中审查不可跳过",
+
+            "fast" => "\
+[Workflow Preset: Fast — 极速模式]
+- 使用最轻量的流程：workflow_demo 或 workflow_simple
+- 禁止使用 workflow_standard 和 workflow_complex
+- expand_requirements: 已禁用，不得调用
+- 跳过门下侍中审查和礼部规范检查
+- 直接 route_to 尚书令执行",
+            "audit" => "\
+[Workflow Preset: Audit — 审计模式]
+- 强制包含门下侍中审查和礼部规范检查
+- 推荐 skill: workflow_audit
+- 所有产出必须经门下侍中审查 + 礼部规范检查后才能交付",
+
+            _ => "\
+[Workflow Preset: Standard — 标准模式]
+- 流程：需求展开 → 设计（中书令）→ 皇帝批复 → 执行（尚书令）
+- 跳过门下侍中审查环节
+- expand_requirements: 仅对 workflow_standard/complex 调用
+- skill 选择：根据复杂度使用 workflow_simple / workflow_standard / workflow_complex",
+        };
+
+        log_console!("[内阁] workflow preset: {}", preset);
+        session.inject(instruction);
+    }
+
     /// Clean up paused session file (used on Interrupt/Replace).
     pub async fn clear_paused_session(working_dir: &std::path::Path) {
         let path = working_dir.join(".shuji").join("paused_session.json");
@@ -182,7 +247,11 @@ impl Agent for NeigeAgent {
 
     async fn execute(&self, input: &AgentInput) -> anyhow::Result<AgentOutput> {
         let system_prompt = include_str!("prompt.md");
-        let tools = Self::tools();
+        let tools = if input.discuss_mode {
+            Self::discuss_tools()
+        } else {
+            Self::tools()
+        };
         let working_dir = input.working_dir.clone();
 
         let mut msgs = input.context_messages.clone();
@@ -205,6 +274,17 @@ impl Agent for NeigeAgent {
             &Self::load_soul(&input.working_dir).await,
         )
         .with_debug_dir(input.working_dir.clone());
+
+        // Inject workflow preset rules after soul is loaded
+        Self::inject_workflow_preset(&mut session, &working_dir).await;
+
+        // ── Discuss mode: force-inject discuss skill ──
+        if input.discuss_mode {
+            let discuss_skill = Self::load_skill("discuss", &working_dir).await;
+            if !discuss_skill.is_empty() {
+                session.inject_skill("discuss", &discuss_skill);
+            }
+        }
 
         // ── Resume from paused session (内阁 waiting for emperor) ──
         let resumed = if input.resume_paused {
@@ -368,6 +448,8 @@ impl Agent for NeigeAgent {
         }));
 
         let cancel_map = self.cancel_map.clone();
+        let fast_txs: Option<Arc<HashMap<Role, mpsc::UnboundedSender<FastMessage>>>> =
+            self.fast_txs.clone();
         let config = input.runtime_config.clone();
         let wd = working_dir.clone();
         let exec = move |name: &str, args: &serde_json::Value| -> crate::api::control::ToolFuture {
@@ -378,6 +460,7 @@ impl Agent for NeigeAgent {
                 cancel_map: cancel_map.clone(),
                 client: Some(client.clone()),
                 model: Some(model.clone()),
+                fast_txs: fast_txs.clone(),
             };
             Box::pin(async move {
                 if let Some(result) =
@@ -403,7 +486,7 @@ impl Agent for NeigeAgent {
             }
 
             let run_result = controller
-                .run(&mut session, &exec, &self.cancel, &tools, None, &config)
+                .run(&mut session, &exec, &self.cancel, &tools, None, &config, Some(&*input.fast_cancel))
                 .await?;
             (result, route) = match run_result {
                 crate::api::control::RunResult::Done(text) => (text, None),
@@ -413,6 +496,20 @@ impl Agent for NeigeAgent {
 
             if route.is_some() {
                 break;
+            }
+
+            // ── Hard enforcement: must-approve doc pending but no <options> ──
+            if !result.contains("<options>") {
+                let pending_id = crate::tool::documents::get_first_pending_approval(&working_dir).await;
+                if let Some(ref id) = pending_id {
+                    log_console!("[内阁] must-approve doc {} pending, no <options> — re-prompting", id);
+                    let msg = format!(
+                        "[系统] 文档 {} 已创建但未经皇帝御批。请立即在回复中包含 <options> 标签，提供选项供皇帝决策。注意：route_to 和 <options> 不能在同一回合使用。请先输出 <options>，等待皇帝批复后再路由。",
+                        id
+                    );
+                    session.inject(&msg);
+                    continue;
+                }
             }
 
             match extract_skill(&result) {

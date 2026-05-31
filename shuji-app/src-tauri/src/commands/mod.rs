@@ -1,3 +1,5 @@
+pub mod checkpoint;
+pub mod demo;
 pub mod friendly_error;
 pub mod project;
 pub mod settings;

@@ -17,10 +17,11 @@ pub fn inspect_tools() -> Vec<ToolDefinition> {
     ]
 }
 
-/// File write tools: create, modify, append, delete, rename.
+/// File write tools: create, modify, append, delete, rename, apply_patch.
 pub fn file_write_tools() -> Vec<ToolDefinition> {
     vec![
         crate::tool::create_file_tool_def("写入新文件"),
+        crate::tool::apply_patch_tool_def(),
         crate::tool::modify_file_tool_def(),
         crate::tool::append_file_tool_def(),
         crate::tool::delete_file_tool_def(),
@@ -34,6 +35,7 @@ pub fn document_tools() -> Vec<ToolDefinition> {
         crate::tool::documents::create_document_tool_def(),
         crate::tool::documents::modify_document_tool_def(),
         crate::tool::documents::append_document_tool_def(),
+        crate::tool::documents::set_document_status_tool_def(),
     ]
 }
 
@@ -203,7 +205,7 @@ pub fn update_soul_tool() -> ToolDefinition {
                 "properties": {
                     "content": {
                         "type": "string",
-                        "description": "内容，格式: [场景] 描述。≤300字符。"
+                        "description": "内容，格式: [场景] 描述。≤500字符。"
                     },
                     "section": {
                         "type": "string",

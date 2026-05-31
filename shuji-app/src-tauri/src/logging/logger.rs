@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
@@ -58,7 +58,7 @@ pub struct Logger {
 }
 
 impl Logger {
-    pub fn new(shuji_root: &PathBuf) -> Self {
+    pub fn new(shuji_root: &Path) -> Self {
         Self {
             log_path: shuji_root.join("logs").join("activity.log"),
         }

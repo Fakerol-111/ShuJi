@@ -70,7 +70,7 @@ async fn test_workflow_demo_e2e() {
     // 内阁 agent
     let neige_client = AnthropicClient::new(api_key.clone(), api_url.clone());
     let cancel = Arc::new(AtomicBool::new(false));
-    let neige = NeigeAgent::new(neige_client, "test-model", cancel, None);
+    let neige = NeigeAgent::new(neige_client, "test-model", cancel, None, None);
 
     let neige_input = AgentInput {
         role: Role::Neige,
@@ -83,6 +83,8 @@ async fn test_workflow_demo_e2e() {
         resume_paused: false,
         context_window_config: Arc::new(HashMap::new()),
         runtime_config: runtime_config.clone(),
+        discuss_mode: false,
+        fast_cancel: Arc::new(AtomicBool::new(false)),
     };
 
     let neige_output = neige
@@ -147,6 +149,8 @@ async fn test_workflow_demo_e2e() {
             resume_paused: false,
             context_window_config: Arc::new(HashMap::new()),
             runtime_config: runtime_config.clone(),
+            discuss_mode: false,
+            fast_cancel: Arc::new(AtomicBool::new(false)),
         };
 
         let gongbu_output = gongbu

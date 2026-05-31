@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Project, ProjectSummary, ChatMessage, ProjectSnapshot, DeptLogEntry, AppConfig, ContextWindowConfig, TokenUsage, ContextStats } from "./types";
+import type { Project, ProjectSummary, ChatMessage, ProjectSnapshot, DeptLogEntry, AppConfig, ContextWindowConfig, TokenUsage, ContextStats, CheckpointEntry, RoundMetrics } from "./types";
 
 export interface ShujiEntry {
   name: string;
@@ -80,6 +80,10 @@ export async function getTokenStats(): Promise<Record<string, Record<string, Tok
   return invoke("get_token_stats");
 }
 
+export async function getRoundMetrics(): Promise<RoundMetrics | null> {
+  return invoke("get_round_metrics");
+}
+
 export async function getContextStats(): Promise<Record<string, ContextStats>> {
   return invoke("get_context_stats");
 }
@@ -114,4 +118,60 @@ export async function getContextConfig(): Promise<ContextWindowConfig> {
 
 export async function saveContextConfig(config: ContextWindowConfig): Promise<void> {
   return invoke("save_context_config", { config });
+}
+
+export async function resetContextConfig(): Promise<void> {
+  return invoke("reset_context_config");
+}
+
+// ── Demo project ───────────────────────────────────────────
+
+export async function createDemoProject(): Promise<Project> {
+  return invoke("create_demo_project");
+}
+
+// ── API health check ─────────────────────────────────────────
+
+export async function checkApiConnection(apiKey: string, apiUrl: string, model: string): Promise<string> {
+  return invoke("check_api_connection", { apiKey, apiUrl, model });
+}
+
+// ── Workflow preset ─────────────────────────────────────────
+
+export async function getWorkflowPreset(): Promise<string> {
+  return invoke("get_workflow_preset");
+}
+
+export async function setWorkflowPreset(preset: string): Promise<void> {
+  return invoke("set_workflow_preset", { preset });
+}
+
+// ── Document approval ─────────────────────────────────────────
+
+export async function setDocumentStatus(
+  id: string,
+  status: "approved" | "rejected",
+  emperorNote?: string
+): Promise<string> {
+  return invoke("set_document_status", { id, status, emperorNote });
+}
+
+// ── Soul management ────────────────────────────────────────────
+
+export async function getSoulContent(): Promise<string> {
+  return invoke("get_soul_content");
+}
+
+export async function clearSoul(): Promise<void> {
+  return invoke("clear_soul");
+}
+
+// ── Checkpoint commands ──────────────────────────────────────
+
+export async function listCheckpoints(role?: string, limit?: number): Promise<CheckpointEntry[]> {
+  return invoke("list_checkpoints", { role, limit });
+}
+
+export async function restoreCheckpoint(commitHash: string): Promise<string> {
+  return invoke("restore_checkpoint", { commitHash });
 }

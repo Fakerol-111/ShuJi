@@ -1,4 +1,4 @@
-export type ActivitySelection = "files" | "stats" | "context" | null;
+export type ActivitySelection = "files" | "stats" | "context" | "archives" | null;
 
 interface ActivityBarProps {
   selected: ActivitySelection;
@@ -10,6 +10,7 @@ const ITEMS: Array<{ id: Exclude<ActivitySelection, null>; icon: string; label: 
   { id: "files", icon: "📁", label: "文件" },
   { id: "stats", icon: "📊", label: "度支" },
   { id: "context", icon: "📝", label: "文脉" },
+  { id: "archives", icon: "💾", label: "存档" },
 ];
 
 export default function ActivityBar({ selected, onSelect, onLogsClick }: ActivityBarProps) {
