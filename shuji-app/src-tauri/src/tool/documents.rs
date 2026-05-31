@@ -585,17 +585,24 @@ async fn resolve_doc_path(working_dir: &Path, id: &str) -> Result<PathBuf, Strin
     }
 }
 
-pub async fn tool_set_document_status(
-    working_dir: &Path,
-    args: &serde_json::Value,
-) -> String {
+pub async fn tool_set_document_status(working_dir: &Path, args: &serde_json::Value) -> String {
     let id = args["id"].as_str().unwrap_or("");
     let new_status = args["status"].as_str().unwrap_or("");
     if id.is_empty() || new_status.is_empty() {
-        return ToolOutput::error("set_document_status", "", "empty_params", "id 和 status 不能为空");
+        return ToolOutput::error(
+            "set_document_status",
+            "",
+            "empty_params",
+            "id 和 status 不能为空",
+        );
     }
     if !matches!(new_status, "approved" | "rejected") {
-        return ToolOutput::error("set_document_status", id, "invalid_status", "status 必须是 approved 或 rejected");
+        return ToolOutput::error(
+            "set_document_status",
+            id,
+            "invalid_status",
+            "status 必须是 approved 或 rejected",
+        );
     }
 
     let full = match resolve_doc_path(working_dir, id).await {
@@ -603,12 +610,19 @@ pub async fn tool_set_document_status(
         Err(e) => return ToolOutput::error("set_document_status", id, "not_found", &e),
     };
     if !full.exists() {
-        return ToolOutput::error("set_document_status", id, "not_found", &format!("文档 {} 不存在", id));
+        return ToolOutput::error(
+            "set_document_status",
+            id,
+            "not_found",
+            &format!("文档 {} 不存在", id),
+        );
     }
 
     let content = match tokio::fs::read_to_string(&full).await {
         Ok(c) => c,
-        Err(e) => return ToolOutput::error("set_document_status", id, "read_error", &e.to_string()),
+        Err(e) => {
+            return ToolOutput::error("set_document_status", id, "read_error", &e.to_string())
+        }
     };
 
     let (mut meta, body) = match parse_doc(&content) {
@@ -618,8 +632,12 @@ pub async fn tool_set_document_status(
 
     // Only allow status change on must-approve types
     if !MUST_APPROVE_TYPES.contains(&meta.doc_type.as_str()) {
-        return ToolOutput::error("set_document_status", id, "wrong_type",
-            "只有 plan 和 revw 类型文档可以设置审批状态");
+        return ToolOutput::error(
+            "set_document_status",
+            id,
+            "wrong_type",
+            "只有 plan 和 revw 类型文档可以设置审批状态",
+        );
     }
 
     meta.status = new_status.to_string();
@@ -630,7 +648,11 @@ pub async fn tool_set_document_status(
     match tokio::fs::write(&full, &new_content).await {
         Ok(_) => {
             let _ = remove_pending_approval(working_dir, id).await;
-            ToolOutput::success("set_document_status", id, &format!("文档 {} 状态已设为 {}", id, new_status))
+            ToolOutput::success(
+                "set_document_status",
+                id,
+                &format!("文档 {} 状态已设为 {}", id, new_status),
+            )
         }
         Err(e) => ToolOutput::error("set_document_status", id, "write_error", &e.to_string()),
     }

@@ -62,7 +62,8 @@ impl PersistedContext {
                     base_prompt = content.to_string();
                 } else if content.starts_with("[soul:") {
                     soul_prompt = Some(content.to_string());
-                } else if content.starts_with("[skill:") || content.starts_with("## Working mode:") {
+                } else if content.starts_with("[skill:") || content.starts_with("## Working mode:")
+                {
                     skill_prompts.push(content.to_string());
                 } else if content.starts_with("[对话摘要]") {
                     history_messages = content.to_string();
@@ -493,7 +494,9 @@ impl Session {
             // Log token usage
             if let Some(usage) = data.get("usage") {
                 let prompt = usage["prompt_tokens"].as_u64().unwrap_or(0);
-                let cached = usage["prompt_tokens_details"]["cached_tokens"].as_u64().unwrap_or(0);
+                let cached = usage["prompt_tokens_details"]["cached_tokens"]
+                    .as_u64()
+                    .unwrap_or(0);
                 let completion = usage["completion_tokens"].as_u64().unwrap_or(0);
                 log_console!(
                     "[{}] tokens: prompt={} cached={} completion={} total={}",
@@ -511,9 +514,7 @@ impl Session {
             // Log completion content for debugging
             {
                 let text = msg["content"].as_str().unwrap_or("");
-                let has_tools = msg["tool_calls"]
-                    .as_array()
-                    .is_some_and(|a| !a.is_empty());
+                let has_tools = msg["tool_calls"].as_array().is_some_and(|a| !a.is_empty());
                 if has_tools {
                     let tool_names: Vec<&str> = msg["tool_calls"]
                         .as_array()

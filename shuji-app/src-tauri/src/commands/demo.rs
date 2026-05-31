@@ -12,9 +12,7 @@ const TEST_CALC_PY: &str = include_str!("../../assets/demo-project/test_calc.py"
 /// Contains a Python calculator with known bugs + tests that fail.
 /// New users can immediately try the workflow: fix bugs, run tests.
 #[tauri::command]
-pub async fn create_demo_project(
-    state: State<'_, AppState>,
-) -> Result<Project, String> {
+pub async fn create_demo_project(state: State<'_, AppState>) -> Result<Project, String> {
     let base = std::env::temp_dir().join("shuji-demo");
     let working_dir = base.join("calc_demo");
     tokio::fs::create_dir_all(&working_dir)
@@ -29,7 +27,8 @@ pub async fn create_demo_project(
         .map_err(friendly_error)?;
 
     let name = "calc_demo".to_string();
-    let goal = "修复 calculator 模块中的 bug（power 和 factorial 函数），确保所有测试通过。".to_string();
+    let goal =
+        "修复 calculator 模块中的 bug（power 和 factorial 函数），确保所有测试通过。".to_string();
     let wd_str = working_dir.to_string_lossy().to_string();
 
     crate::commands::project::create_project(state, name, goal, wd_str).await

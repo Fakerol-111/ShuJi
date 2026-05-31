@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::commands::friendly_error::friendly_error;
 use crate::commands::project::AppState;
-use crate::storage::checkpoint::{CheckpointEntry, find_checkpoint, load_index, load_snapshot};
+use crate::storage::checkpoint::{find_checkpoint, load_index, load_snapshot, CheckpointEntry};
 
 /// List all checkpoints in the current project.
 /// Optionally filter by role, limit the number of results.
@@ -12,7 +12,12 @@ pub async fn list_checkpoints(
     role: Option<String>,
     limit: Option<usize>,
 ) -> Result<Vec<CheckpointEntry>, String> {
-    let dir = state.current_dir.lock().await.clone().ok_or("没有打开的项目")?;
+    let dir = state
+        .current_dir
+        .lock()
+        .await
+        .clone()
+        .ok_or("没有打开的项目")?;
     let dir_path = Path::new(&dir);
     let mut entries = load_index(dir_path).await;
     // 按时间倒序（最新的在前）
@@ -71,7 +76,10 @@ pub async fn restore_checkpoint(
             .await
             .map_err(friendly_error)?;
         if !stash.status.success() {
-            return Err(format!("暂存变更失败: {}", String::from_utf8_lossy(&stash.stderr)));
+            return Err(format!(
+                "暂存变更失败: {}",
+                String::from_utf8_lossy(&stash.stderr)
+            ));
         }
     }
 
@@ -83,7 +91,10 @@ pub async fn restore_checkpoint(
         .await
         .map_err(friendly_error)?;
     if !checkout.status.success() {
-        return Err(format!("恢复失败: {}", String::from_utf8_lossy(&checkout.stderr)));
+        return Err(format!(
+            "恢复失败: {}",
+            String::from_utf8_lossy(&checkout.stderr)
+        ));
     }
 
     let summary = if has_changes {

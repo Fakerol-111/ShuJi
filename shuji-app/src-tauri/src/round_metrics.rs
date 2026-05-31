@@ -95,7 +95,9 @@ pub fn snapshot() -> Option<RoundMetricState> {
 /// Get the name of the currently active role, if any.
 pub fn current_role_name() -> Option<String> {
     ROUND.lock().ok().and_then(|s| {
-        s.as_ref().map(|r| r.current_role.clone()).filter(|r| !r.is_empty())
+        s.as_ref()
+            .map(|r| r.current_role.clone())
+            .filter(|r| !r.is_empty())
     })
 }
 

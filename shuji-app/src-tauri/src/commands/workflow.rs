@@ -410,10 +410,7 @@ pub async fn send_message(
             if let Some(role) = Role::from_name(&current_role) {
                 if let Some(tx) = system.fast_txs.get(&role) {
                     let _ = tx.send(FastMessage::Interrupt);
-                    log_console!(
-                        "[commands] send_message: fast-interrupted {}",
-                        current_role
-                    );
+                    log_console!("[commands] send_message: fast-interrupted {}", current_role);
                 }
             }
         }
@@ -463,7 +460,13 @@ pub async fn discuss_with_cabinet(
 
     let ep = config.for_role("neige");
     let client = AnthropicClient::new(ep.api_key, ep.api_url);
-    let neige = NeigeAgent::new(client, &ep.model, Arc::new(AtomicBool::new(false)), None, None);
+    let neige = NeigeAgent::new(
+        client,
+        &ep.model,
+        Arc::new(AtomicBool::new(false)),
+        None,
+        None,
+    );
 
     let input = AgentInput {
         role: Role::Neige,
@@ -679,10 +682,7 @@ pub async fn get_context_stats(
 /// iterative compaction loop, and saves the result back to disk.
 /// Works independently of the actor system — safe to call while actors run.
 #[tauri::command]
-pub async fn compact_context(
-    state: State<'_, AppState>,
-    role: String,
-) -> Result<String, String> {
+pub async fn compact_context(state: State<'_, AppState>, role: String) -> Result<String, String> {
     let dir = state
         .current_dir
         .lock()
@@ -767,7 +767,10 @@ async fn compact_impl(
     let ep = config.for_role(&role);
 
     if ep.api_key.is_empty() {
-        return Err(friendly_error(format!("角色 {} 未配置 API 密钥，请在设置中配置", role)));
+        return Err(friendly_error(format!(
+            "角色 {} 未配置 API 密钥，请在设置中配置",
+            role
+        )));
     }
     if ep.api_url.is_empty() {
         return Err(friendly_error(format!("角色 {} 未配置 API URL", role)));
@@ -779,11 +782,19 @@ async fn compact_impl(
 
     log_console!(
         "[compact:manual] starting compaction for {} (cabinet={}, chars={})",
-        role, is_cabinet, total_chars,
+        role,
+        is_cabinet,
+        total_chars,
     );
 
     let performed = crate::api::compact::run_compaction_loop(
-        &client, &model, &mut ctx, &force_thresholds, is_cabinet, working_dir, &role,
+        &client,
+        &model,
+        &mut ctx,
+        &force_thresholds,
+        is_cabinet,
+        working_dir,
+        &role,
     )
     .await;
 
@@ -873,13 +884,12 @@ pub async fn set_document_status(
         args["emperor_note"] = serde_json::Value::String(note);
     }
 
-    let result = crate::tool::documents::tool_set_document_status(
-        std::path::Path::new(&working_dir),
-        &args,
-    ).await;
+    let result =
+        crate::tool::documents::tool_set_document_status(std::path::Path::new(&working_dir), &args)
+            .await;
 
-    let v: serde_json::Value = serde_json::from_str(&result)
-        .map_err(|_| "解析结果失败".to_string())?;
+    let v: serde_json::Value =
+        serde_json::from_str(&result).map_err(|_| "解析结果失败".to_string())?;
     if v["ok"].as_bool().unwrap_or(false) {
         Ok(v["message"].as_str().unwrap_or("ok").to_string())
     } else {

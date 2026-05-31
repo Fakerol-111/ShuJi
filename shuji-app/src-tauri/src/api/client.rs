@@ -215,7 +215,9 @@ impl AnthropicClient {
         let data: serde_json::Value = resp.json().await?;
         if let Some(usage) = data.get("usage") {
             let prompt = usage["prompt_tokens"].as_u64().unwrap_or(0);
-            let cached = usage["prompt_tokens_details"]["cached_tokens"].as_u64().unwrap_or(0);
+            let cached = usage["prompt_tokens_details"]["cached_tokens"]
+                .as_u64()
+                .unwrap_or(0);
             let completion = usage["completion_tokens"].as_u64().unwrap_or(0);
             crate::token_tracker::record("text", prompt, cached, completion);
         }

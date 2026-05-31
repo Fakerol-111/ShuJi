@@ -342,13 +342,22 @@ pub async fn check_api_connection(
 
 /// Resolve the workflow_preset file path relative to a project directory.
 fn workflow_preset_path(project_dir: &str) -> std::path::PathBuf {
-    std::path::Path::new(project_dir).join(".shuji").join("workflow_preset.json")
+    std::path::Path::new(project_dir)
+        .join(".shuji")
+        .join("workflow_preset.json")
 }
 
 /// Read the current workflow preset. Returns "standard" if not set.
 #[tauri::command]
-pub async fn get_workflow_preset(state: tauri::State<'_, crate::commands::project::AppState>) -> Result<String, String> {
-    let dir = state.current_dir.lock().await.clone().ok_or("没有打开的项目")?;
+pub async fn get_workflow_preset(
+    state: tauri::State<'_, crate::commands::project::AppState>,
+) -> Result<String, String> {
+    let dir = state
+        .current_dir
+        .lock()
+        .await
+        .clone()
+        .ok_or("没有打开的项目")?;
     let path = workflow_preset_path(&dir);
     match tokio::fs::read_to_string(&path).await {
         Ok(content) => {
@@ -361,19 +370,35 @@ pub async fn get_workflow_preset(state: tauri::State<'_, crate::commands::projec
 
 /// Set the workflow preset. Valid values: full, standard, fast, audit.
 #[tauri::command]
-pub async fn set_workflow_preset(state: tauri::State<'_, crate::commands::project::AppState>, preset: String) -> Result<(), String> {
+pub async fn set_workflow_preset(
+    state: tauri::State<'_, crate::commands::project::AppState>,
+    preset: String,
+) -> Result<(), String> {
     if !matches!(preset.as_str(), "full" | "standard" | "fast" | "audit") {
-        return Err(format!("无效的预设: {}（可选: full, standard, fast, audit）", preset));
+        return Err(format!(
+            "无效的预设: {}（可选: full, standard, fast, audit）",
+            preset
+        ));
     }
-    let dir = state.current_dir.lock().await.clone().ok_or("没有打开的项目")?;
+    let dir = state
+        .current_dir
+        .lock()
+        .await
+        .clone()
+        .ok_or("没有打开的项目")?;
     let path = workflow_preset_path(&dir);
     if let Some(parent) = path.parent() {
-        tokio::fs::create_dir_all(parent).await.map_err(friendly_error)?;
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(friendly_error)?;
     }
     let content = serde_json::json!({ "preset": preset });
-    tokio::fs::write(&path, serde_json::to_string_pretty(&content).map_err(friendly_error)?)
-        .await
-        .map_err(friendly_error)?;
+    tokio::fs::write(
+        &path,
+        serde_json::to_string_pretty(&content).map_err(friendly_error)?,
+    )
+    .await
+    .map_err(friendly_error)?;
     log_console!("[settings] workflow preset set to: {}", preset);
     Ok(())
 }
@@ -392,7 +417,12 @@ fn soul_path(project_dir: &str) -> std::path::PathBuf {
 pub async fn get_soul_content(
     state: tauri::State<'_, crate::commands::project::AppState>,
 ) -> Result<String, String> {
-    let dir = state.current_dir.lock().await.clone().ok_or("没有打开的项目")?;
+    let dir = state
+        .current_dir
+        .lock()
+        .await
+        .clone()
+        .ok_or("没有打开的项目")?;
     let path = soul_path(&dir);
     if path.exists() {
         tokio::fs::read_to_string(&path)
@@ -408,7 +438,12 @@ pub async fn get_soul_content(
 pub async fn clear_soul(
     state: tauri::State<'_, crate::commands::project::AppState>,
 ) -> Result<(), String> {
-    let dir = state.current_dir.lock().await.clone().ok_or("没有打开的项目")?;
+    let dir = state
+        .current_dir
+        .lock()
+        .await
+        .clone()
+        .ok_or("没有打开的项目")?;
     let path = soul_path(&dir);
     let default = include_str!("../agent/neige/soul.md");
     if let Some(parent) = path.parent() {

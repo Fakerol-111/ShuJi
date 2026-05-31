@@ -107,7 +107,10 @@ impl NeigeAgent {
         if let Ok(content) = tokio::fs::read_to_string(&soul_path).await {
             if !content.trim().is_empty() {
                 if content.len() > 4000 {
-                    log_console!("[soul] soul 长度 {} 超过 4000 上限，截断至 4000", content.len());
+                    log_console!(
+                        "[soul] soul 长度 {} 超过 4000 上限，截断至 4000",
+                        content.len()
+                    );
                     let truncated: String = content.chars().take(4000).collect();
                     return truncated;
                 }
@@ -182,7 +185,10 @@ impl NeigeAgent {
     /// Read workflow preset from `.shuji/workflow_preset.json` and inject
     /// behavioral rules into the session.  Guides skill selection and
     /// workflow routing without hard-coding LLM behavior.
-    async fn inject_workflow_preset(session: &mut crate::api::session::Session, working_dir: &Path) {
+    async fn inject_workflow_preset(
+        session: &mut crate::api::session::Session,
+        working_dir: &Path,
+    ) {
         let path = working_dir.join(".shuji").join("workflow_preset.json");
         let preset = match tokio::fs::read_to_string(&path).await {
             Ok(content) => serde_json::from_str::<serde_json::Value>(&content)
@@ -193,32 +199,40 @@ impl NeigeAgent {
         };
 
         let instruction = match preset.as_str() {
-            "full" => "\
+            "full" => {
+                "\
 [Workflow Preset: Full — 完整治理]
 - 所有流程必经：需求展开 → 设计 → 门下审查 → 皇帝批复 → 尚书令执行 → 礼部规范检查
 - 必须调用 expand_requirements（除非是极小 bugfix）
 - skill 选择：workflow_standard / workflow_complex（根据复杂度）
-- 门下侍中审查不可跳过",
+- 门下侍中审查不可跳过"
+            }
 
-            "fast" => "\
+            "fast" => {
+                "\
 [Workflow Preset: Fast — 极速模式]
 - 使用最轻量的流程：workflow_demo 或 workflow_simple
 - 禁止使用 workflow_standard 和 workflow_complex
 - expand_requirements: 已禁用，不得调用
 - 跳过门下侍中审查和礼部规范检查
-- 直接 route_to 尚书令执行",
-            "audit" => "\
+- 直接 route_to 尚书令执行"
+            }
+            "audit" => {
+                "\
 [Workflow Preset: Audit — 审计模式]
 - 强制包含门下侍中审查和礼部规范检查
 - 推荐 skill: workflow_audit
-- 所有产出必须经门下侍中审查 + 礼部规范检查后才能交付",
+- 所有产出必须经门下侍中审查 + 礼部规范检查后才能交付"
+            }
 
-            _ => "\
+            _ => {
+                "\
 [Workflow Preset: Standard — 标准模式]
 - 流程：需求展开 → 设计（中书令）→ 皇帝批复 → 执行（尚书令）
 - 跳过门下侍中审查环节
 - expand_requirements: 仅对 workflow_standard/complex 调用
-- skill 选择：根据复杂度使用 workflow_simple / workflow_standard / workflow_complex",
+- skill 选择：根据复杂度使用 workflow_simple / workflow_standard / workflow_complex"
+            }
         };
 
         log_console!("[内阁] workflow preset: {}", preset);
@@ -487,7 +501,15 @@ impl Agent for NeigeAgent {
             }
 
             let run_result = controller
-                .run(&mut session, &exec, &self.cancel, &tools, None, &config, Some(&*input.fast_cancel))
+                .run(
+                    &mut session,
+                    &exec,
+                    &self.cancel,
+                    &tools,
+                    None,
+                    &config,
+                    Some(&*input.fast_cancel),
+                )
                 .await?;
             (result, route) = match run_result {
                 crate::api::control::RunResult::Done(text) => (text, None),
@@ -501,13 +523,18 @@ impl Agent for NeigeAgent {
 
             // ── Hard enforcement: must-approve doc pending but no <options> ──
             if !result.contains("<options>") {
-                let pending_id = crate::tool::documents::get_first_pending_approval(&working_dir).await;
+                let pending_id =
+                    crate::tool::documents::get_first_pending_approval(&working_dir).await;
                 if let Some(ref id) = pending_id {
                     must_approve_retries += 1;
                     if must_approve_retries >= 3 {
                         log_console!("[内阁] must-approve doc {} 重试{must_approve_retries}次仍无<options>，自动批复", id);
-                        let _ = crate::tool::documents::remove_pending_approval(&working_dir, id).await;
-                        let msg = format!("[系统] 文档 {} 已自动御批（内阁{}次重试仍未输出选项）。继续执行。", id, must_approve_retries);
+                        let _ =
+                            crate::tool::documents::remove_pending_approval(&working_dir, id).await;
+                        let msg = format!(
+                            "[系统] 文档 {} 已自动御批（内阁{}次重试仍未输出选项）。继续执行。",
+                            id, must_approve_retries
+                        );
                         session.inject(&msg);
                         continue;
                     }

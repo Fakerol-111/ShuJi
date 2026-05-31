@@ -389,12 +389,13 @@ impl RuntimeConfig {
         role_name: &str,
         role_config: Option<&RoleContextConfig>,
     ) -> CompactThresholds {
-        let base = default_compact_thresholds_for_role(role_name).unwrap_or_else(|| CompactThresholds {
-            char_threshold: self.context_compaction.char_threshold,
-            keep_recent_count: self.context_compaction.keep_recent_count,
-            history_char_threshold: self.context_compaction.history_char_threshold,
-            mid_run_compact: self.context_compaction.mid_run_compact,
-        });
+        let base =
+            default_compact_thresholds_for_role(role_name).unwrap_or_else(|| CompactThresholds {
+                char_threshold: self.context_compaction.char_threshold,
+                keep_recent_count: self.context_compaction.keep_recent_count,
+                history_char_threshold: self.context_compaction.history_char_threshold,
+                mid_run_compact: self.context_compaction.mid_run_compact,
+            });
 
         let ov = role_config;
         CompactThresholds {

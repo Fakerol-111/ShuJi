@@ -1,4 +1,6 @@
-use shuji_app_lib::config::{default_compact_thresholds_for_role, RoleContextConfig, RuntimeConfig};
+use shuji_app_lib::config::{
+    default_compact_thresholds_for_role, RoleContextConfig, RuntimeConfig,
+};
 
 #[test]
 fn test_role_builtin_default_gongbu() {

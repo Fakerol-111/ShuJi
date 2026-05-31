@@ -391,8 +391,15 @@ pub async fn tool_apply_patch(working_dir: &Path, args: &serde_json::Value) -> S
     }
     // Hard limit: 50KB per patch
     if patch_str.len() > 50_000 {
-        return ToolOutput::error("apply_patch", path, "patch_too_large",
-            &format!("patch 长度 {} 超过上限 50000 字符。请拆分成多次 apply_patch 调用。", patch_str.len()));
+        return ToolOutput::error(
+            "apply_patch",
+            path,
+            "patch_too_large",
+            &format!(
+                "patch 长度 {} 超过上限 50000 字符。请拆分成多次 apply_patch 调用。",
+                patch_str.len()
+            ),
+        );
     }
 
     let full = match resolve_scoped_path(working_dir, path).await {
@@ -422,8 +429,15 @@ pub async fn tool_apply_patch(working_dir: &Path, args: &serde_json::Value) -> S
     };
 
     match tokio::fs::write(&full, &new_content).await {
-        Ok(_) => ToolOutput::success("apply_patch", path,
-            &format!("patch 应用成功（{} 字节 → {} 字节）", old_content.len(), new_content.len())),
+        Ok(_) => ToolOutput::success(
+            "apply_patch",
+            path,
+            &format!(
+                "patch 应用成功（{} 字节 → {} 字节）",
+                old_content.len(),
+                new_content.len()
+            ),
+        ),
         Err(e) => ToolOutput::error("apply_patch", path, "write_error", &e.to_string()),
     }
 }
@@ -986,7 +1000,9 @@ pub async fn execute_named_tool(
             // Gate: check refs before appending to a document
             let id = args["id"].as_str().unwrap_or("");
             if !id.is_empty() {
-                if let Err(msg) = documents::check_doc_refs_approved_for_route(working_dir, id).await {
+                if let Err(msg) =
+                    documents::check_doc_refs_approved_for_route(working_dir, id).await
+                {
                     ToolOutput::error("append_document", id, "doc_not_approved", &msg)
                 } else {
                     documents::tool_append_document(working_dir, args, dept).await
@@ -1004,7 +1020,9 @@ pub async fn execute_named_tool(
             let to_name = args["to"].as_str().unwrap_or("");
             let subject = args["subject"].as_str().unwrap_or("");
             if exec_depts.contains(&to_name) && !subject.is_empty() {
-                if let Err(msg) = documents::check_doc_refs_approved_for_route(working_dir, subject).await {
+                if let Err(msg) =
+                    documents::check_doc_refs_approved_for_route(working_dir, subject).await
+                {
                     ToolOutput::error("route_to", subject, "doc_not_approved", &msg)
                 } else {
                     handle_route_to(args, dept)
@@ -1089,10 +1107,10 @@ async fn tool_cancel_agent(args: &serde_json::Value, ctx: &ToolContext) -> Strin
             }
         }
         log_console!("[tool] cancel_agent → {} interrupted", target);
-        return serde_json::json!({"ok": true, "message": format!("已中断 {} 的当前操作", target)}).to_string();
+        return serde_json::json!({"ok": true, "message": format!("已中断 {} 的当前操作", target)})
+            .to_string();
     }
-    serde_json::json!({"ok": false, "message": format!("无法中断: {}", target)})
-        .to_string()
+    serde_json::json!({"ok": false, "message": format!("无法中断: {}", target)}).to_string()
 }
 
 async fn tool_update_soul(args: &serde_json::Value, ctx: &ToolContext) -> String {
@@ -1190,7 +1208,8 @@ async fn tool_update_soul(args: &serde_json::Value, ctx: &ToolContext) -> String
                     match compact_soul_file(ctx).await {
                         Ok(compact_msg) => {
                             let full_msg = format!("{}. {}", msg, compact_msg);
-                            return serde_json::json!({"ok": true, "message": full_msg}).to_string();
+                            return serde_json::json!({"ok": true, "message": full_msg})
+                                .to_string();
                         }
                         Err(e) => {
                             log_console!("[tool] soul 压缩失败: {}", e);
@@ -1215,7 +1234,10 @@ async fn compact_soul_file(ctx: &ToolContext) -> Result<String, String> {
         .await
         .map_err(|e| format!("读取 soul 失败: {}", e))?;
 
-    let client = ctx.client.clone().ok_or("LLM 客户端未配置，无法压缩 soul")?;
+    let client = ctx
+        .client
+        .clone()
+        .ok_or("LLM 客户端未配置，无法压缩 soul")?;
     let model = ctx.model.clone().ok_or("LLM 模型未配置")?;
 
     let prompt = format!(

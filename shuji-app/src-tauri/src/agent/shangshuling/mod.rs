@@ -210,7 +210,15 @@ impl Agent for ShangshulingAgent {
             Box::pin(async move { Self::execute_tool(&name, &args, &wd).await })
         };
         let (result, route) = controller
-            .run(&mut session, &exec, &self.cancel, &tools, None, &config, Some(&*input.fast_cancel))
+            .run(
+                &mut session,
+                &exec,
+                &self.cancel,
+                &tools,
+                None,
+                &config,
+                Some(&*input.fast_cancel),
+            )
             .await?
             .into_tuple();
 

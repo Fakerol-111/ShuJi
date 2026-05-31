@@ -236,9 +236,23 @@ pub async fn run_compaction_loop(
         let mut round_changed = false;
 
         let result = if is_cabinet {
-            maybe_compact(client, model, &ctx.history_messages, &ctx.context_messages, thresholds).await
+            maybe_compact(
+                client,
+                model,
+                &ctx.history_messages,
+                &ctx.context_messages,
+                thresholds,
+            )
+            .await
         } else {
-            maybe_compact_dept(client, model, &ctx.history_messages, &ctx.context_messages, thresholds).await
+            maybe_compact_dept(
+                client,
+                model,
+                &ctx.history_messages,
+                &ctx.context_messages,
+                thresholds,
+            )
+            .await
         };
         if let Some(result) = result {
             ctx.history_messages = result.new_history;
@@ -247,7 +261,9 @@ pub async fn run_compaction_loop(
             round_changed = true;
         }
 
-        if let Some(merged) = maybe_compact_history(client, model, &ctx.history_messages, thresholds).await {
+        if let Some(merged) =
+            maybe_compact_history(client, model, &ctx.history_messages, thresholds).await
+        {
             ctx.history_messages = merged;
             ctx.save_to(working_dir, role).await;
             round_changed = true;

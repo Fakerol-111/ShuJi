@@ -116,9 +116,7 @@ fn aggregate(records: &[TokenRecord], window: TokenWindow) -> HashMap<String, To
                 continue;
             }
         }
-        let entry = map
-            .entry(rec.role.clone())
-            .or_default();
+        let entry = map.entry(rec.role.clone()).or_default();
         entry.prompt_tokens += rec.prompt_tokens;
         entry.cached_prompt_tokens += rec.cached_prompt_tokens;
         entry.uncached_prompt_tokens += rec.uncached_prompt_tokens;
