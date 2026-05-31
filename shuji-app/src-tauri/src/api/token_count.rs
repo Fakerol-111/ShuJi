@@ -6,9 +6,8 @@ use tiktoken_rs::CoreBPE;
 const MESSAGE_TOKENS: usize = 4;
 const REPLY_PRIMER: usize = 3;
 
-static BPE: LazyLock<CoreBPE> = LazyLock::new(|| {
-    tiktoken_rs::cl100k_base().expect("failed to load cl100k_base tokenizer")
-});
+static BPE: LazyLock<CoreBPE> =
+    LazyLock::new(|| tiktoken_rs::cl100k_base().expect("failed to load cl100k_base tokenizer"));
 
 /// Count tokens in plain text using cl100k (OpenAI / DeepSeek-compatible approximation).
 pub fn count_text_tokens(text: &str) -> usize {

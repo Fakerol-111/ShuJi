@@ -329,9 +329,12 @@ impl Agent for NeigeAgent {
             if let Some(mut ctx) =
                 crate::api::session::PersistedContext::load_from(&working_dir, &role_name).await
             {
-                log_console!("[内阁] loading context: base={} chars, recent={} msgs, skills={}",
-                    ctx.base_prompt.len(), ctx.context_messages.len(),
-                    crate::api::session::count_skill_messages(&ctx.context_messages));
+                log_console!(
+                    "[内阁] loading context: base={} chars, recent={} msgs, skills={}",
+                    ctx.base_prompt.len(),
+                    ctx.context_messages.len(),
+                    crate::api::session::count_skill_messages(&ctx.context_messages)
+                );
 
                 crate::api::compact::compact_and_save(
                     &self.client,

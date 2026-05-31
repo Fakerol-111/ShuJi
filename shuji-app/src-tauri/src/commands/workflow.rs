@@ -644,8 +644,7 @@ pub async fn get_context_stats(
             _ => continue,
         };
 
-        let token_count =
-            crate::api::token_count::count_messages_tokens(&ctx.context_messages);
+        let token_count = crate::api::token_count::count_messages_tokens(&ctx.context_messages);
 
         // Resolve per-role thresholds
         let thresholds = config.resolve_compact_thresholds(&role, role_overrides.get(&role));
@@ -738,8 +737,7 @@ async fn compact_impl(
         .resolve_compact_thresholds(role, role_overrides.get(role));
 
     // Pre-check: skip if neither threshold is exceeded (no API config needed)
-    let total_tokens =
-        crate::api::token_count::count_messages_tokens(&ctx.context_messages);
+    let total_tokens = crate::api::token_count::count_messages_tokens(&ctx.context_messages);
 
     // Force context compaction threshold to 0 so it always compresses.
     let force_thresholds = crate::config::CompactThresholds {

@@ -188,7 +188,9 @@ impl Agent for GongbuShangshuAgent {
                             );
                         }
                     }
-                    msgs.push(serde_json::json!({"role": "user", "content": input.task_description}));
+                    msgs.push(
+                        serde_json::json!({"role": "user", "content": input.task_description}),
+                    );
                     let snap = crate::api::session::SessionSnapshot::from_messages(msgs);
                     session.restore(&snap);
                 }

@@ -58,9 +58,7 @@ async fn maybe_compact_with_prompt(
     let mut non_skill = context_messages.to_vec();
     crate::api::session::strip_skill_messages(&mut non_skill);
 
-    let split_at = non_skill
-        .len()
-        .saturating_sub(thresholds.keep_recent_count);
+    let split_at = non_skill.len().saturating_sub(thresholds.keep_recent_count);
     if split_at == 0 {
         return None;
     }

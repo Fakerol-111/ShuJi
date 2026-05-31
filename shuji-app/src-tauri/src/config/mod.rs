@@ -76,10 +76,7 @@ pub struct ToolIterationsConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContextCompactionConfig {
     /// 触发压缩的 token 阈值（cl100k，仅计量 context_messages）
-    #[serde(
-        default = "default_compact_token_threshold",
-        alias = "char_threshold"
-    )]
+    #[serde(default = "default_compact_token_threshold", alias = "char_threshold")]
     pub token_threshold: usize,
 
     /// 压缩后保留的最近消息数

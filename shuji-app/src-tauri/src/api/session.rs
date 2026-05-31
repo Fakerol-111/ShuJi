@@ -160,7 +160,10 @@ impl PersistedContext {
                 obj.remove("history_messages");
             }
             // Append old skill prompts to context_messages
-            if let Some(ctx) = json.get_mut("context_messages").and_then(|v| v.as_array_mut()) {
+            if let Some(ctx) = json
+                .get_mut("context_messages")
+                .and_then(|v| v.as_array_mut())
+            {
                 for content in &old_skills {
                     ctx.push(serde_json::json!({"role": "system", "content": content}));
                 }
