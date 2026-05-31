@@ -4,7 +4,11 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import ProjectDashboard from "./pages/ProjectDashboard";
 import LogsPage from "./pages/LogsPage";
 import SetupPage from "./pages/SetupPage";
+import { getCodeTheme } from "./constants";
 import "./styles/globals.css";
+
+// Apply saved code theme
+document.documentElement.setAttribute("data-code-theme", getCodeTheme());
 
 const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("root element not found");

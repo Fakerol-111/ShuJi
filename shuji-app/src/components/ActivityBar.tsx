@@ -6,11 +6,63 @@ interface ActivityBarProps {
   onLogsClick: () => void;
 }
 
-const ITEMS: Array<{ id: Exclude<ActivitySelection, null>; icon: string; label: string }> = [
-  { id: "files", icon: "📁", label: "文件" },
-  { id: "stats", icon: "📊", label: "度支" },
-  { id: "context", icon: "📝", label: "文脉" },
-  { id: "archives", icon: "💾", label: "存档" },
+function FolderIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={active ? "text-ink-50" : ""}>
+      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+function ChartIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={active ? "text-ink-50" : ""}>
+      <line x1="18" y1="20" x2="18" y2="10" />
+      <line x1="12" y1="20" x2="12" y2="4" />
+      <line x1="6" y1="20" x2="6" y2="14" />
+    </svg>
+  );
+}
+
+function ScrollIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={active ? "text-ink-50" : ""}>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="16" y1="13" x2="8" y2="13" />
+      <line x1="16" y1="17" x2="8" y2="17" />
+    </svg>
+  );
+}
+
+function ArchiveIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={active ? "text-ink-50" : ""}>
+      <rect x="2" y="3" width="20" height="5" rx="1" />
+      <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+      <path d="M10 12h4" />
+    </svg>
+  );
+}
+
+function ListIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="8" y1="6" x2="21" y2="6" />
+      <line x1="8" y1="12" x2="21" y2="12" />
+      <line x1="8" y1="18" x2="21" y2="18" />
+      <line x1="3" y1="6" x2="3.01" y2="6" />
+      <line x1="3" y1="12" x2="3.01" y2="12" />
+      <line x1="3" y1="18" x2="3.01" y2="18" />
+    </svg>
+  );
+}
+
+const ITEMS: Array<{ id: Exclude<ActivitySelection, null>; icon: (active: boolean) => React.ReactNode; label: string }> = [
+  { id: "files", icon: (a) => <FolderIcon active={a} />, label: "文件" },
+  { id: "stats", icon: (a) => <ChartIcon active={a} />, label: "度支" },
+  { id: "context", icon: (a) => <ScrollIcon active={a} />, label: "文脉" },
+  { id: "archives", icon: (a) => <ArchiveIcon active={a} />, label: "存档" },
 ];
 
 export default function ActivityBar({ selected, onSelect, onLogsClick }: ActivityBarProps) {
@@ -21,23 +73,27 @@ export default function ActivityBar({ selected, onSelect, onLogsClick }: Activit
         return (
           <button
             key={item.id}
-            title={item.label}
             onClick={() => onSelect(active ? null : item.id)}
-            className={`relative w-full h-11 flex items-center justify-center text-lg transition-colors ${
-              active ? "bg-ink-800 text-ink-50" : "text-ink-500 hover:text-ink-200 hover:bg-ink-800/60"
+            className={`group relative w-full h-11 flex items-center justify-center transition-colors ${
+              active ? "bg-ink-800" : "text-ink-500 hover:text-ink-200 hover:bg-ink-800/60"
             }`}
           >
             {active && <span className="absolute left-0 top-1 bottom-1 w-0.5 bg-vermillion rounded-r" />}
-            <span aria-hidden>{item.icon}</span>
+            {item.icon(active)}
+            <span className="absolute left-full ml-2 whitespace-nowrap bg-ink-800 text-ink-200 text-xs px-2 py-1 rounded border border-ink-700 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+              {item.label}
+            </span>
           </button>
         );
       })}
       <button
-        title="日志"
         onClick={onLogsClick}
-        className="mt-1 w-full h-11 flex items-center justify-center text-lg text-ink-500 hover:text-ink-200 hover:bg-ink-800/60 transition-colors"
+        className="group relative mt-1 w-full h-11 flex items-center justify-center text-ink-500 hover:text-ink-200 hover:bg-ink-800/60 transition-colors"
       >
-        📋
+        <ListIcon />
+        <span className="absolute left-full ml-2 whitespace-nowrap bg-ink-800 text-ink-200 text-xs px-2 py-1 rounded border border-ink-700 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+          日志
+        </span>
       </button>
     </div>
   );

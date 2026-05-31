@@ -2,6 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { open } from "@tauri-apps/plugin-dialog";
 import { loadProject, getRecentDirs, getConfig, createDemoProject } from "../api";
+import { SealLogo } from "../components/SealLogo";
+import { Card } from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
 
 export default function WorkspaceSelect() {
   const navigate = useNavigate();
@@ -52,15 +55,19 @@ export default function WorkspaceSelect() {
   };
 
   return (
-    <div className="min-h-screen bg-ink-50 flex items-center justify-center">
-      <div className="bg-white rounded-xl shadow-lg shadow-ink-200/50 border border-ink-200 w-full max-w-md p-8">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-ink-900 mb-2 tracking-wide">枢机</h1>
-          <p className="text-ink-500 text-sm">三省六部制自动化软件开发系统</p>
+    <div className="min-h-screen bg-surface-paper flex items-center justify-center">
+      <Card variant="paper" className="w-full max-w-md p-8">
+        <div className="text-center mb-6">
+          <div className="flex justify-center mb-3"><SealLogo size={40} /></div>
+          <h1 className="font-display text-display font-bold text-ink-900 mb-2">枢机</h1>
+          <p className="text-body text-ink-600">三省六部制自动化软件开发系统</p>
         </div>
 
         {/* ── Quick-start for new users ── */}
-        <button
+        <Button
+          variant="seal"
+          className="w-full mb-4 !py-3 !text-ui font-bold"
+          disabled={loading}
           onClick={async () => {
             setLoading(true);
             setError("");
@@ -73,19 +80,17 @@ export default function WorkspaceSelect() {
               setLoading(false);
             }
           }}
-          disabled={loading}
-          className="w-full mb-4 px-4 py-3 bg-vermillion text-white rounded-xl hover:bg-vermillion-dark disabled:opacity-40 text-sm font-bold transition-colors shadow-sm"
         >
-          {loading ? "创建中..." : "🚀 体验枢机 — 5 分钟上手"}
-        </button>
+          {loading ? "创建中..." : "体验枢机 — 5 分钟上手"}
+        </Button>
 
         <div className="relative mb-4">
-          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-ink-200" /></div>
-          <div className="relative flex justify-center text-xs"><span className="bg-white px-2 text-ink-400">或打开已有项目</span></div>
+          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-fold" /></div>
+          <div className="relative flex justify-center text-ui"><span className="bg-surface-elevated px-2 text-ink-400">或打开已有项目</span></div>
         </div>
 
         <div className="mb-4">
-          <label className="block text-xs font-medium text-ink-500 mb-1 tracking-wide">
+          <label className="block text-ui font-medium text-ink-500 mb-1 tracking-wide">
             工作目录
           </label>
           <div className="flex gap-2">
@@ -95,18 +100,18 @@ export default function WorkspaceSelect() {
               value={dirPath}
               onChange={(e) => setDirPath(e.target.value)}
               placeholder="选择一个文件夹..."
-              className="flex-1 px-3 py-2 border border-ink-200 bg-ink-50 rounded-lg text-sm font-mono text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-ink-500"
+              className="flex-1 px-3 py-2 border border-fold bg-surface-parchment rounded-lg text-body font-mono text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-vermillion focus:ring-1 focus:ring-vermillion/30"
             />
             <button
               onClick={handleBrowse}
-              className="px-3 py-2 border border-ink-200 rounded-lg text-ink-600 hover:bg-ink-100 text-sm transition-colors"
+              className="px-3 py-2 border border-fold rounded-lg text-ink-600 hover:bg-ink-100 text-ui transition-colors"
             >
               浏览
             </button>
             <button
               onClick={() => handleOpen()}
               disabled={loading}
-              className="px-4 py-2 bg-ink-900 text-ink-50 rounded-lg hover:bg-ink-800 disabled:opacity-40 text-sm transition-colors"
+              className="px-4 py-2 bg-ink-900 text-ink-50 rounded-lg hover:bg-ink-800 disabled:opacity-40 text-ui transition-colors"
             >
               {loading ? "打开中..." : "打开"}
             </button>
@@ -115,7 +120,7 @@ export default function WorkspaceSelect() {
 
         {recentDirs.length > 0 && (
           <div>
-            <label className="block text-xs font-medium text-ink-400 mb-1 tracking-wide">
+            <label className="block text-ui font-medium text-ink-400 mb-1 tracking-wide">
               最近目录
             </label>
             <div className="space-y-0.5">
@@ -123,7 +128,7 @@ export default function WorkspaceSelect() {
                 <button
                   key={i}
                   onClick={() => handleOpen(dir)}
-                  className="block w-full text-left px-3 py-1.5 text-sm text-ink-600 hover:bg-ink-100 rounded truncate transition-colors"
+                  className="block w-full text-left px-3 py-1.5 text-ui text-ink-600 hover:bg-ink-100 rounded truncate transition-colors"
                 >
                   {dir}
                 </button>
@@ -133,9 +138,9 @@ export default function WorkspaceSelect() {
         )}
 
         {error && (
-          <div className="mt-3 text-sm text-vermillion-dark bg-vermillion-light border border-vermillion/20 p-2 rounded">{error}</div>
+          <div className="mt-3 text-ui text-vermillion-dark bg-vermillion-light border border-vermillion/20 p-2 rounded">{error}</div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

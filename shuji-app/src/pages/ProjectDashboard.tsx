@@ -14,6 +14,9 @@ import SettingsMenu from "../components/SettingsMenu";
 import HelpDrawer from "../components/HelpDrawer";
 import ProjectPicker from "../components/ProjectPicker";
 import ChatPanel from "../components/ChatPanel";
+import { SealLogo } from "../components/SealLogo";
+import { Tabs } from "../components/ui/Tabs";
+import { Button } from "../components/ui/Button";
 import { createDemoProject } from "../api";
 import type { ActivitySelection } from "../components/ActivityBar";
 
@@ -95,7 +98,7 @@ export default function ProjectDashboard() {
     document.addEventListener("mouseup", up);
   };
 
-  const tabLabels: Record<Tab, string> = { decision: "决策", discuss: "讨论" };
+  const tabLabels: Record<Tab, string> = { decision: "决策", discuss: "廷议" };
   const tabSubtitles: Record<Tab, string> = { decision: "下达敕令，驱动各部门执行", discuss: "仅与内阁议政，不改代码、不写文档" };
 
   const handleConvertToCommand = (text: string) => {
@@ -119,21 +122,22 @@ export default function ProjectDashboard() {
   };
 
   return (
-    <div className="h-screen bg-ink-50 flex flex-col overflow-hidden">
-      <header className="bg-ink-900 border-b border-ink-800 shrink-0 h-11 px-4 flex items-center justify-between">
+    <div className="h-screen bg-surface-paper flex flex-col overflow-hidden">
+      <header className="bg-ink-900 border-b border-gold/30 shrink-0 h-12 px-4 flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
-          <h1 className="text-sm font-bold text-ink-50 tracking-wide truncate">{project?.name || "枢机"}</h1>
-          <span className="text-[11px] text-ink-500 font-mono truncate max-w-[520px]">{project?.working_dir}</span>
+          <SealLogo size={20} />
+          <h1 className="font-display text-base font-semibold text-ink-50 truncate">{project?.name || "枢机"}</h1>
+          <span className="text-caption text-ink-500 font-mono truncate max-w-[520px]">{project?.working_dir}</span>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={handleDemoProject} className="text-xs px-2 py-1 text-vermillion-light hover:text-white hover:bg-vermillion/20 rounded font-medium">🚀 体验枢机</button>
-          <button onClick={openProjectPicker} className="text-xs px-2 py-1 text-ink-400 hover:text-ink-100 hover:bg-ink-800 rounded">打开项目</button>
+          <Button variant="seal" className="text-xs !px-2 !py-1" onClick={handleDemoProject}>体验枢机</Button>
+          <Button variant="ghost" className="text-xs !px-2 !py-1 text-ink-400" onClick={openProjectPicker}>打开项目</Button>
           <HelpDrawer />
           <SettingsMenu open={settingsOpen} setOpen={setSettingsOpen} />
         </div>
       </header>
 
-      {error && <div className="px-4 py-2 bg-vermillion-light border-b border-vermillion/20 text-vermillion-dark text-sm shrink-0">{error}<button onClick={clearError} className="ml-2 font-bold">&times;</button></div>}
+      {error && <div className="px-4 py-2 bg-vermillion-light border-b border-vermillion/20 text-vermillion-dark text-ui shrink-0">{error}<button onClick={clearError} className="ml-2 font-bold">&times;</button></div>}
 
       <div className="flex-1 flex min-h-0 overflow-hidden">
         <ActivityBar selected={activity} onSelect={setActivity} onLogsClick={() => setLogsExpanded(true)} />
@@ -141,17 +145,20 @@ export default function ProjectDashboard() {
         <main className="flex-1 min-w-0 min-h-0 overflow-hidden">
           {project && selectedDoc ? <DocPreview projectDir={project.working_dir} docPath={selectedDoc} /> : <ProjectOverview project={project} activeDepts={activeDepts} planInfo={planInfo} onOpenProject={openProjectPicker} />}
         </main>
-        <section className="relative bg-ink-50 border-l border-ink-200 flex flex-col min-h-0 shrink-0" style={{ width: chatWidth }}>
+        <section className="relative bg-surface-paper border-l border-fold flex flex-col min-h-0 shrink-0" style={{ width: chatWidth }}>
           <div onMouseDown={startResize} className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-vermillion/40 transition-colors" />
-          <div className="border-b border-ink-200 bg-white shrink-0">
-            <div className="flex items-center px-3 gap-1 pt-2">
-              {(["decision", "discuss"] as Tab[]).map((t) => (
-                <button key={t} onClick={() => setTab(t)} className={`px-3 py-1.5 text-xs rounded ${tab === t ? "bg-ink-900 text-white" : "text-ink-500 hover:bg-ink-100"}`}>{tabLabels[t]}</button>
-              ))}
-            </div>
-            <div className="px-3 pb-1.5 text-[10px] text-ink-400">{tabSubtitles[tab]}</div>
+          <div className="border-b border-fold bg-surface-elevated shrink-0 px-3 py-2">
+            <Tabs
+              tabs={[
+                { key: "decision", label: tabLabels.decision },
+                { key: "discuss", label: tabLabels.discuss },
+              ]}
+              activeKey={tab}
+              onChange={(k) => setTab(k as Tab)}
+            />
+            <div className="text-ui text-ink-600 mt-1">{tabSubtitles[tab]}</div>
           </div>
-          {!project ? <div className="flex-1 flex items-center justify-center text-sm text-ink-400">请先加载项目</div> : <ChatPanel tab={tab} messages={messages} discussMsgs={discussMsgs} discussing={discussing} planInfo={planInfo} onOption={(key, supplement) => handleSend(supplement ? `${key}\n${supplement}` : key)} onSend={handleSend} onDiscuss={handleDiscuss} onConvertToCommand={handleConvertToCommand} endRef={chatEndRef} />}
+          {!project ? <div className="flex-1 flex items-center justify-center text-body text-ink-400">请先开卷</div> : <ChatPanel tab={tab} messages={messages} discussMsgs={discussMsgs} discussing={discussing} planInfo={planInfo} onOption={(key, supplement) => handleSend(supplement ? `${key}\n${supplement}` : key)} onSend={handleSend} onDiscuss={handleDiscuss} onConvertToCommand={handleConvertToCommand} endRef={chatEndRef} />}
         </section>
       </div>
 

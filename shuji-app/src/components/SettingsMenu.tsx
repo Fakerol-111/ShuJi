@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { getConfig, saveConfig, getContextConfig, saveContextConfig, checkApiConnection, getWorkflowPreset as apiGetPreset, setWorkflowPreset as apiSetPreset } from "../api";
-import { ALL_ROLES } from "../constants";
+import { ALL_ROLES, CODE_THEMES, getCodeTheme, setCodeTheme as persistCodeTheme } from "../constants";
 import type { RoleEndpoint, ContextWindowConfig } from "../types";
 
 // ── Provider presets (shared with SetupPage) ───────────────
@@ -82,6 +82,7 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
   const [healthStatus, setHealthStatus] = useState<"idle" | "checking" | "ok" | "fail">("idle");
   const [healthMsg, setHealthMsg] = useState("");
   const [workflowPreset, setWorkflowPresetLocal] = useState("standard");
+  const [codeTheme, setCodeThemeLocal] = useState(getCodeTheme);
 
   // Context window config state
   const [contextOverrides, setContextOverrides] = useState<Record<string, ContextRoleForm>>({});
@@ -455,6 +456,30 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
                 fast: "跳过设计/审查，直达执行。适合小改动。",
                 audit: "强制审查和规范检查。适合合规场景。",
               }[workflowPreset]}
+            </div>
+          </div>
+
+          {/* ── 代码主题 ── */}
+          <div className="space-y-1 pt-2 border-t border-ink-700">
+            <span className="text-[11px] font-semibold text-ink-300">代码主题</span>
+            <div className="flex gap-1 flex-wrap">
+              {Object.entries(CODE_THEMES).map(([key, theme]) => (
+                <button
+                  key={key}
+                  onClick={() => {
+                    setCodeThemeLocal(key);
+                    persistCodeTheme(key);
+                    document.documentElement.dataset.codeTheme = key;
+                  }}
+                  className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${
+                    codeTheme === key
+                      ? "bg-ink-700 text-ink-100 border-ink-600"
+                      : "bg-ink-800 text-ink-400 border-ink-700 hover:border-ink-500"
+                  }`}
+                >
+                  {theme.label}
+                </button>
+              ))}
             </div>
           </div>
 

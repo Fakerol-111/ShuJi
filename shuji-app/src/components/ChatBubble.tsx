@@ -1,30 +1,49 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
 import type { ChatMessage, ChatOption } from "../types";
+
+const DEPT_COLORS: Record<string, string> = {
+  内阁: "#6B4E9E",
+  中书令: "#3D6B8E",
+  门下侍中: "#2E7D8C",
+  尚书令: "#B45309",
+  吏部尚书: "#2F7A4F",
+  兵部尚书: "#B83A3A",
+  工部尚书: "#A16207",
+  刑部尚书: "#5C6370",
+  礼部尚书: "#5B5FC7",
+  制司: "#A3477A",
+};
 
 export default function ChatBubble({ msg, onOption }: { msg: ChatMessage; onOption: (key: string, supplement?: string) => void }) {
   const isEmperor = msg.role === "皇帝";
+  const deptColor = DEPT_COLORS[msg.role];
 
   return (
-    <div className={`flex ${isEmperor ? "justify-end" : "justify-start"} mb-3`}>
-      <div className={`max-w-[80%]`}>
-        <div className={`text-[10px] mb-1 tracking-wide ${isEmperor ? "text-right text-ink-500" : "text-ink-400"}`}>
-          {isEmperor ? "陛下" : msg.role}
+    <div className={`flex ${isEmperor ? "justify-end" : "justify-start"}`}>
+      <div className={`${isEmperor ? "max-w-[70%]" : "max-w-[85%]"}`}>
+        {/* Header */}
+        <div className={`text-caption mb-1 ${isEmperor ? "text-right text-ink-500" : "text-ink-600"}`}>
+          {isEmperor ? "御" : `${msg.role} 回奏`}
         </div>
-        <div
-          className={`rounded-xl px-4 py-2.5 text-sm leading-relaxed ${
-            isEmperor
-              ? "bg-ink-900 text-ink-50 rounded-tr-sm"
-              : "bg-white border border-ink-200 text-ink-800 rounded-tl-sm"
-          }`}
-        >
-          {isEmperor ? (
+
+        {/* Emperor bubble */}
+        {isEmperor ? (
+          <div className="bg-ink-900 text-ink-50 rounded-xl rounded-tr-sm px-4 py-2.5 text-body leading-relaxed">
             <p className="whitespace-pre-wrap break-words overflow-hidden">{msg.content}</p>
-          ) : (
-            <div className="prose prose-sm max-w-none break-words prose-headings:text-ink-900 prose-a:text-vermillion">
+          </div>
+        ) : (
+          /* Department bubble: 3px left color bar */
+          <div
+            className="bg-surface-elevated border border-fold rounded-xl rounded-tl-sm px-4 py-2.5 text-body leading-relaxed"
+            style={deptColor ? { borderLeft: `3px solid ${deptColor}` } : undefined}
+          >
+            <div className="prose prose-shuji max-w-none break-words">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeHighlight]}
                 components={{
                   a: ({ href, children }) => (
                     <a href={href} target="_blank" rel="noopener noreferrer"
@@ -37,8 +56,9 @@ export default function ChatBubble({ msg, onOption }: { msg: ChatMessage; onOpti
                 {msg.content}
               </ReactMarkdown>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
         {msg.options.length > 0 && (
           <OptionGroup options={msg.options} onOption={onOption} />
         )}
@@ -55,11 +75,11 @@ function OptionGroup({ options, onOption }: { options: ChatOption[]; onOption: (
     const opt = options.find((o) => o.key === selectedKey);
     if (!opt) return null;
     return (
-      <div className="mt-2 bg-ink-100 border border-ink-200 rounded-lg p-3">
-        <p className="text-xs font-bold text-ink-800 mb-1">{opt.key}. {opt.label}</p>
-        <p className="text-xs text-ink-600 mb-2">{opt.description}</p>
+      <div className="mt-2 bg-ink-100 border border-fold rounded-lg p-3">
+        <p className="text-ui font-bold text-ink-800 mb-1">{opt.key}. {opt.label}</p>
+        <p className="text-caption text-ink-600 mb-2">{opt.description}</p>
         <textarea
-          className="w-full border border-ink-300 rounded px-3 py-2 text-sm resize-none bg-white text-ink-900 focus:outline-none focus:border-vermillion"
+          className="w-full border border-fold rounded px-3 py-2 text-body resize-none bg-surface-elevated text-ink-900 focus:outline-none focus:border-vermillion"
           rows={3}
           placeholder="在此补充御批..."
           value={supplement}
@@ -68,15 +88,15 @@ function OptionGroup({ options, onOption }: { options: ChatOption[]; onOption: (
         <div className="flex gap-2 mt-2">
           <button
             onClick={() => onOption(selectedKey, supplement)}
-            className="bg-vermillion text-white text-xs font-bold px-4 py-1.5 rounded-lg hover:bg-vermillion-dark transition-colors"
+            className="bg-vermillion text-white text-ui font-bold px-4 py-1.5 rounded-lg hover:bg-vermillion-dark transition-colors"
           >
-            确认
+            遵旨
           </button>
           <button
             onClick={() => { setSelectedKey(null); setSupplement(""); }}
-            className="text-xs text-ink-500 px-3 py-1.5 hover:text-ink-700"
+            className="text-ui text-ink-500 px-3 py-1.5 hover:text-ink-700"
           >
-            取消
+            作罢
           </button>
         </div>
       </div>
@@ -95,11 +115,11 @@ function OptionGroup({ options, onOption }: { options: ChatOption[]; onOption: (
               onOption(opt.key);
             }
           }}
-          className={`text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${
-            opt.key === "A" ? "bg-jade hover:bg-jade/80" :
-            opt.key === "B" ? "bg-vermillion hover:bg-vermillion-dark" :
-            opt.key === "C" ? "bg-ink-700 hover:bg-ink-800" :
-            `bg-ink-600 hover:bg-ink-700`
+          className={`text-ui font-bold px-3 py-1.5 rounded-lg transition-colors ${
+            opt.key === "A" ? "bg-jade text-white hover:bg-jade/80" :
+            opt.key === "B" ? "bg-vermillion text-white hover:bg-vermillion-dark" :
+            opt.key === "C" ? "bg-ink-700 text-white hover:bg-ink-800" :
+            `bg-ink-600 text-white hover:bg-ink-700`
           }`}
           title={opt.description}
         >

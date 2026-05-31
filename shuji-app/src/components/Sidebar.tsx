@@ -4,13 +4,15 @@ import ContextPanel from "./ContextPanel";
 import CheckpointPanel from "./CheckpointPanel";
 import type { ActivitySelection } from "./ActivityBar";
 
-function headerLabel(mode: Exclude<ActivitySelection, null>): string {
-  switch (mode) {
-    case "files": return "项目文件";
-    case "stats": return "Token 统计";
-    case "context": return "文脉";
-    case "archives": return "存档";
-  }
+const headerLabel: Record<string, string> = {
+  files: "架阁目录",
+  stats: "度支",
+  context: "文脉",
+  archives: "存档",
+};
+
+function getHeader(mode: Exclude<ActivitySelection, null>): string {
+  return headerLabel[mode] || mode;
 }
 
 function panel(mode: Exclude<ActivitySelection, null>, projectDir: string, selectedDoc: string | null, onDocSelect: (path: string) => void) {
@@ -31,9 +33,9 @@ interface SidebarProps {
 
 export default function Sidebar({ mode, projectDir, selectedDoc, onDocSelect }: SidebarProps) {
   return (
-    <aside className="w-60 bg-white border-r border-ink-200 shrink-0 flex flex-col min-h-0">
-      <div className="h-9 px-3 border-b border-ink-200 flex items-center text-xs font-semibold text-ink-700 bg-ink-50">
-        {headerLabel(mode)}
+    <aside className="w-60 bg-surface-parchment border-r border-fold shrink-0 flex flex-col min-h-0">
+      <div className="h-9 px-3 border-b border-fold flex items-center font-display text-ui font-semibold text-ink-700">
+        {getHeader(mode)}
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
         {panel(mode, projectDir, selectedDoc, onDocSelect)}

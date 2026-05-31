@@ -44,14 +44,14 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
     };
   }, [debouncedRefresh]);
 
-  if (loading) return <div className="p-3 text-xs text-ink-400">加载项目文件...</div>;
-  if (error) return <div className="p-3 text-xs text-vermillion">{error}</div>;
-  if (tree.length === 0) return <div className="p-3 text-xs text-ink-400">暂无可预览文件</div>;
+  if (loading) return <div className="p-3 text-ui text-ink-400">开卷中…</div>;
+  if (error) return <div className="p-3 text-ui text-vermillion">{error}</div>;
+  if (tree.length === 0) return <div className="p-3 text-ui text-ink-400">暂无可预览文件</div>;
 
   return (
-    <div className="py-2 text-xs">
-      <div className="sticky top-0 z-10 bg-white px-2 pb-2 flex justify-end border-b border-ink-100 mb-1">
-        <button onClick={loadTree} className="px-2 py-1 rounded text-[10px] text-ink-500 hover:bg-ink-100 hover:text-ink-800">
+    <div className="py-2 text-ui">
+      <div className="sticky top-0 z-10 bg-surface-parchment px-2 pb-2 flex justify-end border-b border-fold mb-1">
+        <button onClick={loadTree} className="px-2 py-1 rounded text-ui text-ink-500 hover:bg-ink-100 hover:text-ink-800">
           刷新
         </button>
       </div>
@@ -74,9 +74,9 @@ function DocNode({ entry, selectedDoc, onSelect, depth }: { entry: ShujiEntry; s
           className="w-full flex items-center gap-1 px-2 py-1 text-left text-ink-500 hover:text-ink-800 hover:bg-ink-100"
           style={{ paddingLeft: 8 + depth * 12 }}
         >
-          <span className="w-3 text-[10px]">{open ? "▾" : "▸"}</span>
+          <span className="w-3 text-caption">{open ? "▾" : "▸"}</span>
           <span className="truncate font-medium">{entry.name}</span>
-          <span className="ml-auto text-[10px] text-ink-400">{entry.children.length}</span>
+          <span className="ml-auto text-caption text-ink-400">{entry.children.length}</span>
         </button>
         {open && entry.children.map((child) => (
           <DocNode key={child.path} entry={child} selectedDoc={selectedDoc} onSelect={onSelect} depth={depth + 1} />
@@ -94,9 +94,9 @@ function DocNode({ entry, selectedDoc, onSelect, depth }: { entry: ShujiEntry; s
       style={{ paddingLeft: 12 + depth * 12 }}
       title={entry.path}
     >
-      <span className="text-[10px]">{fileIcon(entry.name)}</span>
-      <span className="truncate font-mono text-[11px]">{entry.name}</span>
-      <span className="ml-auto text-[9px] text-ink-400 shrink-0">{entry.type_label}</span>
+      <span className="text-caption">{fileIcon(entry.name)}</span>
+      <span className="truncate font-mono text-ui">{entry.name}</span>
+      <span className="ml-auto text-caption text-ink-400 shrink-0">{entry.type_label}</span>
     </button>
   );
 }

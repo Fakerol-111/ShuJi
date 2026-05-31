@@ -32,7 +32,7 @@ export default function HelpDrawer() {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="relative">
+    <>
       <button
         onClick={() => setOpen(!open)}
         className="text-xs px-2 py-1 text-ink-400 hover:text-ink-100 hover:bg-ink-800 rounded transition-colors"
@@ -44,68 +44,70 @@ export default function HelpDrawer() {
       {open && (
         <>
           {/* Backdrop */}
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          {/* Drawer */}
-          <div className="absolute right-0 top-8 z-50 w-80 bg-white border border-ink-200 rounded-xl shadow-xl shadow-ink-200/40 max-h-[80vh] overflow-y-auto">
-            <div className="p-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-bold text-ink-900">三省六部系统帮助</h2>
-                <button onClick={() => setOpen(false)} className="text-ink-400 hover:text-ink-600 text-sm">&times;</button>
+          <div className="fixed inset-0 z-40 bg-ink-950/30" onClick={() => setOpen(false)} />
+          {/* Drawer panel */}
+          <div className="fixed right-0 top-0 bottom-0 z-50 w-[360px] bg-surface-paper shadow-xl border-l border-fold overflow-y-auto">
+            <div className="px-5 py-4">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-display text-title font-bold text-ink-900">三省六部</h2>
+                <button onClick={() => setOpen(false)} className="text-ink-400 hover:text-ink-600 text-lg leading-none">&times;</button>
               </div>
 
-              {/* Workflow */}
-              <Section title="工作流程">
-                <div className="space-y-2">
-                  {WORKFLOW_STEPS.map((ws, i) => (
-                    <div key={i} className="flex gap-2 text-xs">
-                      <span className="text-ink-400 w-3 shrink-0">{i + 1}.</span>
-                      <div className="min-w-0">
-                        <span className="font-medium text-ink-800">{ws.step}</span>
-                        {ws.dept && <span className="text-vermillion ml-1">{ws.dept}</span>}
-                        <div className="text-ink-500">{ws.desc}</div>
+              <div className="space-y-4">
+                {/* Workflow */}
+                <Section title="工作流程">
+                  <div className="space-y-2">
+                    {WORKFLOW_STEPS.map((ws, i) => (
+                      <div key={i} className="flex gap-2 text-body leading-relaxed">
+                        <span className="text-ink-400 w-4 shrink-0">{i + 1}.</span>
+                        <div className="min-w-0">
+                          <span className="font-medium text-ink-800">{ws.step}</span>
+                          {ws.dept && <span className="text-vermillion ml-1">{ws.dept}</span>}
+                          <div className="text-ink-600">{ws.desc}</div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </Section>
+                    ))}
+                  </div>
+                </Section>
 
-              {/* Departments */}
-              <Section title="部门对照表">
-                <div className="space-y-1">
-                  {DEPARTMENTS.map((d) => (
-                    <div key={d.name} className="flex gap-2 text-xs py-1">
-                      <span className="font-medium text-ink-800 w-14 shrink-0">{d.name}</span>
-                      <span className="text-ink-500">{d.role}</span>
-                    </div>
-                  ))}
-                </div>
-              </Section>
+                {/* Departments */}
+                <Section title="部门对照表">
+                  <div className="space-y-1">
+                    {DEPARTMENTS.map((d) => (
+                      <div key={d.name} className="flex gap-2 text-body py-1">
+                        <span className="font-medium text-ink-800 w-16 shrink-0">{d.name}</span>
+                        <span className="text-ink-600">{d.role}</span>
+                      </div>
+                    ))}
+                  </div>
+                </Section>
 
-              {/* Quick tips */}
-              <Section title="快速提示">
-                <ul className="text-xs text-ink-600 space-y-1 list-disc pl-4">
-                  <li>输入 /level-1 到 /level-3 控制参与度</li>
-                  <li>讨论 tab 仅聊天，不改代码</li>
-                  <li>重要节点皇帝需审批文档</li>
-                  <li>可随时点击「中断所有操作」停止处理</li>
-                  <li>侧边栏可浏览所有 .shuji 文档</li>
-                </ul>
-              </Section>
+                {/* Quick tips */}
+                <Section title="快速提示">
+                  <ul className="text-body text-ink-600 space-y-1 list-disc pl-5 leading-relaxed">
+                    <li>输入 /level-1 到 /level-3 控制参与度</li>
+                    <li>廷议 tab 仅聊天，不改代码</li>
+                    <li>重要节点皇帝需审批文档</li>
+                    <li>可随时点击「叫停诸司」停止处理</li>
+                    <li>侧边栏可浏览所有 .shuji 文档</li>
+                  </ul>
+                </Section>
+              </div>
             </div>
           </div>
         </>
       )}
-    </div>
+    </>
   );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
-    <div className="border border-ink-100 rounded-lg overflow-hidden">
+    <div className="border border-fold rounded-lg overflow-hidden">
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="w-full flex items-center justify-between px-3 py-2 bg-ink-50 text-xs font-semibold text-ink-700 hover:bg-ink-100 transition-colors"
+        className="title-rule-gold w-full flex items-center justify-between px-3 py-2 bg-surface-parchment text-ui font-semibold text-ink-700 hover:bg-ink-100 transition-colors"
       >
         {title}
         <span className="text-ink-400">{collapsed ? "+" : "-"}</span>

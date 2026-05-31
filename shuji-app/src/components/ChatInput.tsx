@@ -87,7 +87,7 @@ export default function ChatInput({ onSend, disabled, placeholder }: Props) {
           {toast}
         </div>
       )}
-      <div className="flex gap-2 border-t border-ink-200 bg-white px-4 py-3 items-end">
+      <div className="flex gap-2 border-t border-fold bg-surface-elevated px-4 py-3 items-end">
         <textarea
           ref={textareaRef}
           value={text}
@@ -96,14 +96,14 @@ export default function ChatInput({ onSend, disabled, placeholder }: Props) {
           placeholder={placeholder || "/level-1 /level-2 /level-3 切换参与度"}
           disabled={disabled}
           rows={1}
-          className="flex-1 px-3 py-2 border border-ink-200 bg-ink-50 rounded-lg text-sm text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-vermillion focus:ring-1 focus:ring-vermillion/30 disabled:opacity-50 resize-none leading-5"
+          className="flex-1 px-3 py-2 border border-fold bg-surface-parchment rounded-lg text-body text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-vermillion focus:ring-1 focus:ring-vermillion/30 disabled:opacity-50 resize-none leading-5"
         />
         <button
           onClick={handleSend}
           disabled={disabled || !text.trim()}
-          className="px-5 py-2 bg-ink-900 text-ink-50 rounded-lg hover:bg-ink-800 disabled:opacity-40 text-sm font-medium transition-colors shrink-0"
+          className="px-5 py-2 bg-ink-900 text-ink-50 rounded-lg hover:bg-ink-800 disabled:opacity-40 text-ui font-medium transition-colors shrink-0"
         >
-          发送
+          下诏
         </button>
       </div>
     </div>

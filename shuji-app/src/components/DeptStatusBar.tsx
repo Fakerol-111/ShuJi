@@ -4,17 +4,17 @@ import { useActiveDepts } from "../hooks/useActiveDepts";
 import type { RoundMetrics } from "../types";
 
 export const DEPT_COLORS: Record<string, string> = {
-  内阁: "#7c3aed",
-  中书令: "#3b82f6",
-  门下侍中: "#06b6d4",
-  尚书令: "#f97316",
-  吏部: "#22c55e",
-  兵部: "#ef4444",
-  工部: "#f59e0b",
-  刑部: "#6b7280",
-  礼部: "#6366f1",
-  户部: "#14b8a6",
-  制司: "#ec4899",
+  内阁: "#6B4E9E",
+  中书令: "#3D6B8E",
+  门下侍中: "#2E7D8C",
+  尚书令: "#B45309",
+  吏部尚书: "#2F7A4F",
+  兵部尚书: "#B83A3A",
+  工部尚书: "#A16207",
+  刑部尚书: "#5C6370",
+  礼部尚书: "#5B5FC7",
+  户部: "#0D7A6E",
+  制司: "#A3477A",
 };
 
 const ROLE_ORDER = ["内阁", "中书令", "门下侍中", "尚书令", "吏部", "兵部", "工部", "刑部", "礼部", "户部", "制司"];
@@ -99,14 +99,14 @@ export default function DeptStatusBar() {
   }
 
   return (
-    <div className="h-6 bg-ink-900 text-ink-300 border-t border-ink-800 px-3 flex items-center justify-between text-[11px] shrink-0">
+    <div className="h-7 bg-ink-900 text-ink-300 border-t border-ink-800 px-3 flex items-center justify-between text-ui shrink-0">
       <div className="flex items-center gap-2 min-w-0">
-        <span className="text-amber-300 shrink-0">⚡</span>
+        <span className="text-ink-500 shrink-0 text-caption">当值</span>
         {visible.map((dept) => <DeptLight key={dept} dept={dept} active={active.has(dept)} />)}
         {hidden.length > 0 && (
-          <span className="group relative text-ink-500 cursor-default">
-            +{hidden.length} 更多
-            <span className="hidden group-hover:flex absolute bottom-5 left-0 bg-ink-800 border border-ink-700 rounded px-2 py-1 gap-2 whitespace-nowrap shadow-lg">
+          <span className="group relative text-ink-500 cursor-default text-caption">
+            +{hidden.length}
+            <span className="hidden group-hover:flex absolute bottom-6 left-0 bg-ink-800 border border-ink-700 rounded px-2 py-1 gap-2 whitespace-nowrap shadow-lg z-10">
               {hidden.map((dept) => <DeptLight key={dept} dept={dept} active={active.has(dept)} />)}
             </span>
           </span>
@@ -115,22 +115,22 @@ export default function DeptStatusBar() {
 
       {/* Round metrics (center) */}
       {roundParts.length > 0 && (
-        <div className="text-ink-400 font-mono truncate mx-2 text-[10px]" title={roundParts.join(" · ")}>
+        <div className="text-ink-400 font-mono truncate mx-2 text-caption" title={roundParts.join(" · ")}>
           {roundParts.join(" · ")}
         </div>
       )}
 
-      <div className="font-mono text-ink-400 shrink-0 ml-3">token {formatToken(tokenTotal)}</div>
+      <div className="font-mono text-ink-400 shrink-0 ml-3 text-caption">token {formatToken(tokenTotal)}</div>
     </div>
   );
 }
 
 function DeptLight({ dept, active }: { dept: string; active: boolean }) {
-  const color = DEPT_COLORS[dept] || "#9ca3af";
+  const color = DEPT_COLORS[dept] || "#8B7355";
   return (
-    <span className="flex items-center gap-0.5 whitespace-nowrap">
-      <span>{dept}</span>
-      <span className={active ? "animate-pulse" : ""} style={{ color }}>{active ? "●" : "○"}</span>
+    <span className="flex items-center gap-1 whitespace-nowrap">
+      <span className={`w-2 h-2 rounded-full ${active ? "animate-pulse" : "opacity-30"}`} style={{ backgroundColor: active ? color : "#8B7355" }} />
+      {active && <span className="text-ink-200 text-caption">{dept}</span>}
     </span>
   );
 }

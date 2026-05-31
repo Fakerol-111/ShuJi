@@ -12,6 +12,80 @@ export const TOKEN_REFRESH_INTERVAL_MS = 30000;
 export const MONTHLY_TOKEN_WARNING = 0.8; // 80% 时黄色预警
 export const MONTHLY_TOKEN_LIMIT = 10_000_000; // 1000 万 tokens
 
+// ── 代码主题 ────────────────────────────────────────────
+
+export interface CodeTheme {
+  label: string;
+  type: "dark" | "light";
+  bg: string;
+  tabBg: string;
+  border: string;
+  text: string;
+  lineNum: string;
+  muted: string;
+  lineHover: string;
+}
+
+export const CODE_THEMES: Record<string, CodeTheme> = {
+  "tokyo-night": {
+    label: "Tokyo Night",
+    type: "dark",
+    bg: "#1a1b26",
+    tabBg: "#16161e",
+    border: "#2f3b54",
+    text: "#c0caf5",
+    lineNum: "#4c4f6b",
+    muted: "#565f89",
+    lineHover: "rgba(255,255,255,0.03)",
+  },
+  "github-dark": {
+    label: "GitHub Dark",
+    type: "dark",
+    bg: "#0d1117",
+    tabBg: "#161b22",
+    border: "#30363d",
+    text: "#e6edf3",
+    lineNum: "#6e7681",
+    muted: "#8b949e",
+    lineHover: "rgba(255,255,255,0.03)",
+  },
+  "one-light": {
+    label: "One Light",
+    type: "light",
+    bg: "#fafafa",
+    tabBg: "#f0f0f0",
+    border: "#e0e0e0",
+    text: "#383a42",
+    lineNum: "#9d9d9f",
+    muted: "#a0a1a7",
+    lineHover: "rgba(0,0,0,0.03)",
+  },
+  "github-light": {
+    label: "GitHub Light",
+    type: "light",
+    bg: "#ffffff",
+    tabBg: "#f6f8fa",
+    border: "#d0d7de",
+    text: "#1f2328",
+    lineNum: "#6e7781",
+    muted: "#656d76",
+    lineHover: "rgba(0,0,0,0.03)",
+  },
+};
+
+export const DEFAULT_CODE_THEME = "tokyo-night";
+
+export function getCodeTheme(): string {
+  if (typeof window === "undefined") return DEFAULT_CODE_THEME;
+  return localStorage.getItem("shuji_code_theme") || DEFAULT_CODE_THEME;
+}
+
+export function setCodeTheme(name: string): void {
+  localStorage.setItem("shuji_code_theme", name);
+}
+
+// ── 代码主题 end ────────────────────────────────────────
+
 // ── Role definitions ──────────────────────────────────────
 
 export interface RoleInfo {

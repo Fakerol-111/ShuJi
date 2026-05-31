@@ -23,15 +23,15 @@ export default function ChatPanel(props: ChatPanelProps) {
       <>
         {planInfo && <PlanCard info={planInfo} />}
         <MessageList messages={messages} onOption={onOption} endRef={endRef} />
-        <div className="shrink-0 px-4 py-2 border-t border-ink-200 bg-white">
+        <div className="shrink-0 px-4 py-2 border-t border-fold bg-surface-elevated flex justify-end">
           <button
             onClick={() => cancelProcessing()}
-            className="w-full px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 active:bg-red-800 rounded transition-colors"
+            className="text-ui px-3 py-1.5 font-medium text-ink-600 hover:text-vermillion hover:bg-vermillion-light rounded-lg transition-colors"
           >
-            中断所有操作
+            叫停诸司
           </button>
         </div>
-        <ChatInput onSend={onSend} disabled={false} placeholder="输入指令..." />
+        <ChatInput onSend={onSend} disabled={false} placeholder="拟旨…" />
       </>
     );
   }
@@ -39,19 +39,19 @@ export default function ChatPanel(props: ChatPanelProps) {
     <>
       <MessageList messages={discussMsgs} onOption={() => {}} endRef={endRef} thinking={discussing} />
       {discussMsgs.length > 0 && !discussing && (
-        <div className="shrink-0 px-4 py-2 border-t border-ink-200 bg-white">
+        <div className="shrink-0 px-4 py-2 border-t border-fold bg-surface-elevated">
           <button
             onClick={() => {
               const lastUserMsg = [...discussMsgs].reverse().find(m => m.role === "user" || m.role === "皇帝");
               if (lastUserMsg) onConvertToCommand(lastUserMsg.content);
             }}
-            className="w-full px-3 py-2 text-xs font-medium text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors"
+            className="w-full px-3 py-2 text-ui font-medium text-gold bg-gold-light hover:bg-gold-light/80 border border-vermillion/20 rounded-lg transition-colors"
           >
             将此事转为正式敕命
           </button>
         </div>
       )}
-      <ChatInput onSend={onDiscuss} disabled={discussing} placeholder="与内阁讨论..." />
+      <ChatInput onSend={onDiscuss} disabled={discussing} placeholder="廷议…" />
     </>
   );
 }
@@ -72,14 +72,14 @@ function messageKey(msg: ChatMessage, index: number) {
 
 function PlanCard({ info }: { info: PlanInfo }) {
   return (
-    <div className="shrink-0 mx-4 mt-3 bg-ink-100 border border-ink-200 rounded-lg px-3 py-2">
-      <div className="text-[10px] text-ink-400 font-medium tracking-wide mb-1">工部计划</div>
+    <div className="shrink-0 mx-4 mt-3 bg-surface-parchment border border-fold rounded-lg px-3 py-2">
+      <div className="font-display text-caption text-ink-600 font-semibold mb-1">工部计划</div>
       <div className="space-y-0.5">
         {info.batches.map((b, i) => (
-          <div key={i} className="flex items-center gap-1.5 text-[11px] font-mono">
-            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${b.status === "done" ? "bg-green-500" : b.status === "current" ? "bg-yellow-500 animate-pulse" : "bg-ink-300"}`} />
+          <div key={i} className="flex items-center gap-1.5 text-caption font-mono">
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${b.status === "done" ? "bg-jade" : b.status === "current" ? "bg-gold animate-pulse" : "bg-ink-300"}`} />
             <span className={b.status === "done" ? "text-ink-400 line-through" : b.status === "current" ? "text-ink-800 font-medium" : "text-ink-500"}>{b.name}</span>
-            {b.status === "current" && <span className="text-ink-400 text-[10px] ml-auto truncate">{b.goal}</span>}
+            {b.status === "current" && <span className="text-ink-400 text-caption ml-auto truncate">{b.goal}</span>}
           </div>
         ))}
       </div>
