@@ -16,11 +16,17 @@ fn build_http_client() -> reqwest::Client {
 
 /// Wrap reqwest error with URL context for better diagnostics.
 fn map_reqwest_error(url: &str, e: reqwest::Error) -> anyhow::Error {
-    let kind = if e.is_connect() { "连接失败" }
-        else if e.is_timeout() { "请求超时" }
-        else if e.is_body() { "请求体错误" }
-        else if e.is_request() { "请求错误" }
-        else { "未知错误" };
+    let kind = if e.is_connect() {
+        "连接失败"
+    } else if e.is_timeout() {
+        "请求超时"
+    } else if e.is_body() {
+        "请求体错误"
+    } else if e.is_request() {
+        "请求错误"
+    } else {
+        "未知错误"
+    };
     anyhow::anyhow!("[{}] {} {}", url, kind, e)
 }
 
@@ -114,7 +120,8 @@ impl AnthropicClient {
         };
 
         log_console!("[api] anthropic send (model={})", model);
-        let resp = self.http_client
+        let resp = self
+            .http_client
             .post(&self.api_url)
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
@@ -186,7 +193,8 @@ impl AnthropicClient {
         };
 
         log_console!("[api] openai send (model={})", model);
-        let resp = self.http_client
+        let resp = self
+            .http_client
             .post(&self.api_url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("content-type", "application/json")

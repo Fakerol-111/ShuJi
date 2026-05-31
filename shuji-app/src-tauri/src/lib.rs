@@ -8,16 +8,16 @@ macro_rules! log_console {
     }};
 }
 
-mod models;
+pub mod actor;
 pub mod agent;
-mod storage;
-mod logging;
 pub mod api;
 mod commands;
-mod token_tracker;
-pub mod actor;
-pub mod tool;
 pub mod config;
+mod logging;
+pub mod models;
+mod storage;
+mod token_tracker;
+pub mod tool;
 
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -29,7 +29,7 @@ use config::RuntimeConfig;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let runtime_config = RuntimeConfig::load_or_default("config.toml");
-    
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -63,6 +63,8 @@ pub fn run() {
             commands::settings::get_config,
             commands::settings::save_config,
             commands::settings::set_dotenv_key,
+            commands::settings::get_context_config,
+            commands::settings::save_context_config,
             commands::shuji_docs::list_shuji_tree,
             commands::shuji_docs::read_shuji_doc,
         ])

@@ -1,2 +1,2 @@
-pub mod shuji_dir;
 pub mod checkpoint;
+pub mod shuji_dir;

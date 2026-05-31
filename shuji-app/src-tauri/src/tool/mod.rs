@@ -1,12 +1,12 @@
+use crate::api::client::AnthropicClient;
+use crate::models::role::Role;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use tokio::io::AsyncReadExt;
-use serde::Serialize;
-use crate::api::client::AnthropicClient;
-use crate::models::role::Role;
 
 pub mod documents;
 pub mod registry;
@@ -49,7 +49,10 @@ pub async fn resolve_scoped_path(root: &Path, rel: &str) -> Result<PathBuf, Stri
     }
 
     // Block .. traversal (use path components, not string match)
-    if rel_path.components().any(|c| c == std::path::Component::ParentDir) {
+    if rel_path
+        .components()
+        .any(|c| c == std::path::Component::ParentDir)
+    {
         return Err(format!("禁止使用父目录跳转: {}", rel));
     }
 
@@ -86,10 +89,7 @@ pub async fn resolve_scoped_path(root: &Path, rel: &str) -> Result<PathBuf, Stri
                 .map_err(|e| format!("父目录解析失败 {}: {}", rel, e))?;
 
             if !canon_parent.starts_with(&canon_root) {
-                return Err(format!(
-                    "路径越界: {} 的父目录不在项目目录内",
-                    rel,
-                ));
+                return Err(format!("路径越界: {} 的父目录不在项目目录内", rel,));
             }
 
             let filename = candidate
@@ -156,19 +156,33 @@ impl ToolOutput {
         let mut o = Self::new(true, operation);
         o.path = Some(path.to_string());
         o.message = Some(message.to_string());
-        serde_json::to_string(&o).unwrap_or_else(|_| format!("{{\"ok\":true,\"operation\":\"{}\",\"message\":\"{}\"}}", operation, message))
+        serde_json::to_string(&o).unwrap_or_else(|_| {
+            format!(
+                "{{\"ok\":true,\"operation\":\"{}\",\"message\":\"{}\"}}",
+                operation, message
+            )
+        })
     }
 
     pub fn success_raw(operation: &str, message: &str) -> String {
         let mut o = Self::new(true, operation);
         o.message = Some(message.to_string());
-        serde_json::to_string(&o).unwrap_or_else(|_| format!("{{\"ok\":true,\"operation\":\"{}\",\"message\":\"{}\"}}", operation, message))
+        serde_json::to_string(&o).unwrap_or_else(|_| {
+            format!(
+                "{{\"ok\":true,\"operation\":\"{}\",\"message\":\"{}\"}}",
+                operation, message
+            )
+        })
     }
 
     pub fn read_file(operation: &str, path: &str, content: &str) -> String {
         let mut o = Self::new(true, operation);
         o.path = Some(path.to_string());
-        o.message = Some(format!("共 {} 字节。内容如下：\n{}", content.len(), content));
+        o.message = Some(format!(
+            "共 {} 字节。内容如下：\n{}",
+            content.len(),
+            content
+        ));
         serde_json::to_string(&o).unwrap_or_else(|_| content.to_string())
     }
 
@@ -209,7 +223,12 @@ pub async fn tool_append_file(working_dir: &Path, args: &serde_json::Value) -> S
     if let Some(parent) = full.parent() {
         let _ = tokio::fs::create_dir_all(parent).await;
     }
-    match tokio::fs::OpenOptions::new().create(true).append(true).open(&full).await {
+    match tokio::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&full)
+        .await
+    {
         Ok(mut file) => {
             use tokio::io::AsyncWriteExt;
             if let Err(e) = file.write_all(format!("{}\n", content).as_bytes()).await {
@@ -263,7 +282,12 @@ pub async fn tool_delete_file(working_dir: &Path, args: &serde_json::Value) -> S
         return ToolOutput::error("delete_file", path, "not_found", "文件不存在");
     }
     if full.is_dir() {
-        return ToolOutput::error("delete_file", path, "is_directory", "不能删除目录，请使用文件路径");
+        return ToolOutput::error(
+            "delete_file",
+            path,
+            "is_directory",
+            "不能删除目录，请使用文件路径",
+        );
     }
     match tokio::fs::remove_file(&full).await {
         Ok(_) => ToolOutput::success("delete_file", path, "删除成功"),
@@ -390,7 +414,11 @@ pub async fn tool_modify_file(working_dir: &Path, args: &serde_json::Value) -> S
 
     let new_content = content.replacen(old_text, new_text, 1);
     match tokio::fs::write(&full, &new_content).await {
-        Ok(_) => ToolOutput::success("modify_file", path, &format!("替换成功（替换 {} 字节）", old_text.len())),
+        Ok(_) => ToolOutput::success(
+            "modify_file",
+            path,
+            &format!("替换成功（替换 {} 字节）", old_text.len()),
+        ),
         Err(e) => ToolOutput::error("modify_file", path, "write_error", &e.to_string()),
     }
 }
@@ -401,7 +429,8 @@ pub fn modify_file_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "modify_file".into(),
-            description: "替换文件中的文本 (find+replace)。≤800字符。大块修改用 read→delete→create。".into(),
+            description:
+                "替换文件中的文本 (find+replace)。≤800字符。大块修改用 read→delete→create。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -430,7 +459,11 @@ pub fn modify_file_tool_def() -> crate::api::client::ToolDefinition {
 
 /// Execute a command with safety checks and timeout.
 /// Used by 兵部 and 刑部 for running test commands.
-pub async fn tool_execute_command(working_dir: &Path, args: &serde_json::Value, dept: &str) -> String {
+pub async fn tool_execute_command(
+    working_dir: &Path,
+    args: &serde_json::Value,
+    dept: &str,
+) -> String {
     let cmd = args["command"].as_str().unwrap_or("");
     if cmd.is_empty() {
         return ToolOutput::error("execute_command", "", "empty_command", "命令为空");
@@ -456,7 +489,10 @@ pub async fn tool_execute_command(working_dir: &Path, args: &serde_json::Value, 
             if exit_code == 0 {
                 format!("命令执行成功 (exit={}):\n{}", exit_code, stdout)
             } else {
-                format!("命令执行失败 (exit={}):\nstdout:\n{}\nstderr:\n{}", exit_code, stdout, stderr)
+                format!(
+                    "命令执行失败 (exit={}):\nstdout:\n{}\nstderr:\n{}",
+                    exit_code, stdout, stderr
+                )
             }
         }
         Err(timeout_msg) => timeout_msg,
@@ -496,7 +532,11 @@ async fn execute_with_timeout(
                 if let Some(ref mut err) = child.stderr {
                     let _ = err.read_to_end(&mut stderr).await;
                 }
-                return Ok(std::process::Output { status, stdout, stderr });
+                return Ok(std::process::Output {
+                    status,
+                    stdout,
+                    stderr,
+                });
             }
             Ok(None) => {
                 if start.elapsed() >= timeout {
@@ -578,7 +618,9 @@ pub async fn tool_read_file(working_dir: &Path, args: &serde_json::Value) -> Str
 
     let start = (offset as usize).min(total);
     let end = (start + (limit as usize).min(total - start)).min(total);
-    let excerpt: Vec<String> = lines[start..end].iter().enumerate()
+    let excerpt: Vec<String> = lines[start..end]
+        .iter()
+        .enumerate()
         .map(|(i, line)| format!("{:>4}| {}", start + i + 1, line))
         .collect();
     let meta = format!("{}（共 {} 行，显示 {}-{}）", path, total, start + 1, end);
@@ -597,8 +639,15 @@ pub async fn tool_create_file(working_dir: &Path, args: &serde_json::Value) -> S
     }
     // Hard limit: 400 characters per call
     if content.len() > 2000 {
-        return ToolOutput::error("create_file", path, "content_too_long",
-            &format!("content 长度 {} 超过上限 2000 字符。请使用 create_file + append_file 分块写入。", content.len()));
+        return ToolOutput::error(
+            "create_file",
+            path,
+            "content_too_long",
+            &format!(
+                "content 长度 {} 超过上限 2000 字符。请使用 create_file + append_file 分块写入。",
+                content.len()
+            ),
+        );
     }
 
     let full = match resolve_scoped_path(working_dir, path).await {
@@ -636,13 +685,18 @@ pub async fn tool_list_dir(working_dir: &Path, args: &serde_json::Value) -> Stri
             let items: Vec<String> = entries
                 .filter_map(|e| e.ok())
                 .map(|e| {
-                    let tag = e.file_type()
+                    let tag = e
+                        .file_type()
                         .map(|t| if t.is_dir() { "[DIR]" } else { "[FILE]" })
                         .unwrap_or("[?]");
                     format!("{} {}", tag, e.file_name().to_string_lossy())
                 })
                 .collect();
-            let message = if items.is_empty() { "(空目录)".to_string() } else { items.join("\n") };
+            let message = if items.is_empty() {
+                "(空目录)".to_string()
+            } else {
+                items.join("\n")
+            };
             ToolOutput::success_raw("list_dir", &message)
         }
         Ok(Err(e)) => ToolOutput::error("list_dir", path, "list_error", &e.to_string()),
@@ -685,7 +739,10 @@ pub fn create_file_tool_def(description: &str) -> crate::api::client::ToolDefini
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "create_file".into(),
-            description: format!("{}。content ≤2000 字符。大文件用 append_file 分块追加。", description),
+            description: format!(
+                "{}。content ≤2000 字符。大文件用 append_file 分块追加。",
+                description
+            ),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -761,7 +818,12 @@ pub async fn tool_summarize_logs(working_dir: &Path, args: &serde_json::Value) -
     }
 
     let mut result = Vec::new();
-    result.push(format!("共 {} 条日志记录（文件共 {} 行，自第 {} 行开始）：", entries.len(), total_lines, since));
+    result.push(format!(
+        "共 {} 条日志记录（文件共 {} 行，自第 {} 行开始）：",
+        entries.len(),
+        total_lines,
+        since
+    ));
     result.push(String::new());
 
     for entry in &entries {
@@ -817,7 +879,12 @@ pub fn execute_command_tool_def(description: &str) -> crate::api::client::ToolDe
 }
 
 /// Central tool dispatch: all agents call this instead of writing their own match block.
-pub async fn execute_named_tool(name: &str, working_dir: &Path, args: &serde_json::Value, dept: &str) -> String {
+pub async fn execute_named_tool(
+    name: &str,
+    working_dir: &Path,
+    args: &serde_json::Value,
+    dept: &str,
+) -> String {
     tool_log::log_tool_call(dept, name, args, working_dir).await;
     match name {
         "read_file" => tool_read_file(working_dir, args).await,
@@ -834,8 +901,9 @@ pub async fn execute_named_tool(name: &str, working_dir: &Path, args: &serde_jso
         "execute_command" => tool_execute_command(working_dir, args, dept).await,
         "summarize_logs" => tool_summarize_logs(working_dir, args).await,
         "route_to" => handle_route_to(args, dept),
-        "route" => ToolOutput::success_raw("route",
-            "请调用 route_to 工具，不要输出文本 route 标签。"),
+        "route" => {
+            ToolOutput::success_raw("route", "请调用 route_to 工具，不要输出文本 route 标签。")
+        }
         _ => ToolOutput::error("unknown_tool", name, "unknown_tool", "未知工具"),
     }
 }
@@ -849,15 +917,28 @@ fn handle_route_to(args: &serde_json::Value, dept: &str) -> String {
     }
     let subject = args["subject"].as_str().unwrap_or("");
     if subject.is_empty() {
-        return ToolOutput::error("route_to", "", "missing_subject", "缺少文档 ID（subject 参数）");
+        return ToolOutput::error(
+            "route_to",
+            "",
+            "missing_subject",
+            "缺少文档 ID（subject 参数）",
+        );
     }
     let _type = args["type"].as_str().unwrap_or("task");
     if !matches!(_type, "task" | "replace" | "interrupt") {
-        return ToolOutput::error("route_to", "", "invalid_type",
-            &format!("无效的路由类型: {}，必须是 task/replace/interrupt", _type));
+        return ToolOutput::error(
+            "route_to",
+            "",
+            "invalid_type",
+            &format!("无效的路由类型: {}，必须是 task/replace/interrupt", _type),
+        );
     }
     let _ = dept;
-    ToolOutput::success("route_to", "", &format!("路由到 {}（{}）：{}", to_name, _type, subject))
+    ToolOutput::success(
+        "route_to",
+        "",
+        &format!("路由到 {}（{}）：{}", to_name, _type, subject),
+    )
 }
 
 // ── Special tools (内阁 only) ──────────────────────────────────────
@@ -890,7 +971,8 @@ async fn tool_cancel_agent(args: &serde_json::Value, ctx: &ToolContext) -> Strin
                 }
             }
         }
-        return serde_json::json!({"ok": false, "message": format!("无法中断: {}", target)}).to_string();
+        return serde_json::json!({"ok": false, "message": format!("无法中断: {}", target)})
+            .to_string();
     }
     serde_json::json!({"ok": false, "message": "cancel_map 不可用"}).to_string()
 }
@@ -916,8 +998,8 @@ async fn tool_update_soul(args: &serde_json::Value, ctx: &ToolContext) -> String
                 if let Some(pos) = existing.find(&heading) {
                     let after_heading = &existing[pos + heading.len()..];
                     let next_heading = after_heading.find("\n## ");
-                    let insert_pos = pos + heading.len()
-                        + next_heading.unwrap_or(after_heading.len());
+                    let insert_pos =
+                        pos + heading.len() + next_heading.unwrap_or(after_heading.len());
                     let mut new_content = existing[..insert_pos].to_string();
                     if !new_content.ends_with('\n') {
                         new_content.push('\n');
@@ -934,7 +1016,11 @@ async fn tool_update_soul(args: &serde_json::Value, ctx: &ToolContext) -> String
                 } else {
                     use tokio::io::AsyncWriteExt;
                     match tokio::fs::OpenOptions::new()
-                        .create(true).append(true).write(true).open(&soul_path).await
+                        .create(true)
+                        .append(true)
+                        .write(true)
+                        .open(&soul_path)
+                        .await
                     {
                         Ok(mut f) => {
                             let line = format!("\n## {}\n\n{}", sec, entry);
@@ -957,7 +1043,11 @@ async fn tool_update_soul(args: &serde_json::Value, ctx: &ToolContext) -> String
     } else {
         use tokio::io::AsyncWriteExt;
         match tokio::fs::OpenOptions::new()
-            .create(true).append(true).write(true).open(&soul_path).await
+            .create(true)
+            .append(true)
+            .write(true)
+            .open(&soul_path)
+            .await
         {
             Ok(mut f) => {
                 f.write_all(entry.as_bytes()).await.ok();
@@ -969,7 +1059,11 @@ async fn tool_update_soul(args: &serde_json::Value, ctx: &ToolContext) -> String
 
     match result {
         Ok(msg) => {
-            log_console!("[tool] update_soul → {} (section={})", content, section.unwrap_or("末尾"));
+            log_console!(
+                "[tool] update_soul → {} (section={})",
+                content,
+                section.unwrap_or("末尾")
+            );
             serde_json::json!({"ok": true, "message": msg}).to_string()
         }
         Err(e) => {
@@ -1010,8 +1104,12 @@ async fn tool_create_skill(args: &serde_json::Value, ctx: &ToolContext) -> Strin
     if skill_name.is_empty() || content.is_empty() {
         return r#"{"ok": false, "message": "name 和 content 不能为空"}"#.to_string();
     }
-    if skill_name.chars().any(|c| !c.is_alphanumeric() && c != '_' && c != '-') {
-        return r#"{"ok": false, "message": "name 只能包含英文字母、数字、下划线和连字符"}"#.to_string();
+    if skill_name
+        .chars()
+        .any(|c| !c.is_alphanumeric() && c != '_' && c != '-')
+    {
+        return r#"{"ok": false, "message": "name 只能包含英文字母、数字、下划线和连字符"}"#
+            .to_string();
     }
     let skills_dir = ctx.working_dir.join(".shuji").join("skills");
     let _ = tokio::fs::create_dir_all(&skills_dir).await;
@@ -1024,7 +1122,8 @@ async fn tool_create_skill(args: &serde_json::Value, ctx: &ToolContext) -> Strin
                 "ok": true,
                 "message": format!("技能 {} 已创建", skill_name),
                 "skill_name": skill_name
-            }).to_string()
+            })
+            .to_string()
         }
         Err(e) => {
             serde_json::json!({"ok": false, "message": format!("写入失败: {}", e)}).to_string()
@@ -1061,10 +1160,15 @@ const SYSTEM_BLOCKS: &[(&str, &str)] = &[
 ];
 
 const PATH_ESCAPE: &[&str] = &[
-    "..\\", "../",
-    "/windows", "/windows/system32", "/program files", "/programdata", "/users",
-    "%systemroot%", "%windir%", "%appdata%", "%programfiles%",
+    "..\\",
+    "../",
+    "/windows",
+    "/windows/system32",
+    "/program files",
+    "/programdata",
+    "/users",
+    "%systemroot%",
+    "%windir%",
+    "%appdata%",
+    "%programfiles%",
 ];
-
-
-

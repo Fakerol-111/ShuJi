@@ -1,6 +1,6 @@
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput};
 use crate::agent::util::{extract_skill, strip_skill_tag};
@@ -16,7 +16,11 @@ pub struct MenxiaShizhongAgent {
 
 impl MenxiaShizhongAgent {
     pub fn new(client: AnthropicClient, model: &str, cancel: Arc<AtomicBool>) -> Self {
-        Self { client, model: model.to_string(), cancel }
+        Self {
+            client,
+            model: model.to_string(),
+            cancel,
+        }
     }
 
     fn tools() -> Vec<ToolDefinition> {
@@ -40,7 +44,9 @@ impl MenxiaShizhongAgent {
 
 #[async_trait::async_trait]
 impl Agent for MenxiaShizhongAgent {
-    fn role(&self) -> Role { Role::MenxiaShizhong }
+    fn role(&self) -> Role {
+        Role::MenxiaShizhong
+    }
 
     fn set_interrupt_flag(&mut self, flag: Arc<AtomicBool>) {
         self.cancel = flag;
@@ -56,19 +62,40 @@ impl Agent for MenxiaShizhongAgent {
 
         let client = Arc::new(self.client.clone());
         let mut session = crate::api::session::Session::new(
-            system_prompt, &msgs, &self.model, &tools, &client,
-            &input.skill_prompts, &input.runtime_config,
-        ).with_role(self.role().name()).with_debug_dir(input.working_dir.clone());
+            system_prompt,
+            &msgs,
+            &self.model,
+            &tools,
+            &client,
+            &input.skill_prompts,
+            &input.runtime_config,
+        )
+        .with_role(self.role().name())
+        .with_debug_dir(input.working_dir.clone());
 
         let role_name = self.role().name().to_string();
-        if let Some(mut ctx) = crate::api::session::PersistedContext::load_from(&working_dir, &role_name).await {
+
+        let thresholds = input.runtime_config.resolve_compact_thresholds(
+            self.role().name(),
+            input.context_window_config.get(self.role().name()),
+        );
+
+        if let Some(mut ctx) =
+            crate::api::session::PersistedContext::load_from(&working_dir, &role_name).await
+        {
             // ── Context compaction (iterative: context → history → repeat) ──
             loop {
                 let mut changed = false;
 
                 if let Some(result) = crate::api::compact::maybe_compact_dept(
-                    &self.client, &self.model, &ctx.history_messages, &ctx.context_messages, &input.runtime_config,
-                ).await {
+                    &self.client,
+                    &self.model,
+                    &ctx.history_messages,
+                    &ctx.context_messages,
+                    &thresholds,
+                )
+                .await
+                {
                     ctx.history_messages = result.new_history;
                     ctx.context_messages = result.kept_context;
                     ctx.save_to(&working_dir, &role_name).await;
@@ -76,14 +103,21 @@ impl Agent for MenxiaShizhongAgent {
                 }
 
                 if let Some(merged) = crate::api::compact::maybe_compact_history(
-                    &self.client, &self.model, &ctx.history_messages, &input.runtime_config,
-                ).await {
+                    &self.client,
+                    &self.model,
+                    &ctx.history_messages,
+                    &thresholds,
+                )
+                .await
+                {
                     ctx.history_messages = merged;
                     ctx.save_to(&working_dir, &role_name).await;
                     changed = true;
                 }
 
-                if !changed { break; }
+                if !changed {
+                    break;
+                }
             }
 
             let mut msgs = ctx.to_messages();
@@ -101,34 +135,66 @@ impl Agent for MenxiaShizhongAgent {
             let wd = working_dir.clone();
             let role = role_name.clone();
             let cfg = input.runtime_config.clone();
-            controller.set_compact_handler(Box::new(move |messages: Vec<serde_json::Value>| {
-                let client = client.clone();
-                let model = model.clone();
-                let wd = wd.clone();
-                let role = role.clone();
-                let cfg = cfg.clone();
-                Box::pin(async move {
-                    let mut ctx = crate::api::session::PersistedContext::from_messages(&messages);
-                    loop {
-                        let mut changed = false;
-                        if let Some(result) = crate::api::compact::maybe_compact_dept(
-                            &client, &model, &ctx.history_messages, &ctx.context_messages, &cfg,
-                        ).await {
-                            ctx.history_messages = result.new_history;
-                            ctx.context_messages = result.kept_context;
-                            changed = true;
+            controller.set_compact_handler(
+                Box::new(move |messages: Vec<serde_json::Value>| {
+                    let client = client.clone();
+                    let model = model.clone();
+                    let wd = wd.clone();
+                    let role = role.clone();
+                    let cfg = cfg.clone();
+                    Box::pin(async move {
+                        // Re-read context config for live threshold updates
+                        let ctx_roles = tokio::fs::read_to_string(wd.join("context_config.json"))
+                            .await
+                            .ok()
+                            .and_then(|c| {
+                                serde_json::from_str::<
+                                        crate::commands::settings::ContextWindowConfig,
+                                    >(&c)
+                                    .ok()
+                            })
+                            .map(|c| c.roles)
+                            .unwrap_or_default();
+                        let thresholds =
+                            cfg.resolve_compact_thresholds(&role, ctx_roles.get(&role));
+
+                        let mut ctx =
+                            crate::api::session::PersistedContext::from_messages(&messages);
+                        loop {
+                            let mut changed = false;
+                            if let Some(result) = crate::api::compact::maybe_compact_dept(
+                                &client,
+                                &model,
+                                &ctx.history_messages,
+                                &ctx.context_messages,
+                                &thresholds,
+                            )
+                            .await
+                            {
+                                ctx.history_messages = result.new_history;
+                                ctx.context_messages = result.kept_context;
+                                changed = true;
+                            }
+                            if let Some(merged) = crate::api::compact::maybe_compact_history(
+                                &client,
+                                &model,
+                                &ctx.history_messages,
+                                &thresholds,
+                            )
+                            .await
+                            {
+                                ctx.history_messages = merged;
+                                changed = true;
+                            }
+                            if !changed {
+                                break;
+                            }
                         }
-                        if let Some(merged) = crate::api::compact::maybe_compact_history(
-                            &client, &model, &ctx.history_messages, &cfg,
-                        ).await {
-                            ctx.history_messages = merged;
-                            changed = true;
-                        }
-                        if !changed { break; }
-                    }
-                    ctx.save_to(&wd, &role).await;
-                })
-            }), 20);
+                        ctx.save_to(&wd, &role).await;
+                    })
+                }),
+                20,
+            );
         }
 
         // ── Periodic checkpoint ──
@@ -156,9 +222,10 @@ impl Agent for MenxiaShizhongAgent {
         let (mut result, mut route);
         let mut current_skill = String::new();
         loop {
-            (result, route) = controller.run(
-                &mut session, &exec, &self.cancel, &tools, None, &config,
-            ).await?.into_tuple();
+            (result, route) = controller
+                .run(&mut session, &exec, &self.cancel, &tools, None, &config)
+                .await?
+                .into_tuple();
 
             if route.is_some() {
                 break;
@@ -167,7 +234,10 @@ impl Agent for MenxiaShizhongAgent {
             match extract_skill(&result) {
                 Some(skill_name) if !Self::load_skill(&skill_name).is_empty() => {
                     if skill_name == current_skill {
-                        log_console!("[门下侍中] skill {} already loaded, prompting continue", skill_name);
+                        log_console!(
+                            "[门下侍中] skill {} already loaded, prompting continue",
+                            skill_name
+                        );
                         session.inject(&format!("[系统] 技能 {} 已在当前会话中。请直接继续执行该技能的指令，不要重复输出 <skill> 标签。", skill_name));
                         continue;
                     }

@@ -3,16 +3,16 @@ use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Role {
-    Zhongshuling, // 中书令（设计）
-    MenxiaShizhong,   // 门下侍中（审查）
+    Zhongshuling,   // 中书令（设计）
+    MenxiaShizhong, // 门下侍中（审查）
     Neige,
     Shangshuling,
     LiBuShangshu,   // 吏部
-    LiBuRShangshu,   // 礼部尚书 (Ministry of Rites; 拼音: Lǐ Bù Shàng Shū)
-    BingbuShangshu,  // 兵部
-    XingbuShangshu,  // 刑部
-    GongbuShangshu,  // 工部
-    Zhisi,   // 制司
+    LiBuRShangshu,  // 礼部尚书 (Ministry of Rites; 拼音: Lǐ Bù Shàng Shū)
+    BingbuShangshu, // 兵部
+    XingbuShangshu, // 刑部
+    GongbuShangshu, // 工部
+    Zhisi,          // 制司
 }
 
 impl Role {

@@ -11,7 +11,10 @@ pub fn extract_skill(text: &str) -> Option<String> {
     if name.is_empty() || end > 50 {
         return None;
     }
-    if name.chars().any(|c| !c.is_alphanumeric() && c != '_' && c != '-') {
+    if name
+        .chars()
+        .any(|c| !c.is_alphanumeric() && c != '_' && c != '-')
+    {
         return None;
     }
     Some(name.to_string())
@@ -65,8 +68,16 @@ fn extract_attr(tag: &str, name: &str) -> Option<String> {
 /// Lenient fallback: look for known role names and document IDs in the text.
 fn extract_route_lenient(text: &str) -> Option<(Role, String)> {
     let known_roles = [
-        "中书令", "门下侍中", "尚书令", "内阁",
-        "吏部", "兵部", "工部", "刑部", "礼部", "制司",
+        "中书令",
+        "门下侍中",
+        "尚书令",
+        "内阁",
+        "吏部",
+        "兵部",
+        "工部",
+        "刑部",
+        "礼部",
+        "制司",
     ];
     for role_name in known_roles {
         if text.contains(role_name) {
@@ -103,7 +114,10 @@ mod tests {
 
     #[test]
     fn test_extract_skill_valid() {
-        assert_eq!(extract_skill("some text <skill>workflow_standard</skill> more"), Some("workflow_standard".into()));
+        assert_eq!(
+            extract_skill("some text <skill>workflow_standard</skill> more"),
+            Some("workflow_standard".into())
+        );
     }
 
     #[test]
@@ -142,13 +156,19 @@ mod tests {
 
     #[test]
     fn test_strip_skill_tag() {
-        assert_eq!(strip_skill_tag("hello <skill>test</skill> world".into()), "hello  world");
+        assert_eq!(
+            strip_skill_tag("hello <skill>test</skill> world".into()),
+            "hello  world"
+        );
     }
 
     #[test]
     fn test_find_doc_id() {
         assert_eq!(find_doc_id("请处理 task_5"), Some("task_5".into()));
-        assert_eq!(find_doc_id("文档 dsgn_003 需要审查"), Some("dsgn_003".into()));
+        assert_eq!(
+            find_doc_id("文档 dsgn_003 需要审查"),
+            Some("dsgn_003".into())
+        );
         assert_eq!(find_doc_id("no doc id here"), None);
     }
 }

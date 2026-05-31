@@ -1,29 +1,29 @@
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 use tauri::{Emitter, Manager, State};
 use tokio::sync::mpsc;
 
 use crate::actor::{ActorContext, ActorMessage, ActorSystem, DeptLogEntry};
-use crate::api::control::RouteMsgType;
-use crate::agent::r#trait::{Agent, AgentInput};
-use crate::agent::zhongshuling::ZhongshulingAgent;
 use crate::agent::bingbushangshu::BingbuShangshuAgent;
 use crate::agent::gongbushangshu::GongbuShangshuAgent;
-use crate::agent::libushangshu::LibuShangshuAgent;
 use crate::agent::liburshangshu::LibuRShangshuAgent;
+use crate::agent::libushangshu::LibuShangshuAgent;
 use crate::agent::menxiashizhong::MenxiaShizhongAgent;
 use crate::agent::neige::NeigeAgent;
+use crate::agent::r#trait::{Agent, AgentInput};
 use crate::agent::shangshuling::ShangshulingAgent;
 use crate::agent::xingbushangshu::XingbuShangshuAgent;
 use crate::agent::zhisi::ZhisiAgent;
+use crate::agent::zhongshuling::ZhongshulingAgent;
 use crate::api::client::AnthropicClient;
+use crate::api::control::RouteMsgType;
 use crate::api::session::PersistedContext;
 use crate::commands::friendly_error::friendly_error;
 use crate::commands::project::AppState;
-use crate::commands::settings::AppConfig;
+use crate::commands::settings::{AppConfig, ContextWindowConfig};
 use crate::models::chat::ChatMessage;
 use crate::models::project::ProjectSnapshot;
 use crate::models::role::Role;
@@ -57,32 +57,35 @@ fn build_agents(
     let mut agents: HashMap<Role, Box<dyn Agent>> = HashMap::new();
 
     let menxiashizhong_ep = config.for_role("menxiashizhong");
-    agents.insert(Role::MenxiaShizhong, Box::new(
-        MenxiaShizhongAgent::new(
+    agents.insert(
+        Role::MenxiaShizhong,
+        Box::new(MenxiaShizhongAgent::new(
             AnthropicClient::new(menxiashizhong_ep.api_key, menxiashizhong_ep.api_url),
             &menxiashizhong_ep.model,
             cancel.clone(),
-        )
-    ));
+        )),
+    );
 
     let zhongshuling_ep = config.for_role("zhongshuling");
-    agents.insert(Role::Zhongshuling, Box::new(
-        ZhongshulingAgent::new(
+    agents.insert(
+        Role::Zhongshuling,
+        Box::new(ZhongshulingAgent::new(
             AnthropicClient::new(zhongshuling_ep.api_key, zhongshuling_ep.api_url),
             &zhongshuling_ep.model,
             cancel.clone(),
-        )
-    ));
+        )),
+    );
 
     let neige_ep = config.for_role("neige");
-    agents.insert(Role::Neige, Box::new(
-        NeigeAgent::new(
+    agents.insert(
+        Role::Neige,
+        Box::new(NeigeAgent::new(
             AnthropicClient::new(neige_ep.api_key, neige_ep.api_url),
             &neige_ep.model,
             cancel.clone(),
             Some(cancel_map),
-        )
-    ));
+        )),
+    );
 
     let ministry_configs: Vec<(Role, &str)> = vec![
         (Role::LiBuShangshu, "libushangshu"),
@@ -98,13 +101,25 @@ fn build_agents(
         let ep = config.for_role(name);
         let client = AnthropicClient::new(ep.api_key, ep.api_url);
         let agent: Box<dyn Agent> = match role {
-            Role::LiBuShangshu => Box::new(LibuShangshuAgent::new(client, &ep.model, cancel.clone())),
-            Role::BingbuShangshu => Box::new(BingbuShangshuAgent::new(client, &ep.model, cancel.clone())),
-            Role::GongbuShangshu => Box::new(GongbuShangshuAgent::new(client, &ep.model, cancel.clone())),
-            Role::XingbuShangshu => Box::new(XingbuShangshuAgent::new(client, &ep.model, cancel.clone())),
-            Role::LiBuRShangshu => Box::new(LibuRShangshuAgent::new(client, &ep.model, cancel.clone())),
+            Role::LiBuShangshu => {
+                Box::new(LibuShangshuAgent::new(client, &ep.model, cancel.clone()))
+            }
+            Role::BingbuShangshu => {
+                Box::new(BingbuShangshuAgent::new(client, &ep.model, cancel.clone()))
+            }
+            Role::GongbuShangshu => {
+                Box::new(GongbuShangshuAgent::new(client, &ep.model, cancel.clone()))
+            }
+            Role::XingbuShangshu => {
+                Box::new(XingbuShangshuAgent::new(client, &ep.model, cancel.clone()))
+            }
+            Role::LiBuRShangshu => {
+                Box::new(LibuRShangshuAgent::new(client, &ep.model, cancel.clone()))
+            }
             Role::Zhisi => Box::new(ZhisiAgent::new(client, &ep.model, cancel.clone())),
-            Role::Shangshuling => Box::new(ShangshulingAgent::new(client, &ep.model, cancel.clone())),
+            Role::Shangshuling => {
+                Box::new(ShangshulingAgent::new(client, &ep.model, cancel.clone()))
+            }
             _ => continue,
         };
         agents.insert(role, agent);
@@ -134,7 +149,8 @@ async fn start_actor_system(
 
     let agents = build_agents(config, cancel.clone(), cancel_map.clone());
     let mut senders: HashMap<Role, mpsc::UnboundedSender<ActorMessage>> = HashMap::new();
-    let mut contexts: Vec<(Role, Box<dyn Agent>, mpsc::UnboundedReceiver<ActorMessage>)> = Vec::new();
+    let mut contexts: Vec<(Role, Box<dyn Agent>, mpsc::UnboundedReceiver<ActorMessage>)> =
+        Vec::new();
 
     for (role, mut agent) in agents {
         // Create per-actor cancel flag and wire it into the agent so
@@ -150,9 +166,12 @@ async fn start_actor_system(
     }
 
     let all_senders = senders.clone();
-    let shared_context: Arc<std::sync::Mutex<HashMap<Role, String>>> = Arc::new(std::sync::Mutex::new(HashMap::new()));
-    let failure_retries: Arc<std::sync::Mutex<HashMap<Role, u32>>> = Arc::new(std::sync::Mutex::new(HashMap::new()));
-    let talk_history: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let shared_context: Arc<std::sync::Mutex<HashMap<Role, String>>> =
+        Arc::new(std::sync::Mutex::new(HashMap::new()));
+    let failure_retries: Arc<std::sync::Mutex<HashMap<Role, u32>>> =
+        Arc::new(std::sync::Mutex::new(HashMap::new()));
+    let talk_history: Arc<std::sync::Mutex<Vec<String>>> =
+        Arc::new(std::sync::Mutex::new(Vec::new()));
 
     for (role, agent, rx) in contexts {
         let mut peers: HashMap<Role, mpsc::UnboundedSender<ActorMessage>> = HashMap::new();
@@ -165,9 +184,7 @@ async fn start_actor_system(
         // Reuse the per-actor cancel flag created in the agents loop above
         let actor_flag = cancel_map.lock().unwrap().get(&role).unwrap().clone();
 
-        let logger = crate::logging::logger::Logger::new(
-            &working_dir.join(".shuji"),
-        );
+        let logger = crate::logging::logger::Logger::new(&working_dir.join(".shuji"));
 
         let is_neige = role == Role::Neige;
         let ctx = ActorContext {
@@ -183,7 +200,11 @@ async fn start_actor_system(
             project_dir: project_dir.to_path_buf(),
             working_dir: working_dir.to_path_buf(),
             cancel: actor_flag,
-            cancel_map: if is_neige { Some(cancel_map.clone()) } else { None },
+            cancel_map: if is_neige {
+                Some(cancel_map.clone())
+            } else {
+                None
+            },
             logger,
             shared_context: shared_context.clone(),
             failure_retries: failure_retries.clone(),
@@ -214,11 +235,15 @@ pub async fn send_message(
     state: State<'_, AppState>,
     message: String,
 ) -> Result<String, String> {
-    let config = crate::commands::settings::get_config().await.map_err(friendly_error)?;
+    let config = crate::commands::settings::get_config()
+        .await
+        .map_err(friendly_error)?;
 
     let p_working_dir = {
         let project_opt = state.current_project.lock().await;
-        let p = project_opt.as_ref().ok_or_else(|| friendly_error("没有加载项目"))?;
+        let p = project_opt
+            .as_ref()
+            .ok_or_else(|| friendly_error("没有加载项目"))?;
         p.working_dir.clone()
     };
 
@@ -229,7 +254,8 @@ pub async fn send_message(
             let (emperor_tx, mut emperor_rx) = mpsc::unbounded_channel::<ChatMessage>();
             let (dept_log_tx, mut dept_log_rx) = mpsc::unbounded_channel::<DeptLogEntry>();
             let (plan_tx, mut plan_rx) = mpsc::unbounded_channel::<serde_json::Value>();
-            let (milestone_tx, mut milestone_rx): (mpsc::UnboundedSender<String>, _) = mpsc::unbounded_channel();
+            let (milestone_tx, mut milestone_rx): (mpsc::UnboundedSender<String>, _) =
+                mpsc::unbounded_channel();
             let app_handle = app.clone();
 
             // Buffer references for missed-event recovery across navigation
@@ -251,7 +277,12 @@ pub async fn send_message(
                     let chat_path = log_dir.join("chat.jsonl");
                     if let Ok(json) = serde_json::to_string(&msg) {
                         use tokio::io::AsyncWriteExt;
-                        if let Ok(mut f) = tokio::fs::OpenOptions::new().create(true).append(true).open(&chat_path).await {
+                        if let Ok(mut f) = tokio::fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(&chat_path)
+                            .await
+                        {
                             let _ = f.write_all(format!("{}\n", json).as_bytes()).await;
                         }
                     }
@@ -272,7 +303,12 @@ pub async fn send_message(
                     let log_path = log_dir.join("dept-log.jsonl");
                     if let Ok(json) = serde_json::to_string(&entry) {
                         use tokio::io::AsyncWriteExt;
-                        if let Ok(mut f) = tokio::fs::OpenOptions::new().create(true).append(true).open(&log_path).await {
+                        if let Ok(mut f) = tokio::fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(&log_path)
+                            .await
+                        {
                             let _ = f.write_all(format!("{}\n", json).as_bytes()).await;
                         }
                     }
@@ -321,7 +357,8 @@ pub async fn send_message(
                 dept_log_tx,
                 plan_tx,
                 milestone_tx,
-            ).await;
+            )
+            .await;
 
             *sys_lock = Some(system);
         }
@@ -329,8 +366,12 @@ pub async fn send_message(
 
     // Send message to 内阁 actor
     let sys_lock = state.actor_system.lock().await;
-    let system = sys_lock.as_ref().ok_or_else(|| friendly_error("Actor 系统未初始化"))?;
-    system.send(&Role::Neige, ActorMessage::new(message, RouteMsgType::Task)).map_err(friendly_error)?;
+    let system = sys_lock
+        .as_ref()
+        .ok_or_else(|| friendly_error("Actor 系统未初始化"))?;
+    system
+        .send(&Role::Neige, ActorMessage::new(message, RouteMsgType::Task))
+        .map_err(friendly_error)?;
 
     Ok("已接收".to_string())
 }
@@ -341,7 +382,9 @@ pub async fn discuss_with_cabinet(
     state: State<'_, AppState>,
     message: String,
 ) -> Result<ChatMessage, String> {
-    let config = crate::commands::settings::get_config().await.map_err(friendly_error)?;
+    let config = crate::commands::settings::get_config()
+        .await
+        .map_err(friendly_error)?;
 
     let (working_dir, project_context) = {
         let project_opt = state.current_project.lock().await;
@@ -349,8 +392,10 @@ pub async fn discuss_with_cabinet(
             Some(p) => p,
             None => return Err(friendly_error("没有加载项目")),
         };
-        (p.working_dir.clone(), format!(
-            r#"━━ 项目目标 ━━
+        (
+            p.working_dir.clone(),
+            format!(
+                r#"━━ 项目目标 ━━
 {}
 
 ━━ 当前阶段 ━━
@@ -361,8 +406,9 @@ pub async fn discuss_with_cabinet(
 
 ━━ 对话记录(近期) ━━
 {}"#,
-            p.goal, p.summary, p.task, p.talk,
-        ))
+                p.goal, p.summary, p.task, p.talk,
+            ),
+        )
     };
 
     let ep = config.for_role("neige");
@@ -381,6 +427,7 @@ pub async fn discuss_with_cabinet(
         skill_prompts: vec![],
         current_skill: None,
         resume_paused: false,
+        context_window_config: Arc::new(HashMap::new()),
         runtime_config: state.runtime_config.clone(),
     };
 
@@ -392,7 +439,9 @@ pub async fn discuss_with_cabinet(
 #[tauri::command]
 pub async fn get_snapshot(state: State<'_, AppState>) -> Result<ProjectSnapshot, String> {
     let project_opt = state.current_project.lock().await;
-    let project = project_opt.as_ref().ok_or_else(|| friendly_error("没有加载项目"))?;
+    let project = project_opt
+        .as_ref()
+        .ok_or_else(|| friendly_error("没有加载项目"))?;
     Ok(project.snapshot())
 }
 
@@ -405,10 +454,17 @@ pub async fn read_document(
     filename: String,
 ) -> Result<Option<String>, String> {
     let project_opt = state.current_project.lock().await;
-    let working_dir = project_opt.as_ref().ok_or_else(|| friendly_error("没有加载项目"))?.working_dir.clone();
+    let working_dir = project_opt
+        .as_ref()
+        .ok_or_else(|| friendly_error("没有加载项目"))?
+        .working_dir
+        .clone();
     drop(project_opt);
     let shuji_dir = crate::storage::shuji_dir::ShujiDir::new(&working_dir);
-    shuji_dir.read_document(&subdir, &filename).await.map_err(friendly_error)
+    shuji_dir
+        .read_document(&subdir, &filename)
+        .await
+        .map_err(friendly_error)
 }
 
 #[tauri::command]
@@ -417,28 +473,49 @@ pub async fn list_documents(
     subdir: String,
 ) -> Result<Vec<String>, String> {
     let project_opt = state.current_project.lock().await;
-    let working_dir = project_opt.as_ref().ok_or_else(|| friendly_error("没有加载项目"))?.working_dir.clone();
+    let working_dir = project_opt
+        .as_ref()
+        .ok_or_else(|| friendly_error("没有加载项目"))?
+        .working_dir
+        .clone();
     drop(project_opt);
     let shuji_dir = crate::storage::shuji_dir::ShujiDir::new(&working_dir);
-    shuji_dir.list_documents(&subdir).await.map_err(friendly_error)
+    shuji_dir
+        .list_documents(&subdir)
+        .await
+        .map_err(friendly_error)
 }
 
 #[tauri::command]
 pub async fn list_log_files(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     let project_opt = state.current_project.lock().await;
-    let working_dir = project_opt.as_ref().ok_or_else(|| friendly_error("没有加载项目"))?.working_dir.clone();
+    let working_dir = project_opt
+        .as_ref()
+        .ok_or_else(|| friendly_error("没有加载项目"))?
+        .working_dir
+        .clone();
     drop(project_opt);
     let shuji_dir = crate::storage::shuji_dir::ShujiDir::new(&working_dir);
     shuji_dir.list_log_files().await.map_err(friendly_error)
 }
 
 #[tauri::command]
-pub async fn read_log_file(state: State<'_, AppState>, filename: String) -> Result<Vec<String>, String> {
+pub async fn read_log_file(
+    state: State<'_, AppState>,
+    filename: String,
+) -> Result<Vec<String>, String> {
     let project_opt = state.current_project.lock().await;
-    let working_dir = project_opt.as_ref().ok_or_else(|| friendly_error("没有加载项目"))?.working_dir.clone();
+    let working_dir = project_opt
+        .as_ref()
+        .ok_or_else(|| friendly_error("没有加载项目"))?
+        .working_dir
+        .clone();
     drop(project_opt);
     let shuji_dir = crate::storage::shuji_dir::ShujiDir::new(&working_dir);
-    shuji_dir.read_log_file(&filename).await.map_err(friendly_error)
+    shuji_dir
+        .read_log_file(&filename)
+        .await
+        .map_err(friendly_error)
 }
 
 #[tauri::command]
@@ -452,20 +529,38 @@ pub async fn get_recent_dirs(state: State<'_, AppState>) -> Result<Vec<String>, 
 
 /// Get token usage statistics for all roles (dashboard data).
 #[tauri::command]
-pub async fn get_token_stats() -> Result<std::collections::HashMap<String, std::collections::HashMap<String, crate::token_tracker::TokenUsage>>, String> {
+pub async fn get_token_stats() -> Result<
+    std::collections::HashMap<
+        String,
+        std::collections::HashMap<String, crate::token_tracker::TokenUsage>,
+    >,
+    String,
+> {
     Ok(crate::token_tracker::snapshot_grouped())
 }
 
 /// Get per-role context usage statistics.
 #[tauri::command]
-pub async fn get_context_stats(state: State<'_, AppState>) -> Result<HashMap<String, ContextStats>, String> {
+pub async fn get_context_stats(
+    state: State<'_, AppState>,
+) -> Result<HashMap<String, ContextStats>, String> {
     let dir = match state.current_dir.lock().await.as_ref() {
         Some(d) => d.clone(),
         None => return Ok(HashMap::new()),
     };
     let config = &state.runtime_config;
-    let char_threshold = config.context_compaction.char_threshold;
-    let history_threshold = config.context_compaction.history_char_threshold;
+
+    // Load per-role context window overrides
+    let role_overrides: HashMap<String, crate::config::RoleContextConfig> = {
+        let path = std::path::Path::new(&dir).join("context_config.json");
+        match tokio::fs::read_to_string(&path).await {
+            Ok(content) => match serde_json::from_str::<ContextWindowConfig>(&content) {
+                Ok(cfg) => cfg.roles,
+                Err(_) => HashMap::new(),
+            },
+            Err(_) => HashMap::new(),
+        }
+    };
 
     let ctx_dir = std::path::Path::new(&dir).join(".shuji/context");
     let mut entries = match tokio::fs::read_dir(&ctx_dir).await {
@@ -499,20 +594,28 @@ pub async fn get_context_stats(state: State<'_, AppState>) -> Result<HashMap<Str
             _ => continue,
         };
 
-        let char_count: usize = ctx.context_messages.iter()
+        let char_count: usize = ctx
+            .context_messages
+            .iter()
             .filter_map(|m| m["content"].as_str())
             .map(|c| c.chars().count())
             .sum();
 
-        result.insert(role, ContextStats {
-            message_count: ctx.context_messages.len(),
-            char_count,
-            char_threshold,
-            history_char_count: ctx.history_messages.chars().count(),
-            history_threshold,
-            compressed: !ctx.history_messages.is_empty(),
-            skill_count: ctx.skill_prompts.len(),
-        });
+        // Resolve per-role thresholds
+        let thresholds = config.resolve_compact_thresholds(&role, role_overrides.get(&role));
+
+        result.insert(
+            role,
+            ContextStats {
+                message_count: ctx.context_messages.len(),
+                char_count,
+                char_threshold: thresholds.char_threshold,
+                history_char_count: ctx.history_messages.chars().count(),
+                history_threshold: thresholds.history_char_threshold,
+                compressed: !ctx.history_messages.is_empty(),
+                skill_count: ctx.skill_prompts.len(),
+            },
+        );
     }
 
     Ok(result)
@@ -527,7 +630,9 @@ pub async fn get_chat_history(state: State<'_, AppState>) -> Result<Vec<ChatMess
 
 /// Get buffered department log history (for re-sync after page navigation).
 #[tauri::command]
-pub async fn get_dept_logs(state: State<'_, AppState>) -> Result<Vec<crate::actor::DeptLogEntry>, String> {
+pub async fn get_dept_logs(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::actor::DeptLogEntry>, String> {
     let hist = state.dept_log_history.lock().await;
     Ok(hist.clone())
 }

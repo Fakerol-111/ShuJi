@@ -8,10 +8,14 @@ use std::sync::Arc;
 
 fn load_env() {
     for path in &[".env", "../.env"] {
-        let Ok(content) = std::fs::read_to_string(path) else { continue };
+        let Ok(content) = std::fs::read_to_string(path) else {
+            continue;
+        };
         for line in content.lines() {
             let line = line.trim();
-            if line.is_empty() || line.starts_with('#') { continue; }
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
             if let Some((k, v)) = line.split_once('=') {
                 std::env::set_var(k.trim(), v.trim().trim_matches('"').trim_matches('\''));
             }
@@ -20,7 +24,11 @@ fn load_env() {
 }
 
 fn project_dir() -> PathBuf {
-    std::env::current_dir().unwrap().parent().unwrap().join("test_workspace")
+    std::env::current_dir()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("test_workspace")
 }
 
 fn setup_client() -> (Arc<shuji_app_lib::api::client::AnthropicClient>, String) {
@@ -29,9 +37,13 @@ fn setup_client() -> (Arc<shuji_app_lib::api::client::AnthropicClient>, String) 
         .expect("缺少 API key");
     let api_url = std::env::var("DEFAULT_API_URL")
         .unwrap_or_else(|_| "https://api.deepseek.com/chat/completions".into());
-    let model = std::env::var("DEFAULT_MODEL")
-        .unwrap_or_else(|_| "deepseek-v4-flash".into());
-    (Arc::new(shuji_app_lib::api::client::AnthropicClient::new(api_key, api_url)), model)
+    let model = std::env::var("DEFAULT_MODEL").unwrap_or_else(|_| "deepseek-v4-flash".into());
+    (
+        Arc::new(shuji_app_lib::api::client::AnthropicClient::new(
+            api_key, api_url,
+        )),
+        model,
+    )
 }
 
 fn setup_task(task_id: &str, counter: u64, content: &str) -> PathBuf {
@@ -67,15 +79,26 @@ fn print_result(doc_id: &str) {
 async fn test_1_vague() {
     load_env();
     let (client, model) = setup_client();
-    setup_task("task_test1", 100, "皇帝需求：做一个简单的待办事项应用。用户能添加、完成、删除任务。");
+    setup_task(
+        "task_test1",
+        100,
+        "皇帝需求：做一个简单的待办事项应用。用户能添加、完成、删除任务。",
+    );
 
     println!("\n=== 测试1: 极模糊需求（待办事项） ===");
     let result = shuji_app_lib::agent::expand_requirements::run(
-        "task_test1", &project_dir(), &client, &model,
-    ).await;
+        "task_test1",
+        &project_dir(),
+        &client,
+        &model,
+    )
+    .await;
 
     match &result {
-        Ok(id) => { println!("\n文档 ID: {}", id); print_result(id); }
+        Ok(id) => {
+            println!("\n文档 ID: {}", id);
+            print_result(id);
+        }
         Err(e) => println!("\n失败: {}", e),
     }
     assert!(result.is_ok());
@@ -87,21 +110,31 @@ async fn test_1_vague() {
 async fn test_2_clear() {
     load_env();
     let (client, model) = setup_client();
-    setup_task("task_test2", 200,
+    setup_task(
+        "task_test2",
+        200,
         "皇帝需求：给博客系统增加文章评论功能。\
         用户能从文章页看到评论区，已登录用户可发表评论，\
         评论支持 Markdown 格式，作者可删除自己文章的任意评论，\
         评论者可在 5 分钟内编辑自己的评论。\
         评论按时间正序显示，超过 50 条时分页加载。\
-        未登录用户只能看评论不能发。");
+        未登录用户只能看评论不能发。",
+    );
 
     println!("\n=== 测试2: 较明确需求（博客评论） ===");
     let result = shuji_app_lib::agent::expand_requirements::run(
-        "task_test2", &project_dir(), &client, &model,
-    ).await;
+        "task_test2",
+        &project_dir(),
+        &client,
+        &model,
+    )
+    .await;
 
     match &result {
-        Ok(id) => { println!("\n文档 ID: {}", id); print_result(id); }
+        Ok(id) => {
+            println!("\n文档 ID: {}", id);
+            print_result(id);
+        }
         Err(e) => println!("\n失败: {}", e),
     }
     assert!(result.is_ok());
@@ -113,16 +146,22 @@ async fn test_2_clear() {
 async fn test_3_broad() {
     load_env();
     let (client, model) = setup_client();
-    setup_task("task_test3", 300,
-        "皇帝需求：做一个电商系统。");
+    setup_task("task_test3", 300, "皇帝需求：做一个电商系统。");
 
     println!("\n=== 测试3: 极宽需求（电商系统） ===");
     let result = shuji_app_lib::agent::expand_requirements::run(
-        "task_test3", &project_dir(), &client, &model,
-    ).await;
+        "task_test3",
+        &project_dir(),
+        &client,
+        &model,
+    )
+    .await;
 
     match &result {
-        Ok(id) => { println!("\n文档 ID: {}", id); print_result(id); }
+        Ok(id) => {
+            println!("\n文档 ID: {}", id);
+            print_result(id);
+        }
         Err(e) => println!("\n失败: {}", e),
     }
     assert!(result.is_ok());
@@ -134,16 +173,26 @@ async fn test_3_broad() {
 async fn test_4_non_functional() {
     load_env();
     let (client, model) = setup_client();
-    setup_task("task_test4", 400,
-        "皇帝需求：让应用加载更快。用户反馈首页打开要3秒，太慢了。");
+    setup_task(
+        "task_test4",
+        400,
+        "皇帝需求：让应用加载更快。用户反馈首页打开要3秒，太慢了。",
+    );
 
     println!("\n=== 测试4: 非功能需求（性能优化） ===");
     let result = shuji_app_lib::agent::expand_requirements::run(
-        "task_test4", &project_dir(), &client, &model,
-    ).await;
+        "task_test4",
+        &project_dir(),
+        &client,
+        &model,
+    )
+    .await;
 
     match &result {
-        Ok(id) => { println!("\n文档 ID: {}", id); print_result(id); }
+        Ok(id) => {
+            println!("\n文档 ID: {}", id);
+            print_result(id);
+        }
         Err(e) => println!("\n失败: {}", e),
     }
     assert!(result.is_ok());
@@ -155,16 +204,26 @@ async fn test_4_non_functional() {
 async fn test_5_narrow() {
     load_env();
     let (client, model) = setup_client();
-    setup_task("task_test5", 500,
-        "皇帝需求：给删除按钮加个 loading 状态，点击后显示加载动画，请求完成后再消失。");
+    setup_task(
+        "task_test5",
+        500,
+        "皇帝需求：给删除按钮加个 loading 状态，点击后显示加载动画，请求完成后再消失。",
+    );
 
     println!("\n=== 测试5: 极窄需求（按钮 loading） ===");
     let result = shuji_app_lib::agent::expand_requirements::run(
-        "task_test5", &project_dir(), &client, &model,
-    ).await;
+        "task_test5",
+        &project_dir(),
+        &client,
+        &model,
+    )
+    .await;
 
     match &result {
-        Ok(id) => { println!("\n文档 ID: {}", id); print_result(id); }
+        Ok(id) => {
+            println!("\n文档 ID: {}", id);
+            print_result(id);
+        }
         Err(e) => println!("\n失败: {}", e),
     }
     assert!(result.is_ok());
@@ -176,16 +235,26 @@ async fn test_5_narrow() {
 async fn test_6_dev_internal() {
     load_env();
     let (client, model) = setup_client();
-    setup_task("task_test6", 600,
-        "皇帝需求：重构数据库连接池。当前连接池在高并发下频繁超时，需要换用更高效的池化方案。");
+    setup_task(
+        "task_test6",
+        600,
+        "皇帝需求：重构数据库连接池。当前连接池在高并发下频繁超时，需要换用更高效的池化方案。",
+    );
 
     println!("\n=== 测试6: 开发者需求（连接池重构） ===");
     let result = shuji_app_lib::agent::expand_requirements::run(
-        "task_test6", &project_dir(), &client, &model,
-    ).await;
+        "task_test6",
+        &project_dir(),
+        &client,
+        &model,
+    )
+    .await;
 
     match &result {
-        Ok(id) => { println!("\n文档 ID: {}", id); print_result(id); }
+        Ok(id) => {
+            println!("\n文档 ID: {}", id);
+            print_result(id);
+        }
         Err(e) => println!("\n失败: {}", e),
     }
     assert!(result.is_ok());

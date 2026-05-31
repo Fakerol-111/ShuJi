@@ -83,9 +83,11 @@ fn aggregate(records: &[TokenRecord], window: TokenWindow) -> HashMap<String, To
     let cutoff = match window {
         TokenWindow::Today => {
             let now = Utc::now();
-            Some(now - chrono::Duration::hours(now.hour() as i64)
-                        - chrono::Duration::minutes(now.minute() as i64)
-                        - chrono::Duration::seconds(now.second() as i64))
+            Some(
+                now - chrono::Duration::hours(now.hour() as i64)
+                    - chrono::Duration::minutes(now.minute() as i64)
+                    - chrono::Duration::seconds(now.second() as i64),
+            )
         }
         TokenWindow::Last3Days => Some(Utc::now() - chrono::Duration::days(3)),
         TokenWindow::Last7Days => Some(Utc::now() - chrono::Duration::days(7)),
@@ -100,7 +102,9 @@ fn aggregate(records: &[TokenRecord], window: TokenWindow) -> HashMap<String, To
                 continue;
             }
         }
-        let entry = map.entry(rec.role.clone()).or_insert_with(TokenUsage::default);
+        let entry = map
+            .entry(rec.role.clone())
+            .or_insert_with(TokenUsage::default);
         entry.prompt_tokens += rec.prompt_tokens;
         entry.completion_tokens += rec.completion_tokens;
         entry.total_tokens += rec.prompt_tokens + rec.completion_tokens;
@@ -127,7 +131,12 @@ pub fn snapshot_window(window: TokenWindow) -> HashMap<String, TokenUsage> {
 
 pub fn snapshot_grouped() -> HashMap<String, HashMap<String, TokenUsage>> {
     let mut result = HashMap::new();
-    for window in &[TokenWindow::Today, TokenWindow::Last3Days, TokenWindow::Last7Days, TokenWindow::All] {
+    for window in &[
+        TokenWindow::Today,
+        TokenWindow::Last3Days,
+        TokenWindow::Last7Days,
+        TokenWindow::All,
+    ] {
         result.insert(window.label().to_string(), snapshot_window(*window));
     }
     result

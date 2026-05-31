@@ -1,7 +1,7 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::AtomicBool;
 use std::path::Path;
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput};
 use crate::agent::util::{extract_skill, strip_skill_tag};
@@ -23,7 +23,12 @@ impl NeigeAgent {
         cancel: Arc<AtomicBool>,
         cancel_map: Option<Arc<Mutex<HashMap<Role, Arc<AtomicBool>>>>>,
     ) -> Self {
-        Self { client, model: model.to_string(), cancel, cancel_map }
+        Self {
+            client,
+            model: model.to_string(),
+            cancel,
+            cancel_map,
+        }
     }
 
     fn tools() -> Vec<ToolDefinition> {
@@ -102,7 +107,10 @@ impl NeigeAgent {
     /// Returns empty string if the skill is not found in either location.
     pub async fn load_skill(name: &str, working_dir: &Path) -> String {
         // 1. Check runtime skills on disk
-        let disk_path = working_dir.join(".shuji").join("skills").join(format!("{}.md", name));
+        let disk_path = working_dir
+            .join(".shuji")
+            .join("skills")
+            .join(format!("{}.md", name));
         if let Ok(content) = tokio::fs::read_to_string(&disk_path).await {
             if !content.trim().is_empty() {
                 log_console!("[内阁] load skill from disk: {}", name);
@@ -164,7 +172,9 @@ impl NeigeAgent {
 
 #[async_trait::async_trait]
 impl Agent for NeigeAgent {
-    fn role(&self) -> Role { Role::Neige }
+    fn role(&self) -> Role {
+        Role::Neige
+    }
 
     fn set_interrupt_flag(&mut self, flag: Arc<AtomicBool>) {
         self.cancel = flag;
@@ -181,17 +191,28 @@ impl Agent for NeigeAgent {
         let client = Arc::new(self.client.clone());
         let model = self.model.clone();
         let mut session = crate::api::session::Session::new(
-            system_prompt, &msgs, &self.model, &tools, &client,
-            &input.skill_prompts, &input.runtime_config,
-        ).with_role(self.role().name())
-         .with_soul(self.role().name(), &Self::load_soul(&input.working_dir).await)
-         .with_debug_dir(input.working_dir.clone());
+            system_prompt,
+            &msgs,
+            &self.model,
+            &tools,
+            &client,
+            &input.skill_prompts,
+            &input.runtime_config,
+        )
+        .with_role(self.role().name())
+        .with_soul(
+            self.role().name(),
+            &Self::load_soul(&input.working_dir).await,
+        )
+        .with_debug_dir(input.working_dir.clone());
 
         // ── Resume from paused session (内阁 waiting for emperor) ──
         let resumed = if input.resume_paused {
             match Self::load_paused_session(&working_dir).await {
                 Some(messages) => {
-                    session.restore(&crate::api::session::SessionSnapshot::from_messages(messages));
+                    session.restore(&crate::api::session::SessionSnapshot::from_messages(
+                        messages,
+                    ));
                     session.inject(&format!("[皇帝回复] {}", input.task_description));
                     true
                 }
@@ -204,42 +225,62 @@ impl Agent for NeigeAgent {
             false
         };
 
+        let thresholds = input.runtime_config.resolve_compact_thresholds(
+            self.role().name(),
+            input.context_window_config.get(self.role().name()),
+        );
+
         // ── Normal restore from PersistedContext (skipped when resumed) ──
         let role_name = self.role().name().to_string();
         if !resumed {
-            if let Some(mut ctx) = crate::api::session::PersistedContext::load_from(&working_dir, &role_name).await {
+            if let Some(mut ctx) =
+                crate::api::session::PersistedContext::load_from(&working_dir, &role_name).await
+            {
                 log_console!("[内阁] loading context: base={} chars, skills={}, summary={} chars, recent={} msgs",
                     ctx.base_prompt.len(), ctx.skill_prompts.len(), ctx.history_messages.len(), ctx.context_messages.len());
 
-            // Compact iteratively: context first, then history. Persist after each step.
-            loop {
-                let mut changed = false;
+                // Compact iteratively: context first, then history. Persist after each step.
+                loop {
+                    let mut changed = false;
 
-                if let Some(result) = crate::api::compact::maybe_compact(
-                    &self.client, &self.model, &ctx.history_messages, &ctx.context_messages, &input.runtime_config,
-                ).await {
-                    ctx.history_messages = result.new_history;
-                    ctx.context_messages = result.kept_context;
-                    ctx.save_to(&working_dir, &role_name).await;
-                    changed = true;
+                    if let Some(result) = crate::api::compact::maybe_compact(
+                        &self.client,
+                        &self.model,
+                        &ctx.history_messages,
+                        &ctx.context_messages,
+                        &thresholds,
+                    )
+                    .await
+                    {
+                        ctx.history_messages = result.new_history;
+                        ctx.context_messages = result.kept_context;
+                        ctx.save_to(&working_dir, &role_name).await;
+                        changed = true;
+                    }
+
+                    if let Some(merged) = crate::api::compact::maybe_compact_history(
+                        &self.client,
+                        &self.model,
+                        &ctx.history_messages,
+                        &thresholds,
+                    )
+                    .await
+                    {
+                        ctx.history_messages = merged;
+                        ctx.save_to(&working_dir, &role_name).await;
+                        changed = true;
+                    }
+
+                    if !changed {
+                        break;
+                    }
                 }
 
-                if let Some(merged) = crate::api::compact::maybe_compact_history(
-                    &self.client, &self.model, &ctx.history_messages, &input.runtime_config,
-                ).await {
-                    ctx.history_messages = merged;
-                    ctx.save_to(&working_dir, &role_name).await;
-                    changed = true;
-                }
-
-                if !changed { break; }
+                let mut msgs = ctx.to_messages();
+                msgs.push(serde_json::json!({"role": "user", "content": format!("皇帝新指令：{}", input.task_description)}));
+                let snap = crate::api::session::SessionSnapshot::from_messages(msgs);
+                session.restore(&snap);
             }
-
-            let mut msgs = ctx.to_messages();
-            msgs.push(serde_json::json!({"role": "user", "content": format!("皇帝新指令：{}", input.task_description)}));
-            let snap = crate::api::session::SessionSnapshot::from_messages(msgs);
-            session.restore(&snap);
-        }
         } // end if !resumed
 
         let mut controller = crate::api::control::AgentController::new();
@@ -251,34 +292,66 @@ impl Agent for NeigeAgent {
             let wd = working_dir.clone();
             let role = role_name.clone();
             let cfg = input.runtime_config.clone();
-            controller.set_compact_handler(Box::new(move |messages: Vec<serde_json::Value>| {
-                let client = client.clone();
-                let model = model.clone();
-                let wd = wd.clone();
-                let role = role.clone();
-                let cfg = cfg.clone();
-                Box::pin(async move {
-                    let mut ctx = crate::api::session::PersistedContext::from_messages(&messages);
-                    loop {
-                        let mut changed = false;
-                        if let Some(result) = crate::api::compact::maybe_compact(
-                            &client, &model, &ctx.history_messages, &ctx.context_messages, &cfg,
-                        ).await {
-                            ctx.history_messages = result.new_history;
-                            ctx.context_messages = result.kept_context;
-                            changed = true;
+            controller.set_compact_handler(
+                Box::new(move |messages: Vec<serde_json::Value>| {
+                    let client = client.clone();
+                    let model = model.clone();
+                    let wd = wd.clone();
+                    let role = role.clone();
+                    let cfg = cfg.clone();
+                    Box::pin(async move {
+                        // Re-read context config for live threshold updates
+                        let ctx_roles = tokio::fs::read_to_string(wd.join("context_config.json"))
+                            .await
+                            .ok()
+                            .and_then(|c| {
+                                serde_json::from_str::<
+                                        crate::commands::settings::ContextWindowConfig,
+                                    >(&c)
+                                    .ok()
+                            })
+                            .map(|c| c.roles)
+                            .unwrap_or_default();
+                        let thresholds =
+                            cfg.resolve_compact_thresholds(&role, ctx_roles.get(&role));
+
+                        let mut ctx =
+                            crate::api::session::PersistedContext::from_messages(&messages);
+                        loop {
+                            let mut changed = false;
+                            if let Some(result) = crate::api::compact::maybe_compact(
+                                &client,
+                                &model,
+                                &ctx.history_messages,
+                                &ctx.context_messages,
+                                &thresholds,
+                            )
+                            .await
+                            {
+                                ctx.history_messages = result.new_history;
+                                ctx.context_messages = result.kept_context;
+                                changed = true;
+                            }
+                            if let Some(merged) = crate::api::compact::maybe_compact_history(
+                                &client,
+                                &model,
+                                &ctx.history_messages,
+                                &thresholds,
+                            )
+                            .await
+                            {
+                                ctx.history_messages = merged;
+                                changed = true;
+                            }
+                            if !changed {
+                                break;
+                            }
                         }
-                        if let Some(merged) = crate::api::compact::maybe_compact_history(
-                            &client, &model, &ctx.history_messages, &cfg,
-                        ).await {
-                            ctx.history_messages = merged;
-                            changed = true;
-                        }
-                        if !changed { break; }
-                    }
-                    ctx.save_to(&wd, &role).await;
-                })
-            }), 20);
+                        ctx.save_to(&wd, &role).await;
+                    })
+                }),
+                20,
+            );
         }
 
         // ── Periodic checkpoint ──
@@ -307,7 +380,9 @@ impl Agent for NeigeAgent {
                 model: Some(model.clone()),
             };
             Box::pin(async move {
-                if let Some(result) = crate::tool::tool_handle_neige_special(&name, &args, &ctx).await {
+                if let Some(result) =
+                    crate::tool::tool_handle_neige_special(&name, &args, &ctx).await
+                {
                     result
                 } else {
                     Self::execute_tool(&name, &args, &ctx.working_dir).await
@@ -327,9 +402,9 @@ impl Agent for NeigeAgent {
                 break;
             }
 
-            let run_result = controller.run(
-                &mut session, &exec, &self.cancel, &tools, None, &config,
-            ).await?;
+            let run_result = controller
+                .run(&mut session, &exec, &self.cancel, &tools, None, &config)
+                .await?;
             (result, route) = match run_result {
                 crate::api::control::RunResult::Done(text) => (text, None),
                 crate::api::control::RunResult::Routed { text, route: r } => (text, Some(r)),
@@ -341,15 +416,23 @@ impl Agent for NeigeAgent {
             }
 
             match extract_skill(&result) {
-                Some(skill_name) if !Self::load_skill(&skill_name, &working_dir).await.is_empty() => {
+                Some(skill_name)
+                    if !Self::load_skill(&skill_name, &working_dir).await.is_empty() =>
+                {
                     if skill_name == current_skill {
-                        log_console!("[内阁] skill {} already loaded, prompting continue", skill_name);
+                        log_console!(
+                            "[内阁] skill {} already loaded, prompting continue",
+                            skill_name
+                        );
                         session.inject(&format!("[系统] 技能 {} 已在当前会话中。请直接继续执行该技能的指令，不要重复输出 <skill> 标签。", skill_name));
                         continue;
                     }
                     current_skill = skill_name.clone();
                     log_console!("[内阁] inject skill: {}", skill_name);
-                    session.inject_skill(&skill_name, &Self::load_skill(&skill_name, &working_dir).await);
+                    session.inject_skill(
+                        &skill_name,
+                        &Self::load_skill(&skill_name, &working_dir).await,
+                    );
                     session.inject(&format!("[系统] 技能 {} 已加载。请立即按照该技能的指令行动，不要再输出 <skill> 标签。", skill_name));
                     if skill_name == "summary" {
                         Self::inject_project_state(&mut session, &working_dir).await;
@@ -382,17 +465,17 @@ impl Agent for NeigeAgent {
         } else {
             // Normal: save to PersistedContext
             let snap = session.snapshot();
-	            let ctx = crate::api::session::PersistedContext::from_messages(&snap.messages);
-	            ctx.save_to(&working_dir, &role_name).await;
-	        }
+            let ctx = crate::api::session::PersistedContext::from_messages(&snap.messages);
+            ctx.save_to(&working_dir, &role_name).await;
+        }
 
-	        let clean = strip_skill_tag(result);
-	        let mut output = AgentOutput::new(clean);
-	        output.paused = has_options && route.is_none();
-	        output.route = route;
-	        if !current_skill.is_empty() {
-	            output.skill = Some(current_skill);
-	        }
-	        Ok(output)
-	    }
-	}
+        let clean = strip_skill_tag(result);
+        let mut output = AgentOutput::new(clean);
+        output.paused = has_options && route.is_none();
+        output.route = route;
+        if !current_skill.is_empty() {
+            output.skill = Some(current_skill);
+        }
+        Ok(output)
+    }
+}

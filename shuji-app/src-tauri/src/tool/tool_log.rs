@@ -5,7 +5,12 @@ static LOG_LOCK: Mutex<()> = Mutex::new(());
 
 /// Log a tool call to `.shuji/logs/tool-calls/{dept}.jsonl`.
 /// Each line: `{"ts":"...","tool":"...","args":{...}}`
-pub async fn log_tool_call(dept: &str, tool_name: &str, args: &serde_json::Value, working_dir: &Path) {
+pub async fn log_tool_call(
+    dept: &str,
+    tool_name: &str,
+    args: &serde_json::Value,
+    working_dir: &Path,
+) {
     let log_dir = working_dir.join(".shuji").join("logs").join("tool-calls");
     let _ = tokio::fs::create_dir_all(&log_dir).await;
 
@@ -28,5 +33,6 @@ pub async fn log_tool_call(dept: &str, tool_name: &str, args: &serde_json::Value
             .ok()?;
         use std::io::Write;
         file.write_all(entry.as_bytes()).ok()
-    }).await;
+    })
+    .await;
 }

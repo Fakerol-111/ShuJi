@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::sync::Mutex;
 
 use std::fmt;
@@ -57,11 +57,21 @@ pub struct ActorMessage {
 
 impl ActorMessage {
     pub fn new(subject: impl Into<String>, msg_type: RouteMsgType) -> Self {
-        Self { msg_type, subject: subject.into(), payload: None, reply_to: None }
+        Self {
+            msg_type,
+            subject: subject.into(),
+            payload: None,
+            reply_to: None,
+        }
     }
 
     pub fn interrupt() -> Self {
-        Self { msg_type: RouteMsgType::Interrupt, subject: String::new(), payload: None, reply_to: None }
+        Self {
+            msg_type: RouteMsgType::Interrupt,
+            subject: String::new(),
+            payload: None,
+            reply_to: None,
+        }
     }
 
     fn subject(&self) -> &str {
@@ -123,13 +133,21 @@ impl ActorSystem {
         cancel_map: Arc<std::sync::Mutex<HashMap<Role, Arc<AtomicBool>>>>,
         cancel: Arc<AtomicBool>,
     ) -> Self {
-        Self { senders, emperor_tx, dept_log_tx, cancel_map, cancel }
+        Self {
+            senders,
+            emperor_tx,
+            dept_log_tx,
+            cancel_map,
+            cancel,
+        }
     }
 
     /// Send a message to a role's actor.
     pub fn send(&self, target: &Role, msg: ActorMessage) -> Result<(), String> {
         match self.senders.get(target) {
-            Some(tx) => tx.send(msg).map_err(|_| format!("{} actor 已关闭", target.name())),
+            Some(tx) => tx
+                .send(msg)
+                .map_err(|_| format!("{} actor 已关闭", target.name())),
             None => Err(format!("找不到 {} actor", target.name())),
         }
     }
@@ -149,7 +167,9 @@ impl Drop for ActorSystem {
             let _ = tx.send(ActorMessage::interrupt());
         }
 
-        log_console!("[actor] ActorSystem dropped — all cancel flags set, Interrupt sent to all actors");
+        log_console!(
+            "[actor] ActorSystem dropped — all cancel flags set, Interrupt sent to all actors"
+        );
     }
 }
 
@@ -214,7 +234,10 @@ pub async fn run_actor(mut ctx: ActorContext) {
         // If a Replace was queued while we were busy, use that
         // instead of the original Task content.
         let content = if let Some(replacement) = pending_replace.take() {
-            log_console!("[actor] {}: using replacement instead of original task", role_name);
+            log_console!(
+                "[actor] {}: using replacement instead of original task",
+                role_name
+            );
             replacement
         } else {
             msg.subject().to_string()
@@ -225,7 +248,8 @@ pub async fn run_actor(mut ctx: ActorContext) {
             let mut prompts = Vec::new();
             let skill_name = ctx.current_skill.lock().ok().and_then(|s| s.clone());
             if let Some(name) = skill_name {
-                let content = crate::agent::neige::NeigeAgent::load_skill(&name, &ctx.working_dir).await;
+                let content =
+                    crate::agent::neige::NeigeAgent::load_skill(&name, &ctx.working_dir).await;
                 prompts.push(format!("[skill: {}]\n{}", name, content));
             }
             prompts
@@ -258,7 +282,9 @@ pub async fn run_actor(mut ctx: ActorContext) {
             // Safety: break if stuck without plan progress.
             // If the plan's current batch has changed, the agent is making
             // legitimate progress → reset the counter.
-            if let Ok(plan_json) = serde_json::from_str::<serde_json::Value>(&ctx.agent.plan_display()) {
+            if let Ok(plan_json) =
+                serde_json::from_str::<serde_json::Value>(&ctx.agent.plan_display())
+            {
                 if let Some(cur) = plan_json["current"].as_u64() {
                     let cur_usize = cur as usize;
                     if last_plan_current.map_or(true, |prev| cur_usize != prev) {
@@ -271,11 +297,33 @@ pub async fn run_actor(mut ctx: ActorContext) {
             if exec_iterations > max_exec_iterations {
                 log_console!("[actor] {}: plan loop exceeded {} iterations without batch progress, forcing exit",
                     role_name, max_exec_iterations);
-                let _ = ctx.emperor_tx.send(ChatMessage::new("系统",
-                    &format!("{} 计划循环超过次数限制（同一批次内 {} 轮未推进），请重新路由", role_name, max_exec_iterations)));
+                let _ = ctx.emperor_tx.send(ChatMessage::new(
+                    "系统",
+                    &format!(
+                        "{} 计划循环超过次数限制（同一批次内 {} 轮未推进），请重新路由",
+                        role_name, max_exec_iterations
+                    ),
+                ));
                 break 'exec;
             }
             let current_skill = ctx.current_skill.lock().ok().and_then(|s| s.clone());
+
+            // Load per-role context window overrides
+            let context_config: Arc<HashMap<String, crate::config::RoleContextConfig>> = {
+                let path = ctx.working_dir.join("context_config.json");
+                match tokio::fs::read_to_string(&path).await {
+                    Ok(content) => {
+                        match serde_json::from_str::<crate::commands::settings::ContextWindowConfig>(
+                            &content,
+                        ) {
+                            Ok(cfg) => Arc::new(cfg.roles),
+                            Err(_) => Arc::new(HashMap::new()),
+                        }
+                    }
+                    Err(_) => Arc::new(HashMap::new()),
+                }
+            };
+
             let input = AgentInput {
                 role: ctx.role,
                 task_description: content.clone(),
@@ -285,6 +333,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
                 skill_prompts: skill_prompts.clone(),
                 current_skill,
                 resume_paused: paused_for_decision,
+                context_window_config: context_config.clone(),
                 runtime_config: ctx.runtime_config.clone(),
             };
 
@@ -346,10 +395,16 @@ pub async fn run_actor(mut ctx: ActorContext) {
                     if output.skill.as_deref() == Some("summary") {
                         let state_path = ctx.working_dir.join(".shuji").join("state.json");
                         if let Ok(content) = tokio::fs::read_to_string(&state_path).await {
-                            if let Ok(mut proj) = serde_json::from_str::<serde_json::Value>(&content) {
+                            if let Ok(mut proj) =
+                                serde_json::from_str::<serde_json::Value>(&content)
+                            {
                                 if let Some(obj) = proj.as_object_mut() {
-                                    obj.insert("summary_prompt".into(), serde_json::Value::String(output.content.clone()));
-                                    let content = serde_json::to_string_pretty(&proj).unwrap_or_default();
+                                    obj.insert(
+                                        "summary_prompt".into(),
+                                        serde_json::Value::String(output.content.clone()),
+                                    );
+                                    let content =
+                                        serde_json::to_string_pretty(&proj).unwrap_or_default();
                                     let _ = tokio::fs::write(&state_path, content).await;
                                 }
                             }
@@ -365,19 +420,27 @@ pub async fn run_actor(mut ctx: ActorContext) {
                     match ctx.agent.after_execute(&output) {
                         crate::agent::r#trait::LoopDecision::Continue(ctx_msg) => {
                             // Emit plan progress to frontend
-                            let done = ctx_msg.matches("[x]").count() + ctx_msg.matches("[X]").count();
+                            let done =
+                                ctx_msg.matches("[x]").count() + ctx_msg.matches("[X]").count();
                             let total = done + ctx_msg.matches("[ ]").count();
                             let plan_action = if total > 0 {
                                 format!("执行计划：{}/{} 完成", done, total)
                             } else {
                                 "执行计划已输出".to_string()
                             };
-                            let _ = ctx.dept_log_tx.send(DeptLogEntry::new(&role_name, &plan_action));
-                            let _ = ctx.dept_log_tx.send(DeptLogEntry::with_detail(&role_name, "计划", &ctx_msg));
-                            let _ = ctx.milestone_tx.send(format!("{} | {}", role_name, plan_action));
+                            let _ = ctx
+                                .dept_log_tx
+                                .send(DeptLogEntry::new(&role_name, &plan_action));
+                            let _ = ctx
+                                .dept_log_tx
+                                .send(DeptLogEntry::with_detail(&role_name, "计划", &ctx_msg));
+                            let _ = ctx
+                                .milestone_tx
+                                .send(format!("{} | {}", role_name, plan_action));
                             // Emit structured plan progress for frontend card
                             let plan_json = ctx.agent.plan_display();
-                            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&plan_json) {
+                            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&plan_json)
+                            {
                                 let _ = ctx.plan_tx.send(value);
                             }
                             context_msgs.push(crate::models::message::Message::user(&ctx_msg));
@@ -436,7 +499,11 @@ async fn fallback_to_dispatcher(ctx: &ActorContext, role_name: &str, error: &str
         Err(_) => {
             let _ = ctx.emperor_tx.send(ChatMessage::new(
                 "系统",
-                &format!("{} 执行失败，且无法记录重试次数。错误: {}", ctx.role.name(), error),
+                &format!(
+                    "{} 执行失败，且无法记录重试次数。错误: {}",
+                    ctx.role.name(),
+                    error
+                ),
             ));
             return;
         }
@@ -467,12 +534,23 @@ async fn fallback_to_dispatcher(ctx: &ActorContext, role_name: &str, error: &str
     match ctx.peers.get(&Role::Shangshuling) {
         Some(tx) => {
             let _ = tx.send(ActorMessage::new(fallback_content, RouteMsgType::Task));
-            log_dept(ctx, role_name, &format!("→ 回退到尚书令 (retry {}/{})", retry_count, MAX_FAILURE_RETRIES));
+            log_dept(
+                ctx,
+                role_name,
+                &format!(
+                    "→ 回退到尚书令 (retry {}/{})",
+                    retry_count, MAX_FAILURE_RETRIES
+                ),
+            );
         }
         None => {
             let _ = ctx.emperor_tx.send(ChatMessage::new(
                 "系统",
-                &format!("{} 执行失败且无法回退（找不到尚书令）: {}", ctx.role.name(), error),
+                &format!(
+                    "{} 执行失败且无法回退（找不到尚书令）: {}",
+                    ctx.role.name(),
+                    error
+                ),
             ));
         }
     }
@@ -488,7 +566,9 @@ async fn forward_route(ctx: &ActorContext, route: RouteTo) {
     log_dept(ctx, ctx.role.name(), &format!("→ {}", subject));
 
     // Log routing event to activity log
-    ctx.logger.log_route(ctx.role.name(), &target_name, &subject).await;
+    ctx.logger
+        .log_route(ctx.role.name(), &target_name, &subject)
+        .await;
 
     match ctx.peers.get(&route.target) {
         Some(tx) => {
@@ -508,7 +588,9 @@ async fn forward_route(ctx: &ActorContext, route: RouteTo) {
 fn emit_to_emperor(tx: &mpsc::UnboundedSender<ChatMessage>, role: Role, content: &str) {
     let role_name = role.name();
     let trimmed = content.trim();
-    if trimmed.is_empty() { return; }
+    if trimmed.is_empty() {
+        return;
+    }
     let (clean_content, options) = parse_options(trimmed);
     let mut msg = ChatMessage::new(role_name, &clean_content);
     msg.options = options;
@@ -532,13 +614,23 @@ fn parse_options(content: &str) -> (String, Vec<crate::models::chat::ChatOption>
                     let label = extract_attr(tag, "label").unwrap_or_default();
                     let desc = extract_attr(tag, "description").unwrap_or_default();
                     if !key.is_empty() {
-                        options.push(crate::models::chat::ChatOption { key, label, description: desc });
+                        options.push(crate::models::chat::ChatOption {
+                            key,
+                            label,
+                            description: desc,
+                        });
                     }
                     pos = abs_start + opt_end + 2;
-                } else { break; }
+                } else {
+                    break;
+                }
             }
             // Remove the options block from content
-            let clean = format!("{}{}", content[..start].trim(), content[end + "</options>".len()..].trim());
+            let clean = format!(
+                "{}{}",
+                content[..start].trim(),
+                content[end + "</options>".len()..].trim()
+            );
             return (clean, options);
         }
     }

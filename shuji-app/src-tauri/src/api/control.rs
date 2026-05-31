@@ -13,14 +13,16 @@ pub type ToolFuture = Pin<Box<dyn Future<Output = String> + Send + 'static>>;
 /// Callback for periodic checkpoint saves.
 /// Receives an owned SessionSnapshot (cloned inside the controller),
 /// so the async block does not borrow the caller's session.
-pub type CheckpointFn = Box<dyn Fn(SessionSnapshot) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
+pub type CheckpointFn =
+    Box<dyn Fn(SessionSnapshot) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
 
 /// Callback for mid-run context compaction.
 /// Takes the flat messages array and persists a compacted version to disk.
 /// Does NOT modify the in-memory session — the compressed context is loaded
 /// automatically on the next execute() call. This avoids disrupting the
 /// running conversation mid-turn.
-pub type CompactFn = Box<dyn Fn(Vec<serde_json::Value>) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
+pub type CompactFn =
+    Box<dyn Fn(Vec<serde_json::Value>) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
 
 const INTERRUPT_RESPONSE: &str = "\n\n[系统] 当前处理已被皇帝中断";
 
@@ -105,10 +107,16 @@ pub fn role_from_name(s: &str) -> Option<Role> {
 /// Iteration budget based on tool set.
 fn max_iterations_for_tools(tools: &[ToolDefinition], config: &RuntimeConfig) -> usize {
     let has_write_file = tools.iter().any(|t| {
-        matches!(t.function.name.as_str(), "create_file" | "modify_file" | "append_file" | "delete_file" | "rename_file")
+        matches!(
+            t.function.name.as_str(),
+            "create_file" | "modify_file" | "append_file" | "delete_file" | "rename_file"
+        )
     });
     let has_append_document = tools.iter().any(|t| {
-        matches!(t.function.name.as_str(), "append_document" | "modify_document")
+        matches!(
+            t.function.name.as_str(),
+            "append_document" | "modify_document"
+        )
     });
 
     if has_write_file {
@@ -135,7 +143,13 @@ pub struct AgentController {
 
 impl AgentController {
     pub fn new() -> Self {
-        Self { saved: None, checkpoint_fn: None, last_checkpoint: Instant::now(), compact_handler: None, compact_iter_interval: 0 }
+        Self {
+            saved: None,
+            checkpoint_fn: None,
+            last_checkpoint: Instant::now(),
+            compact_handler: None,
+            compact_iter_interval: 0,
+        }
     }
 
     /// Register a handler for periodic checkpoint saves.
@@ -194,14 +208,19 @@ impl AgentController {
                 return Ok(RunResult::Stopped(result));
             }
             if force_stop.is_some_and(|f| f.load(Ordering::SeqCst)) {
-                let result = if last_text.is_empty() { "已停止".to_string() } else { last_text };
+                let result = if last_text.is_empty() {
+                    "已停止".to_string()
+                } else {
+                    last_text
+                };
                 return Ok(RunResult::Stopped(result));
             }
 
             // ── Periodic checkpoint ──
             if let Some(ref handler) = self.checkpoint_fn {
                 if config.checkpoint.interval_secs > 0
-                    && self.last_checkpoint.elapsed() >= Duration::from_secs(config.checkpoint.interval_secs)
+                    && self.last_checkpoint.elapsed()
+                        >= Duration::from_secs(config.checkpoint.interval_secs)
                 {
                     let snap = session.snapshot();
                     handler(snap).await;
@@ -214,29 +233,36 @@ impl AgentController {
             // on the next execute() call. This avoids disrupting the running
             // conversation while still reaping the token savings next turn.
             if let Some(ref handler) = self.compact_handler {
-                if self.compact_iter_interval > 0 && iter > 0 && iter % self.compact_iter_interval as usize == 0 {
+                if self.compact_iter_interval > 0
+                    && iter > 0
+                    && iter % self.compact_iter_interval as usize == 0
+                {
                     let snap = session.snapshot();
                     handler(snap.messages).await;
                 }
             }
 
-            log_console!(
-                "[control] tool-call iter={}/{}",
-                iter + 1,
-                max_iter
-            );
+            log_console!("[control] tool-call iter={}/{}", iter + 1, max_iter);
 
             let step_result = session.step().await?;
 
             // ── Suspension point B: API just returned, don't process if cancelled ──
             if cancel.load(Ordering::SeqCst) {
-                let result = if last_text.is_empty() { "已中断".to_string() } else { last_text.clone() };
+                let result = if last_text.is_empty() {
+                    "已中断".to_string()
+                } else {
+                    last_text.clone()
+                };
                 return Ok(RunResult::Stopped(result));
             }
 
             match step_result {
                 crate::api::session::StepResult::Text(text) => {
-                    let combined = if last_text.is_empty() { text } else { format!("{}{}", last_text, text) };
+                    let combined = if last_text.is_empty() {
+                        text
+                    } else {
+                        format!("{}{}", last_text, text)
+                    };
                     last_text.clear();
                     return Ok(RunResult::Done(combined));
                 }
@@ -248,7 +274,9 @@ impl AgentController {
                     }
                     for (idx, tc) in calls.iter().enumerate() {
                         // ── Same-tool watchdog ─────────────
-                        let key_arg = tc.args.get("path")
+                        let key_arg = tc
+                            .args
+                            .get("path")
                             .or_else(|| tc.args.get("command"))
                             .and_then(|v| v.as_str())
                             .unwrap_or("");
@@ -263,7 +291,8 @@ impl AgentController {
                         if same_tool_count == config.watchdog.same_tool_warning_count {
                             log_console!(
                                 "[control] WATCHDOG: {} repeated {} times",
-                                tc.name, same_tool_count
+                                tc.name,
+                                same_tool_count
                             );
                         }
 
@@ -304,18 +333,21 @@ impl AgentController {
                                 // so the assistant message's tool_calls are balanced with
                                 // tool_results — otherwise the next API request returns 400.
                                 for remaining in &calls[idx + 1..] {
-                                    session.feed_tool_result(&remaining.id, &remaining.name,
-                                        "已取消：本批任务因路由到其他部门而中断");
+                                    session.feed_tool_result(
+                                        &remaining.id,
+                                        &remaining.name,
+                                        "已取消：本批任务因路由到其他部门而中断",
+                                    );
                                 }
 
                                 let msg_type = route_msg_type_from_str(
-                                    tc.args["type"].as_str().unwrap_or("task")
-                                ).unwrap_or(RouteMsgType::Task);
-                                let subject = tc.args["subject"]
-                                    .as_str()
-                                    .unwrap_or("")
-                                    .to_string();
-                                let payload = tc.args.get("inline")
+                                    tc.args["type"].as_str().unwrap_or("task"),
+                                )
+                                .unwrap_or(RouteMsgType::Task);
+                                let subject = tc.args["subject"].as_str().unwrap_or("").to_string();
+                                let payload = tc
+                                    .args
+                                    .get("inline")
                                     .and_then(|v| v.as_str())
                                     .filter(|s| !s.is_empty())
                                     .map(|s| s.to_string());
@@ -345,8 +377,16 @@ impl AgentController {
                         }
 
                         // ── Write/read tracking ───────────
-                        let is_write = matches!(tc.name.as_str(), "create_file" | "modify_file" | "append_file" | "delete_file" | "rename_file");
-                        let is_read = matches!(tc.name.as_str(), "read_file" | "list_dir" | "find_document");
+                        let is_write = matches!(
+                            tc.name.as_str(),
+                            "create_file"
+                                | "modify_file"
+                                | "append_file"
+                                | "delete_file"
+                                | "rename_file"
+                        );
+                        let is_read =
+                            matches!(tc.name.as_str(), "read_file" | "list_dir" | "find_document");
                         if is_write {
                             write_count += 1;
                             read_without_write = 0;
@@ -365,7 +405,9 @@ impl AgentController {
                         if same_tool_count >= config.watchdog.same_tool_warning_count {
                             notes.push(format!("重复调用{}", tc.name));
                         }
-                        if read_without_write >= config.watchdog.read_without_write_warning + 3 && write_count == 0 {
+                        if read_without_write >= config.watchdog.read_without_write_warning + 3
+                            && write_count == 0
+                        {
                             notes.push(format!("读取{}次未写入", read_without_write));
                         }
                         let progress_note = if notes.is_empty() {
@@ -393,8 +435,7 @@ impl AgentController {
 
                         if is_error {
                             consecutive_errors += 1;
-                            let first_line =
-                                result.lines().next().unwrap_or(&result);
+                            let first_line = result.lines().next().unwrap_or(&result);
                             let preview = if first_line.len() > 120 {
                                 let end = first_line.floor_char_boundary(120);
                                 format!("{}...", &first_line[..end])
@@ -403,7 +444,8 @@ impl AgentController {
                             };
                             log_console!(
                                 "[control] tool error (consecutive #{}/{})",
-                                consecutive_errors, config.watchdog.max_consecutive_errors
+                                consecutive_errors,
+                                config.watchdog.max_consecutive_errors
                             );
                             log_console!("  {}", preview);
                             if consecutive_errors >= config.watchdog.max_consecutive_errors {
@@ -415,8 +457,11 @@ impl AgentController {
                                 session.feed_tool_result(&tc.id, &tc.name, &tool_content);
                                 // Feed dummy results for remaining unprocessed tools
                                 for remaining in &calls[idx + 1..] {
-                                    session.feed_tool_result(&remaining.id, &remaining.name,
-                                        "已取消：工具连续错误，终止调用");
+                                    session.feed_tool_result(
+                                        &remaining.id,
+                                        &remaining.name,
+                                        "已取消：工具连续错误，终止调用",
+                                    );
                                 }
                                 return Ok(RunResult::Stopped(last_text));
                             }
@@ -433,11 +478,22 @@ impl AgentController {
         // ── Max iterations reached ─────────────────────
         log_console!("[control] tool-call limit ({}) reached", max_iter);
         let reason = if write_count == 0 && same_tool_count >= 3 {
-            format!("调用{}次达上限，其中重复工具{}次，无任何写入", max_iter, same_tool_count + 1)
+            format!(
+                "调用{}次达上限，其中重复工具{}次，无任何写入",
+                max_iter,
+                same_tool_count + 1
+            )
         } else if read_without_write >= 8 && write_count == 0 {
-            format!("调用{}次达上限，读取{}次未写入", max_iter, read_without_write + 1)
+            format!(
+                "调用{}次达上限，读取{}次未写入",
+                max_iter,
+                read_without_write + 1
+            )
         } else if write_count > 0 {
-            format!("调用{}次达上限，写入{}次文件，读取{}次", max_iter, write_count, read_without_write)
+            format!(
+                "调用{}次达上限，写入{}次文件，读取{}次",
+                max_iter, write_count, read_without_write
+            )
         } else {
             format!("调用{}次达上限，无特殊异常", max_iter)
         };
@@ -479,7 +535,9 @@ impl AgentController {
             ));
             log_console!("[control] restart_with: snapshot restored, new instruction injected");
         } else {
-            log_console!("[control] restart_with: no saved snapshot — injecting as new instruction");
+            log_console!(
+                "[control] restart_with: no saved snapshot — injecting as new instruction"
+            );
             session.inject(&format!(
                 "系统：皇帝给出了新指令，请开始处理：{}",
                 new_instruction

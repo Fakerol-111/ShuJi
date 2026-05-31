@@ -1,9 +1,11 @@
-use crate::config::RuntimeConfig;
-use crate::models::role::Role;
+use std::collections::HashMap;
+
+use crate::config::{RoleContextConfig, RuntimeConfig};
 use crate::models::message::Message;
+use crate::models::role::Role;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct AgentInput {
@@ -22,6 +24,8 @@ pub struct AgentInput {
     /// When true, the agent should resume a previously paused session
     /// (内阁 waiting for emperor decision) instead of building a new context.
     pub resume_paused: bool,
+    /// Per-role context window overrides (from context_config.json)
+    pub context_window_config: Arc<HashMap<String, RoleContextConfig>>,
     /// Runtime configuration
     pub runtime_config: Arc<RuntimeConfig>,
 }
@@ -86,5 +90,7 @@ pub trait Agent: Send + Sync {
     fn reset_plan(&self) {}
 
     /// Return plan display JSON for the frontend progress card.
-    fn plan_display(&self) -> String { "null".to_string() }
+    fn plan_display(&self) -> String {
+        "null".to_string()
+    }
 }

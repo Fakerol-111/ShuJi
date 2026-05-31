@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Project, ProjectSummary, ChatMessage, ProjectSnapshot, DeptLogEntry, AppConfig, TokenUsage, ContextStats } from "./types";
+import type { Project, ProjectSummary, ChatMessage, ProjectSnapshot, DeptLogEntry, AppConfig, ContextWindowConfig, TokenUsage, ContextStats } from "./types";
 
 export interface ShujiEntry {
   name: string;
@@ -106,4 +106,12 @@ export async function saveConfig(config: AppConfig): Promise<void> {
 
 export async function setDotenvKey(key: string, value: string): Promise<void> {
   return invoke("set_dotenv_key", { key, value });
+}
+
+export async function getContextConfig(): Promise<ContextWindowConfig> {
+  return invoke("get_context_config");
+}
+
+export async function saveContextConfig(config: ContextWindowConfig): Promise<void> {
+  return invoke("save_context_config", { config });
 }

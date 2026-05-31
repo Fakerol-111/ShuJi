@@ -84,7 +84,9 @@ impl Project {
                 "项目进行中"
             } else {
                 let last = self.task.lines().last().unwrap_or("项目进行中");
-                last.trim_start_matches(|c: char| c == '[' || c == ']' || c.is_numeric() || c == ':' || c == ' ')
+                last.trim_start_matches(|c: char| {
+                    c == '[' || c == ']' || c.is_numeric() || c == ':' || c == ' '
+                })
             };
             let kept = lines[lines.len().saturating_sub(8)..].join("\n");
             self.talk = format!("【前期概要】{}\n---\n{}", summary, kept);
@@ -97,11 +99,15 @@ impl Project {
     pub fn snapshot(&self) -> ProjectSnapshot {
         ProjectSnapshot {
             overall: self.overall.clone(),
-            phases: self.phases.iter().map(|p| PhaseSnapshot {
-                index: p.index,
-                design: p.design.label(p.index),
-                execution: p.execution.label(p.index),
-            }).collect(),
+            phases: self
+                .phases
+                .iter()
+                .map(|p| PhaseSnapshot {
+                    index: p.index,
+                    design: p.design.label(p.index),
+                    execution: p.execution.label(p.index),
+                })
+                .collect(),
             overall_progress: calc_progress(self.phase_count, &self.overall, &self.phases),
         }
     }
@@ -110,10 +116,16 @@ impl Project {
 fn calc_progress(phase_count: u32, overall: &OverallStatus, phases: &[PhaseRuntime]) -> f64 {
     let total = phase_count as f64 * 2.0 + 1.0;
     let mut done = 0.0;
-    if *overall == OverallStatus::Approved { done += 1.0; }
+    if *overall == OverallStatus::Approved {
+        done += 1.0;
+    }
     for phase in phases {
-        if phase.design == PhaseDesignStatus::Approved { done += 1.0; }
-        if phase.execution == PhaseExecutionStatus::Completed { done += 1.0; }
+        if phase.design == PhaseDesignStatus::Approved {
+            done += 1.0;
+        }
+        if phase.execution == PhaseExecutionStatus::Completed {
+            done += 1.0;
+        }
     }
     done / total * 100.0
 }

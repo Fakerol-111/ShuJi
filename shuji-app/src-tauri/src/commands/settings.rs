@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::commands::friendly_error::friendly_error;
+use crate::config::RoleContextConfig;
 
 use serde::{Deserialize, Serialize};
 
@@ -42,23 +43,25 @@ fn api_config_path() -> std::path::PathBuf {
 /// (short_prefix, canonical_role_name) — maps .env.template short names
 /// to the canonical names used by `for_role()` and `build_agents()`.
 const ROLE_PREFIXES: &[(&str, &str)] = &[
-    ("DEFAULT",  "default"),
-    ("MENXIA",   "menxiashizhong"),
+    ("DEFAULT", "default"),
+    ("MENXIA", "menxiashizhong"),
     ("ZHONGSHU", "zhongshuling"),
-    ("NEIGE",    "neige"),
+    ("NEIGE", "neige"),
     ("SHANGSHU", "shangshuling"),
-    ("LIBUP",    "libushangshu"),
-    ("HUBU",     "hubu"),
-    ("LIBUR",    "liburshangshu"),
-    ("BINGBU",   "bingbushangshu"),
-    ("XINGBU",   "xingbushangshu"),
-    ("GONGBU",   "gongbushangshu"),
-    ("ZHISI",    "zhisi"),
+    ("LIBUP", "libushangshu"),
+    ("HUBU", "hubu"),
+    ("LIBUR", "liburshangshu"),
+    ("BINGBU", "bingbushangshu"),
+    ("XINGBU", "xingbushangshu"),
+    ("GONGBU", "gongbushangshu"),
+    ("ZHISI", "zhisi"),
 ];
 
 fn prefix_for_role(role_name: &str) -> &str {
     for (prefix, name) in ROLE_PREFIXES {
-        if *name == role_name { return prefix; }
+        if *name == role_name {
+            return prefix;
+        }
     }
     role_name // fallback: use as-is
 }
@@ -84,7 +87,8 @@ pub struct AppConfig {
 impl AppConfig {
     /// Get config for a specific role, falling back to "default", then a hardcoded default.
     pub fn for_role(&self, name: &str) -> RoleEndpoint {
-        self.roles.get(name)
+        self.roles
+            .get(name)
             .cloned()
             .or_else(|| self.roles.get("default").cloned())
             .unwrap_or_else(|| RoleEndpoint {
@@ -115,12 +119,20 @@ fn load_dotenv() -> HashMap<String, String> {
                     vars.insert(key, val);
                 }
             }
-            log_console!("[debug] loaded .env from {} ({} vars)", path.display(), vars.len());
+            log_console!(
+                "[debug] loaded .env from {} ({} vars)",
+                path.display(),
+                vars.len()
+            );
             return vars;
         }
     }
-    log_console!("[debug] no .env found (cwd={})",
-        std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default());
+    log_console!(
+        "[debug] no .env found (cwd={})",
+        std::env::current_dir()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default()
+    );
     HashMap::new()
 }
 
@@ -132,11 +144,14 @@ fn app_config_from_dotenv(vars: &HashMap<String, String>) -> AppConfig {
         let api_url = vars.get(&format!("{}_API_URL", short_prefix));
         let model = vars.get(&format!("{}_MODEL", short_prefix));
         if api_key.or(api_url).or(model).is_some() {
-            roles.insert(role_name.to_string(), RoleEndpoint {
-                api_key: api_key.cloned().unwrap_or_default(),
-                api_url: api_url.cloned().unwrap_or_default(),
-                model: model.cloned().unwrap_or_default(),
-            });
+            roles.insert(
+                role_name.to_string(),
+                RoleEndpoint {
+                    api_key: api_key.cloned().unwrap_or_default(),
+                    api_url: api_url.cloned().unwrap_or_default(),
+                    model: model.cloned().unwrap_or_default(),
+                },
+            );
         }
     }
     AppConfig { roles }
@@ -199,7 +214,9 @@ pub async fn get_config() -> Result<AppConfig, String> {
 pub async fn save_config(config: AppConfig) -> Result<(), String> {
     let path = api_config_path();
     let content = serde_json::to_string_pretty(&config).map_err(friendly_error)?;
-    tokio::fs::write(&path, &content).await.map_err(friendly_error)?;
+    tokio::fs::write(&path, &content)
+        .await
+        .map_err(friendly_error)?;
     log_console!("[debug] saved api_config to {}", path.display());
     Ok(())
 }
@@ -228,6 +245,54 @@ pub async fn set_dotenv_key(key: String, value: String) -> Result<(), String> {
         lines.push(format!("{}={}", key, value));
         lines.push(String::new());
     }
-    tokio::fs::write(&path, lines.join("\n")).await.map_err(friendly_error)?;
+    tokio::fs::write(&path, lines.join("\n"))
+        .await
+        .map_err(friendly_error)?;
+    Ok(())
+}
+
+// ── Context window config ───────────────────────────────
+
+fn context_config_path() -> std::path::PathBuf {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let candidate = cwd.join("context_config.json");
+    if candidate.exists() {
+        return candidate;
+    }
+    if let Some(parent) = cwd.parent() {
+        let parent_candidate = parent.join("context_config.json");
+        if parent_candidate.exists() {
+            return parent_candidate;
+        }
+    }
+    cwd.join("context_config.json")
+}
+
+/// Per-role context window overrides, persisted as `context_config.json`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ContextWindowConfig {
+    pub roles: HashMap<String, RoleContextConfig>,
+}
+
+/// Read per-role context window config from `context_config.json`.
+#[tauri::command]
+pub async fn get_context_config() -> Result<ContextWindowConfig, String> {
+    let path = context_config_path();
+    if let Ok(content) = tokio::fs::read_to_string(&path).await {
+        if let Ok(config) = serde_json::from_str::<ContextWindowConfig>(&content) {
+            return Ok(config);
+        }
+    }
+    Ok(ContextWindowConfig::default())
+}
+
+/// Save per-role context window config to `context_config.json`.
+#[tauri::command]
+pub async fn save_context_config(config: ContextWindowConfig) -> Result<(), String> {
+    let path = context_config_path();
+    let content = serde_json::to_string_pretty(&config).map_err(friendly_error)?;
+    tokio::fs::write(&path, &content)
+        .await
+        .map_err(friendly_error)?;
     Ok(())
 }

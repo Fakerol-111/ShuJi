@@ -133,6 +133,17 @@ export interface DeptLogEntry {
   detail?: string;
 }
 
+// Context window configuration
+export interface RoleContextConfig {
+  char_threshold?: number;
+  keep_recent_count?: number;
+  history_char_threshold?: number;
+}
+
+export interface ContextWindowConfig {
+  roles: Record<string, RoleContextConfig>;
+}
+
 // 工部 plan progress (from plan-update Tauri event)
 export interface PlanBatch {
   name: string;

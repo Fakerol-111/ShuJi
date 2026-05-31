@@ -77,7 +77,10 @@ pub async fn save(
 
 /// Read the checkpoint index.
 pub async fn load_index(working_dir: &Path) -> Vec<CheckpointEntry> {
-    let path = working_dir.join(".shuji").join("checkpoints").join("index.json");
+    let path = working_dir
+        .join(".shuji")
+        .join("checkpoints")
+        .join("index.json");
     let content = tokio::fs::read_to_string(&path).await.unwrap_or_default();
     if content.is_empty() {
         return vec![];
@@ -96,7 +99,10 @@ async fn git_checkpoint(working_dir: &Path, role: &str, description: &str) -> Op
         .await
         .ok()?;
     if !add.status.success() {
-        log_console!("[checkpoint] git add failed: {}", String::from_utf8_lossy(&add.stderr));
+        log_console!(
+            "[checkpoint] git add failed: {}",
+            String::from_utf8_lossy(&add.stderr)
+        );
         return None;
     }
 
@@ -120,7 +126,10 @@ async fn git_checkpoint(working_dir: &Path, role: &str, description: &str) -> Op
         .await
         .ok()?;
     if !commit.status.success() {
-        log_console!("[checkpoint] git commit failed: {}", String::from_utf8_lossy(&commit.stderr));
+        log_console!(
+            "[checkpoint] git commit failed: {}",
+            String::from_utf8_lossy(&commit.stderr)
+        );
         return None;
     }
 
@@ -139,7 +148,10 @@ async fn git_checkpoint(working_dir: &Path, role: &str, description: &str) -> Op
 }
 
 async fn append_index(working_dir: &Path, entry: &CheckpointEntry) {
-    let path = working_dir.join(".shuji").join("checkpoints").join("index.json");
+    let path = working_dir
+        .join(".shuji")
+        .join("checkpoints")
+        .join("index.json");
     let mut entries = load_index(working_dir).await;
 
     // Cap index to last 500 entries to keep it manageable

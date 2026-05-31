@@ -33,8 +33,12 @@ pub async fn read_shuji_doc(project_dir: String, path: String) -> Result<ShujiDo
     let root = PathBuf::from(project_dir);
     let target = root.join(&rel);
 
-    let root_canon = tokio::fs::canonicalize(&root).await.map_err(friendly_error)?;
-    let target_canon = tokio::fs::canonicalize(&target).await.map_err(friendly_error)?;
+    let root_canon = tokio::fs::canonicalize(&root)
+        .await
+        .map_err(friendly_error)?;
+    let target_canon = tokio::fs::canonicalize(&target)
+        .await
+        .map_err(friendly_error)?;
     if !target_canon.starts_with(&root_canon) {
         return Err(friendly_error("路径越界"));
     }
@@ -42,8 +46,13 @@ pub async fn read_shuji_doc(project_dir: String, path: String) -> Result<ShujiDo
         return Err(friendly_error("不能读取目录"));
     }
 
-    let content = tokio::fs::read_to_string(&target_canon).await.map_err(friendly_error)?;
-    Ok(ShujiDoc { content, path: rel.to_string_lossy().replace('\\', "/") })
+    let content = tokio::fs::read_to_string(&target_canon)
+        .await
+        .map_err(friendly_error)?;
+    Ok(ShujiDoc {
+        content,
+        path: rel.to_string_lossy().replace('\\', "/"),
+    })
 }
 
 fn safe_project_path(path: &str) -> Result<PathBuf, String> {
@@ -51,7 +60,12 @@ fn safe_project_path(path: &str) -> Result<PathBuf, String> {
     if rel.is_absolute() {
         return Err("非法路径".to_string());
     }
-    if rel.components().any(|c| matches!(c, Component::ParentDir | Component::RootDir | Component::Prefix(_))) {
+    if rel.components().any(|c| {
+        matches!(
+            c,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        )
+    }) {
         return Err("非法路径".to_string());
     }
     Ok(rel.components().collect())
@@ -80,7 +94,11 @@ fn collect_entries(root: &Path, dir: &Path, depth: usize) -> Result<Vec<ShujiEnt
             continue;
         }
 
-        let rel = path.strip_prefix(root).unwrap_or(&path).to_string_lossy().replace('\\', "/");
+        let rel = path
+            .strip_prefix(root)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .replace('\\', "/");
         if path.is_dir() {
             let mut children = collect_entries(root, &path, depth + 1)?;
             sort_entries(&mut children);
@@ -121,7 +139,13 @@ fn should_skip(name: &str, path: &Path) -> bool {
     if path.is_dir() && skipped_dirs.contains(&name) {
         return true;
     }
-    if name == "logs" && path.parent().and_then(|p| p.file_name()).and_then(|s| s.to_str()) == Some(".shuji") {
+    if name == "logs"
+        && path
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|s| s.to_str())
+            == Some(".shuji")
+    {
         return true;
     }
     false
@@ -135,11 +159,37 @@ fn should_include_file(path: &Path) -> bool {
     if metadata.len() > 512 * 1024 {
         return false;
     }
-    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
-    matches!(ext.as_str(),
-        "md" | "txt" | "json" | "jsonl" | "toml" | "yaml" | "yml" | "rs" | "ts" | "tsx" |
-        "js" | "jsx" | "css" | "html" | "xml" | "svg" | "py" | "sh" | "ps1" | "env" | "gitignore"
-    ) || path.file_name().and_then(|s| s.to_str()).is_some_and(|name| name.starts_with(".") && name.contains("env"))
+    let ext = path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    matches!(
+        ext.as_str(),
+        "md" | "txt"
+            | "json"
+            | "jsonl"
+            | "toml"
+            | "yaml"
+            | "yml"
+            | "rs"
+            | "ts"
+            | "tsx"
+            | "js"
+            | "jsx"
+            | "css"
+            | "html"
+            | "xml"
+            | "svg"
+            | "py"
+            | "sh"
+            | "ps1"
+            | "env"
+            | "gitignore"
+    ) || path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .is_some_and(|name| name.starts_with(".") && name.contains("env"))
 }
 
 fn infer_label(path: &Path, rel: &str) -> String {
@@ -158,10 +208,17 @@ fn infer_label(path: &Path, rel: &str) -> String {
             "reqs" => "需求",
             "anls" => "分析",
             _ => "枢机文档",
-        }.to_string();
+        }
+        .to_string();
     }
 
-    match path.extension().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase().as_str() {
+    match path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .as_str()
+    {
         "md" => "Markdown",
         "rs" => "Rust",
         "ts" | "tsx" => "TypeScript",
@@ -175,19 +232,20 @@ fn infer_label(path: &Path, rel: &str) -> String {
         "svg" => "SVG",
         "env" => "Env",
         _ => "文本",
-    }.to_string()
+    }
+    .to_string()
 }
 
 fn sort_entries(entries: &mut [ShujiEntry]) {
-    entries.sort_by(|a, b| {
-        match (a.is_dir, b.is_dir) {
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            _ => {
-                let a_shuji = a.path.starts_with(".shuji");
-                let b_shuji = b.path.starts_with(".shuji");
-                b_shuji.cmp(&a_shuji).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
-            }
+    entries.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => {
+            let a_shuji = a.path.starts_with(".shuji");
+            let b_shuji = b.path.starts_with(".shuji");
+            b_shuji
+                .cmp(&a_shuji)
+                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
         }
     });
 }

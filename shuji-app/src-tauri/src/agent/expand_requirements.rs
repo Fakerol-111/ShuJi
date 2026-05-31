@@ -29,19 +29,20 @@ pub async fn run(
     let msgs = vec![Message::user(&prompt)];
 
     let config = Arc::new(crate::config::RuntimeConfig::default());
-    
-    let mut session = crate::api::session::Session::new(
-        PROMPT, &msgs, model, &tools, client, &[], &config,
-    )
-    .with_role("requirements_agent")
-    .with_debug_dir(working_dir.to_path_buf());
+
+    let mut session =
+        crate::api::session::Session::new(PROMPT, &msgs, model, &tools, client, &[], &config)
+            .with_role("requirements_agent")
+            .with_debug_dir(working_dir.to_path_buf());
 
     let wd = working_dir.to_path_buf();
     let exec = move |name: &str, args: &serde_json::Value| -> crate::api::control::ToolFuture {
         let name = name.to_owned();
         let args = args.clone();
         let wd = wd.clone();
-        Box::pin(async move { crate::tool::execute_named_tool(&name, &wd, &args, "requirements_agent").await })
+        Box::pin(async move {
+            crate::tool::execute_named_tool(&name, &wd, &args, "requirements_agent").await
+        })
     };
 
     let mut controller = crate::api::control::AgentController::new();
@@ -55,4 +56,3 @@ pub async fn run(
 
     Ok(result.trim().to_string())
 }
-

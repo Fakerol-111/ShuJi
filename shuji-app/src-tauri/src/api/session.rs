@@ -74,7 +74,13 @@ impl PersistedContext {
             }
         }
 
-        Self { base_prompt, soul_prompt, skill_prompts, history_messages, context_messages }
+        Self {
+            base_prompt,
+            soul_prompt,
+            skill_prompts,
+            history_messages,
+            context_messages,
+        }
     }
 
     /// Rebuild flat messages array from the 5 layers, preserving
@@ -117,9 +123,11 @@ impl PersistedContext {
                 if let Some(content) = msg["content"].as_str() {
                     if content.len() > max_chars {
                         let head: String = content.chars().take(max_chars).collect();
-                        msg["content"] = serde_json::Value::String(
-                            format!("{}...(截断, 原 {} 字符)", head, content.len())
-                        );
+                        msg["content"] = serde_json::Value::String(format!(
+                            "{}...(截断, 原 {} 字符)",
+                            head,
+                            content.len()
+                        ));
                     }
                 }
             }
@@ -128,7 +136,9 @@ impl PersistedContext {
 
     /// Load from `.shuji/context/{role}.json`.
     pub async fn load_from(working_dir: &Path, role: &str) -> Option<Self> {
-        let path = working_dir.join(".shuji/context").join(format!("{}.json", role));
+        let path = working_dir
+            .join(".shuji/context")
+            .join(format!("{}.json", role));
         let data = tokio::fs::read_to_string(&path).await.ok()?;
         serde_json::from_str(&data).ok()
     }
@@ -169,43 +179,52 @@ fn sanitize_messages(msgs: &mut Vec<serde_json::Value>) {
     //   assistant — strip dangling tool_calls whose id has no tool result
     //   tool     — keep only if its id was announced by an assistant
     //   other    — keep as-is
-    *msgs = msgs.iter().filter_map(|msg| {
-        let role = msg["role"].as_str().unwrap_or("");
-        if role == "assistant" {
-            let tcs = match msg["tool_calls"].as_array() {
-                Some(t) if !t.is_empty() => t,
-                _ => return Some(msg.clone()),
-            };
-            let valid: Vec<serde_json::Value> = tcs.iter()
-                .filter(|tc| {
-                    tc["id"].as_str()
-                        .map(|id| result_ids.iter().any(|rid| rid == id))
-                        .unwrap_or(false)
-                })
-                .cloned()
-                .collect();
-            if valid.len() == tcs.len() {
-                Some(msg.clone())
-            } else if valid.is_empty() {
-                let mut cleaned = msg.clone();
-                cleaned.as_object_mut().unwrap().remove("tool_calls");
-                Some(cleaned)
+    *msgs = msgs
+        .iter()
+        .filter_map(|msg| {
+            let role = msg["role"].as_str().unwrap_or("");
+            if role == "assistant" {
+                let tcs = match msg["tool_calls"].as_array() {
+                    Some(t) if !t.is_empty() => t,
+                    _ => return Some(msg.clone()),
+                };
+                let valid: Vec<serde_json::Value> = tcs
+                    .iter()
+                    .filter(|tc| {
+                        tc["id"]
+                            .as_str()
+                            .map(|id| result_ids.iter().any(|rid| rid == id))
+                            .unwrap_or(false)
+                    })
+                    .cloned()
+                    .collect();
+                if valid.len() == tcs.len() {
+                    Some(msg.clone())
+                } else if valid.is_empty() {
+                    let mut cleaned = msg.clone();
+                    cleaned.as_object_mut().unwrap().remove("tool_calls");
+                    Some(cleaned)
+                } else {
+                    let mut cleaned = msg.clone();
+                    cleaned
+                        .as_object_mut()
+                        .unwrap()
+                        .insert("tool_calls".to_string(), serde_json::Value::Array(valid));
+                    Some(cleaned)
+                }
+            } else if role == "tool" {
+                let call_id = msg["tool_call_id"].as_str().unwrap_or("");
+                let valid = !call_id.is_empty() && assistant_ids.iter().any(|id| id == call_id);
+                if valid {
+                    Some(msg.clone())
+                } else {
+                    None
+                }
             } else {
-                let mut cleaned = msg.clone();
-                cleaned.as_object_mut().unwrap().insert(
-                    "tool_calls".to_string(),
-                    serde_json::Value::Array(valid),
-                );
-                Some(cleaned)
+                Some(msg.clone())
             }
-        } else if role == "tool" {
-            let call_id = msg["tool_call_id"].as_str().unwrap_or("");
-            let valid = !call_id.is_empty() && assistant_ids.iter().any(|id| id == call_id);
-            if valid { Some(msg.clone()) } else { None }
-        } else {
-            Some(msg.clone())
-        }
-    }).collect();
+        })
+        .collect();
 }
 
 /// Opaque snapshot of Session internals, used for interrupt/restore.
@@ -408,7 +427,8 @@ impl Session {
                     #[allow(unused_mut)]
                     let mut thinking = serde_json::json!({"type": "enabled"});
                     if self.reasoning_config.budget_tokens > 0 {
-                        thinking["budget_tokens"] = serde_json::json!(self.reasoning_config.budget_tokens);
+                        thinking["budget_tokens"] =
+                            serde_json::json!(self.reasoning_config.budget_tokens);
                     }
                     body["thinking"] = thinking;
                 } else {
@@ -429,14 +449,25 @@ impl Session {
                 body["tool_choice"] = serde_json::json!("auto");
             }
 
-            log_console!("[{}] step: sending {} messages", self.role, self.messages.len());
+            log_console!(
+                "[{}] step: sending {} messages",
+                self.role,
+                self.messages.len()
+            );
 
-            let data = match Self::api_request(&self.client, &body, self.config.api_timeout()).await {
+            let data = match Self::api_request(&self.client, &body, self.config.api_timeout()).await
+            {
                 Ok(d) => d,
                 Err(e) => {
                     api_retries += 1;
                     if api_retries < max_api_retries {
-                        log_console!("[{}] API 请求失败 (retry {}/{}), 2s 后重试: {}", self.role, api_retries, max_api_retries, e);
+                        log_console!(
+                            "[{}] API 请求失败 (retry {}/{}), 2s 后重试: {}",
+                            self.role,
+                            api_retries,
+                            max_api_retries,
+                            e
+                        );
                         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                         continue;
                     }
@@ -444,9 +475,7 @@ impl Session {
                 }
             };
             let msg = &data["choices"][0]["message"];
-            let finish_reason = data["choices"][0]["finish_reason"]
-                .as_str()
-                .unwrap_or("");
+            let finish_reason = data["choices"][0]["finish_reason"].as_str().unwrap_or("");
 
             // Log reasoning content length for debugging (DeepSeek reasoning_content field)
             if let Some(rc) = msg.get("reasoning_content").and_then(|v| v.as_str()) {
@@ -478,10 +507,16 @@ impl Session {
             // Log completion content for debugging
             {
                 let text = msg["content"].as_str().unwrap_or("");
-                let has_tools = msg["tool_calls"].as_array().map_or(false, |a| !a.is_empty());
+                let has_tools = msg["tool_calls"]
+                    .as_array()
+                    .map_or(false, |a| !a.is_empty());
                 if has_tools {
-                    let tool_names: Vec<&str> = msg["tool_calls"].as_array().unwrap()
-                        .iter().filter_map(|tc| tc["function"]["name"].as_str()).collect();
+                    let tool_names: Vec<&str> = msg["tool_calls"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .filter_map(|tc| tc["function"]["name"].as_str())
+                        .collect();
                     if text.is_empty() {
                         log_console!("[{}] → tools: {:?}", self.role, tool_names);
                     } else {
@@ -499,30 +534,39 @@ impl Session {
 
                 // First pass: parse tool calls to see which ones have valid JSON
                 let raw_tcs = msg["tool_calls"].as_array();
-                let valid_tool_count = raw_tcs.map(|tcs| {
-                    tcs.iter().filter(|tc| {
-                        match &tc["function"]["arguments"] {
-                            serde_json::Value::String(s) => serde_json::from_str::<serde_json::Value>(s).is_ok(),
-                            serde_json::Value::Object(_) => true,
-                            _ => false,
-                        }
-                    }).count()
-                }).unwrap_or(0);
+                let valid_tool_count = raw_tcs
+                    .map(|tcs| {
+                        tcs.iter()
+                            .filter(|tc| match &tc["function"]["arguments"] {
+                                serde_json::Value::String(s) => {
+                                    serde_json::from_str::<serde_json::Value>(s).is_ok()
+                                }
+                                serde_json::Value::Object(_) => true,
+                                _ => false,
+                            })
+                            .count()
+                    })
+                    .unwrap_or(0);
 
                 let total_tool_count = raw_tcs.map(|tcs| tcs.len()).unwrap_or(0);
                 let has_valid_calls = valid_tool_count > 0;
                 let broken_count = total_tool_count - valid_tool_count;
 
                 // Collect names of broken tools for the retry hint
-                let broken_names: Vec<&str> = raw_tcs.map(|tcs| {
-                    tcs.iter().filter(|tc| {
-                        match &tc["function"]["arguments"] {
-                            serde_json::Value::String(s) => !serde_json::from_str::<serde_json::Value>(s).is_ok(),
-                            serde_json::Value::Object(_) => false,
-                            _ => true,
-                        }
-                    }).filter_map(|tc| tc["function"]["name"].as_str()).collect()
-                }).unwrap_or_default();
+                let broken_names: Vec<&str> = raw_tcs
+                    .map(|tcs| {
+                        tcs.iter()
+                            .filter(|tc| match &tc["function"]["arguments"] {
+                                serde_json::Value::String(s) => {
+                                    !serde_json::from_str::<serde_json::Value>(s).is_ok()
+                                }
+                                serde_json::Value::Object(_) => false,
+                                _ => true,
+                            })
+                            .filter_map(|tc| tc["function"]["name"].as_str())
+                            .collect()
+                    })
+                    .unwrap_or_default();
 
                 if length_retries < max_length_retries {
                     let previous_max_tokens = self.max_tokens;
@@ -586,7 +630,8 @@ impl Session {
                     }));
                 }
 
-                let max_tokens = self.max_tokens
+                let max_tokens = self
+                    .max_tokens
                     .map(|tokens| tokens.to_string())
                     .unwrap_or_else(|| "unlimited".to_string());
                 log_console!(
@@ -603,80 +648,95 @@ impl Session {
                     ));
                 }
 
-            let mut calls = Vec::new();
-            for tc in tcs {
-                let id = tc["id"].as_str().unwrap_or("").to_string();
-                let name = tc["function"]["name"].as_str().unwrap_or("").to_string();
-                let args: serde_json::Value = match &tc["function"]["arguments"] {
-                    serde_json::Value::String(s) => {
-                        match serde_json::from_str(s) {
+                let mut calls = Vec::new();
+                for tc in tcs {
+                    let id = tc["id"].as_str().unwrap_or("").to_string();
+                    let name = tc["function"]["name"].as_str().unwrap_or("").to_string();
+                    let args: serde_json::Value = match &tc["function"]["arguments"] {
+                        serde_json::Value::String(s) => match serde_json::from_str(s) {
                             Ok(v) => v,
                             Err(e) => {
-                                let preview =
-                                    &s[..s.floor_char_boundary(200.min(s.len()))];
+                                let preview = &s[..s.floor_char_boundary(200.min(s.len()))];
                                 log_console!(
                                     "[{}] JSON parse error for {}: {} — preview: {}",
-                                    self.role, name, e, preview
+                                    self.role,
+                                    name,
+                                    e,
+                                    preview
                                 );
                                 serde_json::Value::Null
                             }
+                        },
+                        v @ serde_json::Value::Object(_) => v.clone(),
+                        _ => {
+                            log_console!(
+                                "[{}] unexpected arguments type for {}: {:?}",
+                                self.role,
+                                name,
+                                tc["function"]["arguments"]
+                            );
+                            serde_json::Value::Null
                         }
-                    }
-                    v @ serde_json::Value::Object(_) => v.clone(),
-                    _ => {
-                        log_console!(
-                            "[{}] unexpected arguments type for {}: {:?}",
-                            self.role, name, tc["function"]["arguments"]
-                        );
-                        serde_json::Value::Null
-                    }
-                };
+                    };
 
-                if args.is_null() {
-                    log_console!("[{}] skipping tool call {} due to broken arguments (truncated)", self.role, name);
-                    continue;
+                    if args.is_null() {
+                        log_console!(
+                            "[{}] skipping tool call {} due to broken arguments (truncated)",
+                            self.role,
+                            name
+                        );
+                        continue;
+                    }
+
+                    let key_arg = if name == "route_to" {
+                        args.get("to")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("?")
+                            .to_string()
+                    } else {
+                        args.get("path")
+                            .or_else(|| args.get("command"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string()
+                    };
+                    log_console!("[{}] {} {}", self.role, name, key_arg);
+
+                    calls.push(ToolCallInfo { id, name, args });
                 }
 
-                let key_arg = if name == "route_to" {
-                    args.get("to").and_then(|v| v.as_str()).unwrap_or("?").to_string()
-                } else {
-                    args.get("path")
-                        .or_else(|| args.get("command"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string()
-                };
-                log_console!("[{}] {} {}", self.role, name, key_arg);
+                // If all calls had broken arguments, return text content instead of
+                // empty ToolCalls (which would cause control.rs to loop infinitely).
+                if calls.is_empty() {
+                    log_console!(
+                        "[{}] all tool calls had broken arguments — falling back to text",
+                        self.role
+                    );
+                    return Ok(StepResult::Text(
+                        msg["content"].as_str().unwrap_or_default().to_string(),
+                    ));
+                }
 
-                calls.push(ToolCallInfo { id, name, args });
-            }
-
-            // If all calls had broken arguments, return text content instead of
-            // empty ToolCalls (which would cause control.rs to loop infinitely).
-            if calls.is_empty() {
-                log_console!("[{}] all tool calls had broken arguments — falling back to text", self.role);
+                // Only push assistant message with valid tool calls remaining.
+                // If we pushed the raw msg (which may contain truncated calls),
+                // the API would 400 because those IDs never get tool_result.
+                let valid_ids: std::collections::HashSet<&str> =
+                    calls.iter().map(|c| c.id.as_str()).collect();
+                let mut filtered = msg.clone();
+                if let Some(arr) = filtered["tool_calls"].as_array_mut() {
+                    arr.retain(|tc| valid_ids.contains(tc["id"].as_str().unwrap_or("")));
+                }
+                let assistant_text = msg["content"].as_str().unwrap_or_default().to_string();
+                self.messages.push(filtered);
+                return Ok(StepResult::ToolCalls {
+                    calls,
+                    text: assistant_text,
+                });
+            } else {
                 return Ok(StepResult::Text(
                     msg["content"].as_str().unwrap_or_default().to_string(),
                 ));
             }
-
-            // Only push assistant message with valid tool calls remaining.
-            // If we pushed the raw msg (which may contain truncated calls),
-            // the API would 400 because those IDs never get tool_result.
-            let valid_ids: std::collections::HashSet<&str> =
-                calls.iter().map(|c| c.id.as_str()).collect();
-            let mut filtered = msg.clone();
-            if let Some(arr) = filtered["tool_calls"].as_array_mut() {
-                arr.retain(|tc| valid_ids.contains(tc["id"].as_str().unwrap_or("")));
-            }
-            let assistant_text = msg["content"].as_str().unwrap_or_default().to_string();
-            self.messages.push(filtered);
-            return Ok(StepResult::ToolCalls { calls, text: assistant_text });
-        } else {
-            return Ok(StepResult::Text(
-                msg["content"].as_str().unwrap_or_default().to_string(),
-            ));
-        }
         } // end step loop
     }
 
@@ -691,7 +751,8 @@ impl Session {
     /// Skills accumulate in the context (context compression will handle pruning later).
     pub fn inject_skill(&mut self, skill_name: &str, content: &str) {
         let formatted = format!("## Working mode: {}\n\n{}", skill_name, content);
-        self.messages.push(serde_json::json!({"role": "system", "content": formatted}));
+        self.messages
+            .push(serde_json::json!({"role": "system", "content": formatted}));
     }
 
     /// Replace the previous skill message with a new one (no accumulation).
@@ -701,7 +762,9 @@ impl Session {
         let msg = serde_json::json!({"role": "system", "content": formatted});
         if let Some(pos) = self.messages.iter().rposition(|m| {
             m["role"].as_str() == Some("system")
-                && m["content"].as_str().map_or(false, |c| c.starts_with("## Working mode:"))
+                && m["content"]
+                    .as_str()
+                    .map_or(false, |c| c.starts_with("## Working mode:"))
         }) {
             self.messages[pos] = msg;
         } else {
@@ -733,7 +796,14 @@ impl Session {
         } else {
             // Multi-line: show first 20 chars of first line + last 20 chars of last line
             let first: String = lines[0].chars().take(20).collect();
-            let last: String = lines[lines.len()-1].chars().rev().take(20).collect::<String>().chars().rev().collect();
+            let last: String = lines[lines.len() - 1]
+                .chars()
+                .rev()
+                .take(20)
+                .collect::<String>()
+                .chars()
+                .rev()
+                .collect();
             format!("{}...{} ({}行)", first, last, lines.len())
         }
     }
@@ -754,10 +824,15 @@ impl Session {
             .send()
             .await
             .map_err(|e| {
-                let kind = if e.is_connect() { "连接失败" }
-                    else if e.is_timeout() { "请求超时" }
-                    else if e.is_body() { "请求体错误" }
-                    else { "请求错误" };
+                let kind = if e.is_connect() {
+                    "连接失败"
+                } else if e.is_timeout() {
+                    "请求超时"
+                } else if e.is_body() {
+                    "请求体错误"
+                } else {
+                    "请求错误"
+                };
                 anyhow::anyhow!("[{}] {} {}", client.api_url, kind, e)
             })?;
 
@@ -785,17 +860,23 @@ impl Session {
 
         let sep = "─".repeat(60);
         let content = msg["content"].as_str().unwrap_or("");
-        let finish = msg.get("finish_reason")
-            .and_then(|v| v.as_str()).unwrap_or("?");
+        let finish = msg
+            .get("finish_reason")
+            .and_then(|v| v.as_str())
+            .unwrap_or("?");
 
-        let max_tokens = self.max_tokens
+        let max_tokens = self
+            .max_tokens
             .map(|tokens| tokens.to_string())
             .unwrap_or_else(|| "unlimited".to_string());
 
         let mut lines = vec![
             sep.clone(),
             "# Truncated Output".to_string(),
-            format!("Timestamp: {}", chrono::Local::now().format("%Y-%m-%dT%H:%M:%S")),
+            format!(
+                "Timestamp: {}",
+                chrono::Local::now().format("%Y-%m-%dT%H:%M:%S")
+            ),
             format!("Role: {}", self.role),
             format!("Model: {}", self.model),
             format!("Max Tokens: {}", max_tokens),
@@ -809,8 +890,10 @@ impl Session {
         if content.is_empty() {
             lines.push("(empty — content was fully truncated)".to_string());
             // Dump the raw message JSON to see if anything survived
-            lines.push(format!("\nRaw message:\n```json\n{}\n```",
-                serde_json::to_string_pretty(msg).unwrap_or_default()));
+            lines.push(format!(
+                "\nRaw message:\n```json\n{}\n```",
+                serde_json::to_string_pretty(msg).unwrap_or_default()
+            ));
         } else {
             lines.push(format!("({} chars)", content.chars().count()));
             lines.push(String::new());
@@ -820,24 +903,39 @@ impl Session {
 
         // 2. Dump tool calls (even partial ones with broken JSON args)
         if let Some(tcs) = msg["tool_calls"].as_array() {
-            let valid = tcs.iter().filter(|tc| {
-                match &tc["function"]["arguments"] {
-                    serde_json::Value::String(s) => serde_json::from_str::<serde_json::Value>(s).is_ok(),
+            let valid = tcs
+                .iter()
+                .filter(|tc| match &tc["function"]["arguments"] {
+                    serde_json::Value::String(s) => {
+                        serde_json::from_str::<serde_json::Value>(s).is_ok()
+                    }
                     serde_json::Value::Object(_) => true,
                     _ => false,
-                }
-            }).count();
-            lines.push(format!("## Tool Calls ({} total, {} with valid args)", tcs.len(), valid));
+                })
+                .count();
+            lines.push(format!(
+                "## Tool Calls ({} total, {} with valid args)",
+                tcs.len(),
+                valid
+            ));
             for (i, tc) in tcs.iter().enumerate() {
                 let name = tc["function"]["name"].as_str().unwrap_or("?");
                 let args_raw = tc["function"]["arguments"].as_str().unwrap_or("");
                 let args_valid = match &tc["function"]["arguments"] {
-                    serde_json::Value::String(s) => serde_json::from_str::<serde_json::Value>(s).is_ok(),
+                    serde_json::Value::String(s) => {
+                        serde_json::from_str::<serde_json::Value>(s).is_ok()
+                    }
                     serde_json::Value::Object(_) => true,
                     _ => false,
                 };
                 let status = if args_valid { "✓" } else { "✗ BROKEN" };
-                lines.push(format!("{}. {} {} — args ({} chars):", i + 1, name, status, args_raw.len()));
+                lines.push(format!(
+                    "{}. {} {} — args ({} chars):",
+                    i + 1,
+                    name,
+                    status,
+                    args_raw.len()
+                ));
                 // Always show the raw args for broken ones; truncate valid ones only if huge
                 if !args_valid || args_raw.len() <= 1000 {
                     lines.push(format!("```\n{}\n```", args_raw));
@@ -856,21 +954,33 @@ impl Session {
         // 3. Dump last N session messages to show what led to truncation
         let last_n = 8usize;
         let start = self.messages.len().saturating_sub(last_n);
-        lines.push(format!("## Last {} Session Messages (of {})", last_n, self.messages.len()));
+        lines.push(format!(
+            "## Last {} Session Messages (of {})",
+            last_n,
+            self.messages.len()
+        ));
         lines.push("(most recent at bottom — shows what triggered this response)".to_string());
         lines.push(String::new());
         for (j, m) in self.messages.iter().enumerate().skip(start) {
             let role = m["role"].as_str().unwrap_or("");
             let c = m["content"].as_str().unwrap_or("");
-            let tool_names: Vec<&str> = m["tool_calls"].as_array()
-                .map(|a| a.iter().filter_map(|tc| tc["function"]["name"].as_str()).collect())
+            let tool_names: Vec<&str> = m["tool_calls"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|tc| tc["function"]["name"].as_str())
+                        .collect()
+                })
                 .unwrap_or_default();
             let tool_id = m["tool_call_id"].as_str().unwrap_or("");
 
             if role == "tool" {
                 let preview: String = c.chars().take(150).collect();
                 let suffix = if c.chars().count() > 150 { "..." } else { "" };
-                lines.push(format!("[{}] tool (id={}) → {}{}", j, tool_id, preview, suffix));
+                lines.push(format!(
+                    "[{}] tool (id={}) → {}{}",
+                    j, tool_id, preview, suffix
+                ));
             } else if !tool_names.is_empty() {
                 lines.push(format!("[{}] {} → tools: {:?}", j, role, tool_names));
             } else {
@@ -888,7 +998,9 @@ impl Session {
             .await
         {
             use tokio::io::AsyncWriteExt;
-            let _ = file.write_all(format!("{}\n", lines.join("\n")).as_bytes()).await;
+            let _ = file
+                .write_all(format!("{}\n", lines.join("\n")).as_bytes())
+                .await;
         }
     }
 

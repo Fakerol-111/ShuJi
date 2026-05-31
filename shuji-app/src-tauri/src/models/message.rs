@@ -23,5 +23,4 @@ impl Message {
             timestamp: chrono::Local::now().to_rfc3339(),
         }
     }
-
 }

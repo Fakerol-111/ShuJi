@@ -5,8 +5,8 @@
 mod common;
 
 use shuji_app_lib::tool::{
-    tool_create_file, tool_read_file, tool_modify_file, tool_append_file,
-    tool_delete_file, tool_rename_file, tool_list_dir, tool_execute_command,
+    tool_append_file, tool_create_file, tool_delete_file, tool_execute_command, tool_list_dir,
+    tool_modify_file, tool_read_file, tool_rename_file,
 };
 
 /// Sync wrapper for async tool functions in tests.
@@ -24,12 +24,12 @@ fn block_on<T>(f: impl std::future::Future<Output = T>) -> T {
 fn test_create_file_success() {
     let temp = common::create_test_project("tool_create");
     let root = temp.path();
-    
+
     let args = serde_json::json!({
         "path": "test.txt",
         "content": "Hello, World!"
     });
-    
+
     let result = block_on(tool_create_file(root, &args));
     let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
 
@@ -38,7 +38,10 @@ fn test_create_file_success() {
 
     let file_path = root.join("test.txt");
     assert!(file_path.exists());
-    assert_eq!(std::fs::read_to_string(&file_path).unwrap(), "Hello, World!");
+    assert_eq!(
+        std::fs::read_to_string(&file_path).unwrap(),
+        "Hello, World!"
+    );
 }
 
 #[test]
@@ -53,9 +56,9 @@ fn test_create_file_nested_directory() {
 
     let result = block_on(tool_create_file(root, &args));
     let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
-    
+
     assert_eq!(parsed["ok"], true);
-    
+
     let file_path = root.join("src/components/Button.tsx");
     assert!(file_path.exists());
 }
@@ -64,20 +67,20 @@ fn test_create_file_nested_directory() {
 fn test_create_file_reject_overwrite() {
     let temp = common::create_test_project("tool_create_overwrite");
     let root = temp.path();
-    
+
     common::fixtures::create_test_file(root, "existing.txt", "original content");
-    
+
     let args = serde_json::json!({
         "path": "existing.txt",
         "content": "new content"
     });
-    
+
     let result = block_on(tool_create_file(root, &args));
     let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
 
     assert_eq!(parsed["ok"], false);
     assert_eq!(parsed["error_code"], "already_exists");
-    
+
     let content = std::fs::read_to_string(root.join("existing.txt")).unwrap();
     assert_eq!(content, "original content");
 }
@@ -88,13 +91,13 @@ fn test_create_file_reject_overwrite() {
 fn test_read_file_success() {
     let temp = common::create_test_project("tool_read");
     let root = temp.path();
-    
+
     common::fixtures::create_test_file(root, "test.txt", "Line 1\nLine 2\nLine 3");
-    
+
     let args = serde_json::json!({
         "path": "test.txt"
     });
-    
+
     let result = block_on(tool_read_file(root, &args));
     let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
 
@@ -107,7 +110,10 @@ fn test_read_file_with_offset_limit() {
     let temp = common::create_test_project("tool_read_range");
     let root = temp.path();
 
-    let content = (0..100).map(|i| format!("Line {}", i)).collect::<Vec<_>>().join("\n");
+    let content = (0..100)
+        .map(|i| format!("Line {}", i))
+        .collect::<Vec<_>>()
+        .join("\n");
     common::fixtures::create_test_file(root, "large.txt", &content);
 
     let args = serde_json::json!({
@@ -118,7 +124,7 @@ fn test_read_file_with_offset_limit() {
 
     let result = block_on(tool_read_file(root, &args));
     let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
-    
+
     assert_eq!(parsed["ok"], true);
     let message = parsed["message"].as_str().unwrap();
     assert!(message.contains("Line 10"));
@@ -133,7 +139,11 @@ fn test_modify_file_success() {
     let temp = common::create_test_project("tool_modify");
     let root = temp.path();
 
-    common::fixtures::create_test_file(root, "code.rs", "fn old_name() {\n    println!(\"test\");\n}");
+    common::fixtures::create_test_file(
+        root,
+        "code.rs",
+        "fn old_name() {\n    println!(\"test\");\n}",
+    );
 
     let args = serde_json::json!({
         "path": "code.rs",
@@ -247,11 +257,11 @@ fn test_list_dir_success() {
     common::fixtures::create_test_file(root, "file1.txt", "");
     common::fixtures::create_test_file(root, "file2.txt", "");
     std::fs::create_dir(root.join("subdir")).unwrap();
-    
+
     let args = serde_json::json!({
         "path": ""
     });
-    
+
     let result = block_on(tool_list_dir(root, &args));
     let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
 
@@ -269,11 +279,7 @@ async fn test_execute_command_block_dangerous() {
     let temp = common::create_test_project("tool_exec_danger");
     let root = temp.path();
 
-    let dangerous_commands = vec![
-        "format c:",
-        "sudo rm -rf /",
-        "shutdown -h now",
-    ];
+    let dangerous_commands = vec!["format c:", "sudo rm -rf /", "shutdown -h now"];
 
     for cmd in dangerous_commands {
         let args = serde_json::json!({
@@ -284,8 +290,13 @@ async fn test_execute_command_block_dangerous() {
         // Command should either be blocked by safety check OR fail to execute
         // Both outcomes are safe - we just don't want it to succeed
         assert!(
-            result.contains("安全拦截") || result.contains("禁止") || result.contains("失败") || result.contains("错误"),
-            "Command '{}' should be blocked or fail: {}", cmd, result
+            result.contains("安全拦截")
+                || result.contains("禁止")
+                || result.contains("失败")
+                || result.contains("错误"),
+            "Command '{}' should be blocked or fail: {}",
+            cmd,
+            result
         );
     }
 }
@@ -297,8 +308,8 @@ async fn test_execute_command_block_dangerous() {
 /// the tokio worker thread is not blocked by `std::thread::sleep`.
 #[tokio::test]
 async fn test_execute_command_non_blocking() {
-    use std::time::Instant;
     use std::path::PathBuf;
+    use std::time::Instant;
 
     let wd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let cmd = if cfg!(target_os = "windows") {
@@ -313,12 +324,8 @@ async fn test_execute_command_non_blocking() {
 
     let args1 = args.clone();
     let wd1 = wd.clone();
-    let h1 = tokio::spawn(async move {
-        tool_execute_command(&wd1, &args1, dept).await
-    });
-    let h2 = tokio::spawn(async move {
-        tool_execute_command(&wd, &args, dept).await
-    });
+    let h1 = tokio::spawn(async move { tool_execute_command(&wd1, &args1, dept).await });
+    let h2 = tokio::spawn(async move { tool_execute_command(&wd, &args, dept).await });
 
     let (r1, r2) = tokio::join!(h1, h2);
     let elapsed = start.elapsed();

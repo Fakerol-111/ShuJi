@@ -4,10 +4,10 @@
 
 mod common;
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use shuji_app_lib::actor::ActorMessage;
 use shuji_app_lib::api::control::RouteMsgType;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 // ── ActorMessage 构造测试 ─────────────────────────────────
 
@@ -59,11 +59,11 @@ fn test_cancel_flag_reset() {
 fn test_cancel_flag_shared_across_threads() {
     let cancel = Arc::new(AtomicBool::new(false));
     let cancel_clone = cancel.clone();
-    
+
     let handle = std::thread::spawn(move || {
         cancel_clone.store(true, Ordering::SeqCst);
     });
-    
+
     handle.join().unwrap();
     assert_eq!(cancel.load(Ordering::SeqCst), true);
 }
@@ -73,7 +73,7 @@ fn test_cancel_flag_shared_across_threads() {
 #[test]
 fn test_dept_log_entry_creation() {
     let entry = shuji_app_lib::actor::DeptLogEntry::new("工部尚书", "开始编码");
-    
+
     assert_eq!(entry.dept, "工部尚书");
     assert_eq!(entry.action, "开始编码");
     assert!(entry.detail.is_none());
@@ -82,12 +82,9 @@ fn test_dept_log_entry_creation() {
 
 #[test]
 fn test_dept_log_entry_with_detail() {
-    let entry = shuji_app_lib::actor::DeptLogEntry::with_detail(
-        "工部尚书",
-        "创建文件",
-        "src/main.rs"
-    );
-    
+    let entry =
+        shuji_app_lib::actor::DeptLogEntry::with_detail("工部尚书", "创建文件", "src/main.rs");
+
     assert_eq!(entry.dept, "工部尚书");
     assert_eq!(entry.action, "创建文件");
     assert_eq!(entry.detail, Some("src/main.rs".to_string()));
@@ -96,7 +93,7 @@ fn test_dept_log_entry_with_detail() {
 #[test]
 fn test_dept_log_entry_timestamp_format() {
     let entry = shuji_app_lib::actor::DeptLogEntry::new("测试", "动作");
-    
+
     // 时间戳应该是 HH:MM:SS 格式
     assert!(entry.ts.contains(":"));
     let parts: Vec<&str> = entry.ts.split(':').collect();
@@ -105,16 +102,11 @@ fn test_dept_log_entry_timestamp_format() {
 
 #[test]
 fn test_dept_log_entry_serialization() {
-    let entry = shuji_app_lib::actor::DeptLogEntry::with_detail(
-        "内阁",
-        "路由",
-        "中书令"
-    );
-    
+    let entry = shuji_app_lib::actor::DeptLogEntry::with_detail("内阁", "路由", "中书令");
+
     let json = serde_json::to_string(&entry).unwrap();
-    let deserialized: shuji_app_lib::actor::DeptLogEntry = 
-        serde_json::from_str(&json).unwrap();
-    
+    let deserialized: shuji_app_lib::actor::DeptLogEntry = serde_json::from_str(&json).unwrap();
+
     assert_eq!(deserialized.dept, entry.dept);
     assert_eq!(deserialized.action, entry.action);
     assert_eq!(deserialized.detail, entry.detail);
@@ -125,20 +117,23 @@ fn test_dept_log_entry_serialization() {
 #[test]
 fn test_message_queue_ordering() {
     use tokio::sync::mpsc;
-    
+
     let (tx, mut rx) = mpsc::unbounded_channel();
-    
-    tx.send(ActorMessage::new("First", RouteMsgType::Task)).unwrap();
-    tx.send(ActorMessage::new("Second", RouteMsgType::Task)).unwrap();
-    tx.send(ActorMessage::new("Third", RouteMsgType::Task)).unwrap();
-    
+
+    tx.send(ActorMessage::new("First", RouteMsgType::Task))
+        .unwrap();
+    tx.send(ActorMessage::new("Second", RouteMsgType::Task))
+        .unwrap();
+    tx.send(ActorMessage::new("Third", RouteMsgType::Task))
+        .unwrap();
+
     // 消息应该按FIFO顺序接收
     let msg1 = rx.blocking_recv().unwrap();
     assert_eq!(msg1.subject, "First");
-    
+
     let msg2 = rx.blocking_recv().unwrap();
     assert_eq!(msg2.subject, "Second");
-    
+
     let msg3 = rx.blocking_recv().unwrap();
     assert_eq!(msg3.subject, "Third");
 }
@@ -146,20 +141,22 @@ fn test_message_queue_ordering() {
 #[test]
 fn test_message_queue_mixed_types() {
     use tokio::sync::mpsc;
-    
+
     let (tx, mut rx) = mpsc::unbounded_channel();
-    
-    tx.send(ActorMessage::new("Task", RouteMsgType::Task)).unwrap();
+
+    tx.send(ActorMessage::new("Task", RouteMsgType::Task))
+        .unwrap();
     tx.send(ActorMessage::interrupt()).unwrap();
-    tx.send(ActorMessage::new("Replace", RouteMsgType::Replace)).unwrap();
-    
+    tx.send(ActorMessage::new("Replace", RouteMsgType::Replace))
+        .unwrap();
+
     // 验证消息类型顺序
     let msg1 = rx.blocking_recv().unwrap();
     assert_eq!(msg1.msg_type as isize, RouteMsgType::Task as isize);
-    
+
     let msg2 = rx.blocking_recv().unwrap();
     assert_eq!(msg2.msg_type as isize, RouteMsgType::Interrupt as isize);
-    
+
     let msg3 = rx.blocking_recv().unwrap();
     assert_eq!(msg3.msg_type as isize, RouteMsgType::Replace as isize);
 }
@@ -168,32 +165,34 @@ fn test_message_queue_mixed_types() {
 
 #[test]
 fn test_concurrent_message_sending() {
-    use tokio::sync::mpsc;
     use std::thread;
-    
+    use tokio::sync::mpsc;
+
     let (tx, mut rx) = mpsc::unbounded_channel();
-    
+
     let mut handles = vec![];
-    
+
     for i in 0..10 {
         let tx_clone = tx.clone();
         let handle = thread::spawn(move || {
-            tx_clone.send(ActorMessage::new(format!("Task {}", i), RouteMsgType::Task)).unwrap();
+            tx_clone
+                .send(ActorMessage::new(format!("Task {}", i), RouteMsgType::Task))
+                .unwrap();
         });
         handles.push(handle);
     }
-    
+
     for handle in handles {
         handle.join().unwrap();
     }
-    
+
     drop(tx);
-    
+
     let mut received = vec![];
     while let Some(msg) = rx.blocking_recv() {
         received.push(msg.subject);
     }
-    
+
     assert_eq!(received.len(), 10);
 }
 
@@ -204,7 +203,7 @@ fn test_message_subject_extraction() {
     let task = ActorMessage::new("Task content", RouteMsgType::Task);
     let replace = ActorMessage::new("Replace content", RouteMsgType::Replace);
     let interrupt = ActorMessage::interrupt();
-    
+
     assert_eq!(task.subject, "Task content");
     assert_eq!(replace.subject, "Replace content");
     assert!(interrupt.subject.is_empty());
@@ -250,11 +249,11 @@ fn test_message_clone() {
 #[test]
 fn test_channel_closed_detection() {
     use tokio::sync::mpsc;
-    
+
     let (tx, mut rx) = mpsc::unbounded_channel::<shuji_app_lib::actor::ActorMessage>();
-    
+
     drop(tx);
-    
+
     let result = rx.blocking_recv();
     assert!(result.is_none());
 }
@@ -262,12 +261,12 @@ fn test_channel_closed_detection() {
 #[test]
 fn test_send_after_receiver_dropped() {
     use tokio::sync::mpsc;
-    
+
     let (tx, rx) = mpsc::unbounded_channel::<shuji_app_lib::actor::ActorMessage>();
-    
+
     drop(rx);
-    
+
     let result = tx.send(ActorMessage::new("Test", RouteMsgType::Task));
-    
+
     assert!(result.is_err());
 }

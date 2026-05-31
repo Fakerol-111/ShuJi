@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { getConfig, saveConfig } from "../api";
+import { getConfig, saveConfig, getContextConfig, saveContextConfig } from "../api";
 import { ALL_ROLES } from "../constants";
-import type { RoleEndpoint } from "../types";
+import type { RoleEndpoint, ContextWindowConfig } from "../types";
 
 // ── Provider presets (shared with SetupPage) ───────────────
 
@@ -30,6 +30,21 @@ function detectProvider(url: string): string {
 type RoleFormState = Pick<RoleEndpoint, "api_key" | "api_url" | "model">;
 
 const DEFAULT_EMPTY: RoleFormState = { api_key: "", api_url: "", model: "" };
+
+// ── Context window config ──────────────────────────────────
+
+interface ContextRoleForm {
+  char_threshold: number;
+  keep_recent_count: number;
+  history_char_threshold: number;
+}
+
+/// Matches default values in config/mod.rs
+const DEFAULT_CONTEXT_VALUES: ContextRoleForm = {
+  char_threshold: 80_000,
+  keep_recent_count: 10,
+  history_char_threshold: 2_000,
+};
 
 function initRoleConfigs(cfg: Record<string, RoleEndpoint>): {
   defaultCfg: RoleFormState;
@@ -65,6 +80,10 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
   const [expandedRole, setExpandedRole] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState("");
 
+  // Context window config state
+  const [contextOverrides, setContextOverrides] = useState<Record<string, ContextRoleForm>>({});
+  const [contextUseDefault, setContextUseDefault] = useState<Record<string, boolean>>({});
+
   const loadConfig = () => {
     getConfig().then((cfg) => {
       const { defaultCfg: d, overrides: o, useDefault: u } = initRoleConfigs(cfg.roles ?? {});
@@ -74,8 +93,27 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
     }).catch((e) => console.error("读取配置失败:", e));
   };
 
+  const loadContextConfig = () => {
+    getContextConfig().then((ctxCfg: ContextWindowConfig) => {
+      const overrides: Record<string, ContextRoleForm> = {};
+      const useDefault: Record<string, boolean> = {};
+      const roles = ctxCfg.roles ?? {};
+      for (const role of ALL_ROLES) {
+        if (role.key === "default") continue;
+        if (roles[role.key]) {
+          overrides[role.key] = roles[role.key] as ContextRoleForm;
+          useDefault[role.key] = false;
+        } else {
+          useDefault[role.key] = true;
+        }
+      }
+      setContextOverrides(overrides);
+      setContextUseDefault(useDefault);
+    }).catch((e) => console.error("读取上下文配置失败:", e));
+  };
+
   const toggle = () => {
-    if (!open) loadConfig();
+    if (!open) { loadConfig(); loadContextConfig(); }
     setOpen(!open);
   };
 
@@ -94,8 +132,29 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
     });
   };
 
+  const toggleContextDefault = (role: string) => {
+    setContextUseDefault((prev) => {
+      const current = prev[role] ?? true;
+      if (current) {
+        setContextOverrides((o) => ({ ...o, [role]: { ...DEFAULT_CONTEXT_VALUES } }));
+      }
+      return { ...prev, [role]: !current };
+    });
+  };
+
+  const setContextOverride = (role: string, field: keyof ContextRoleForm, value: number) => {
+    setContextOverrides((prev) => ({
+      ...prev,
+      [role]: { ...(prev[role] ?? DEFAULT_CONTEXT_VALUES), [field]: value },
+    }));
+  };
+
+  const effectiveContext = (key: string): ContextRoleForm =>
+    !(contextUseDefault[key] ?? true) && contextOverrides[key] ? contextOverrides[key] : DEFAULT_CONTEXT_VALUES;
+
   const handleSave = async () => {
     try {
+      // Save API config
       const roles: Record<string, RoleEndpoint> = { default: defaultCfg };
       for (const role of ALL_ROLES) {
         if (role.key === "default") continue;
@@ -104,6 +163,17 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
         }
       }
       await saveConfig({ roles });
+
+      // Save context window config
+      const ctxRoles: Record<string, ContextRoleForm> = {};
+      for (const role of ALL_ROLES) {
+        if (role.key === "default") continue;
+        if (!(contextUseDefault[role.key] ?? true)) {
+          ctxRoles[role.key] = contextOverrides[role.key] ?? DEFAULT_CONTEXT_VALUES;
+        }
+      }
+      await saveContextConfig({ roles: ctxRoles });
+
       setSavedMsg("已保存");
       setTimeout(() => setSavedMsg(""), 2000);
     } catch (e) {
@@ -201,6 +271,58 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
             })}
           </div>
 
+          {/* ── Context window config ── */}
+          <div className="space-y-0.5 pt-2 border-t border-ink-700">
+            <span className="text-[11px] font-semibold text-ink-300">上下文窗口配置</span>
+            <div className="text-[10px] text-ink-500 px-1 pb-1">
+              全局默认: {DEFAULT_CONTEXT_VALUES.char_threshold.toLocaleString()} token / 保留{DEFAULT_CONTEXT_VALUES.keep_recent_count}条 / {DEFAULT_CONTEXT_VALUES.history_char_threshold.toLocaleString()} token 摘要
+            </div>
+            {roleList.map((r) => {
+              const isExpanded = expandedRole === r.key;
+              const usingDefault = contextUseDefault[r.key] ?? true;
+              return (
+                <div key={r.key} className="border border-ink-800 rounded">
+                  <button
+                    onClick={() => setExpandedRole(isExpanded ? null : r.key)}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-ink-300 hover:bg-ink-800 transition-colors"
+                  >
+                    <span className="text-ink-500 shrink-0">{isExpanded ? "▾" : "▸"}</span>
+                    <label className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={usingDefault}
+                        onChange={() => toggleContextDefault(r.key)}
+                        className="accent-ink-500"
+                      />
+                      <span className="text-[10px] text-ink-500 whitespace-nowrap">使用默认</span>
+                    </label>
+                    <span className="flex-1 text-left">{r.label}</span>
+                    <span className="text-[10px] text-ink-500 italic">
+                      {effectiveContext(r.key).char_threshold.toLocaleString()} token
+                    </span>
+                  </button>
+                  {isExpanded && (
+                    <div className="px-2 pb-2 space-y-1">
+                      {usingDefault ? (
+                        <div className="text-[10px] text-ink-500 italic px-1 py-2">
+                          使用全局默认值
+                          <br />
+                          取消勾选"使用默认"可单独设置
+                        </div>
+                      ) : (
+                        <>
+                          <ContextInput label="压缩阈值（token）" value={contextOverrides[r.key]?.char_threshold ?? DEFAULT_CONTEXT_VALUES.char_threshold} onChange={(v) => setContextOverride(r.key, "char_threshold", v)} />
+                          <ContextInput label="保留最近消息数" value={contextOverrides[r.key]?.keep_recent_count ?? DEFAULT_CONTEXT_VALUES.keep_recent_count} onChange={(v) => setContextOverride(r.key, "keep_recent_count", v)} />
+                          <ContextInput label="历史摘要合并阈值（token）" value={contextOverrides[r.key]?.history_char_threshold ?? DEFAULT_CONTEXT_VALUES.history_char_threshold} onChange={(v) => setContextOverride(r.key, "history_char_threshold", v)} />
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
           {/* ── Save ── */}
           <div className="flex items-center gap-2 pt-1">
             <button onClick={handleSave} className="text-xs px-3 py-1.5 bg-ink-700 text-ink-200 rounded hover:bg-ink-600 transition-colors">
@@ -260,4 +382,20 @@ function ModelSuggestions({ url, model, onSelect }: { url: string; model: string
     );
   }
   return <ConfigInput label="模型" value={model} onChange={onSelect} />;
+}
+
+/** Numeric input for context window config values. */
+function ContextInput({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  return (
+    <label className="block">
+      <span className="text-[10px] text-ink-500">{label}</span>
+      <input
+        type="number"
+        min={0}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full mt-0.5 px-2 py-1 text-xs bg-ink-800 border border-ink-700 rounded text-ink-200 focus:outline-none focus:border-ink-500"
+      />
+    </label>
+  );
 }

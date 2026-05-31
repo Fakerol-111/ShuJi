@@ -12,9 +12,12 @@ mod common;
 #[test]
 fn test_mock_text_response_format() {
     let response = common::mock_text_response("Hello, World!");
-    
+
     assert_eq!(response["choices"][0]["message"]["role"], "assistant");
-    assert_eq!(response["choices"][0]["message"]["content"], "Hello, World!");
+    assert_eq!(
+        response["choices"][0]["message"]["content"],
+        "Hello, World!"
+    );
     assert_eq!(response["choices"][0]["finish_reason"], "stop");
 }
 
@@ -22,16 +25,17 @@ fn test_mock_text_response_format() {
 fn test_mock_tool_response_format() {
     let args = serde_json::json!({"path": "test.txt"});
     let response = common::mock_tool_response("read_file", args.clone());
-    
+
     assert_eq!(response["choices"][0]["finish_reason"], "tool_calls");
-    
-    let tool_calls = response["choices"][0]["message"]["tool_calls"].as_array().unwrap();
+
+    let tool_calls = response["choices"][0]["message"]["tool_calls"]
+        .as_array()
+        .unwrap();
     assert_eq!(tool_calls.len(), 1);
     assert_eq!(tool_calls[0]["function"]["name"], "read_file");
-    
-    let parsed_args: serde_json::Value = serde_json::from_str(
-        tool_calls[0]["function"]["arguments"].as_str().unwrap()
-    ).unwrap();
+
+    let parsed_args: serde_json::Value =
+        serde_json::from_str(tool_calls[0]["function"]["arguments"].as_str().unwrap()).unwrap();
     assert_eq!(parsed_args, args);
 }
 
@@ -39,16 +43,21 @@ fn test_mock_tool_response_format() {
 fn test_mock_truncated_response_format() {
     let response = common::mock_truncated_response(
         "This is a partial response",
-        Some(("read_file", r#"{"path": "test.t"#))
+        Some(("read_file", r#"{"path": "test.t"#)),
     );
-    
+
     assert_eq!(response["choices"][0]["finish_reason"], "length");
-    assert_eq!(response["choices"][0]["message"]["content"], "This is a partial response");
-    
-    let tool_calls = response["choices"][0]["message"]["tool_calls"].as_array().unwrap();
+    assert_eq!(
+        response["choices"][0]["message"]["content"],
+        "This is a partial response"
+    );
+
+    let tool_calls = response["choices"][0]["message"]["tool_calls"]
+        .as_array()
+        .unwrap();
     assert_eq!(tool_calls.len(), 1);
     assert_eq!(tool_calls[0]["function"]["name"], "read_file");
-    
+
     // 验证参数是截断的（无效JSON）
     let broken_args = tool_calls[0]["function"]["arguments"].as_str().unwrap();
     assert!(serde_json::from_str::<serde_json::Value>(broken_args).is_err());
@@ -57,7 +66,7 @@ fn test_mock_truncated_response_format() {
 #[test]
 fn test_mock_truncated_response_no_tools() {
     let response = common::mock_truncated_response("Partial text only", None);
-    
+
     assert_eq!(response["choices"][0]["finish_reason"], "length");
     assert!(response["choices"][0]["message"]["tool_calls"].is_null());
 }
@@ -90,11 +99,11 @@ fn test_detect_truncated_tool_call() {
             "arguments": r#"{"path": "test.txt", "content": "This is a very long cont"#
         }
     });
-    
+
     // 尝试解析参数
     let args_str = tool_call["function"]["arguments"].as_str().unwrap();
     let parse_result = serde_json::from_str::<serde_json::Value>(args_str);
-    
+
     // 应该解析失败，表明这是一个被截断的调用
     assert!(parse_result.is_err(), "Truncated JSON should fail to parse");
 }
@@ -109,11 +118,11 @@ fn test_detect_valid_tool_call() {
             "arguments": r#"{"path": "test.txt", "content": "Complete content"}"#
         }
     });
-    
+
     // 尝试解析参数
     let args_str = tool_call["function"]["arguments"].as_str().unwrap();
     let parse_result = serde_json::from_str::<serde_json::Value>(args_str);
-    
+
     // 应该解析成功
     assert!(parse_result.is_ok(), "Valid JSON should parse successfully");
 }
@@ -145,11 +154,11 @@ fn test_mixed_valid_and_broken_tool_calls() {
             }
         }),
     ];
-    
+
     let mut valid_count = 0;
     let mut broken_count = 0;
     let mut broken_names = Vec::new();
-    
+
     for tc in &tool_calls {
         let args_str = tc["function"]["arguments"].as_str().unwrap();
         if serde_json::from_str::<serde_json::Value>(args_str).is_ok() {
@@ -159,7 +168,7 @@ fn test_mixed_valid_and_broken_tool_calls() {
             broken_names.push(tc["function"]["name"].as_str().unwrap());
         }
     }
-    
+
     assert_eq!(valid_count, 2);
     assert_eq!(broken_count, 1);
     assert_eq!(broken_names, vec!["create_file"]);
@@ -175,7 +184,7 @@ fn test_generate_retry_hint_for_broken_tools() {
         broken_names.len(),
         broken_names.join("、")
     );
-    
+
     assert!(hint.contains("create_file"));
     assert!(hint.contains("modify_file"));
     assert!(hint.contains("2 个"));
@@ -220,15 +229,15 @@ fn test_filter_tool_calls_by_valid_ids() {
             "function": {"name": "delete_file", "arguments": r#"{"path": "c.txt"}"#}
         }),
     ];
-    
+
     // 模拟只有call_1和call_3有效
-    let valid_ids: std::collections::HashSet<&str> = 
-        vec!["call_1", "call_3"].into_iter().collect();
-    
-    let filtered: Vec<_> = all_tool_calls.iter()
+    let valid_ids: std::collections::HashSet<&str> = vec!["call_1", "call_3"].into_iter().collect();
+
+    let filtered: Vec<_> = all_tool_calls
+        .iter()
         .filter(|tc| valid_ids.contains(tc["id"].as_str().unwrap()))
         .collect();
-    
+
     assert_eq!(filtered.len(), 2);
     assert_eq!(filtered[0]["id"], "call_1");
     assert_eq!(filtered[1]["id"], "call_3");
@@ -248,8 +257,10 @@ fn test_empty_tool_calls_array() {
             "finish_reason": "stop"
         }]
     });
-    
-    let tool_calls = response["choices"][0]["message"]["tool_calls"].as_array().unwrap();
+
+    let tool_calls = response["choices"][0]["message"]["tool_calls"]
+        .as_array()
+        .unwrap();
     assert!(tool_calls.is_empty());
 }
 
@@ -258,7 +269,7 @@ fn test_empty_tool_calls_array() {
 #[test]
 fn test_finish_reason_types() {
     let reasons = vec!["stop", "length", "tool_calls", "content_filter"];
-    
+
     for reason in reasons {
         let response = serde_json::json!({
             "choices": [{
@@ -266,7 +277,7 @@ fn test_finish_reason_types() {
                 "finish_reason": reason
             }]
         });
-        
+
         assert_eq!(response["choices"][0]["finish_reason"], reason);
     }
 }
@@ -286,7 +297,7 @@ fn test_token_usage_parsing() {
             "total_tokens": 225
         }
     });
-    
+
     let usage = &response["usage"];
     assert_eq!(usage["prompt_tokens"], 150);
     assert_eq!(usage["completion_tokens"], 75);
@@ -298,19 +309,19 @@ fn test_token_usage_parsing() {
 #[test]
 fn test_message_history_structure() {
     let mut messages = Vec::new();
-    
+
     // System message
     messages.push(serde_json::json!({
         "role": "system",
         "content": "You are a helpful assistant."
     }));
-    
+
     // User message
     messages.push(serde_json::json!({
         "role": "user",
         "content": "Read file test.txt"
     }));
-    
+
     // Assistant with tool call
     messages.push(serde_json::json!({
         "role": "assistant",
@@ -320,14 +331,14 @@ fn test_message_history_structure() {
             "function": {"name": "read_file", "arguments": r#"{"path": "test.txt"}"#}
         }]
     }));
-    
+
     // Tool result
     messages.push(serde_json::json!({
         "role": "tool",
         "content": "File content here",
         "tool_call_id": "call_1"
     }));
-    
+
     assert_eq!(messages.len(), 4);
     assert_eq!(messages[0]["role"], "system");
     assert_eq!(messages[1]["role"], "user");

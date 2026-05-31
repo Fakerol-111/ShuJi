@@ -1,6 +1,6 @@
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
 use uuid::Uuid;
@@ -9,7 +9,7 @@ use crate::actor::DeptLogEntry;
 use crate::commands::friendly_error::friendly_error;
 use crate::config::RuntimeConfig;
 use crate::models::chat::ChatMessage;
-use crate::models::project::{Project, ProjectSummary, OverallStatus};
+use crate::models::project::{OverallStatus, Project, ProjectSummary};
 use crate::storage::shuji_dir::ShujiDir;
 
 pub struct AppState {
@@ -51,7 +51,10 @@ pub async fn create_project(
 
     let shuji_dir = ShujiDir::new(&working_dir);
     shuji_dir.init().await.map_err(friendly_error)?;
-    shuji_dir.save_project(&project).await.map_err(friendly_error)?;
+    shuji_dir
+        .save_project(&project)
+        .await
+        .map_err(friendly_error)?;
 
     // Update state
     let mut current = state.current_project.lock().await;
@@ -68,7 +71,9 @@ pub async fn load_project(
     working_dir: String,
 ) -> Result<Project, String> {
     let shuji_dir = ShujiDir::new(&working_dir);
-    let storage_path = Path::new(&working_dir).join(".shuji").join("token_records.json");
+    let storage_path = Path::new(&working_dir)
+        .join(".shuji")
+        .join("token_records.json");
     crate::token_tracker::init(&storage_path);
 
     // Auto-create project if not exists
@@ -99,7 +104,10 @@ pub async fn load_project(
                 summary_prompt: String::new(),
             };
             shuji_dir.init().await.map_err(friendly_error)?;
-            shuji_dir.save_project(&project).await.map_err(friendly_error)?;
+            shuji_dir
+                .save_project(&project)
+                .await
+                .map_err(friendly_error)?;
             project
         }
     };
@@ -127,7 +135,9 @@ pub async fn load_project(
     {
         let mut dept_hist = state.dept_log_history.lock().await;
         dept_hist.clear();
-        let dept_path = Path::new(&working_dir).join(".shuji").join("dept-log.jsonl");
+        let dept_path = Path::new(&working_dir)
+            .join(".shuji")
+            .join("dept-log.jsonl");
         if let Ok(data) = tokio::fs::read_to_string(&dept_path).await {
             for line in data.lines() {
                 if let Ok(entry) = serde_json::from_str::<DeptLogEntry>(line) {

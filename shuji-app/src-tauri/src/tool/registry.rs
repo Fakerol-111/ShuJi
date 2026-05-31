@@ -39,16 +39,12 @@ pub fn document_tools() -> Vec<ToolDefinition> {
 
 /// Command execution tool.
 pub fn execute_command_tool() -> Vec<ToolDefinition> {
-    vec![
-        crate::tool::execute_command_tool_def("执行命令"),
-    ]
+    vec![crate::tool::execute_command_tool_def("执行命令")]
 }
 
 /// Log summarization tool.
 pub fn summarize_logs_tool() -> Vec<ToolDefinition> {
-    vec![
-        crate::tool::summarize_logs_tool_def(),
-    ]
+    vec![crate::tool::summarize_logs_tool_def()]
 }
 
 /// Agent-interaction tools (route_to for all, cancel_agent for 内阁).
@@ -57,7 +53,9 @@ pub fn route_tool() -> ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "route_to".into(),
-            description: "向其他部门发送任务。type: task=新任务, replace=中断并替换, interrupt=仅中断。".into(),
+            description:
+                "向其他部门发送任务。type: task=新任务, replace=中断并替换, interrupt=仅中断。"
+                    .into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -135,7 +133,8 @@ pub fn complete_task_tool() -> ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "complete_task".into(),
-            description: "标记当前批次任务完成，推进到下一批。所有批次完成后会提示写报告并路由。".into(),
+            description: "标记当前批次任务完成，推进到下一批。所有批次完成后会提示写报告并路由。"
+                .into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {}
@@ -169,7 +168,8 @@ pub fn create_skill_tool() -> ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "create_skill".into(),
-            description: "创建自定义技能文件到 .shuji/skills/。用于固化重复出现的工作流模式。".into(),
+            description: "创建自定义技能文件到 .shuji/skills/。用于固化重复出现的工作流模式。"
+                .into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

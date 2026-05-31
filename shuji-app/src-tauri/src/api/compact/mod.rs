@@ -1,5 +1,5 @@
 use crate::api::client::AnthropicClient;
-use crate::config::RuntimeConfig;
+use crate::config::CompactThresholds;
 use crate::models::message::Message;
 
 /// Build a flat text representation of messages for the summarizer.
@@ -37,20 +37,20 @@ async fn maybe_compact_with_prompt(
     model: &str,
     history_messages: &str,
     context_messages: &[serde_json::Value],
-    config: &RuntimeConfig,
+    thresholds: &CompactThresholds,
     compact_prompt: &str,
     tag: &str,
 ) -> Option<CompactResult> {
-    let total_chars: usize = context_messages.iter()
-        .map(|m| m.to_string().len())
-        .sum();
+    let total_chars: usize = context_messages.iter().map(|m| m.to_string().len()).sum();
 
-    if total_chars < config.context_compaction.char_threshold {
+    if total_chars < thresholds.char_threshold {
         return None;
     }
 
     // Split: old messages to compress, recent messages to keep
-    let split_at = context_messages.len().saturating_sub(config.context_compaction.keep_recent_count);
+    let split_at = context_messages
+        .len()
+        .saturating_sub(thresholds.keep_recent_count);
     if split_at == 0 {
         return None;
     }
@@ -71,14 +71,24 @@ async fn maybe_compact_with_prompt(
 
     let msgs = vec![Message::user(&input_text)];
 
-    log_console!("[compact:{}] compressing {} messages ({} chars) → target ≤500 chars summary",
-        tag, old_messages.len(), old_messages.iter().map(|m| m.to_string().len()).sum::<usize>());
+    log_console!(
+        "[compact:{}] compressing {} messages ({} chars) → target ≤500 chars summary",
+        tag,
+        old_messages.len(),
+        old_messages
+            .iter()
+            .map(|m| m.to_string().len())
+            .sum::<usize>()
+    );
 
     match client.send_message(compact_prompt, &msgs, model).await {
         Ok(summary) => {
             let trimmed = summary.trim();
             if trimmed.is_empty() || trimmed.len() < 20 {
-                log_console!("[compact:{}] returned empty or too-short summary, skipping", tag);
+                log_console!(
+                    "[compact:{}] returned empty or too-short summary, skipping",
+                    tag
+                );
                 return None;
             }
             let tagged = if trimmed.starts_with("[对话摘要]") {
@@ -91,9 +101,16 @@ async fn maybe_compact_with_prompt(
             } else {
                 format!("{}\n{}", history_messages, tagged)
             };
-            log_console!("[compact:{}] done — summary: {} chars, keeping {} recent msgs",
-                tag, new_history.len(), kept_context.len());
-            Some(CompactResult { new_history, kept_context })
+            log_console!(
+                "[compact:{}] done — summary: {} chars, keeping {} recent msgs",
+                tag,
+                new_history.len(),
+                kept_context.len()
+            );
+            Some(CompactResult {
+                new_history,
+                kept_context,
+            })
         }
         Err(e) => {
             log_console!("[compact:{}] summarization failed: {}", tag, e);
@@ -110,12 +127,18 @@ pub async fn maybe_compact(
     model: &str,
     history_messages: &str,
     context_messages: &[serde_json::Value],
-    config: &RuntimeConfig,
+    thresholds: &CompactThresholds,
 ) -> Option<CompactResult> {
     maybe_compact_with_prompt(
-        client, model, history_messages, context_messages, config,
-        include_str!("prompt.md"), "cabinet",
-    ).await
+        client,
+        model,
+        history_messages,
+        context_messages,
+        thresholds,
+        include_str!("prompt.md"),
+        "cabinet",
+    )
+    .await
 }
 
 /// Check whether compaction is needed and, if so, run it (department version).
@@ -126,12 +149,18 @@ pub async fn maybe_compact_dept(
     model: &str,
     history_messages: &str,
     context_messages: &[serde_json::Value],
-    config: &RuntimeConfig,
+    thresholds: &CompactThresholds,
 ) -> Option<CompactResult> {
     maybe_compact_with_prompt(
-        client, model, history_messages, context_messages, config,
-        include_str!("dept_prompt.md"), "dept",
-    ).await
+        client,
+        model,
+        history_messages,
+        context_messages,
+        thresholds,
+        include_str!("dept_prompt.md"),
+        "dept",
+    )
+    .await
 }
 
 /// Merge multiple accumulated summaries into one.
@@ -140,17 +169,19 @@ pub async fn maybe_compact_history(
     client: &AnthropicClient,
     model: &str,
     history_messages: &str,
-    config: &RuntimeConfig,
+    thresholds: &CompactThresholds,
 ) -> Option<String> {
-    if history_messages.len() < config.context_compaction.history_char_threshold {
+    if history_messages.len() < thresholds.history_char_threshold {
         return None;
     }
 
     let compact_prompt = include_str!("history_prompt.md");
     let msgs = vec![Message::user(history_messages)];
 
-    log_console!("[compact:history] merging summaries ({} chars → target ≤500 chars)",
-        history_messages.len());
+    log_console!(
+        "[compact:history] merging summaries ({} chars → target ≤500 chars)",
+        history_messages.len()
+    );
 
     match client.send_message(compact_prompt, &msgs, model).await {
         Ok(summary) => {

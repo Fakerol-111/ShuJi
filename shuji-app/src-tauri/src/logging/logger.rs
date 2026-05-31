@@ -107,6 +107,7 @@ impl Logger {
 
     /// Log a cross-department routing event.
     pub async fn log_route(&self, from: &str, to: &str, subject: &str) {
-        self.append(from, &format!("路由到 {}: {}", to, subject)).await;
+        self.append(from, &format!("路由到 {}: {}", to, subject))
+            .await;
     }
 }

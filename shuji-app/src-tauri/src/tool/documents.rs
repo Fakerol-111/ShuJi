@@ -13,7 +13,9 @@ async fn next_id(working_dir: &Path) -> Result<u64, String> {
 
     // Use spawn_blocking so the std::sync::MutexGuard is never held across .await.
     tokio::task::spawn_blocking(move || {
-        let _lock = COUNTER_LOCK.lock().map_err(|e| format!("计数器锁失败: {}", e))?;
+        let _lock = COUNTER_LOCK
+            .lock()
+            .map_err(|e| format!("计数器锁失败: {}", e))?;
         let current: u64 = std::fs::read_to_string(&counter_path)
             .ok()
             .and_then(|s| s.trim().parse().ok())
@@ -39,8 +41,12 @@ struct DocMeta {
 /// Parse the YAML frontmatter and body from a document string.
 /// Returns (DocMeta, body_text) or an error.
 fn parse_doc(content: &str) -> Result<(DocMeta, &str), String> {
-    let body = content.strip_prefix("---\n").ok_or_else(|| "缺少 YAML frontmatter 起始标记".to_string())?;
-    let end = body.find("\n---").ok_or_else(|| "缺少 YAML frontmatter 结束标记".to_string())?;
+    let body = content
+        .strip_prefix("---\n")
+        .ok_or_else(|| "缺少 YAML frontmatter 起始标记".to_string())?;
+    let end = body
+        .find("\n---")
+        .ok_or_else(|| "缺少 YAML frontmatter 结束标记".to_string())?;
     let header = &body[..end];
     let body_text = body[end + 4..].trim_start();
 
@@ -68,7 +74,16 @@ fn parse_doc(content: &str) -> Result<(DocMeta, &str), String> {
         return Err("文档缺少 id 字段".to_string());
     }
 
-    Ok((DocMeta { id, doc_type, author, timestamp, refs }, body_text))
+    Ok((
+        DocMeta {
+            id,
+            doc_type,
+            author,
+            timestamp,
+            refs,
+        },
+        body_text,
+    ))
 }
 
 /// Build a full document string from metadata and body.
@@ -141,29 +156,52 @@ async fn find_rprt_path(working_dir: &Path, id: &str) -> Option<PathBuf> {
             }
         }
         None
-    }).await.ok().flatten()
+    })
+    .await
+    .ok()
+    .flatten()
 }
 
 /// ── create_document ────────────────────────────────────────────────
 
-pub async fn tool_create_document(working_dir: &Path, args: &serde_json::Value, dept: &str) -> String {
+pub async fn tool_create_document(
+    working_dir: &Path,
+    args: &serde_json::Value,
+    dept: &str,
+) -> String {
     let doc_type = args["type"].as_str().unwrap_or("").to_string();
     if doc_type.is_empty() {
         return ToolOutput::error("create_document", "", "empty_type", "文档类型不能为空");
     }
-    let valid_types = ["dsgn", "plan", "pdsg", "ddtl", "task", "ctrt", "rprt", "revw", "precepts", "anls", "reqs"];
+    let valid_types = [
+        "dsgn", "plan", "pdsg", "ddtl", "task", "ctrt", "rprt", "revw", "precepts", "anls", "reqs",
+    ];
     if !valid_types.contains(&doc_type.as_str()) {
-        return ToolOutput::error("create_document", "", "invalid_type",
-            &format!("无效文档类型: {}，支持的类型: {}", doc_type, valid_types.join(", ")));
+        return ToolOutput::error(
+            "create_document",
+            "",
+            "invalid_type",
+            &format!(
+                "无效文档类型: {}，支持的类型: {}",
+                doc_type,
+                valid_types.join(", ")
+            ),
+        );
     }
 
-    let refs = args["refs"].as_array()
+    let refs = args["refs"]
+        .as_array()
         .map(|arr| {
-            let nums: Vec<String> = arr.iter()
+            let nums: Vec<String> = arr
+                .iter()
                 .filter_map(|v| v.as_i64())
                 .map(|n| n.to_string())
                 .collect();
-            if nums.is_empty() { "[-1]".to_string() } else { format!("[{}]", nums.join(", ")) }
+            if nums.is_empty() {
+                "[-1]".to_string()
+            } else {
+                format!("[{}]", nums.join(", "))
+            }
         })
         .unwrap_or_else(|| "[-1]".to_string());
 
@@ -204,14 +242,22 @@ pub async fn tool_create_document(working_dir: &Path, args: &serde_json::Value, 
         let _ = tokio::fs::create_dir_all(parent).await;
     }
     match tokio::fs::write(&full, &content).await {
-        Ok(_) => ToolOutput::success("create_document", &doc_id, &format!("文档 {} 创建成功", doc_id)),
+        Ok(_) => ToolOutput::success(
+            "create_document",
+            &doc_id,
+            &format!("文档 {} 创建成功", doc_id),
+        ),
         Err(e) => ToolOutput::error("create_document", &doc_id, "write_error", &e.to_string()),
     }
 }
 
 /// ── update_document ────────────────────────────────────────────────
 
-pub async fn tool_modify_document(working_dir: &Path, args: &serde_json::Value, _dept: &str) -> String {
+pub async fn tool_modify_document(
+    working_dir: &Path,
+    args: &serde_json::Value,
+    _dept: &str,
+) -> String {
     let id = args["id"].as_str().unwrap_or("");
     if id.is_empty() {
         return ToolOutput::error("modify_document", "", "empty_id", "文档 ID 不能为空");
@@ -221,7 +267,14 @@ pub async fn tool_modify_document(working_dir: &Path, args: &serde_json::Value, 
     let full = if type_prefix == "rprt" {
         match find_rprt_path(working_dir, id).await {
             Some(p) => p,
-            None => return ToolOutput::error("modify_document", id, "not_found", &format!("文档 {} 不存在", id)),
+            None => {
+                return ToolOutput::error(
+                    "modify_document",
+                    id,
+                    "not_found",
+                    &format!("文档 {} 不存在", id),
+                )
+            }
         }
     } else {
         let dir = type_to_dir(type_prefix);
@@ -236,7 +289,12 @@ pub async fn tool_modify_document(working_dir: &Path, args: &serde_json::Value, 
         }
     };
     if !full.exists() {
-        return ToolOutput::error("modify_document", id, "not_found", &format!("文档 {} 不存在", id));
+        return ToolOutput::error(
+            "modify_document",
+            id,
+            "not_found",
+            &format!("文档 {} 不存在", id),
+        );
     }
 
     let content = match tokio::fs::read_to_string(&full).await {
@@ -256,8 +314,12 @@ pub async fn tool_modify_document(working_dir: &Path, args: &serde_json::Value, 
             return ToolOutput::error("modify_document", id, "empty_old_text", "old_text 不能为空");
         }
         if !body.contains(old_text) {
-            return ToolOutput::error("modify_document", id, "not_found",
-                "未在文档正文中找到匹配的文本。请先 read_file 确认内容。");
+            return ToolOutput::error(
+                "modify_document",
+                id,
+                "not_found",
+                "未在文档正文中找到匹配的文本。请先 read_file 确认内容。",
+            );
         }
         body.replacen(old_text, new_text, 1)
     } else {
@@ -274,7 +336,11 @@ pub async fn tool_modify_document(working_dir: &Path, args: &serde_json::Value, 
 }
 
 /// Append content to an existing document's body.
-pub async fn tool_append_document(working_dir: &Path, args: &serde_json::Value, _dept: &str) -> String {
+pub async fn tool_append_document(
+    working_dir: &Path,
+    args: &serde_json::Value,
+    _dept: &str,
+) -> String {
     let id = args["id"].as_str().unwrap_or("");
     let append_content = args["content"].as_str().unwrap_or("");
     if id.is_empty() {
@@ -288,7 +354,14 @@ pub async fn tool_append_document(working_dir: &Path, args: &serde_json::Value, 
     let full = if type_prefix == "rprt" {
         match find_rprt_path(working_dir, id).await {
             Some(p) => p,
-            None => return ToolOutput::error("append_document", id, "not_found", &format!("文档 {} 不存在", id)),
+            None => {
+                return ToolOutput::error(
+                    "append_document",
+                    id,
+                    "not_found",
+                    &format!("文档 {} 不存在", id),
+                )
+            }
         }
     } else {
         let dir = type_to_dir(type_prefix);
@@ -303,7 +376,12 @@ pub async fn tool_append_document(working_dir: &Path, args: &serde_json::Value, 
         }
     };
     if !full.exists() {
-        return ToolOutput::error("append_document", id, "not_found", &format!("文档 {} 不存在", id));
+        return ToolOutput::error(
+            "append_document",
+            id,
+            "not_found",
+            &format!("文档 {} 不存在", id),
+        );
     }
 
     let content = match tokio::fs::read_to_string(&full).await {
@@ -430,7 +508,12 @@ pub async fn tool_find_document(working_dir: &Path, args: &serde_json::Value) ->
                 let rel = p.strip_prefix(working_dir).unwrap_or(&p);
                 ToolOutput::success("find_document", id, &format!("{}", rel.display()))
             }
-            None => ToolOutput::error("find_document", id, "not_found", &format!("文档 {} 不存在", id)),
+            None => ToolOutput::error(
+                "find_document",
+                id,
+                "not_found",
+                &format!("文档 {} 不存在", id),
+            ),
         }
     } else {
         let dir = type_to_dir(type_prefix);
@@ -444,7 +527,12 @@ pub async fn tool_find_document(working_dir: &Path, args: &serde_json::Value) ->
                 let rel = full.strip_prefix(working_dir).unwrap_or(&full);
                 ToolOutput::success("find_document", id, &format!("{}", rel.display()))
             }
-            Ok(_) => ToolOutput::error("find_document", id, "not_found", &format!("文档 {} 不存在", id)),
+            Ok(_) => ToolOutput::error(
+                "find_document",
+                id,
+                "not_found",
+                &format!("文档 {} 不存在", id),
+            ),
             Err(e) => ToolOutput::error("find_document", id, "path_error", &e),
         }
     }

@@ -5,7 +5,7 @@
 mod common;
 
 use shuji_app_lib::tool::documents::{
-    tool_create_document, tool_modify_document, tool_append_document, tool_find_document,
+    tool_append_document, tool_create_document, tool_find_document, tool_modify_document,
 };
 
 /// Sync wrapper for async tool functions in tests.
@@ -44,7 +44,10 @@ fn test_create_document_design() {
         .unwrap()
         .filter_map(|e| e.ok())
         .collect();
-    assert!(!entries.is_empty(), "At least one design document should be created");
+    assert!(
+        !entries.is_empty(),
+        "At least one design document should be created"
+    );
 }
 
 #[test]
@@ -64,7 +67,11 @@ fn test_create_document_different_types() {
         let result = block_on(tool_create_document(root, &args, "test"));
         let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
 
-        assert_eq!(parsed["ok"], true, "Creating {} document should succeed", doc_type);
+        assert_eq!(
+            parsed["ok"], true,
+            "Creating {} document should succeed",
+            doc_type
+        );
 
         // Verify directory exists
         let dir_path = root.join(expected_dir);

@@ -49,7 +49,8 @@ impl ShujiDir {
             return Ok(()); // already exists, user may have customised it
         }
         let default = include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"), "/../assets/defaults/zuxun.md"
+            env!("CARGO_MANIFEST_DIR"),
+            "/../assets/defaults/zuxun.md"
         ));
         fs::write(&path, default).await?;
         Ok(())
@@ -90,7 +91,9 @@ impl ShujiDir {
         // 2. Reconstruct summary from existing files
         let has_overall = designs.iter().any(|d| d.contains("overall_design"));
         let has_phase1 = designs.iter().any(|d| d.contains("phase_1_design"));
-        let has_approved_review = reviews.iter().any(|r| r.contains("_agree") || r.contains("_pass"));
+        let has_approved_review = reviews
+            .iter()
+            .any(|r| r.contains("_agree") || r.contains("_pass"));
         let has_rejected_review = reviews.iter().any(|r| r.contains("_reject"));
 
         if has_overall && has_phase1 && has_approved_review {
@@ -108,12 +111,19 @@ impl ShujiDir {
         // 3. Reconstruct task milestones from review files
         for review in &reviews {
             let milestone = if review.contains("overall_design") {
-                if review.contains("_agree") { "[已恢复] 整体方案审查通过".to_string() }
-                else if review.contains("_reject") { "[已恢复] 整体方案审查发现问题".to_string() }
-                else { format!("[已恢复] 审查报告: {}", review) }
+                if review.contains("_agree") {
+                    "[已恢复] 整体方案审查通过".to_string()
+                } else if review.contains("_reject") {
+                    "[已恢复] 整体方案审查发现问题".to_string()
+                } else {
+                    format!("[已恢复] 审查报告: {}", review)
+                }
             } else if review.contains("phase_1") {
-                if review.contains("_agree") { "[已恢复] 阶段1审查通过".to_string() }
-                else { format!("[已恢复] 阶段1审查: {}", review) }
+                if review.contains("_agree") {
+                    "[已恢复] 阶段1审查通过".to_string()
+                } else {
+                    format!("[已恢复] 阶段1审查: {}", review)
+                }
             } else {
                 continue;
             };
@@ -144,7 +154,11 @@ impl ShujiDir {
         Ok(())
     }
 
-    pub async fn read_document(&self, subdir: &str, filename: &str) -> anyhow::Result<Option<String>> {
+    pub async fn read_document(
+        &self,
+        subdir: &str,
+        filename: &str,
+    ) -> anyhow::Result<Option<String>> {
         let path = self.root.join(subdir).join(filename);
         if !fs::try_exists(&path).await? {
             return Ok(None);
@@ -191,6 +205,10 @@ impl ShujiDir {
             return Ok(vec![]);
         }
         let data = fs::read_to_string(&path).await?;
-        Ok(data.lines().filter(|l| !l.is_empty()).map(|l| l.to_string()).collect())
+        Ok(data
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(|l| l.to_string())
+            .collect())
     }
 }

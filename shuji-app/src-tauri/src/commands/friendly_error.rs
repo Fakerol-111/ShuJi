@@ -23,9 +23,13 @@ pub fn friendly_error(e: impl std::fmt::Display) -> String {
         }
     }
 
-    if msg.contains("connection refused") || msg.contains("connect error") || msg.contains("tcp connect") {
+    if msg.contains("connection refused")
+        || msg.contains("connect error")
+        || msg.contains("tcp connect")
+    {
         "无法连接 API 服务器，请检查网络或 API URL 配置".to_string()
-    } else if msg.contains("401") || msg.contains("unauthorized") || msg.contains("invalid api key") {
+    } else if msg.contains("401") || msg.contains("unauthorized") || msg.contains("invalid api key")
+    {
         "API 密钥无效或已过期，请在设置中重新配置".to_string()
     } else if msg.contains("403") || msg.contains("forbidden") {
         "API 访问被拒绝，请检查密钥权限".to_string()
