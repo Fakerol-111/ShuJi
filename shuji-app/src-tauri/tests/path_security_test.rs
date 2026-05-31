@@ -54,6 +54,7 @@ fn test_reject_parent_directory_traversal_unix() {
 }
 
 #[test]
+#[cfg(windows)]
 fn test_reject_parent_directory_traversal_windows() {
     let temp = common::create_test_project("path_traversal_windows");
     let root = temp.path();
