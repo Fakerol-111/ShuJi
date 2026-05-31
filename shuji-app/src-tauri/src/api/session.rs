@@ -62,7 +62,7 @@ impl PersistedContext {
                     base_prompt = content.to_string();
                 } else if content.starts_with("[soul:") {
                     soul_prompt = Some(content.to_string());
-                } else if content.starts_with("## Working mode:") {
+                } else if content.starts_with("[skill:") || content.starts_with("## Working mode:") {
                     skill_prompts.push(content.to_string());
                 } else if content.starts_with("[对话摘要]") {
                     history_messages = content.to_string();
@@ -104,13 +104,15 @@ impl PersistedContext {
         msgs
     }
 
-    /// Save to `.shuji/context/{role}.json`.
+    /// Save to `.shuji/context/{role}.json` using atomic write (tmp + rename).
     pub async fn save_to(&self, working_dir: &Path, role: &str) {
         let dir = working_dir.join(".shuji/context");
         let _ = tokio::fs::create_dir_all(&dir).await;
         let path = dir.join(format!("{}.json", role));
+        let tmp = dir.join(format!("{}.json.tmp", role));
         if let Ok(json) = serde_json::to_string_pretty(&self) {
-            let _ = tokio::fs::write(&path, &json).await;
+            let _ = tokio::fs::write(&tmp, &json).await;
+            let _ = tokio::fs::rename(&tmp, &path).await;
         }
     }
 
@@ -491,16 +493,18 @@ impl Session {
             // Log token usage
             if let Some(usage) = data.get("usage") {
                 let prompt = usage["prompt_tokens"].as_u64().unwrap_or(0);
+                let cached = usage["prompt_tokens_details"]["cached_tokens"].as_u64().unwrap_or(0);
                 let completion = usage["completion_tokens"].as_u64().unwrap_or(0);
                 log_console!(
-                    "[{}] tokens: prompt={} completion={} total={}",
+                    "[{}] tokens: prompt={} cached={} completion={} total={}",
                     self.role,
                     prompt,
+                    cached,
                     completion,
                     prompt + completion
                 );
                 if !self.role.is_empty() {
-                    crate::token_tracker::record(&self.role, prompt, completion);
+                    crate::token_tracker::record(&self.role, prompt, cached, completion);
                 }
             }
 
@@ -750,21 +754,21 @@ impl Session {
     /// Append a skill-level system message to the conversation.
     /// Skills accumulate in the context (context compression will handle pruning later).
     pub fn inject_skill(&mut self, skill_name: &str, content: &str) {
-        let formatted = format!("## Working mode: {}\n\n{}", skill_name, content);
+        let formatted = format!("[skill: {}]\n{}", skill_name, content);
         self.messages
             .push(serde_json::json!({"role": "system", "content": formatted}));
     }
 
     /// Replace the previous skill message with a new one (no accumulation).
-    /// Falls back to append if no prior `## Working mode:` message exists.
+    /// Falls back to append if no prior `[skill:` message exists.
     pub fn replace_skill(&mut self, skill_name: &str, content: &str) {
-        let formatted = format!("## Working mode: {}\n\n{}", skill_name, content);
+        let formatted = format!("[skill: {}]\n{}", skill_name, content);
         let msg = serde_json::json!({"role": "system", "content": formatted});
         if let Some(pos) = self.messages.iter().rposition(|m| {
             m["role"].as_str() == Some("system")
                 && m["content"]
                     .as_str()
-                    .is_some_and(|c| c.starts_with("## Working mode:"))
+                    .is_some_and(|c| c.starts_with("[skill:") || c.starts_with("## Working mode:"))
         }) {
             self.messages[pos] = msg;
         } else {

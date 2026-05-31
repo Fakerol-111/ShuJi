@@ -88,6 +88,10 @@ export async function getContextStats(): Promise<Record<string, ContextStats>> {
   return invoke("get_context_stats");
 }
 
+export async function compactContext(role: string): Promise<string> {
+  return invoke("compact_context", { role });
+}
+
 export async function cancelProcessing(): Promise<void> {
   return invoke("cancel_processing");
 }

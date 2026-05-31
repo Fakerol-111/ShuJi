@@ -186,7 +186,7 @@ impl Agent for XingbuShangshuAgent {
                         ctx.save_to(&wd, &role).await;
                     })
                 }),
-                20,
+                40,
             );
         }
 

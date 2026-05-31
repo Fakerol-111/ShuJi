@@ -98,6 +98,8 @@ export interface ChatResponse {
 // Token usage stats
 export interface TokenUsage {
   prompt_tokens: number;
+  cached_prompt_tokens: number;
+  uncached_prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
   call_count: number;
@@ -171,6 +173,8 @@ export interface RoundMetrics {
   current_role: string;
   skill: string;
   prompt_tokens: number;
+  cached_prompt_tokens: number;
+  uncached_prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
   dept_iterations: Record<string, number>;

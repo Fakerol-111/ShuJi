@@ -184,7 +184,7 @@ impl Agent for ShangshulingAgent {
                         ctx.save_to(&wd, &role).await;
                     })
                 }),
-                20,
+                40,
             );
         }
 

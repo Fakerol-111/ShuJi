@@ -673,6 +673,128 @@ pub async fn get_context_stats(
     Ok(result)
 }
 
+/// Manually trigger context compaction for a specific role.
+///
+/// Reads the persisted context from `.shuji/context/{role}.json`, runs the
+/// iterative compaction loop, and saves the result back to disk.
+/// Works independently of the actor system — safe to call while actors run.
+#[tauri::command]
+pub async fn compact_context(
+    state: State<'_, AppState>,
+    role: String,
+) -> Result<String, String> {
+    let dir = state
+        .current_dir
+        .lock()
+        .await
+        .clone()
+        .ok_or_else(|| friendly_error("没有加载项目"))?;
+    let working_dir = std::path::Path::new(&dir);
+
+    // ── Concurrency guard: agent is actively executing ──
+    if crate::round_metrics::is_active(&role) {
+        return Err(friendly_error(format!(
+            "角色 {} 正在执行中，请等待完成后再压缩",
+            role
+        )));
+    }
+
+    // ── Concurrency guard: already being compacted ──
+    {
+        let mut compacting = state.compacting_roles.lock().await;
+        if !compacting.insert(role.clone()) {
+            return Err(friendly_error(format!(
+                "角色 {} 正在被压缩中，请勿重复操作",
+                role
+            )));
+        }
+    }
+
+    // Run compaction and always release the guard when done.
+    let result = compact_impl(working_dir, &role, &state).await;
+    state.compacting_roles.lock().await.remove(&role);
+    result
+}
+
+async fn compact_impl(
+    working_dir: &Path,
+    role: &str,
+    state: &State<'_, AppState>,
+) -> Result<String, String> {
+    // Load context window overrides from context_config.json
+    let role_overrides: HashMap<String, crate::config::RoleContextConfig> = {
+        let path = working_dir.join("context_config.json");
+        match tokio::fs::read_to_string(&path).await {
+            Ok(content) => serde_json::from_str::<ContextWindowConfig>(&content)
+                .ok()
+                .map(|c| c.roles)
+                .unwrap_or_default(),
+            Err(_) => HashMap::new(),
+        }
+    };
+
+    // Load persisted context
+    let mut ctx = PersistedContext::load_from(working_dir, &role)
+        .await
+        .ok_or_else(|| friendly_error(format!("角色 {} 没有找到上下文文件", role)))?;
+
+    // Resolve thresholds
+    let thresholds = state
+        .runtime_config
+        .resolve_compact_thresholds(role, role_overrides.get(role));
+
+    // Pre-check: skip if neither threshold is exceeded (no API config needed)
+    let total_chars: usize = ctx
+        .context_messages
+        .iter()
+        .filter_map(|m| m["content"].as_str())
+        .map(|c| c.chars().count())
+        .sum();
+
+    // Force context compaction threshold to 0 so it always compresses;
+    // keep original history threshold to avoid infinite history-merge loops.
+    let force_thresholds = crate::config::CompactThresholds {
+        char_threshold: 0,
+        keep_recent_count: thresholds.keep_recent_count,
+        history_char_threshold: thresholds.history_char_threshold,
+        mid_run_compact: false,
+    };
+
+    // Load API config for this role
+    let config = crate::commands::settings::get_config()
+        .await
+        .map_err(friendly_error)?;
+    let ep = config.for_role(&role);
+
+    if ep.api_key.is_empty() {
+        return Err(friendly_error(format!("角色 {} 未配置 API 密钥，请在设置中配置", role)));
+    }
+    if ep.api_url.is_empty() {
+        return Err(friendly_error(format!("角色 {} 未配置 API URL", role)));
+    }
+
+    let client = AnthropicClient::new(ep.api_key, ep.api_url);
+    let model = ep.model;
+    let is_cabinet = role == "neige";
+
+    log_console!(
+        "[compact:manual] starting compaction for {} (cabinet={}, chars={})",
+        role, is_cabinet, total_chars,
+    );
+
+    let performed = crate::api::compact::run_compaction_loop(
+        &client, &model, &mut ctx, &force_thresholds, is_cabinet, working_dir, &role,
+    )
+    .await;
+
+    if performed {
+        log_console!("[compact:manual] compaction completed for {}", role);
+        Ok("压缩完成".to_string())
+    } else {
+        Ok("无需压缩".to_string())
+    }
+}
+
 /// Get buffered chat message history (for re-sync after page navigation).
 #[tauri::command]
 pub async fn get_chat_history(state: State<'_, AppState>) -> Result<Vec<ChatMessage>, String> {

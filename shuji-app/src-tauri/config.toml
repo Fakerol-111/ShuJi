@@ -45,7 +45,7 @@ write_heavy = 60
 document_heavy = 100
 
 [context_compaction]
-# 触发压缩的字符数阈值（约 40k tokens）
+# 触发压缩的字符数阈值（约 40k tokens）；未在代码内置列表中的角色使用此值
 char_threshold = 80000
 
 # 压缩后保留的最近消息数

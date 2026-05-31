@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getContextStats } from "../api";
+import { getContextStats, compactContext } from "../api";
 import type { ContextStats } from "../api";
 
 const ROLE_NAMES: Record<string, string> = {
@@ -12,6 +12,8 @@ const ROLE_NAMES: Record<string, string> = {
 export default function ContextPanel() {
   const [stats, setStats] = useState<Record<string, ContextStats> | null>(null);
   const [error, setError] = useState("");
+  const [compactingRole, setCompactingRole] = useState<string | null>(null);
+  const [lastCompactMsg, setLastCompactMsg] = useState("");
 
   const load = () => {
     setError("");
@@ -26,10 +28,11 @@ export default function ContextPanel() {
 
   return (
     <div className="h-full overflow-y-auto p-3 bg-ink-50">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-1">
         <h3 className="text-xs font-bold text-ink-800">文脉</h3>
         <button onClick={load} className="text-[10px] text-ink-400 hover:text-ink-700">刷新</button>
       </div>
+      <p className="text-[9px] text-ink-400 mb-3">单位：字符 | 10000 字符 ≈ 5000 tokens（中文）</p>
       {error && <p className="text-xs text-vermillion mb-2">{error}</p>}
       {!stats || Object.keys(stats).length === 0 ? (
         <p className="text-xs text-ink-400">暂无数据</p>
@@ -47,7 +50,7 @@ export default function ContextPanel() {
                 <div className="flex justify-between text-[11px] mb-1">
                   <span className="font-medium text-ink-700">{ROLE_NAMES[role] || role}</span>
                   <span className={cs.char_count >= cs.char_threshold ? "text-vermillion text-[10px]" : "text-ink-500"}>
-                    {abbr(cs.char_count)} / {abbr(cs.char_threshold)}
+                    {abbr(cs.char_count)}字符 / {abbr(cs.char_threshold)}字符
                   </span>
                 </div>
                 <div className="w-full bg-ink-200 rounded-full h-2 overflow-hidden">
@@ -72,6 +75,36 @@ export default function ContextPanel() {
                     <div className="h-full rounded-full bg-amber-400 transition-all duration-500" style={{ width: `${Math.max(historyPct, 2)}%` }} />
                   </div>
                 )}
+                <div className="mt-1">
+                    <button
+                      onClick={async () => {
+                        setCompactingRole(role);
+                        setLastCompactMsg("");
+                        setError("");
+                        try {
+                          const msg = await compactContext(role);
+                          setLastCompactMsg(msg);
+                          const newStats = await getContextStats();
+                          setStats(newStats);
+                        } catch (e) {
+                          setError(String(e));
+                        } finally {
+                          setCompactingRole(null);
+                        }
+                      }}
+                      disabled={compactingRole !== null}
+                      className={`text-[10px] px-2 py-0.5 rounded border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                        compactingRole === role
+                          ? "bg-amber-100 border-amber-300 text-amber-700"
+                          : "border-ink-300 hover:bg-ink-100 text-ink-600"
+                      }`}
+                    >
+                      {compactingRole === role ? "压缩中…" : "立即压缩"}
+                    </button>
+                    {lastCompactMsg && compactingRole === null && (
+                      <span className="text-[9px] text-jade ml-1.5">{lastCompactMsg}</span>
+                    )}
+                  </div>
               </div>
             );
           })}

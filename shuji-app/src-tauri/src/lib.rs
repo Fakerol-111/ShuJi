@@ -25,6 +25,7 @@ mod storage;
 mod token_tracker;
 pub mod tool;
 
+use std::collections::HashSet;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -47,6 +48,7 @@ pub fn run() {
             chat_history: Arc::new(tokio::sync::Mutex::new(Vec::new())),
             dept_log_history: Arc::new(tokio::sync::Mutex::new(Vec::new())),
             runtime_config: Arc::new(runtime_config),
+            compacting_roles: Arc::new(Mutex::new(HashSet::new())),
         })
         .invoke_handler(tauri::generate_handler![
             commands::project::create_project,
@@ -63,6 +65,7 @@ pub fn run() {
             commands::workflow::get_recent_dirs,
             commands::workflow::get_token_stats,
             commands::workflow::get_context_stats,
+            commands::workflow::compact_context,
             commands::workflow::cancel_processing,
             commands::workflow::get_chat_history,
             commands::workflow::get_dept_logs,

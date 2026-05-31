@@ -193,7 +193,7 @@ impl Agent for MenxiaShizhongAgent {
                         ctx.save_to(&wd, &role).await;
                     })
                 }),
-                20,
+                40,
             );
         }
 

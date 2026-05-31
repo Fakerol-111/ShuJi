@@ -24,9 +24,11 @@ Thumbs.db
 .env.*
 !.env.template
 
-# API config (contains plain-text API keys)
-shuji-app/src-tauri/api_config.json
-shuji-app/src-tauri/context_config.json
+# API / context config (contains plain-text API keys or local overrides)
+api_config.json
+**/api_config.json
+context_config.json
+**/context_config.json
 
 # Logs
 *.log

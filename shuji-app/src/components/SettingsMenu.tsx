@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { getConfig, saveConfig, getContextConfig, saveContextConfig, checkApiConnection, getWorkflowPreset as apiGetPreset, setWorkflowPreset as apiSetPreset } from "../api";
-import { ALL_ROLES, CODE_THEMES, getCodeTheme, setCodeTheme as persistCodeTheme } from "../constants";
+import { ALL_ROLES, CODE_THEMES, ROLE_CONTEXT_DEFAULTS, getCodeTheme, setCodeTheme as persistCodeTheme } from "../constants";
 import type { RoleEndpoint, ContextWindowConfig } from "../types";
 
 // ── Provider presets (shared with SetupPage) ───────────────
@@ -104,8 +104,9 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
       const roles = ctxCfg.roles ?? {};
       for (const role of ALL_ROLES) {
         if (role.key === "default") continue;
-        if (roles[role.key]) {
-          overrides[role.key] = roles[role.key] as ContextRoleForm;
+        // 运行时 lookup 使用中文部门名（role.label）
+        if (roles[role.label]) {
+          overrides[role.key] = roles[role.label] as ContextRoleForm;
           useDefault[role.key] = false;
         } else {
           useDefault[role.key] = true;
@@ -140,13 +141,20 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
     });
   };
 
-  const toggleContextDefault = (role: string) => {
+  const toggleContextDefault = (roleKey: string) => {
     setContextUseDefault((prev) => {
-      const current = prev[role] ?? true;
+      const current = prev[roleKey] ?? true;
       if (current) {
-        setContextOverrides((o) => ({ ...o, [role]: { ...DEFAULT_CONTEXT_VALUES } }));
+        const role = ALL_ROLES.find((r) => r.key === roleKey);
+        const preset = role ? ROLE_CONTEXT_DEFAULTS[role.label] : undefined;
+        setContextOverrides((o) => ({
+          ...o,
+          [roleKey]: preset
+            ? { char_threshold: preset.char_threshold, keep_recent_count: preset.keep_recent_count, mid_run_compact: preset.mid_run_compact }
+            : { ...DEFAULT_CONTEXT_VALUES },
+        }));
       }
-      return { ...prev, [role]: !current };
+      return { ...prev, [roleKey]: !current };
     });
   };
 
@@ -157,8 +165,21 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
     }));
   };
 
-  const effectiveContext = (key: string): ContextRoleForm =>
-    !(contextUseDefault[key] ?? true) && contextOverrides[key] ? contextOverrides[key] : DEFAULT_CONTEXT_VALUES;
+  const effectiveContext = (key: string): ContextRoleForm => {
+    if (!(contextUseDefault[key] ?? true) && contextOverrides[key]) {
+      return contextOverrides[key];
+    }
+    const role = ALL_ROLES.find((r) => r.key === key);
+    if (role && ROLE_CONTEXT_DEFAULTS[role.label]) {
+      const d = ROLE_CONTEXT_DEFAULTS[role.label];
+      return {
+        char_threshold: d.char_threshold,
+        keep_recent_count: d.keep_recent_count,
+        mid_run_compact: d.mid_run_compact,
+      };
+    }
+    return DEFAULT_CONTEXT_VALUES;
+  };
 
   const handleSave = async () => {
     try {
@@ -177,7 +198,7 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
       for (const role of ALL_ROLES) {
         if (role.key === "default") continue;
         if (!(contextUseDefault[role.key] ?? true)) {
-          ctxRoles[role.key] = contextOverrides[role.key] ?? DEFAULT_CONTEXT_VALUES;
+          ctxRoles[role.label] = contextOverrides[role.key] ?? effectiveContext(role.key);
         }
       }
       await saveContextConfig({ roles: ctxRoles });
@@ -304,7 +325,7 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
           <div className="space-y-0.5 pt-2 border-t border-ink-700">
             <span className="text-[11px] font-semibold text-ink-300">上下文窗口配置</span>
             <div className="text-[10px] text-ink-500 px-1 pb-1">
-              全局默认: {DEFAULT_CONTEXT_VALUES.char_threshold.toLocaleString()} token / 保留{DEFAULT_CONTEXT_VALUES.keep_recent_count}条 / mid-run: {DEFAULT_CONTEXT_VALUES.mid_run_compact ? "开启" : "关闭"}
+              全局回退: {DEFAULT_CONTEXT_VALUES.char_threshold.toLocaleString()} 字符 · 各部门已内置推荐默认值（见 context_config.example.json）
             </div>
             {roleList.map((r) => {
               const isExpanded = expandedRole === r.key;
@@ -327,35 +348,35 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
                     </label>
                     <span className="flex-1 text-left">{r.label}</span>
                     <span className="text-[10px] text-ink-500 italic">
-                      {effectiveContext(r.key).char_threshold.toLocaleString()} token
+                      {effectiveContext(r.key).char_threshold.toLocaleString()} 字符
                     </span>
                   </button>
                   {isExpanded && (
                     <div className="px-2 pb-2 space-y-1">
                       {usingDefault ? (
                         <div className="text-[10px] text-ink-500 italic px-1 py-2">
-                          使用全局默认值
+                          使用部门内置推荐值（{effectiveContext(r.key).char_threshold.toLocaleString()} 字符，保留 {effectiveContext(r.key).keep_recent_count} 条）
                           <br />
-                          取消勾选"使用默认"可单独设置
+                          取消勾选"使用默认"可单独覆盖
                         </div>
                       ) : (
                         <>
-                          <ContextInput label="压缩阈值（token）" value={contextOverrides[r.key]?.char_threshold ?? DEFAULT_CONTEXT_VALUES.char_threshold} onChange={(v) => setContextOverride(r.key, "char_threshold", v)} />
-                          <ContextInput label="保留最近消息数" value={contextOverrides[r.key]?.keep_recent_count ?? DEFAULT_CONTEXT_VALUES.keep_recent_count} onChange={(v) => setContextOverride(r.key, "keep_recent_count", v)} />
+                          <ContextInput label="压缩阈值（字符）" value={contextOverrides[r.key]?.char_threshold ?? effectiveContext(r.key).char_threshold} onChange={(v) => setContextOverride(r.key, "char_threshold", v)} />
+                          <ContextInput label="保留最近消息数" value={contextOverrides[r.key]?.keep_recent_count ?? effectiveContext(r.key).keep_recent_count} onChange={(v) => setContextOverride(r.key, "keep_recent_count", v)} />
                           <label className="flex items-center gap-2 py-1">
                             <span className="text-[10px] text-ink-500">mid-run compact</span>
                             <button
-                              onClick={() => setContextOverride(r.key, "mid_run_compact", !(contextOverrides[r.key]?.mid_run_compact ?? DEFAULT_CONTEXT_VALUES.mid_run_compact))}
+                              onClick={() => setContextOverride(r.key, "mid_run_compact", !(contextOverrides[r.key]?.mid_run_compact ?? effectiveContext(r.key).mid_run_compact))}
                               className={`relative w-8 h-4 rounded-full transition-colors ${
-                                (contextOverrides[r.key]?.mid_run_compact ?? DEFAULT_CONTEXT_VALUES.mid_run_compact) ? "bg-ink-500" : "bg-ink-700"
+                                (contextOverrides[r.key]?.mid_run_compact ?? effectiveContext(r.key).mid_run_compact) ? "bg-ink-500" : "bg-ink-700"
                               }`}
                             >
                               <span className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
-                                (contextOverrides[r.key]?.mid_run_compact ?? DEFAULT_CONTEXT_VALUES.mid_run_compact) ? "translate-x-4" : ""
+                                (contextOverrides[r.key]?.mid_run_compact ?? effectiveContext(r.key).mid_run_compact) ? "translate-x-4" : ""
                               }`} />
                             </button>
                             <span className="text-[10px] text-ink-400">
-                              {(contextOverrides[r.key]?.mid_run_compact ?? DEFAULT_CONTEXT_VALUES.mid_run_compact) ? "开启" : "关闭"}
+                              {(contextOverrides[r.key]?.mid_run_compact ?? effectiveContext(r.key).mid_run_compact) ? "开启" : "关闭"}
                             </span>
                           </label>
                         </>

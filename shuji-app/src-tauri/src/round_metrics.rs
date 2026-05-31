@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
 use chrono::Utc;
@@ -15,6 +15,10 @@ pub struct RoundMetricState {
     pub skill: String,
     /// Cumulative prompt tokens consumed this round.
     pub prompt_tokens: u64,
+    /// Cumulative cached prompt tokens (cache hit).
+    pub cached_prompt_tokens: u64,
+    /// Cumulative uncached prompt tokens (cache miss).
+    pub uncached_prompt_tokens: u64,
     /// Cumulative completion tokens consumed this round.
     pub completion_tokens: u64,
     /// Cumulative total tokens.
@@ -33,6 +37,8 @@ pub fn start_round() {
             current_role: String::new(),
             skill: String::new(),
             prompt_tokens: 0,
+            cached_prompt_tokens: 0,
+            uncached_prompt_tokens: 0,
             completion_tokens: 0,
             total_tokens: 0,
             dept_iterations: HashMap::new(),
@@ -41,10 +47,13 @@ pub fn start_round() {
 }
 
 /// Add token usage to the current round.
-pub fn add_tokens(prompt: u64, completion: u64) {
+pub fn add_tokens(prompt: u64, cached: u64, completion: u64) {
+    let uncached = prompt.saturating_sub(cached);
     if let Ok(mut state) = ROUND.lock() {
         if let Some(ref mut s) = *state {
             s.prompt_tokens += prompt;
+            s.cached_prompt_tokens += cached;
+            s.uncached_prompt_tokens += uncached;
             s.completion_tokens += completion;
             s.total_tokens += prompt + completion;
         }
@@ -88,4 +97,28 @@ pub fn current_role_name() -> Option<String> {
     ROUND.lock().ok().and_then(|s| {
         s.as_ref().map(|r| r.current_role.clone()).filter(|r| !r.is_empty())
     })
+}
+
+// ── Active-role tracking (independent of snapshot-able state) ──
+
+static ACTIVE_ROLES: std::sync::LazyLock<Mutex<HashSet<String>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashSet::new()));
+
+/// Mark a role as actively executing.
+pub fn mark_active(role: &str) {
+    if let Ok(mut set) = ACTIVE_ROLES.lock() {
+        set.insert(role.to_string());
+    }
+}
+
+/// Mark a role as idle (no longer executing).
+pub fn mark_idle(role: &str) {
+    if let Ok(mut set) = ACTIVE_ROLES.lock() {
+        set.remove(role);
+    }
+}
+
+/// Check whether a role is currently executing.
+pub fn is_active(role: &str) -> bool {
+    ACTIVE_ROLES.lock().map_or(false, |set| set.contains(role))
 }

@@ -430,7 +430,7 @@ impl Agent for NeigeAgent {
                         ctx.save_to(&wd, &role).await;
                     })
                 }),
-                20,
+                40,
             );
         }
 
@@ -476,6 +476,7 @@ impl Agent for NeigeAgent {
         let mut result;
         let mut route: Option<crate::api::control::RouteTo>;
         let mut current_skill = input.current_skill.clone().unwrap_or_default();
+        let mut must_approve_retries = 0u32;
         loop {
             // Suspension point D: check cancel between controller.run() rounds
             if self.cancel.load(std::sync::atomic::Ordering::SeqCst) {
@@ -502,7 +503,15 @@ impl Agent for NeigeAgent {
             if !result.contains("<options>") {
                 let pending_id = crate::tool::documents::get_first_pending_approval(&working_dir).await;
                 if let Some(ref id) = pending_id {
-                    log_console!("[内阁] must-approve doc {} pending, no <options> — re-prompting", id);
+                    must_approve_retries += 1;
+                    if must_approve_retries >= 3 {
+                        log_console!("[内阁] must-approve doc {} 重试{must_approve_retries}次仍无<options>，自动批复", id);
+                        let _ = crate::tool::documents::remove_pending_approval(&working_dir, id).await;
+                        let msg = format!("[系统] 文档 {} 已自动御批（内阁{}次重试仍未输出选项）。继续执行。", id, must_approve_retries);
+                        session.inject(&msg);
+                        continue;
+                    }
+                    log_console!("[内阁] must-approve doc {} pending (retry {must_approve_retries}/3), no <options> — re-prompting", id);
                     let msg = format!(
                         "[系统] 文档 {} 已创建但未经皇帝御批。请立即在回复中包含 <options> 标签，提供选项供皇帝决策。注意：route_to 和 <options> 不能在同一回合使用。请先输出 <options>，等待皇帝批复后再路由。",
                         id
@@ -525,8 +534,8 @@ impl Agent for NeigeAgent {
                         continue;
                     }
                     current_skill = skill_name.clone();
-                    log_console!("[内阁] inject skill: {}", skill_name);
-                    session.inject_skill(
+                    log_console!("[内阁] replace skill: {}", skill_name);
+                    session.replace_skill(
                         &skill_name,
                         &Self::load_skill(&skill_name, &working_dir).await,
                     );

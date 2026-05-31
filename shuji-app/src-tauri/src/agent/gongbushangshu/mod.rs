@@ -149,7 +149,7 @@ impl Agent for GongbuShangshuAgent {
 
         let role_name = self.role().name().to_string();
 
-        let thresholds = input.runtime_config.resolve_compact_thresholds(
+        let _thresholds = input.runtime_config.resolve_compact_thresholds(
             self.role().name(),
             input.context_window_config.get(self.role().name()),
         );
@@ -204,47 +204,11 @@ impl Agent for GongbuShangshuAgent {
             let has_plan = self.plan.lock().unwrap().is_some();
             if has_plan {
                 // Continuation within a batch: restore full coding context from previous round.
+                // Session was already compacted on save — no need to re-run compaction.
                 if let Some(mut ctx) =
                     crate::api::session::PersistedContext::load_from(&working_dir, &role_name).await
                 {
                     ctx.trim_tool_results(2000);
-                    // ── Context compaction (iterative: context → history → repeat) ──
-                    loop {
-                        let mut changed = false;
-
-                        if let Some(result) = crate::api::compact::maybe_compact_dept(
-                            &self.client,
-                            &self.model,
-                            &ctx.history_messages,
-                            &ctx.context_messages,
-                            &thresholds,
-                        )
-                        .await
-                        {
-                            ctx.history_messages = result.new_history;
-                            ctx.context_messages = result.kept_context;
-                            ctx.save_to(&working_dir, &role_name).await;
-                            changed = true;
-                        }
-
-                        if let Some(merged) = crate::api::compact::maybe_compact_history(
-                            &self.client,
-                            &self.model,
-                            &ctx.history_messages,
-                            &thresholds,
-                        )
-                        .await
-                        {
-                            ctx.history_messages = merged;
-                            ctx.save_to(&working_dir, &role_name).await;
-                            changed = true;
-                        }
-
-                        if !changed {
-                            break;
-                        }
-                    }
-
                     let mut msgs = ctx.to_messages();
                     msgs.push(
                         serde_json::json!({"role": "user", "content": input.task_description}),
@@ -342,7 +306,7 @@ impl Agent for GongbuShangshuAgent {
                         ctx.save_to(&wd, &role).await;
                     })
                 }),
-                20,
+                40,
             );
         }
 

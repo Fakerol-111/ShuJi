@@ -1,4 +1,7 @@
+use std::path::Path;
+
 use crate::api::client::AnthropicClient;
+use crate::api::session::PersistedContext;
 use crate::config::CompactThresholds;
 use crate::models::message::Message;
 
@@ -203,4 +206,57 @@ pub async fn maybe_compact_history(
             None
         }
     }
+}
+
+/// Run the iterative compaction loop on a loaded PersistedContext.
+///
+/// 1. Compresses context_messages into history (cabinet or dept prompt).
+/// 2. Merges accumulated history summaries.
+/// 3. Repeats until no further changes.
+/// 4. Saves to disk after each mutation step.
+///
+/// Returns `true` if any compaction was actually performed.
+pub async fn run_compaction_loop(
+    client: &AnthropicClient,
+    model: &str,
+    ctx: &mut PersistedContext,
+    thresholds: &CompactThresholds,
+    is_cabinet: bool,
+    working_dir: &Path,
+    role: &str,
+) -> bool {
+    let mut changed = false;
+    let mut safety = 0u32;
+    loop {
+        safety += 1;
+        if safety > 20 {
+            log_console!("[compact] safety limit reached, breaking compaction loop");
+            break;
+        }
+        let mut round_changed = false;
+
+        let result = if is_cabinet {
+            maybe_compact(client, model, &ctx.history_messages, &ctx.context_messages, thresholds).await
+        } else {
+            maybe_compact_dept(client, model, &ctx.history_messages, &ctx.context_messages, thresholds).await
+        };
+        if let Some(result) = result {
+            ctx.history_messages = result.new_history;
+            ctx.context_messages = result.kept_context;
+            ctx.save_to(working_dir, role).await;
+            round_changed = true;
+        }
+
+        if let Some(merged) = maybe_compact_history(client, model, &ctx.history_messages, thresholds).await {
+            ctx.history_messages = merged;
+            ctx.save_to(working_dir, role).await;
+            round_changed = true;
+        }
+
+        if !round_changed {
+            break;
+        }
+        changed = true;
+    }
+    changed
 }

@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -20,6 +21,7 @@ pub struct AppState {
     pub chat_history: Arc<Mutex<Vec<ChatMessage>>>,
     pub dept_log_history: Arc<Mutex<Vec<DeptLogEntry>>>,
     pub runtime_config: Arc<RuntimeConfig>,
+    pub compacting_roles: Arc<Mutex<HashSet<String>>>,
 }
 
 #[tauri::command]

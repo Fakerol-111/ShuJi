@@ -35,15 +35,19 @@ const SKILL_LABELS: Record<string, string> = {
 
 export default function DeptStatusBar() {
   const active = useActiveDepts();
-  const [tokenTotal, setTokenTotal] = useState(0);
+  const [tokenPrompt, setTokenPrompt] = useState(0);
+  const [tokenCached, setTokenCached] = useState(0);
+  const [tokenCompletion, setTokenCompletion] = useState(0);
   const [round, setRound] = useState<RoundMetrics | null>(null);
   const [elapsed, setElapsed] = useState("");
 
   useEffect(() => {
     const load = () => {
       getTokenStats().then((stats) => {
-        const total = Object.values(stats["汇总"] || {}).reduce((sum, u) => sum + u.total_tokens, 0);
-        setTokenTotal(total);
+        const roles = Object.values(stats["汇总"] || {});
+        setTokenPrompt(roles.reduce((sum, u) => sum + u.prompt_tokens, 0));
+        setTokenCached(roles.reduce((sum, u) => sum + (u.cached_prompt_tokens ?? 0), 0));
+        setTokenCompletion(roles.reduce((sum, u) => sum + u.completion_tokens, 0));
       }).catch((e) => console.error("Token统计加载失败:", e));
     };
     load();
@@ -93,9 +97,6 @@ export default function DeptStatusBar() {
     }
     if (round.total_tokens > 0) roundParts.push(formatToken(round.total_tokens) + " tokens");
     if (elapsed) roundParts.push(elapsed);
-    // Rough RMB estimate (DeepSeek approximate: ¥2/1M input, ¥8/1M output)
-    const cost = (round.prompt_tokens * 2 + round.completion_tokens * 8) / 1_000_000;
-    if (cost > 0.001) roundParts.push(`¥${cost.toFixed(4)}`);
   }
 
   return (
@@ -120,7 +121,7 @@ export default function DeptStatusBar() {
         </div>
       )}
 
-      <div className="font-mono text-ink-400 shrink-0 ml-3 text-caption">token {formatToken(tokenTotal)}</div>
+      <div className="font-mono text-ink-400 shrink-0 ml-3 text-caption whitespace-nowrap">输入缓存命中 {formatToken(tokenCached)} · 输入缓存未命中 {formatToken(tokenPrompt - tokenCached)} · 输出 {formatToken(tokenCompletion)}</div>
     </div>
   );
 }

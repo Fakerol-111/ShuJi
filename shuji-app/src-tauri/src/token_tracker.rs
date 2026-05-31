@@ -8,6 +8,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct TokenUsage {
     pub prompt_tokens: u64,
+    #[serde(default)]
+    pub cached_prompt_tokens: u64,
+    #[serde(default)]
+    pub uncached_prompt_tokens: u64,
     pub completion_tokens: u64,
     pub total_tokens: u64,
     pub call_count: u64,
@@ -17,6 +21,10 @@ pub struct TokenUsage {
 struct TokenRecord {
     role: String,
     prompt_tokens: u64,
+    #[serde(default)]
+    cached_prompt_tokens: u64,
+    #[serde(default)]
+    uncached_prompt_tokens: u64,
     completion_tokens: u64,
     timestamp: chrono::DateTime<Utc>,
 }
@@ -36,9 +44,10 @@ pub fn init(file_path: &Path) {
 }
 
 /// Record token usage for a given role.
-pub fn record(role: &str, prompt: u64, completion: u64) {
+pub fn record(role: &str, prompt: u64, cached: u64, completion: u64) {
+    let uncached = prompt.saturating_sub(cached);
     // Also update live round metrics
-    crate::round_metrics::add_tokens(prompt, completion);
+    crate::round_metrics::add_tokens(prompt, cached, completion);
 
     let mut lock = match RECORDS.lock() {
         Ok(l) => l,
@@ -48,6 +57,8 @@ pub fn record(role: &str, prompt: u64, completion: u64) {
     records.push(TokenRecord {
         role: role.to_string(),
         prompt_tokens: prompt,
+        cached_prompt_tokens: cached,
+        uncached_prompt_tokens: uncached,
         completion_tokens: completion,
         timestamp: Utc::now(),
     });
@@ -109,6 +120,8 @@ fn aggregate(records: &[TokenRecord], window: TokenWindow) -> HashMap<String, To
             .entry(rec.role.clone())
             .or_default();
         entry.prompt_tokens += rec.prompt_tokens;
+        entry.cached_prompt_tokens += rec.cached_prompt_tokens;
+        entry.uncached_prompt_tokens += rec.uncached_prompt_tokens;
         entry.completion_tokens += rec.completion_tokens;
         entry.total_tokens += rec.prompt_tokens + rec.completion_tokens;
         entry.call_count += 1;

@@ -293,6 +293,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
 
         // Track current role for round metrics
         crate::round_metrics::set_role(&role_name);
+        crate::round_metrics::mark_active(&role_name);
 
         // ── Execute (with plan loop for 工部尚书) ────
         log_dept(&ctx, &role_name, "开始处理");
@@ -515,8 +516,10 @@ pub async fn run_actor(mut ctx: ActorContext) {
                 }
             }
         }
+        crate::round_metrics::mark_idle(&role_name);
     }
 
+    crate::round_metrics::mark_idle(&role_name);
     log_console!("[actor] {}: stopped", role_name);
 }
 

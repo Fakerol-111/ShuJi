@@ -61,7 +61,7 @@ export default function TokenPanel() {
                 </div>
                 <div className="flex justify-between text-[9px] text-ink-400 mt-0.5">
                   <span>调用 {usage.call_count} 次</span>
-                  <span>入 {usage.prompt_tokens.toLocaleString()} / 出 {usage.completion_tokens.toLocaleString()}</span>
+                  <span>缓存命中 {(usage.cached_prompt_tokens ?? 0).toLocaleString()} | 缓存未命中 {(usage.uncached_prompt_tokens ?? 0).toLocaleString()} | 输出 {usage.completion_tokens.toLocaleString()}</span>
                 </div>
               </div>
             );

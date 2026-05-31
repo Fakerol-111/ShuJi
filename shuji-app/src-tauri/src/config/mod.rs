@@ -10,6 +10,7 @@ pub struct RuntimeConfig {
     pub context_compaction: ContextCompactionConfig,
     pub actor: ActorConfig,
     pub watchdog: WatchdogConfig,
+    #[serde(default)]
     pub checkpoint: CheckpointConfig,
 }
 
@@ -201,8 +202,8 @@ fn default_document_heavy_iterations() -> usize {
 }
 
 fn default_compact_char_threshold() -> usize {
-    80_000
-} // compact earlier (was 160K)
+    120_000
+} // 提高阈值，减少不必要的压缩频率
 fn default_keep_recent_count() -> usize {
     10
 } // keep more context after compaction (was 6)
@@ -381,26 +382,102 @@ impl RuntimeConfig {
         Duration::from_secs(self.api.timeout_secs)
     }
 
-    /// 为指定角色解析上下文压缩阈值，合并全局默认值与角色覆盖。
+    /// 为指定角色解析上下文压缩阈值。
+    /// 优先级：`context_config.json` 字段覆盖 > 部门内置推荐值 > `[context_compaction]` 全局默认。
     pub fn resolve_compact_thresholds(
         &self,
-        _role_name: &str,
+        role_name: &str,
         role_config: Option<&RoleContextConfig>,
     ) -> CompactThresholds {
+        let base = default_compact_thresholds_for_role(role_name).unwrap_or_else(|| CompactThresholds {
+            char_threshold: self.context_compaction.char_threshold,
+            keep_recent_count: self.context_compaction.keep_recent_count,
+            history_char_threshold: self.context_compaction.history_char_threshold,
+            mid_run_compact: self.context_compaction.mid_run_compact,
+        });
+
         let ov = role_config;
         CompactThresholds {
             char_threshold: ov
                 .and_then(|o| o.char_threshold)
-                .unwrap_or(self.context_compaction.char_threshold),
+                .unwrap_or(base.char_threshold),
             keep_recent_count: ov
                 .and_then(|o| o.keep_recent_count)
-                .unwrap_or(self.context_compaction.keep_recent_count),
+                .unwrap_or(base.keep_recent_count),
             history_char_threshold: ov
                 .and_then(|o| o.history_char_threshold)
-                .unwrap_or(self.context_compaction.history_char_threshold),
+                .unwrap_or(base.history_char_threshold),
             mid_run_compact: ov
                 .and_then(|o| o.mid_run_compact)
-                .unwrap_or(self.context_compaction.mid_run_compact),
+                .unwrap_or(base.mid_run_compact),
         }
     }
+}
+
+/// 各部门内置上下文压缩推荐值（中文角色名，与 `Role::name()` 一致）。
+/// 无 `context_config.json` 覆盖时生效。
+pub fn default_compact_thresholds_for_role(role_name: &str) -> Option<CompactThresholds> {
+    Some(match role_name {
+        "工部" => CompactThresholds {
+            char_threshold: 120_000,
+            keep_recent_count: 16,
+            history_char_threshold: 3_500,
+            mid_run_compact: true,
+        },
+        "刑部" => CompactThresholds {
+            char_threshold: 110_000,
+            keep_recent_count: 14,
+            history_char_threshold: 3_500,
+            mid_run_compact: true,
+        },
+        "中书令" => CompactThresholds {
+            char_threshold: 100_000,
+            keep_recent_count: 12,
+            history_char_threshold: 3_000,
+            mid_run_compact: true,
+        },
+        "吏部" => CompactThresholds {
+            char_threshold: 100_000,
+            keep_recent_count: 12,
+            history_char_threshold: 3_000,
+            mid_run_compact: true,
+        },
+        "内阁" => CompactThresholds {
+            char_threshold: 100_000,
+            keep_recent_count: 14,
+            history_char_threshold: 4_000,
+            mid_run_compact: true,
+        },
+        "兵部" => CompactThresholds {
+            char_threshold: 85_000,
+            keep_recent_count: 10,
+            history_char_threshold: 2_500,
+            mid_run_compact: true,
+        },
+        "门下侍中" => CompactThresholds {
+            char_threshold: 70_000,
+            keep_recent_count: 8,
+            history_char_threshold: 2_000,
+            mid_run_compact: true,
+        },
+        "制司" => CompactThresholds {
+            char_threshold: 65_000,
+            keep_recent_count: 8,
+            history_char_threshold: 2_000,
+            mid_run_compact: true,
+        },
+        "尚书令" => CompactThresholds {
+            char_threshold: 55_000,
+            keep_recent_count: 6,
+            history_char_threshold: 1_500,
+            mid_run_compact: true,
+        },
+        "礼部" => CompactThresholds {
+            char_threshold: 50_000,
+            keep_recent_count: 6,
+            history_char_threshold: 1_500,
+            mid_run_compact: true,
+        },
+        _ => return None,
+    })
 }
