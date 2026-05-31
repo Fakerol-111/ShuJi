@@ -32,25 +32,22 @@ export default function ContextPanel() {
         <h3 className="text-xs font-bold text-ink-800">文脉</h3>
         <button onClick={load} className="text-[10px] text-ink-400 hover:text-ink-700">刷新</button>
       </div>
-      <p className="text-[9px] text-ink-400 mb-3">单位：字符 | 10000 字符 ≈ 5000 tokens（中文）</p>
+      <p className="text-[9px] text-ink-400 mb-3">单位：tokens（cl100k，与 OpenAI/DeepSeek 兼容 API 估算一致）</p>
       {error && <p className="text-xs text-vermillion mb-2">{error}</p>}
       {!stats || Object.keys(stats).length === 0 ? (
         <p className="text-xs text-ink-400">暂无数据</p>
       ) : (
         <div className="space-y-3">
           {Object.entries(stats).sort(([a], [b]) => roleOrder(a) - roleOrder(b)).map(([role, cs]) => {
-            const pct = cs.char_threshold > 0
-              ? Math.min((cs.char_count / cs.char_threshold) * 100, 100)
-              : 0;
-            const historyPct = cs.history_threshold > 0
-              ? Math.min((cs.history_char_count / cs.history_threshold) * 100, 100)
+            const pct = cs.token_threshold > 0
+              ? Math.min((cs.token_count / cs.token_threshold) * 100, 100)
               : 0;
             return (
               <div key={role}>
                 <div className="flex justify-between text-[11px] mb-1">
                   <span className="font-medium text-ink-700">{ROLE_NAMES[role] || role}</span>
-                  <span className={cs.char_count >= cs.char_threshold ? "text-vermillion text-[10px]" : "text-ink-500"}>
-                    {abbr(cs.char_count)}字符 / {abbr(cs.char_threshold)}字符
+                  <span className={cs.token_count >= cs.token_threshold ? "text-vermillion text-[10px]" : "text-ink-500"}>
+                    {abbr(cs.token_count)} / {abbr(cs.token_threshold)} tokens
                   </span>
                 </div>
                 <div className="w-full bg-ink-200 rounded-full h-2 overflow-hidden">
@@ -62,19 +59,11 @@ export default function ContextPanel() {
                 <div className="flex justify-between items-center text-[9px] text-ink-400 mt-0.5">
                   <span>{cs.message_count} 条消息</span>
                   {cs.compressed ? (
-                    <span className="text-amber-600 flex items-center gap-1">
-                      <span>已压缩</span>
-                      <span className="text-ink-400">(历史 {abbr(cs.history_char_count)} / {abbr(cs.history_threshold)})</span>
-                    </span>
+                    <span className="text-amber-600">已压缩</span>
                   ) : (
                     <span className="text-ink-400">未压缩</span>
                   )}
                 </div>
-                {cs.compressed && (
-                  <div className="w-full bg-ink-200 rounded-full h-1 mt-0.5 overflow-hidden">
-                    <div className="h-full rounded-full bg-amber-400 transition-all duration-500" style={{ width: `${Math.max(historyPct, 2)}%` }} />
-                  </div>
-                )}
                 <div className="mt-1">
                     <button
                       onClick={async () => {

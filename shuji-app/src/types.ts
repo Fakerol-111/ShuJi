@@ -108,10 +108,8 @@ export interface TokenUsage {
 // Per-role context usage stats
 export interface ContextStats {
   message_count: number;
-  char_count: number;
-  char_threshold: number;
-  history_char_count: number;
-  history_threshold: number;
+  token_count: number;
+  token_threshold: number;
   compressed: boolean;
   skill_count: number;
 }
@@ -137,7 +135,7 @@ export interface DeptLogEntry {
 
 // Context window configuration
 export interface RoleContextConfig {
-  char_threshold?: number;
+  token_threshold?: number;
   keep_recent_count?: number;
   mid_run_compact?: boolean;
 }

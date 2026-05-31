@@ -41,9 +41,6 @@ char_threshold = 160000
 # 压缩后保留的最近消息数
 keep_recent_count = 6
 
-# 历史消息压缩的字符数阈值
-history_char_threshold = 2000
-
 [actor]
 # 单个 actor 执行的最大迭代次数
 max_exec_iterations = 20

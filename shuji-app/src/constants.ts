@@ -108,19 +108,26 @@ export const ALL_ROLES: RoleInfo[] = [
   { key: "zhisi", label: "制司", description: "独立调查" },
 ];
 
+/** DeepSeek 1M 窗口：接近上限再压缩（cl100k token 计数，各部门统一） */
+const NEAR_WINDOW_CONTEXT = {
+  token_threshold: 750_000,
+  keep_recent_count: 24,
+  mid_run_compact: false,
+} as const;
+
 /** 各部门内置上下文压缩默认值（与 Rust `default_compact_thresholds_for_role` 一致） */
 export const ROLE_CONTEXT_DEFAULTS: Record<
   string,
-  { char_threshold: number; keep_recent_count: number; history_char_threshold: number; mid_run_compact: boolean }
+  { token_threshold: number; keep_recent_count: number; mid_run_compact: boolean }
 > = {
-  工部: { char_threshold: 120_000, keep_recent_count: 16, history_char_threshold: 3_500, mid_run_compact: true },
-  刑部: { char_threshold: 110_000, keep_recent_count: 14, history_char_threshold: 3_500, mid_run_compact: true },
-  中书令: { char_threshold: 100_000, keep_recent_count: 12, history_char_threshold: 3_000, mid_run_compact: true },
-  吏部: { char_threshold: 100_000, keep_recent_count: 12, history_char_threshold: 3_000, mid_run_compact: true },
-  内阁: { char_threshold: 100_000, keep_recent_count: 14, history_char_threshold: 4_000, mid_run_compact: true },
-  兵部: { char_threshold: 85_000, keep_recent_count: 10, history_char_threshold: 2_500, mid_run_compact: true },
-  门下侍中: { char_threshold: 70_000, keep_recent_count: 8, history_char_threshold: 2_000, mid_run_compact: true },
-  制司: { char_threshold: 65_000, keep_recent_count: 8, history_char_threshold: 2_000, mid_run_compact: true },
-  尚书令: { char_threshold: 55_000, keep_recent_count: 6, history_char_threshold: 1_500, mid_run_compact: true },
-  礼部: { char_threshold: 50_000, keep_recent_count: 6, history_char_threshold: 1_500, mid_run_compact: true },
+  工部: { ...NEAR_WINDOW_CONTEXT },
+  刑部: { ...NEAR_WINDOW_CONTEXT },
+  中书令: { ...NEAR_WINDOW_CONTEXT },
+  吏部: { ...NEAR_WINDOW_CONTEXT },
+  内阁: { ...NEAR_WINDOW_CONTEXT },
+  兵部: { ...NEAR_WINDOW_CONTEXT },
+  门下侍中: { ...NEAR_WINDOW_CONTEXT },
+  制司: { ...NEAR_WINDOW_CONTEXT },
+  尚书令: { ...NEAR_WINDOW_CONTEXT },
+  礼部: { ...NEAR_WINDOW_CONTEXT },
 };

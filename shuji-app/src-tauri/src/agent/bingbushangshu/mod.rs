@@ -58,7 +58,6 @@ impl Agent for BingbuShangshuAgent {
             &self.model,
             &tools,
             &client,
-            &[],
             &input.runtime_config,
         )
         .with_role(self.role().name())
@@ -74,42 +73,16 @@ impl Agent for BingbuShangshuAgent {
         if let Some(mut ctx) =
             crate::api::session::PersistedContext::load_from(&working_dir, &role_name).await
         {
-            // ── Context compaction (iterative: context → history → repeat) ──
-            loop {
-                let mut changed = false;
-
-                if let Some(result) = crate::api::compact::maybe_compact_dept(
-                    &self.client,
-                    &self.model,
-                    &ctx.history_messages,
-                    &ctx.context_messages,
-                    &thresholds,
-                )
-                .await
-                {
-                    ctx.history_messages = result.new_history;
-                    ctx.context_messages = result.kept_context;
-                    ctx.save_to(&working_dir, &role_name).await;
-                    changed = true;
-                }
-
-                if let Some(merged) = crate::api::compact::maybe_compact_history(
-                    &self.client,
-                    &self.model,
-                    &ctx.history_messages,
-                    &thresholds,
-                )
-                .await
-                {
-                    ctx.history_messages = merged;
-                    ctx.save_to(&working_dir, &role_name).await;
-                    changed = true;
-                }
-
-                if !changed {
-                    break;
-                }
-            }
+            crate::api::compact::compact_and_save(
+                &self.client,
+                &self.model,
+                &mut ctx,
+                &thresholds,
+                false,
+                &working_dir,
+                &role_name,
+            )
+            .await;
 
             let mut msgs = ctx.to_messages();
             msgs.push(serde_json::json!({"role": "user", "content": input.task_description}));
@@ -151,37 +124,16 @@ impl Agent for BingbuShangshuAgent {
 
                         let mut ctx =
                             crate::api::session::PersistedContext::from_messages(&messages);
-                        loop {
-                            let mut changed = false;
-                            if let Some(result) = crate::api::compact::maybe_compact_dept(
-                                &client,
-                                &model,
-                                &ctx.history_messages,
-                                &ctx.context_messages,
-                                &thresholds,
-                            )
-                            .await
-                            {
-                                ctx.history_messages = result.new_history;
-                                ctx.context_messages = result.kept_context;
-                                changed = true;
-                            }
-                            if let Some(merged) = crate::api::compact::maybe_compact_history(
-                                &client,
-                                &model,
-                                &ctx.history_messages,
-                                &thresholds,
-                            )
-                            .await
-                            {
-                                ctx.history_messages = merged;
-                                changed = true;
-                            }
-                            if !changed {
-                                break;
-                            }
-                        }
-                        ctx.save_to(&wd, &role).await;
+                        crate::api::compact::compact_and_save(
+                            &client,
+                            &model,
+                            &mut ctx,
+                            &thresholds,
+                            false,
+                            &wd,
+                            &role,
+                        )
+                        .await;
                     })
                 }),
                 40,

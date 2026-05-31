@@ -33,15 +33,11 @@ use crate::models::role::Role;
 pub struct ContextStats {
     /// Number of conversation messages in current context.
     pub message_count: usize,
-    /// Total characters across all context messages.
-    pub char_count: usize,
-    /// Compression threshold (from config, default 80K).
-    pub char_threshold: usize,
-    /// Characters in the history summary (non-empty = compressed).
-    pub history_char_count: usize,
-    /// History merge threshold (from config, default 2K).
-    pub history_threshold: usize,
-    /// Whether context has been compacted (history summary is non-empty).
+    /// Total tokens across context_messages (cl100k).
+    pub token_count: usize,
+    /// Compression threshold in tokens.
+    pub token_threshold: usize,
+    /// Whether context has been compacted (contains `[对话摘要]` summary).
     pub compressed: bool,
     /// Number of active skill prompts.
     pub skill_count: usize,
@@ -477,7 +473,6 @@ pub async fn discuss_with_cabinet(
         context_messages: vec![],
         project_dir: std::path::PathBuf::from(&working_dir),
         working_dir: std::path::PathBuf::from(&working_dir),
-        skill_prompts: vec![],
         current_skill: None,
         resume_paused: false,
         context_window_config: Arc::new(HashMap::new()),
@@ -649,12 +644,8 @@ pub async fn get_context_stats(
             _ => continue,
         };
 
-        let char_count: usize = ctx
-            .context_messages
-            .iter()
-            .filter_map(|m| m["content"].as_str())
-            .map(|c| c.chars().count())
-            .sum();
+        let token_count =
+            crate::api::token_count::count_messages_tokens(&ctx.context_messages);
 
         // Resolve per-role thresholds
         let thresholds = config.resolve_compact_thresholds(&role, role_overrides.get(&role));
@@ -663,12 +654,15 @@ pub async fn get_context_stats(
             role,
             ContextStats {
                 message_count: ctx.context_messages.len(),
-                char_count,
-                char_threshold: thresholds.char_threshold,
-                history_char_count: ctx.history_messages.chars().count(),
-                history_threshold: thresholds.history_char_threshold,
-                compressed: !ctx.history_messages.is_empty(),
-                skill_count: ctx.skill_prompts.len(),
+                token_count,
+                token_threshold: thresholds.token_threshold,
+                compressed: ctx.context_messages.iter().any(|m| {
+                    m["role"].as_str() == Some("system")
+                        && m["content"]
+                            .as_str()
+                            .is_some_and(|c| c.starts_with("[对话摘要]"))
+                }),
+                skill_count: crate::api::session::count_skill_messages(&ctx.context_messages),
             },
         );
     }
@@ -744,19 +738,13 @@ async fn compact_impl(
         .resolve_compact_thresholds(role, role_overrides.get(role));
 
     // Pre-check: skip if neither threshold is exceeded (no API config needed)
-    let total_chars: usize = ctx
-        .context_messages
-        .iter()
-        .filter_map(|m| m["content"].as_str())
-        .map(|c| c.chars().count())
-        .sum();
+    let total_tokens =
+        crate::api::token_count::count_messages_tokens(&ctx.context_messages);
 
-    // Force context compaction threshold to 0 so it always compresses;
-    // keep original history threshold to avoid infinite history-merge loops.
+    // Force context compaction threshold to 0 so it always compresses.
     let force_thresholds = crate::config::CompactThresholds {
-        char_threshold: 0,
+        token_threshold: 0,
         keep_recent_count: thresholds.keep_recent_count,
-        history_char_threshold: thresholds.history_char_threshold,
         mid_run_compact: false,
     };
 
@@ -781,10 +769,10 @@ async fn compact_impl(
     let is_cabinet = role == "neige";
 
     log_console!(
-        "[compact:manual] starting compaction for {} (cabinet={}, chars={})",
+        "[compact:manual] starting compaction for {} (cabinet={}, tokens={})",
         role,
         is_cabinet,
-        total_chars,
+        total_tokens,
     );
 
     let performed = crate::api::compact::run_compaction_loop(

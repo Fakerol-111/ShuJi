@@ -23,10 +23,6 @@ pub struct PlanState {
     pub complete: bool,
     /// True when the batch just advanced — next execute() starts fresh.
     pub fresh_batch: bool,
-    /// Session snapshot captured at submit_plan time. Contains pre-plan
-    /// analysis context (contract reads, design analysis). Restored at the
-    /// start of every batch so the LLM remembers the task understanding.
-    pub baseline: Option<Vec<serde_json::Value>>,
 }
 
 impl PlanState {
@@ -36,7 +32,6 @@ impl PlanState {
             current: 0,
             complete: false,
             fresh_batch: true,
-            baseline: None,
         }
     }
 
@@ -88,32 +83,6 @@ impl GongbuShangshuAgent {
     async fn execute_tool(name: &str, args: &serde_json::Value, working_dir: &Path) -> String {
         crate::tool::execute_named_tool(name, working_dir, args, "gongbushangshu").await
     }
-
-    fn build_plan_prompt(plan: &PlanState) -> String {
-        let mut lines = vec![format!("总计划（共 {} 批）：", plan.batches.len())];
-        for (i, b) in plan.batches.iter().enumerate() {
-            let marker = if i == plan.current {
-                "← 当前"
-            } else if i < plan.current {
-                "✓"
-            } else {
-                ""
-            };
-            lines.push(format!("  {}. {} — {} {}", i + 1, b.name, b.goal, marker));
-        }
-        lines.join("\n")
-    }
-
-    fn build_task_prompt(plan: &PlanState) -> String {
-        let batch = plan.current_batch().unwrap();
-        format!(
-            "当前批次（第 {} 批/共 {} 批）：{}\n目标：{}\n\n请完成本批任务。完成后调用 complete_task。",
-            plan.current + 1,
-            plan.batches.len(),
-            batch.name,
-            batch.goal,
-        )
-    }
 }
 
 #[async_trait::async_trait]
@@ -141,7 +110,6 @@ impl Agent for GongbuShangshuAgent {
             &self.model,
             &tools,
             &client,
-            &[],
             &input.runtime_config,
         )
         .with_role(self.role().name())
@@ -158,18 +126,14 @@ impl Agent for GongbuShangshuAgent {
         // Execution phase disables it to maximize tool output space.
         let has_plan = self.plan.lock().unwrap().is_some();
         if has_plan {
-            // Execution phase: disable reasoning to maximize tool output space.
             session.set_reasoning(false);
             log_console!("[工部] 执行阶段：关闭 reasoning，不限制 max_tokens");
         } else {
-            // Planning phase: allow reasoning while leaving output length to the model/provider.
             session.set_reasoning(true);
             log_console!("[工部] 规划阶段：开启 reasoning，不限制 max_tokens");
         }
 
-        // Track whether this is the first round of a new batch.
-        // On fresh batch: start clean (no restore), inject plan + task.
-        // On continuation within a batch: restore previous coding context.
+        // Track and consume fresh_batch flag atomically
         let is_fresh = {
             let mut plan_guard = self.plan.lock().unwrap();
             if let Some(ref mut plan) = *plan_guard {
@@ -184,58 +148,57 @@ impl Agent for GongbuShangshuAgent {
             }
         };
 
-        if is_fresh {
-            // New batch: restore from baseline (pre-plan analysis + submit_plan call)
-            // so the LLM remembers the task understanding. Old coding context is discarded.
-            let baseline = {
-                let plan_guard = self.plan.lock().unwrap();
-                plan_guard.as_ref().and_then(|p| p.baseline.clone())
-            };
-            if let Some(msgs) = baseline {
-                let snap = crate::api::session::SessionSnapshot::from_messages(msgs);
-                session.restore(&snap);
+        // Extract plan info before any async operations (avoid holding MutexGuard across await)
+        let (plan_complete, plan_current, plan_total, batch_name, batch_goal) = {
+            let plan_guard = self.plan.lock().unwrap();
+            match *plan_guard {
+                Some(ref p) => (
+                    p.complete,
+                    p.current,
+                    p.batches.len(),
+                    p.current_batch().map(|b| b.name.clone()),
+                    p.current_batch().map(|b| b.goal.clone()),
+                ),
+                None => (true, 0, 0, None, None),
             }
-            // Inject the current task_description (may have changed across batches)
-            session.inject(&format!("继续执行。当前任务：{}", input.task_description));
-        } else {
-            // Check whether there's an active plan. If plan was reset (new task
-            // arrived), the old persisted context from the previous task is stale
-            // — delete it and start the session fresh.
-            let has_plan = self.plan.lock().unwrap().is_some();
-            if has_plan {
-                // Continuation within a batch: restore full coding context from previous round.
-                // Session was already compacted on save — no need to re-run compaction.
+        };
+
+        // Unified session building: both fresh batch and continuation load from
+        // persisted context. No baseline restore, no full-plan inject —
+        // just a one-line batch instruction on fresh start.
+        if has_plan {
+            if plan_complete {
+                session.inject("所有批次任务已完成。请创建报告文档并路由回尚书令。");
+            } else {
                 if let Some(mut ctx) =
                     crate::api::session::PersistedContext::load_from(&working_dir, &role_name).await
                 {
                     ctx.trim_tool_results(2000);
                     let mut msgs = ctx.to_messages();
-                    msgs.push(
-                        serde_json::json!({"role": "user", "content": input.task_description}),
-                    );
+                    if is_fresh {
+                        if let (Some(ref name), Some(ref goal)) = (batch_name, batch_goal) {
+                            msgs.push(serde_json::json!({"role": "user", "content": format!(
+                                "当前批次（{}/{}）：{} — {}。请完成本批任务，完成后调用 complete_task。",
+                                plan_current + 1, plan_total, name, goal,
+                            )}));
+                            log_console!(
+                                "[工部] batch {}/{} started, appended instruction only",
+                                plan_current + 1,
+                                plan_total
+                            );
+                        }
+                    }
+                    msgs.push(serde_json::json!({"role": "user", "content": input.task_description}));
                     let snap = crate::api::session::SessionSnapshot::from_messages(msgs);
                     session.restore(&snap);
                 }
-            } else {
-                // New task: remove stale context so the next save starts clean.
-                let ctx_path = working_dir
-                    .join(".shuji/context")
-                    .join(format!("{}.json", role_name));
-                let _ = tokio::fs::remove_file(&ctx_path).await;
             }
-        }
-
-        // Inject plan + task only on the first round of a batch
-        {
-            let plan_guard = self.plan.lock().unwrap();
-            if let Some(ref plan) = *plan_guard {
-                if !plan.complete && is_fresh {
-                    session.inject(&Self::build_plan_prompt(plan));
-                    session.inject(&Self::build_task_prompt(plan));
-                } else if plan.complete {
-                    session.inject("所有批次任务已完成。请创建报告文档并路由回尚书令。");
-                }
-            }
+        } else {
+            // No plan yet: new task, remove stale context
+            let ctx_path = working_dir
+                .join(".shuji/context")
+                .join(format!("{}.json", role_name));
+            let _ = tokio::fs::remove_file(&ctx_path).await;
         }
 
         let mut controller = crate::api::control::AgentController::new();
@@ -272,38 +235,16 @@ impl Agent for GongbuShangshuAgent {
 
                         let mut ctx =
                             crate::api::session::PersistedContext::from_messages(&messages);
-                        loop {
-                            let mut changed = false;
-                            if let Some(result) = crate::api::compact::maybe_compact_dept(
-                                &client,
-                                &model,
-                                &ctx.history_messages,
-                                &ctx.context_messages,
-                                &thresholds,
-                            )
-                            .await
-                            {
-                                ctx.history_messages = result.new_history;
-                                ctx.context_messages = result.kept_context;
-                                changed = true;
-                            }
-                            if let Some(merged) = crate::api::compact::maybe_compact_history(
-                                &client,
-                                &model,
-                                &ctx.history_messages,
-                                &thresholds,
-                            )
-                            .await
-                            {
-                                ctx.history_messages = merged;
-                                changed = true;
-                            }
-                            if !changed {
-                                break;
-                            }
-                        }
-                        ctx.trim_tool_results(2000);
-                        ctx.save_to(&wd, &role).await;
+                        crate::api::compact::compact_and_save(
+                            &client,
+                            &model,
+                            &mut ctx,
+                            &thresholds,
+                            false,
+                            &wd,
+                            &role,
+                        )
+                        .await;
                     })
                 }),
                 40,
@@ -401,21 +342,6 @@ impl Agent for GongbuShangshuAgent {
             )
             .await?
             .into_tuple();
-
-        // Capture baseline after submit_plan: save the pre-plan analysis context
-        // so every batch can restore from this shared understanding.
-        {
-            let mut plan_guard = self.plan.lock().unwrap();
-            if let Some(ref mut plan) = *plan_guard {
-                if plan.baseline.is_none() {
-                    plan.baseline = Some(session.snapshot().messages);
-                    log_console!(
-                        "[工部] baseline captured: {} messages",
-                        plan.baseline.as_ref().unwrap().len()
-                    );
-                }
-            }
-        }
 
         // Persist for continuation within the batch
         let snap = session.snapshot();

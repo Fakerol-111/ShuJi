@@ -14,10 +14,6 @@ pub struct AgentInput {
     pub context_messages: Vec<Message>,
     pub project_dir: PathBuf,
     pub working_dir: PathBuf,
-    /// Active skill system messages (内阁 only), injected between base_prompt
-    /// and history. Stored as a vec to allow multiple active skills and future
-    /// context compression.
-    pub skill_prompts: Vec<String>,
     /// Current skill name from previous turn (内阁 only).
     /// Used by skill guard to prevent false-positive retries across execution rounds.
     pub current_skill: Option<String>,

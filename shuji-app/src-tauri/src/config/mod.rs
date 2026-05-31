@@ -75,17 +75,16 @@ pub struct ToolIterationsConfig {
 /// 上下文压缩配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContextCompactionConfig {
-    /// 触发压缩的字符数阈值
-    #[serde(default = "default_compact_char_threshold")]
-    pub char_threshold: usize,
+    /// 触发压缩的 token 阈值（cl100k，仅计量 context_messages）
+    #[serde(
+        default = "default_compact_token_threshold",
+        alias = "char_threshold"
+    )]
+    pub token_threshold: usize,
 
     /// 压缩后保留的最近消息数
     #[serde(default = "default_keep_recent_count")]
     pub keep_recent_count: usize,
-
-    /// 历史消息压缩的字符数阈值
-    #[serde(default = "default_history_compact_threshold")]
-    pub history_char_threshold: usize,
 
     /// 是否启用运行中上下文压缩（tool 循环中的 mid-run compact）
     #[serde(default = "default_compact_mid_run_enabled")]
@@ -123,12 +122,10 @@ pub struct WatchdogConfig {
 /// 每个角色可选的上下文窗口覆盖配置
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RoleContextConfig {
-    #[serde(default)]
-    pub char_threshold: Option<usize>,
+    #[serde(default, alias = "char_threshold")]
+    pub token_threshold: Option<usize>,
     #[serde(default)]
     pub keep_recent_count: Option<usize>,
-    #[serde(default)]
-    pub history_char_threshold: Option<usize>,
     #[serde(default)]
     pub mid_run_compact: Option<bool>,
 }
@@ -136,9 +133,8 @@ pub struct RoleContextConfig {
 /// 已解析的上下文压缩阈值（合并了全局默认值与角色覆盖后）
 #[derive(Debug, Clone, Copy)]
 pub struct CompactThresholds {
-    pub char_threshold: usize,
+    pub token_threshold: usize,
     pub keep_recent_count: usize,
-    pub history_char_threshold: usize,
     pub mid_run_compact: bool,
 }
 
@@ -201,18 +197,16 @@ fn default_document_heavy_iterations() -> usize {
     100
 }
 
-fn default_compact_char_threshold() -> usize {
-    120_000
-} // 提高阈值，减少不必要的压缩频率
-fn default_keep_recent_count() -> usize {
-    10
-} // keep more context after compaction (was 6)
-fn default_history_compact_threshold() -> usize {
-    2_000
+/// DeepSeek 1M token 窗口：接近上限再压缩。
+/// `token_threshold` 仅计量 `context_messages`（cl100k），预留 system / tools / 输出余量。
+fn default_compact_token_threshold() -> usize {
+    750_000
 }
-
+fn default_keep_recent_count() -> usize {
+    24
+}
 fn default_compact_mid_run_enabled() -> bool {
-    true
+    false
 }
 
 fn default_max_exec_iterations() -> u32 {
@@ -305,9 +299,8 @@ impl Default for ToolIterationsConfig {
 impl Default for ContextCompactionConfig {
     fn default() -> Self {
         Self {
-            char_threshold: default_compact_char_threshold(),
+            token_threshold: default_compact_token_threshold(),
             keep_recent_count: default_keep_recent_count(),
-            history_char_threshold: default_history_compact_threshold(),
             mid_run_compact: default_compact_mid_run_enabled(),
         }
     }
@@ -347,10 +340,10 @@ impl RuntimeConfig {
             Ok(config) => {
                 log_console!("[config] 已从 {} 加载配置", path_ref.display());
                 log_console!(
-                    "[debug] 配置值: api.timeout={}, api.max_retries={}, compact.char_threshold={}, compact.mid_run_compact={}",
+                    "[debug] 配置值: api.timeout={}, api.max_retries={}, compact.token_threshold={}, compact.mid_run_compact={}",
                     config.api.timeout_secs,
                     config.api.max_retries,
-                    config.context_compaction.char_threshold,
+                    config.context_compaction.token_threshold,
                     config.context_compaction.mid_run_compact,
                 );
                 config
@@ -391,23 +384,19 @@ impl RuntimeConfig {
     ) -> CompactThresholds {
         let base =
             default_compact_thresholds_for_role(role_name).unwrap_or_else(|| CompactThresholds {
-                char_threshold: self.context_compaction.char_threshold,
+                token_threshold: self.context_compaction.token_threshold,
                 keep_recent_count: self.context_compaction.keep_recent_count,
-                history_char_threshold: self.context_compaction.history_char_threshold,
                 mid_run_compact: self.context_compaction.mid_run_compact,
             });
 
         let ov = role_config;
         CompactThresholds {
-            char_threshold: ov
-                .and_then(|o| o.char_threshold)
-                .unwrap_or(base.char_threshold),
+            token_threshold: ov
+                .and_then(|o| o.token_threshold)
+                .unwrap_or(base.token_threshold),
             keep_recent_count: ov
                 .and_then(|o| o.keep_recent_count)
                 .unwrap_or(base.keep_recent_count),
-            history_char_threshold: ov
-                .and_then(|o| o.history_char_threshold)
-                .unwrap_or(base.history_char_threshold),
             mid_run_compact: ov
                 .and_then(|o| o.mid_run_compact)
                 .unwrap_or(base.mid_run_compact),
@@ -415,70 +404,21 @@ impl RuntimeConfig {
     }
 }
 
+/// 接近 1M 窗口上限再压缩（各部门统一策略，可用 `context_config.json` 覆盖）。
+fn near_window_compact_thresholds() -> CompactThresholds {
+    CompactThresholds {
+        token_threshold: default_compact_token_threshold(),
+        keep_recent_count: default_keep_recent_count(),
+        mid_run_compact: default_compact_mid_run_enabled(),
+    }
+}
+
 /// 各部门内置上下文压缩推荐值（中文角色名，与 `Role::name()` 一致）。
 /// 无 `context_config.json` 覆盖时生效。
 pub fn default_compact_thresholds_for_role(role_name: &str) -> Option<CompactThresholds> {
-    Some(match role_name {
-        "工部" => CompactThresholds {
-            char_threshold: 120_000,
-            keep_recent_count: 16,
-            history_char_threshold: 3_500,
-            mid_run_compact: true,
-        },
-        "刑部" => CompactThresholds {
-            char_threshold: 110_000,
-            keep_recent_count: 14,
-            history_char_threshold: 3_500,
-            mid_run_compact: true,
-        },
-        "中书令" => CompactThresholds {
-            char_threshold: 100_000,
-            keep_recent_count: 12,
-            history_char_threshold: 3_000,
-            mid_run_compact: true,
-        },
-        "吏部" => CompactThresholds {
-            char_threshold: 100_000,
-            keep_recent_count: 12,
-            history_char_threshold: 3_000,
-            mid_run_compact: true,
-        },
-        "内阁" => CompactThresholds {
-            char_threshold: 100_000,
-            keep_recent_count: 14,
-            history_char_threshold: 4_000,
-            mid_run_compact: true,
-        },
-        "兵部" => CompactThresholds {
-            char_threshold: 85_000,
-            keep_recent_count: 10,
-            history_char_threshold: 2_500,
-            mid_run_compact: true,
-        },
-        "门下侍中" => CompactThresholds {
-            char_threshold: 70_000,
-            keep_recent_count: 8,
-            history_char_threshold: 2_000,
-            mid_run_compact: true,
-        },
-        "制司" => CompactThresholds {
-            char_threshold: 65_000,
-            keep_recent_count: 8,
-            history_char_threshold: 2_000,
-            mid_run_compact: true,
-        },
-        "尚书令" => CompactThresholds {
-            char_threshold: 55_000,
-            keep_recent_count: 6,
-            history_char_threshold: 1_500,
-            mid_run_compact: true,
-        },
-        "礼部" => CompactThresholds {
-            char_threshold: 50_000,
-            keep_recent_count: 6,
-            history_char_threshold: 1_500,
-            mid_run_compact: true,
-        },
-        _ => return None,
-    })
+    match role_name {
+        "工部" | "刑部" | "中书令" | "吏部" | "内阁" | "兵部" | "门下侍中" | "制司" | "尚书令"
+        | "礼部" => Some(near_window_compact_thresholds()),
+        _ => None,
+    }
 }

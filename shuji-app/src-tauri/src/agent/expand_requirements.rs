@@ -31,7 +31,7 @@ pub async fn run(
     let config = Arc::new(crate::config::RuntimeConfig::default());
 
     let mut session =
-        crate::api::session::Session::new(PROMPT, &msgs, model, &tools, client, &[], &config)
+        crate::api::session::Session::new(PROMPT, &msgs, model, &tools, client, &config)
             .with_role("requirements_agent")
             .with_debug_dir(working_dir.to_path_buf());
 

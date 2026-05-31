@@ -29,7 +29,9 @@ pub enum StepResult {
     },
 }
 
-/// Persisted context with 5 separated layers for independent management.
+/// Persisted context with 3 separated layers for independent management.
+/// Skill messages (`[skill:` or `## Working mode:`) are stored inside
+/// `context_messages` as regular system messages, not in a separate layer.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PersistedContext {
     /// The base system prompt (prompt.md content).
@@ -37,21 +39,19 @@ pub struct PersistedContext {
     /// Soul / persona message injected right after base prompt (`[soul: role]\n...`).
     #[serde(default)]
     pub soul_prompt: Option<String>,
-    /// Active skill prompts, each prefixed with `[skill: name]\n`.
-    pub skill_prompts: Vec<String>,
-    /// Compressed summary of early conversation history.
-    pub history_messages: String,
     /// Recent user/assistant/tool conversation (the last N turns).
+    /// Includes skill system messages and `[对话摘要]` summary messages.
+    /// Old messages are compressed into `[对话摘要]` system messages.
     pub context_messages: Vec<serde_json::Value>,
 }
 
 impl PersistedContext {
-    /// Extract 5 layers from a flat messages array.
+    /// Extract 3 layers from a flat messages array.
+    /// Skill messages (`[skill:` / `## Working mode:`) go into context_messages,
+    /// not a separate layer.
     pub fn from_messages(messages: &[serde_json::Value]) -> Self {
         let mut base_prompt = String::new();
         let mut soul_prompt = None;
-        let mut skill_prompts = Vec::new();
-        let mut history_messages = String::new();
         let mut context_messages = Vec::new();
 
         for msg in messages {
@@ -62,12 +62,8 @@ impl PersistedContext {
                     base_prompt = content.to_string();
                 } else if content.starts_with("[soul:") {
                     soul_prompt = Some(content.to_string());
-                } else if content.starts_with("[skill:") || content.starts_with("## Working mode:")
-                {
-                    skill_prompts.push(content.to_string());
-                } else if content.starts_with("[对话摘要]") {
-                    history_messages = content.to_string();
                 } else {
+                    // Includes skill messages and [对话摘要] summaries
                     context_messages.push(msg.clone());
                 }
             } else {
@@ -78,25 +74,18 @@ impl PersistedContext {
         Self {
             base_prompt,
             soul_prompt,
-            skill_prompts,
-            history_messages,
             context_messages,
         }
     }
 
-    /// Rebuild flat messages array from the 5 layers, preserving
-    /// the original ordering: base → soul → skills → history → context.
+    /// Rebuild flat messages array from the 3 layers, preserving
+    /// the original ordering: base → soul → context.
+    /// Skill messages are already embedded in context_messages.
     pub fn to_messages(&self) -> Vec<serde_json::Value> {
         let mut msgs: Vec<serde_json::Value> = Vec::new();
         msgs.push(serde_json::json!({"role": "system", "content": self.base_prompt}));
         if let Some(ref soul) = self.soul_prompt {
             msgs.push(serde_json::json!({"role": "system", "content": soul}));
-        }
-        for sp in &self.skill_prompts {
-            msgs.push(serde_json::json!({"role": "system", "content": sp}));
-        }
-        if !self.history_messages.is_empty() {
-            msgs.push(serde_json::json!({"role": "system", "content": self.history_messages}));
         }
         for m in &self.context_messages {
             msgs.push(m.clone());
@@ -138,12 +127,59 @@ impl PersistedContext {
     }
 
     /// Load from `.shuji/context/{role}.json`.
+    /// Migrates old format where `skill_prompts` and `history_messages` were
+    /// stored as separate fields — converts them to context_messages entries.
     pub async fn load_from(working_dir: &Path, role: &str) -> Option<Self> {
         let path = working_dir
             .join(".shuji/context")
             .join(format!("{}.json", role));
         let data = tokio::fs::read_to_string(&path).await.ok()?;
-        serde_json::from_str(&data).ok()
+
+        // Parse as generic JSON for migration checks
+        let mut json: serde_json::Value = serde_json::from_str(&data).ok()?;
+
+        // Migration: extract old fields' data before mutating
+        let old_skills: Vec<String> = json
+            .get("skill_prompts")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let old_history: Option<String> = json
+            .get("history_messages")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        if !old_skills.is_empty() || old_history.as_ref().is_some_and(|s| !s.is_empty()) {
+            // Remove old fields, then mutate context_messages
+            if let Some(obj) = json.as_object_mut() {
+                obj.remove("skill_prompts");
+                obj.remove("history_messages");
+            }
+            // Append old skill prompts to context_messages
+            if let Some(ctx) = json.get_mut("context_messages").and_then(|v| v.as_array_mut()) {
+                for content in &old_skills {
+                    ctx.push(serde_json::json!({"role": "system", "content": content}));
+                }
+                // Prepend old history as a single [对话摘要] entry
+                if let Some(ref history) = old_history {
+                    if !history.is_empty() {
+                        ctx.insert(
+                            0,
+                            serde_json::json!({
+                                "role": "system",
+                                "content": format!("[对话摘要] {}", history)
+                            }),
+                        );
+                    }
+                }
+            }
+        }
+
+        serde_json::from_value(json).ok()
     }
 }
 
@@ -272,22 +308,16 @@ pub struct Session {
 impl Session {
     /// Build a new Session from a system prompt, message history,
     /// model name, tool definitions, and an API client reference.
-    /// `skill_prompts` are system messages inserted between the base prompt
-    /// and the history (used by 内阁 for cross-turn skill persistence).
     pub fn new(
         system: &str,
         history: &[crate::models::message::Message],
         model: &str,
         tools: &[ToolDefinition],
         client: &Arc<AnthropicClient>,
-        skill_prompts: &[String],
         config: &Arc<RuntimeConfig>,
     ) -> Self {
         let mut messages: Vec<serde_json::Value> = Vec::new();
         messages.push(serde_json::json!({"role": "system", "content": system}));
-        for sp in skill_prompts {
-            messages.push(serde_json::json!({"role": "system", "content": sp}));
-        }
         for m in history {
             messages.push(serde_json::json!({"role": m.role, "content": m.content}));
         }
@@ -342,7 +372,7 @@ impl Session {
     }
 
     /// Inject a persona system message (`[soul: role]`) right after
-    /// the base prompt, before skill prompts and history messages.
+    /// the base prompt but before other messages.
     pub fn with_soul(mut self, role: &str, content: &str) -> Self {
         if content.is_empty() {
             return self;
@@ -351,7 +381,7 @@ impl Session {
             "role": "system",
             "content": format!("[soul: {}]\n{}", role, content)
         });
-        // Insert at index 1 (after base prompt, before skill/history)
+        // Insert at index 1 (after base prompt)
         if self.messages.len() > 1 {
             self.messages.insert(1, soul_msg);
         } else {
@@ -760,23 +790,6 @@ impl Session {
             .push(serde_json::json!({"role": "system", "content": formatted}));
     }
 
-    /// Replace the previous skill message with a new one (no accumulation).
-    /// Falls back to append if no prior `[skill:` message exists.
-    pub fn replace_skill(&mut self, skill_name: &str, content: &str) {
-        let formatted = format!("[skill: {}]\n{}", skill_name, content);
-        let msg = serde_json::json!({"role": "system", "content": formatted});
-        if let Some(pos) = self.messages.iter().rposition(|m| {
-            m["role"].as_str() == Some("system")
-                && m["content"]
-                    .as_str()
-                    .is_some_and(|c| c.starts_with("[skill:") || c.starts_with("## Working mode:"))
-        }) {
-            self.messages[pos] = msg;
-        } else {
-            self.messages.push(msg);
-        }
-    }
-
     /// Append a tool result to the conversation so the LLM sees it.
     pub fn feed_tool_result(&mut self, id: &str, _name: &str, output: &str) {
         self.messages.push(serde_json::json!({
@@ -1020,4 +1033,24 @@ impl Session {
     pub fn restore(&mut self, snap: &SessionSnapshot) {
         self.messages = snap.messages.clone();
     }
+}
+
+// ── Skill message helpers ──────────────────────────────────
+
+/// Check whether a message is a skill system message (`[skill:` or `## Working mode:`).
+pub(crate) fn is_skill_message(msg: &serde_json::Value) -> bool {
+    msg["role"].as_str() == Some("system")
+        && msg["content"]
+            .as_str()
+            .is_some_and(|c| c.starts_with("[skill:") || c.starts_with("## Working mode:"))
+}
+
+/// Remove all skill messages from the vector in-place.
+pub(crate) fn strip_skill_messages(msgs: &mut Vec<serde_json::Value>) {
+    msgs.retain(|m| !is_skill_message(m));
+}
+
+/// Count how many skill messages are in the slice.
+pub(crate) fn count_skill_messages(msgs: &[serde_json::Value]) -> usize {
+    msgs.iter().filter(|m| is_skill_message(m)).count()
 }

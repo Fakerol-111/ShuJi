@@ -279,7 +279,6 @@ impl Agent for NeigeAgent {
             &self.model,
             &tools,
             &client,
-            &input.skill_prompts,
             &input.runtime_config,
         )
         .with_role(self.role().name())
@@ -330,45 +329,20 @@ impl Agent for NeigeAgent {
             if let Some(mut ctx) =
                 crate::api::session::PersistedContext::load_from(&working_dir, &role_name).await
             {
-                log_console!("[内阁] loading context: base={} chars, skills={}, summary={} chars, recent={} msgs",
-                    ctx.base_prompt.len(), ctx.skill_prompts.len(), ctx.history_messages.len(), ctx.context_messages.len());
+                log_console!("[内阁] loading context: base={} chars, recent={} msgs, skills={}",
+                    ctx.base_prompt.len(), ctx.context_messages.len(),
+                    crate::api::session::count_skill_messages(&ctx.context_messages));
 
-                // Compact iteratively: context first, then history. Persist after each step.
-                loop {
-                    let mut changed = false;
-
-                    if let Some(result) = crate::api::compact::maybe_compact(
-                        &self.client,
-                        &self.model,
-                        &ctx.history_messages,
-                        &ctx.context_messages,
-                        &thresholds,
-                    )
-                    .await
-                    {
-                        ctx.history_messages = result.new_history;
-                        ctx.context_messages = result.kept_context;
-                        ctx.save_to(&working_dir, &role_name).await;
-                        changed = true;
-                    }
-
-                    if let Some(merged) = crate::api::compact::maybe_compact_history(
-                        &self.client,
-                        &self.model,
-                        &ctx.history_messages,
-                        &thresholds,
-                    )
-                    .await
-                    {
-                        ctx.history_messages = merged;
-                        ctx.save_to(&working_dir, &role_name).await;
-                        changed = true;
-                    }
-
-                    if !changed {
-                        break;
-                    }
-                }
+                crate::api::compact::compact_and_save(
+                    &self.client,
+                    &self.model,
+                    &mut ctx,
+                    &thresholds,
+                    true,
+                    &working_dir,
+                    &role_name,
+                )
+                .await;
 
                 let mut msgs = ctx.to_messages();
                 msgs.push(serde_json::json!({"role": "user", "content": format!("皇帝新指令：{}", input.task_description)}));
@@ -411,37 +385,16 @@ impl Agent for NeigeAgent {
 
                         let mut ctx =
                             crate::api::session::PersistedContext::from_messages(&messages);
-                        loop {
-                            let mut changed = false;
-                            if let Some(result) = crate::api::compact::maybe_compact(
-                                &client,
-                                &model,
-                                &ctx.history_messages,
-                                &ctx.context_messages,
-                                &thresholds,
-                            )
-                            .await
-                            {
-                                ctx.history_messages = result.new_history;
-                                ctx.context_messages = result.kept_context;
-                                changed = true;
-                            }
-                            if let Some(merged) = crate::api::compact::maybe_compact_history(
-                                &client,
-                                &model,
-                                &ctx.history_messages,
-                                &thresholds,
-                            )
-                            .await
-                            {
-                                ctx.history_messages = merged;
-                                changed = true;
-                            }
-                            if !changed {
-                                break;
-                            }
-                        }
-                        ctx.save_to(&wd, &role).await;
+                        crate::api::compact::compact_and_save(
+                            &client,
+                            &model,
+                            &mut ctx,
+                            &thresholds,
+                            true,
+                            &wd,
+                            &role,
+                        )
+                        .await;
                     })
                 }),
                 40,
@@ -562,7 +515,7 @@ impl Agent for NeigeAgent {
                     }
                     current_skill = skill_name.clone();
                     log_console!("[内阁] replace skill: {}", skill_name);
-                    session.replace_skill(
+                    session.inject_skill(
                         &skill_name,
                         &Self::load_skill(&skill_name, &working_dir).await,
                     );

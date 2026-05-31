@@ -45,14 +45,15 @@ write_heavy = 60
 document_heavy = 100
 
 [context_compaction]
-# 触发压缩的字符数阈值（约 40k tokens）；未在代码内置列表中的角色使用此值
-char_threshold = 80000
+# DeepSeek 1M 窗口：接近上限再压缩（cl100k token 计数，仅 context_messages 层）
+# 750k tokens 对话层 + system/tools/输出余量；未在内置列表中的角色使用此值
+token_threshold = 750000
 
 # 压缩后保留的最近消息数
-keep_recent_count = 10
+keep_recent_count = 24
 
-# 历史消息压缩的字符数阈值
-history_char_threshold = 2000
+# 关闭 mid-run 压缩：与「接近窗口再压」策略一致，避免 tool loop 中途改写持久化上下文
+mid_run_compact = false
 
 [actor]
 # 单个 actor 执行的最大迭代次数

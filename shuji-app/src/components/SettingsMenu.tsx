@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { getConfig, saveConfig, getContextConfig, saveContextConfig, checkApiConnection, getWorkflowPreset as apiGetPreset, setWorkflowPreset as apiSetPreset } from "../api";
 import { ALL_ROLES, CODE_THEMES, ROLE_CONTEXT_DEFAULTS, getCodeTheme, setCodeTheme as persistCodeTheme } from "../constants";
-import type { RoleEndpoint, ContextWindowConfig } from "../types";
+import type { RoleEndpoint, ContextWindowConfig, RoleContextConfig } from "../types";
 
 // ── Provider presets (shared with SetupPage) ───────────────
 
@@ -34,16 +34,16 @@ const DEFAULT_EMPTY: RoleFormState = { api_key: "", api_url: "", model: "" };
 // ── Context window config ──────────────────────────────────
 
 interface ContextRoleForm {
-  char_threshold: number;
+  token_threshold: number;
   keep_recent_count: number;
   mid_run_compact: boolean;
 }
 
 /// Matches default values in config/mod.rs
 const DEFAULT_CONTEXT_VALUES: ContextRoleForm = {
-  char_threshold: 80_000,
-  keep_recent_count: 10,
-  mid_run_compact: true,
+  token_threshold: 750_000,
+  keep_recent_count: 24,
+  mid_run_compact: false,
 };
 
 function initRoleConfigs(cfg: Record<string, RoleEndpoint>): {
@@ -106,7 +106,17 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
         if (role.key === "default") continue;
         // 运行时 lookup 使用中文部门名（role.label）
         if (roles[role.label]) {
-          overrides[role.key] = roles[role.label] as ContextRoleForm;
+          const raw = roles[role.label] as RoleContextConfig & {
+            char_threshold?: number;
+          };
+          overrides[role.key] = {
+            token_threshold:
+              raw.token_threshold ?? raw.char_threshold ?? DEFAULT_CONTEXT_VALUES.token_threshold,
+            keep_recent_count:
+              raw.keep_recent_count ?? DEFAULT_CONTEXT_VALUES.keep_recent_count,
+            mid_run_compact:
+              raw.mid_run_compact ?? DEFAULT_CONTEXT_VALUES.mid_run_compact,
+          };
           useDefault[role.key] = false;
         } else {
           useDefault[role.key] = true;
@@ -150,7 +160,11 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
         setContextOverrides((o) => ({
           ...o,
           [roleKey]: preset
-            ? { char_threshold: preset.char_threshold, keep_recent_count: preset.keep_recent_count, mid_run_compact: preset.mid_run_compact }
+            ? {
+                token_threshold: preset.token_threshold,
+                keep_recent_count: preset.keep_recent_count,
+                mid_run_compact: preset.mid_run_compact,
+              }
             : { ...DEFAULT_CONTEXT_VALUES },
         }));
       }
@@ -173,7 +187,7 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
     if (role && ROLE_CONTEXT_DEFAULTS[role.label]) {
       const d = ROLE_CONTEXT_DEFAULTS[role.label];
       return {
-        char_threshold: d.char_threshold,
+        token_threshold: d.token_threshold,
         keep_recent_count: d.keep_recent_count,
         mid_run_compact: d.mid_run_compact,
       };
@@ -325,7 +339,7 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
           <div className="space-y-0.5 pt-2 border-t border-ink-700">
             <span className="text-[11px] font-semibold text-ink-300">上下文窗口配置</span>
             <div className="text-[10px] text-ink-500 px-1 pb-1">
-              全局回退: {DEFAULT_CONTEXT_VALUES.char_threshold.toLocaleString()} 字符 · 各部门已内置推荐默认值（见 context_config.example.json）
+              全局回退: {DEFAULT_CONTEXT_VALUES.token_threshold.toLocaleString()} tokens · cl100k · DeepSeek 1M 接近上限再压缩
             </div>
             {roleList.map((r) => {
               const isExpanded = expandedRole === r.key;
@@ -348,20 +362,20 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
                     </label>
                     <span className="flex-1 text-left">{r.label}</span>
                     <span className="text-[10px] text-ink-500 italic">
-                      {effectiveContext(r.key).char_threshold.toLocaleString()} 字符
+                      {effectiveContext(r.key).token_threshold.toLocaleString()} tokens
                     </span>
                   </button>
                   {isExpanded && (
                     <div className="px-2 pb-2 space-y-1">
                       {usingDefault ? (
                         <div className="text-[10px] text-ink-500 italic px-1 py-2">
-                          使用部门内置推荐值（{effectiveContext(r.key).char_threshold.toLocaleString()} 字符，保留 {effectiveContext(r.key).keep_recent_count} 条）
+                          使用部门内置推荐值（{effectiveContext(r.key).token_threshold.toLocaleString()} tokens，保留 {effectiveContext(r.key).keep_recent_count} 条）
                           <br />
                           取消勾选"使用默认"可单独覆盖
                         </div>
                       ) : (
                         <>
-                          <ContextInput label="压缩阈值（字符）" value={contextOverrides[r.key]?.char_threshold ?? effectiveContext(r.key).char_threshold} onChange={(v) => setContextOverride(r.key, "char_threshold", v)} />
+                          <ContextInput label="压缩阈值（tokens）" value={contextOverrides[r.key]?.token_threshold ?? effectiveContext(r.key).token_threshold} onChange={(v) => setContextOverride(r.key, "token_threshold", v)} />
                           <ContextInput label="保留最近消息数" value={contextOverrides[r.key]?.keep_recent_count ?? effectiveContext(r.key).keep_recent_count} onChange={(v) => setContextOverride(r.key, "keep_recent_count", v)} />
                           <label className="flex items-center gap-2 py-1">
                             <span className="text-[10px] text-ink-500">mid-run compact</span>

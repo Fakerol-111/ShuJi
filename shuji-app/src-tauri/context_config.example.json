@@ -1,65 +1,55 @@
 {
-  "_comment": "复制到项目根目录为 context_config.json 可覆盖内置部门默认值。键名必须为中文部门名。",
+  "_comment": "复制到项目根目录为 context_config.json 可覆盖内置部门默认值。键名必须为中文部门名。旧字段 char_threshold 仍兼容。",
   "roles": {
     "工部": {
-      "char_threshold": 120000,
-      "keep_recent_count": 16,
-      "history_char_threshold": 3500,
-      "mid_run_compact": true
+      "token_threshold": 750000,
+      "keep_recent_count": 24,
+      "mid_run_compact": false
     },
     "刑部": {
-      "char_threshold": 110000,
-      "keep_recent_count": 14,
-      "history_char_threshold": 3500,
-      "mid_run_compact": true
+      "token_threshold": 750000,
+      "keep_recent_count": 24,
+      "mid_run_compact": false
     },
     "中书令": {
-      "char_threshold": 100000,
-      "keep_recent_count": 12,
-      "history_char_threshold": 3000,
-      "mid_run_compact": true
+      "token_threshold": 750000,
+      "keep_recent_count": 24,
+      "mid_run_compact": false
     },
     "吏部": {
-      "char_threshold": 100000,
-      "keep_recent_count": 12,
-      "history_char_threshold": 3000,
-      "mid_run_compact": true
+      "token_threshold": 750000,
+      "keep_recent_count": 24,
+      "mid_run_compact": false
     },
     "内阁": {
-      "char_threshold": 100000,
-      "keep_recent_count": 14,
-      "history_char_threshold": 4000,
-      "mid_run_compact": true
+      "token_threshold": 750000,
+      "keep_recent_count": 24,
+      "mid_run_compact": false
     },
     "兵部": {
-      "char_threshold": 85000,
-      "keep_recent_count": 10,
-      "history_char_threshold": 2500,
-      "mid_run_compact": true
+      "token_threshold": 750000,
+      "keep_recent_count": 24,
+      "mid_run_compact": false
     },
     "门下侍中": {
-      "char_threshold": 70000,
-      "keep_recent_count": 8,
-      "history_char_threshold": 2000,
-      "mid_run_compact": true
+      "token_threshold": 750000,
+      "keep_recent_count": 24,
+      "mid_run_compact": false
     },
     "制司": {
-      "char_threshold": 65000,
-      "keep_recent_count": 8,
-      "history_char_threshold": 2000,
-      "mid_run_compact": true
+      "token_threshold": 750000,
+      "keep_recent_count": 24,
+      "mid_run_compact": false
     },
     "尚书令": {
-      "char_threshold": 55000,
-      "keep_recent_count": 6,
-      "history_char_threshold": 1500,
-      "mid_run_compact": true
+      "token_threshold": 750000,
+      "keep_recent_count": 24,
+      "mid_run_compact": false
     },
     "礼部": {
-      "char_threshold": 50000,
-      "keep_recent_count": 6,
-      "history_char_threshold": 1500,
-      "mid_run_compact": true
+      "token_threshold": 750000,
+      "keep_recent_count": 24,
+      "mid_run_compact": false
     }
   }
 }

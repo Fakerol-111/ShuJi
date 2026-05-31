@@ -263,20 +263,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
             msg.subject().to_string()
         };
 
-        // ── Build context (only 内阁 gets talk history + skill prompts) ──
-        let skill_prompts: Vec<String> = if ctx.role == crate::models::role::Role::Neige {
-            let mut prompts = Vec::new();
-            let skill_name = ctx.current_skill.lock().ok().and_then(|s| s.clone());
-            if let Some(name) = skill_name {
-                let content =
-                    crate::agent::neige::NeigeAgent::load_skill(&name, &ctx.working_dir).await;
-                prompts.push(format!("[skill: {}]\n{}", name, content));
-            }
-            prompts
-        } else {
-            vec![]
-        };
-
+        // ── Build context (only 内阁 gets talk history) ──
         let mut context_msgs = Vec::new();
         if ctx.role == crate::models::role::Role::Neige {
             // Talk: full conversation with emperor
@@ -379,7 +366,6 @@ pub async fn run_actor(mut ctx: ActorContext) {
                 context_messages: context_msgs.clone(),
                 project_dir: ctx.project_dir.clone(),
                 working_dir: ctx.working_dir.clone(),
-                skill_prompts: skill_prompts.clone(),
                 current_skill,
                 resume_paused: paused_for_decision,
                 context_window_config: context_config.clone(),
