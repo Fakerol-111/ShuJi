@@ -50,7 +50,7 @@ jobs:
       - name: Run unit tests
         run: cd shuji-app/src-tauri && cargo test --lib
       - name: Run integration tests
-        run: cd shuji-app/src-tauri && cargo test --tests -- --skip expand_requirements
+        run: cd shuji-app/src-tauri && RUST_BACKTRACE=1 cargo test --tests -- --skip expand_requirements --test-threads=1
 
   frontend:
     runs-on: ubuntu-latest
