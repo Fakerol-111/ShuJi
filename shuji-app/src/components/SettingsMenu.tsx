@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { getConfig, saveConfig, getContextConfig, saveContextConfig, checkApiConnection, getWorkflowPreset as apiGetPreset, setWorkflowPreset as apiSetPreset } from "../api";
+import { getConfig, saveConfig, getContextConfig, saveContextConfig, checkApiConnection, getWorkflowPreset as apiGetPreset, setWorkflowPreset as apiSetPreset, getModelPreset, setModelPreset } from "../api";
 import { ALL_ROLES, CODE_THEMES, ROLE_CONTEXT_DEFAULTS, getCodeTheme, setCodeTheme as persistCodeTheme } from "../constants";
 import type { RoleEndpoint, ContextWindowConfig, RoleContextConfig } from "../types";
 
@@ -82,6 +82,7 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
   const [healthStatus, setHealthStatus] = useState<"idle" | "checking" | "ok" | "fail">("idle");
   const [healthMsg, setHealthMsg] = useState("");
   const [workflowPreset, setWorkflowPresetLocal] = useState("standard");
+  const [modelPreset, setModelPresetLocal] = useState("balanced");
   const [codeTheme, setCodeThemeLocal] = useState(getCodeTheme);
 
   // Context window config state
@@ -131,13 +132,19 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
     apiGetPreset().then(setWorkflowPresetLocal).catch(() => setWorkflowPresetLocal("standard"));
   };
 
+  const loadModelPreset = () => {
+    getModelPreset().then(setModelPresetLocal).catch(() => setModelPresetLocal("balanced"));
+  };
+
   const toggle = () => {
-    if (!open) { loadConfig(); loadContextConfig(); loadWorkflowPreset(); }
+    if (!open) { loadConfig(); loadContextConfig(); loadWorkflowPreset(); loadModelPreset(); }
     setOpen(!open);
   };
 
   const setOverride = (role: string, field: keyof RoleFormState, value: string) => {
     setOverrides((prev) => ({ ...prev, [role]: { ...(prev[role] ?? defaultCfg), [field]: value } }));
+    // Manual override → mark preset as custom
+    setModelPresetLocal("custom");
   };
 
   const toggleDefault = (role: string) => {
@@ -206,6 +213,8 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
         }
       }
       await saveConfig({ roles });
+      // Apply model preset (updates per-role model fields)
+      await setModelPreset(modelPreset).catch(() => {});
 
       // Save context window config
       const ctxRoles: Record<string, ContextRoleForm> = {};
@@ -491,6 +500,44 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
                 fast: "跳过设计/审查，直达执行。适合小改动。",
                 audit: "强制审查和规范检查。适合合规场景。",
               }[workflowPreset]}
+            </div>
+          </div>
+
+          {/* ── Model preset ── */}
+          <div className="space-y-1 pt-2 border-t border-ink-700">
+            <span className="text-[11px] font-semibold text-ink-300">模型分级预设</span>
+            <div className="flex gap-1 flex-wrap items-center">
+              {[
+                { key: "balanced", label: "均衡" },
+                { key: "economy", label: "经济" },
+                { key: "quality", label: "质量" },
+              ].map((p) => (
+                <button
+                  key={p.key}
+                  onClick={() => { setModelPresetLocal(p.key); }}
+                  className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${
+                    modelPreset === p.key
+                      ? "bg-ink-700 text-ink-100 border-ink-600"
+                      : "bg-ink-800 text-ink-400 border-ink-700 hover:border-ink-500"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+              {modelPreset === "custom" && (
+                <span className="text-[10px] text-ink-400 italic px-1">自定义</span>
+              )}
+            </div>
+            <div className="text-[10px] text-ink-500 px-1">
+              {{
+                balanced: "全部部门使用同一模型（默认）",
+                economy: "审查/检查部门用轻量模型，设计/编码用默认",
+                quality: "设计/编码部门用最强模型，其余用默认",
+                custom: "已手动修改部门模型配置",
+              }[modelPreset] || ""}
+            </div>
+            <div className="text-[10px] text-ink-400 px-1">
+              切换预设会覆盖相关角色的 model 字段，不改 API URL/Key。
             </div>
           </div>
 

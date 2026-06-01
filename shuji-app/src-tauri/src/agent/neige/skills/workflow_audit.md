@@ -1,6 +1,6 @@
 # Audit Workflow
 
-Use this workflow for code audit, security review, or compliance inspection. Unlike standard execution workflows, audit is inspection-driven: 礼部 leads the review, and 制司 provides independent investigation support.
+Use this workflow for code audit, security review, or compliance inspection. Unlike standard execution workflows, audit is inspection-driven: 礼部 leads the review with compliance check and behavioral analysis.
 
 ## Goal
 
@@ -17,16 +17,15 @@ Use this mode when the emperor asks to:
 
 ## Workflow intent
 
-Inspection-first, with optional fix follow-up: 礼部 leads the audit → 制司 performs independent investigation → findings compiled into report → emperor decides on fixes.
+Inspection-first, with optional fix follow-up: 礼部 performs the audit → findings compiled into report → emperor decides on fixes.
 
 ## Steps
 
 1. Create a task record with audit scope, focus areas, and any specific concerns
-2. Route to `礼部` for standards check + test coverage audit + behavioral review. 礼部 reads all relevant precepts, contracts, designs, and source files, then produces an audit report.
-3. In parallel or after, route to `制司` for independent investigation — 制司 checks for unauthorized actions, permission violations, and suspicious patterns that 礼部 might not catch
-4. When both reports return, compile findings into a summary for the emperor. Use `<options>` to let the emperor decide: approve as-is, or route fixes to `尚书令`.
-5. If the emperor orders fixes, route to `尚书令` for execution
-6. After fixes, optionally re-audit the changed files
+2. Route to `礼部` for standards check + test coverage audit + behavioral review + security-sensitive pattern inspection. 礼部 reads all relevant precepts, contracts, designs, and source files, then produces an audit report.
+3. When the report returns, compile findings into a summary for the emperor. Use `<options>` to let the emperor decide: approve as-is, or route fixes to `尚书令`.
+4. If the emperor orders fixes, route to `尚书令` for execution
+5. After fixes, optionally re-audit the changed files
 
 ## 礼部 audit scope
 
@@ -35,27 +34,18 @@ Inspection-first, with optional fix follow-up: 礼部 leads the audit → 制司
 - Test coverage audit
 - Behavioral consistency review (implementation vs design)
 - Security-sensitive patterns (hardcoded credentials, unsafe input handling, etc.)
-
-## 制司 investigation scope
-
-制司 checks:
-- Whether departments stayed within their authority
-- Whether any file writes occurred outside authorized directories
-- Suspicious patterns or potential backdoors
-- Permission and access control issues
+- Permission and access control review
 
 ## Routing policy
 
 - Standards audit → `route_to(to="礼部", subject="{id}")`
-- Independent investigation → `route_to(to="制司", subject="{id}")`
 - Fix execution (if ordered) → `route_to(to="尚书令", subject="{id}")`
 
-Note: For audit, 内阁 routes directly to 礼部 and 制司 — this is inspection, not execution dispatch. 尚书令 is only involved if the emperor decides to fix issues.
+Note: For audit, 内阁 routes directly to 礼部 — this is inspection, not execution dispatch. 尚书令 is only involved if the emperor decides to fix issues.
 
 ## Rules
 
 - `route_to` and `<options>` are mutually exclusive in a single turn
-- 礼部 and 制司 can be dispatched in parallel (independent tasks)
 - Do not auto-route fixes without imperial decision
 - Audit reports must be presented to the emperor before any action is taken
 - If no issues are found, report the clean audit and close

@@ -1,6 +1,6 @@
 # Bug Diagnosis
 
-Use this mode to independently diagnose a bug through systematic code reading. This is the 中书令-side diagnostic capability — distinct from 制司's independent investigation role in the bugfix workflow.
+Use this mode to independently diagnose a bug through systematic code reading. This is the 中书令-side diagnostic capability used when the bug may have architectural root causes.
 
 ## When to use
 
@@ -8,7 +8,7 @@ Use this mode to independently diagnose a bug through systematic code reading. T
 - The bug may have architectural root causes rather than local implementation errors
 - A broader system understanding is needed to trace the issue across modules
 
-Note: For runtime bug diagnosis in the `workflow_bugfix` flow, 内阁 routes to 制司. 中书令 diagnosis is used when the bug likely involves design-level issues or cross-module architecture problems.
+Note: For runtime bug diagnosis in the `workflow_bugfix` flow, 内阁 routes to 尚书令 for end-to-end diagnosis and fix. 中书令 diagnosis is used when the bug likely involves design-level issues or cross-module architecture problems.
 
 ## Working method
 

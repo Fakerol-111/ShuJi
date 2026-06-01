@@ -122,6 +122,7 @@ export interface RoleEndpoint {
 }
 
 export interface AppConfig {
+  preset?: string;
   roles: Record<string, RoleEndpoint>;
 }
 

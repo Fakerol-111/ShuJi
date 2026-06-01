@@ -105,7 +105,6 @@ export const ALL_ROLES: RoleInfo[] = [
   { key: "bingbushangshu", label: "兵部", description: "测试" },
   { key: "xingbushangshu", label: "刑部", description: "异常检查" },
   { key: "gongbushangshu", label: "工部", description: "编码实现" },
-  { key: "zhisi", label: "制司", description: "独立调查" },
 ];
 
 /** DeepSeek 1M 窗口：接近上限再压缩（cl100k token 计数，各部门统一） */
@@ -127,7 +126,6 @@ export const ROLE_CONTEXT_DEFAULTS: Record<
   内阁: { ...NEAR_WINDOW_CONTEXT },
   兵部: { ...NEAR_WINDOW_CONTEXT },
   门下侍中: { ...NEAR_WINDOW_CONTEXT },
-  制司: { ...NEAR_WINDOW_CONTEXT },
   尚书令: { ...NEAR_WINDOW_CONTEXT },
   礼部: { ...NEAR_WINDOW_CONTEXT },
 };

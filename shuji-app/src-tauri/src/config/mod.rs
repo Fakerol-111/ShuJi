@@ -414,8 +414,9 @@ fn near_window_compact_thresholds() -> CompactThresholds {
 /// 无 `context_config.json` 覆盖时生效。
 pub fn default_compact_thresholds_for_role(role_name: &str) -> Option<CompactThresholds> {
     match role_name {
-        "工部" | "刑部" | "中书令" | "吏部" | "内阁" | "兵部" | "门下侍中" | "制司" | "尚书令"
-        | "礼部" => Some(near_window_compact_thresholds()),
+        "工部" | "刑部" | "中书令" | "吏部" | "内阁" | "兵部" | "门下侍中" | "尚书令" | "礼部" => {
+            Some(near_window_compact_thresholds())
+        }
         _ => None,
     }
 }

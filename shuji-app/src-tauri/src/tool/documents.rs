@@ -124,7 +124,6 @@ fn dept_to_author(dept: &str) -> &'static str {
         "gongbushangshu" => "工部",
         "xingbushangshu" => "刑部",
         "liburshangshu" => "礼部",
-        "zhisi" => "制司",
         "hubu" => "户部",
         _ => "未知",
     }

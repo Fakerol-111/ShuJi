@@ -203,3 +203,174 @@ async fn test_workflow_demo_e2e() {
         queue.remaining()
     );
 }
+
+#[tokio::test]
+async fn test_workflow_demo_blocks_zhongshuling() {
+    // 验证：workflow_demo 模式下 route_to 中书令被技能短路拦截，
+    // LLM 应纠正为路由到尚书令。
+    let mock_server = wiremock::MockServer::start().await;
+    let api_url = format!("{}/chat/completions", mock_server.uri());
+    let api_key = "test-key".to_string();
+
+    let runtime_config = Arc::new({
+        let mut c = RuntimeConfig::default();
+        c.checkpoint.interval_secs = 0;
+        c.api.max_retries = 0;
+        c.api.timeout_secs = 30;
+        c
+    });
+
+    // Mock 序列:
+    //   1. 内阁 skill detection → <skill>workflow_demo</skill>
+    //   2. 内阁 create_document
+    //   3. 内阁 route_to(中书令) → 被技能短路拦截
+    //   4. 内阁 route_to(尚书令) → 允许 → Routed
+    let queue = MockQueue::new(vec![
+        mock_api_text("<skill>workflow_demo</skill>"),
+        mock_api_tool(
+            "create_document",
+            serde_json::json!({
+                "type": "task",
+                "refs": []
+            }),
+        ),
+        mock_api_tool(
+            "route_to",
+            serde_json::json!({
+                "to": "中书令",
+                "subject": "task_0"
+            }),
+        ),
+        mock_api_tool(
+            "route_to",
+            serde_json::json!({
+                "to": "尚书令",
+                "subject": "task_0"
+            }),
+        ),
+    ])
+    .mount(&mock_server)
+    .await;
+
+    let temp = create_test_project("demo_block_zhongshuling");
+    let working_dir = temp.path().to_path_buf();
+
+    let cancel = Arc::new(AtomicBool::new(false));
+    let neige = NeigeAgent::new(
+        AnthropicClient::new(api_key, api_url),
+        "test-model",
+        cancel,
+        None,
+        None,
+    );
+
+    let neige_input = AgentInput {
+        role: Role::Neige,
+        task_description: "创建一个 greeting.py 文件，输出 'Hello World'".into(),
+        context_messages: vec![],
+        project_dir: working_dir.clone(),
+        working_dir: working_dir.clone(),
+        current_skill: None,
+        resume_paused: false,
+        context_window_config: Arc::new(HashMap::new()),
+        runtime_config: runtime_config.clone(),
+        discuss_mode: false,
+        fast_cancel: Arc::new(AtomicBool::new(false)),
+    };
+
+    let neige_output = neige
+        .execute(&neige_input)
+        .await
+        .expect("内阁 execute 失败");
+
+    // 断言：最终路由到尚书令（而非中书令）
+    assert!(neige_output.route.is_some(), "应有路由指令");
+    let route = neige_output.route.as_ref().unwrap();
+    assert_eq!(
+        route.target,
+        Role::Shangshuling,
+        "workflow_demo 下 route_to 中书令应被拦截，最终应路由到尚书令"
+    );
+    assert_eq!(route.subject, "task_0");
+
+    assert_eq!(
+        queue.remaining(),
+        0,
+        "所有 mock 响应应被消费（剩余 {} 个）",
+        queue.remaining()
+    );
+}
+
+#[tokio::test]
+async fn test_workflow_standard_allows_zhongshuling() {
+    // 验证：workflow_standard 模式下 route_to 中书令不受影响
+    let mock_server = wiremock::MockServer::start().await;
+    let api_url = format!("{}/chat/completions", mock_server.uri());
+    let api_key = "test-key".to_string();
+
+    let runtime_config = Arc::new({
+        let mut c = RuntimeConfig::default();
+        c.checkpoint.interval_secs = 0;
+        c.api.max_retries = 0;
+        c.api.timeout_secs = 30;
+        c
+    });
+
+    let queue = MockQueue::new(vec![mock_api_tool(
+        "route_to",
+        serde_json::json!({
+            "to": "中书令",
+            "subject": "task_0"
+        }),
+    )])
+    .mount(&mock_server)
+    .await;
+
+    let temp = create_test_project("standard_zhongshuling");
+    let working_dir = temp.path().to_path_buf();
+
+    let cancel = Arc::new(AtomicBool::new(false));
+    let neige = NeigeAgent::new(
+        AnthropicClient::new(api_key, api_url),
+        "test-model",
+        cancel,
+        None,
+        None,
+    );
+
+    let neige_input = AgentInput {
+        role: Role::Neige,
+        task_description: "设计用户模块的整体架构，包含登录注册功能".into(),
+        context_messages: vec![],
+        project_dir: working_dir.clone(),
+        working_dir: working_dir.clone(),
+        current_skill: Some("workflow_standard".into()),
+        resume_paused: false,
+        context_window_config: Arc::new(HashMap::new()),
+        runtime_config: runtime_config.clone(),
+        discuss_mode: false,
+        fast_cancel: Arc::new(AtomicBool::new(false)),
+    };
+
+    let neige_output = neige
+        .execute(&neige_input)
+        .await
+        .expect("内阁 execute 失败");
+
+    // 断言：workflow_standard 下路由到中书令不被拦截
+    assert!(neige_output.route.is_some(), "应有路由指令");
+    let route = neige_output.route.as_ref().unwrap();
+    assert_eq!(
+        route.target,
+        Role::Zhongshuling,
+        "workflow_standard 下 route_to 中书令应被允许"
+    );
+    assert_eq!(route.subject, "task_0");
+
+    assert_eq!(
+        queue.remaining(),
+        0,
+        "所有 mock 响应应被消费（剩余 {} 个）",
+        queue.remaining()
+    );
+}

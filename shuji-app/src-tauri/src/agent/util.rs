@@ -77,7 +77,6 @@ fn extract_route_lenient(text: &str) -> Option<(Role, String)> {
         "工部",
         "刑部",
         "礼部",
-        "制司",
     ];
     for role_name in known_roles {
         if text.contains(role_name) {

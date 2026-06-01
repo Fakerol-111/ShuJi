@@ -16,7 +16,6 @@ use crate::agent::neige::NeigeAgent;
 use crate::agent::r#trait::{Agent, AgentInput};
 use crate::agent::shangshuling::ShangshulingAgent;
 use crate::agent::xingbushangshu::XingbuShangshuAgent;
-use crate::agent::zhisi::ZhisiAgent;
 use crate::agent::zhongshuling::ZhongshulingAgent;
 use crate::api::client::AnthropicClient;
 use crate::api::control::RouteMsgType;
@@ -91,7 +90,6 @@ fn build_agents(
         (Role::GongbuShangshu, "gongbushangshu"),
         (Role::XingbuShangshu, "xingbushangshu"),
         (Role::LiBuRShangshu, "liburshangshu"),
-        (Role::Zhisi, "zhisi"),
         (Role::Shangshuling, "shangshuling"),
     ];
 
@@ -114,7 +112,6 @@ fn build_agents(
             Role::LiBuRShangshu => {
                 Box::new(LibuRShangshuAgent::new(client, &ep.model, cancel.clone()))
             }
-            Role::Zhisi => Box::new(ZhisiAgent::new(client, &ep.model, cancel.clone())),
             Role::Shangshuling => {
                 Box::new(ShangshulingAgent::new(client, &ep.model, cancel.clone()))
             }
@@ -157,7 +154,6 @@ async fn start_actor_system(
         Role::GongbuShangshu,
         Role::XingbuShangshu,
         Role::LiBuRShangshu,
-        Role::Zhisi,
     ];
     let mut fast_txs: HashMap<Role, mpsc::UnboundedSender<FastMessage>> = HashMap::new();
     let mut fast_rxs: HashMap<Role, tokio::sync::Mutex<mpsc::UnboundedReceiver<FastMessage>>> =
@@ -836,6 +832,24 @@ pub async fn cancel_processing(state: State<'_, AppState>) -> Result<(), String>
     }
 
     Ok(())
+}
+
+/// Get the list of document IDs pending emperor approval (朱批).
+#[tauri::command]
+pub async fn get_pending_approvals(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let working_dir = {
+        let project_opt = state.current_project.lock().await;
+        project_opt
+            .as_ref()
+            .ok_or_else(|| friendly_error("没有加载项目"))?
+            .working_dir
+            .clone()
+    };
+    let path = std::path::Path::new(&working_dir).join(".shuji/pending_approvals.json");
+    match tokio::fs::read_to_string(&path).await {
+        Ok(content) => serde_json::from_str(&content).map_err(|e| e.to_string()),
+        Err(_) => Ok(vec![]),
+    }
 }
 
 /// Get the current round metrics (live workflow state).

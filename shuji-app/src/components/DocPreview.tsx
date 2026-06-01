@@ -1,13 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { readShujiDoc, setDocumentStatus as apiSetStatus, sendMessage } from "../api";
+import { readShujiDoc, setDocumentStatus as apiSetStatus, sendMessage, getDocumentDiff } from "../api";
+import type { DocumentDiff } from "../api";
 import { Card } from "./ui/Card";
 
 interface DocPreviewProps {
   projectDir: string;
   docPath: string;
 }
+
+type ViewMode = "content" | "diff";
+
+const REJECTION_REASONS = [
+  { label: "缺少 API 定义", value: "缺少 API 定义" },
+  { label: "缺少测试策略", value: "缺少测试策略" },
+  { label: "范围过大需拆分", value: "范围过大需拆分" },
+  { label: "自定义", value: "" },
+];
 
 export default function DocPreview({ projectDir, docPath }: DocPreviewProps) {
   const [content, setContent] = useState("");
@@ -16,15 +26,27 @@ export default function DocPreview({ projectDir, docPath }: DocPreviewProps) {
   const [approving, setApproving] = useState(false);
   const [approvalError, setApprovalError] = useState("");
   const [comment, setComment] = useState("");
+  const [viewMode, setViewMode] = useState<ViewMode>("content");
+  const [diffData, setDiffData] = useState<DocumentDiff | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
 
   useEffect(() => {
     setLoading(true);
     setError("");
     setApprovalError("");
+    setDiffData(null);
+    setViewMode("content");
     readShujiDoc(projectDir, docPath)
       .then((doc) => setContent(doc.content))
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
+
+    // Fetch diff in parallel
+    setDiffLoading(true);
+    getDocumentDiff(projectDir, docPath)
+      .then((d) => setDiffData(d))
+      .catch(() => { /* diff is optional, silently fail */ })
+      .finally(() => setDiffLoading(false));
   }, [projectDir, docPath]);
 
   const isShujiMarkdown = docPath.startsWith(".shuji/") && docPath.endsWith(".md");
@@ -38,16 +60,23 @@ export default function DocPreview({ projectDir, docPath }: DocPreviewProps) {
     setApproving(true);
     setApprovalError("");
     try {
-      const msg = status === "approved" ? `朕已御批。${comment ? " " + comment : ""}` : `驳回。${comment ? " " + comment : ""}`;
+      const msg = status === "approved"
+        ? `朕已御批。${comment ? " " + comment : ""}`
+        : `驳回。${comment ? " " + comment : ""}`;
       await apiSetStatus(docId, status, comment || undefined);
       await sendMessage(msg);
-      // Re-fetch to update banner status
       const doc = await readShujiDoc(projectDir, docPath);
       setContent(doc.content);
     } catch (e) {
       setApprovalError(String(e));
     } finally {
       setApproving(false);
+    }
+  };
+
+  const insertRejectionReason = (reason: string) => {
+    if (reason) {
+      setComment(reason);
     }
   };
 
@@ -63,6 +92,35 @@ export default function DocPreview({ projectDir, docPath }: DocPreviewProps) {
               {i > 0 && <span className="mx-1 text-ink-300">/</span>}{p}
             </span>
           ))}
+        </div>
+
+        {/* ── View toggle tabs ── */}
+        <div className="mb-4 flex gap-1 border-b border-fold">
+          <button
+            onClick={() => setViewMode("content")}
+            className={`px-4 py-2 text-ui font-bold rounded-t-lg transition -mb-px border-b-2 ${
+              viewMode === "content"
+                ? "border-vermillion text-ink-900"
+                : "border-transparent text-ink-400 hover:text-ink-600"
+            }`}
+          >
+            全文
+          </button>
+          {(diffData?.has_previous) && (
+            <button
+              onClick={() => setViewMode("diff")}
+              className={`px-4 py-2 text-ui font-bold rounded-t-lg transition -mb-px border-b-2 ${
+                viewMode === "diff"
+                  ? "border-vermillion text-ink-900"
+                  : "border-transparent text-ink-400 hover:text-ink-600"
+              }`}
+            >
+              差异
+              <span className="ml-1.5 text-caption text-ink-400">
+                +{diffData!.added}/-{diffData!.removed}
+              </span>
+            </button>
+          )}
         </div>
 
         {/* ── "待陛下朱批" banner ── */}
@@ -90,28 +148,89 @@ export default function DocPreview({ projectDir, docPath }: DocPreviewProps) {
                 </button>
               </div>
             </div>
-            <div className="mt-2">
+            <div className="mt-2 flex gap-2">
               <input
                 type="text"
                 placeholder="御批备注（可选）..."
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-                className="w-full px-3 py-1.5 border border-fold rounded-lg text-body bg-surface-parchment"
+                className="flex-1 px-3 py-1.5 border border-fold rounded-lg text-body bg-surface-parchment"
               />
+              <select
+                onChange={(e) => insertRejectionReason(e.target.value)}
+                value=""
+                className="px-2 py-1.5 border border-fold rounded-lg text-caption bg-surface-parchment text-ink-600"
+              >
+                <option value="" disabled>驳回模板</option>
+                {REJECTION_REASONS.map((r) => (
+                  <option key={r.value || "__custom"} value={r.value}>{r.label}</option>
+                ))}
+              </select>
             </div>
             {approvalError && <p className="text-caption text-vermillion mt-1">{approvalError}</p>}
           </div>
         )}
 
-        {isShujiMarkdown && parsed.meta && <FrontmatterCard meta={parsed.meta} />}
-
-        {isMarkdown ? (
-          <article className="prose prose-shuji max-w-none">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{(isShujiMarkdown ? parsed.body : content) || "_文件为空_"}</ReactMarkdown>
-          </article>
+        {viewMode === "diff" && diffData ? (
+          <DiffView diff={diffData.diff} />
+        ) : diffLoading ? (
+          <div className="p-6 text-body text-ink-400">加载差异中…</div>
         ) : (
-          <CodePreview content={content} path={docPath} />
+          <>
+            {isShujiMarkdown && parsed.meta && <FrontmatterCard meta={parsed.meta} />}
+            {isMarkdown ? (
+              <article className="prose prose-shuji max-w-none">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{(isShujiMarkdown ? parsed.body : content) || "_文件为空_"}</ReactMarkdown>
+              </article>
+            ) : (
+              <CodePreview content={content} path={docPath} />
+            )}
+          </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function DiffView({ diff }: { diff: string }) {
+  if (!diff) {
+    return <div className="p-6 text-body text-ink-400 text-center">无差异内容</div>;
+  }
+
+  const lines = diff.split("\n");
+
+  return (
+    <div className="rounded-xl border overflow-hidden shadow-sm" style={{ borderColor: "var(--code-border)", backgroundColor: "var(--code-bg)" }}>
+      <div className="h-9 flex items-center px-3 text-[11px] font-mono" style={{ backgroundColor: "var(--code-tab-bg)", borderBottom: "1px solid var(--code-border)", color: "var(--code-muted)" }}>
+        <span>Unified Diff</span>
+      </div>
+      <div className="overflow-auto max-h-[calc(100vh-190px)] text-[13px] leading-[22px] font-[Cascadia_Code,JetBrains_Mono,Consolas,Menlo,Monaco,monospace]">
+        <table className="w-full border-separate border-spacing-0">
+          <tbody>
+            {lines.map((line, i) => {
+              let bgColor = "transparent";
+              let textColor = "var(--code-text)";
+              if (line.startsWith("+") && !line.startsWith("+++")) {
+                bgColor = "rgba(34,197,94,0.10)";
+                textColor = "#16a34a";
+              } else if (line.startsWith("-") && !line.startsWith("---")) {
+                bgColor = "rgba(239,68,68,0.10)";
+                textColor = "#dc2626";
+              } else if (line.startsWith("@@")) {
+                textColor = "var(--code-line-num)";
+              } else if (line.startsWith("---") || line.startsWith("+++")) {
+                textColor = "var(--code-line-num)";
+              }
+              return (
+                <tr key={i} style={{ backgroundColor: bgColor }}>
+                  <td className="pl-4 pr-6 whitespace-pre align-top" style={{ color: textColor }}>
+                    {line || " "}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -143,7 +262,7 @@ function CodePreview({ content, path }: { content: string; path: string }) {
                   {index + 1}
                 </td>
                 <td className="pl-4 pr-6 whitespace-pre align-top" style={{ color: "var(--code-text)" }}>
-                  {line || "\u00A0"}
+                  {line || " "}
                 </td>
               </tr>
             ))}

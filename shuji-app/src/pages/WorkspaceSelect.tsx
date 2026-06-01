@@ -74,6 +74,7 @@ export default function WorkspaceSelect() {
             try {
               const project = await createDemoProject();
               await loadProject(project.working_dir);
+              sessionStorage.setItem("shuji_demo", "true");
               navigate("/project");
             } catch (e) {
               setError(String(e));

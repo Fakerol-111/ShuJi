@@ -54,7 +54,6 @@ const ROLE_PREFIXES: &[(&str, &str)] = &[
     ("BINGBU", "bingbushangshu"),
     ("XINGBU", "xingbushangshu"),
     ("GONGBU", "gongbushangshu"),
-    ("ZHISI", "zhisi"),
 ];
 
 fn prefix_for_role(role_name: &str) -> &str {
@@ -81,6 +80,9 @@ pub struct RoleEndpoint {
 /// Persisted as `api_config.json`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AppConfig {
+    /// Model preset: "balanced" (default), "economy", "quality", or "custom".
+    #[serde(default)]
+    pub preset: Option<String>,
     pub roles: HashMap<String, RoleEndpoint>,
 }
 
@@ -154,7 +156,10 @@ fn app_config_from_dotenv(vars: &HashMap<String, String>) -> AppConfig {
             );
         }
     }
-    AppConfig { roles }
+    AppConfig {
+        preset: Some("balanced".to_string()),
+        roles,
+    }
 }
 
 /// Serialize back to .env format lines (backward compat, used by set_dotenv_key area).
@@ -210,14 +215,152 @@ pub async fn get_config() -> Result<AppConfig, String> {
 }
 
 /// Save config to `api_config.json` (does NOT touch `.env`).
+/// Preserves `preset` field from existing config if not set in incoming config.
 #[tauri::command]
 pub async fn save_config(config: AppConfig) -> Result<(), String> {
+    let path = api_config_path();
+    let mut final_config = config;
+    if final_config.preset.is_none() {
+        // Preserve existing preset from disk
+        if let Ok(content) = tokio::fs::read_to_string(&path).await {
+            if let Ok(existing) = serde_json::from_str::<AppConfig>(&content) {
+                final_config.preset = existing.preset;
+            }
+        }
+    }
+    let content = serde_json::to_string_pretty(&final_config).map_err(friendly_error)?;
+    tokio::fs::write(&path, &content)
+        .await
+        .map_err(friendly_error)?;
+    log_console!("[debug] saved api_config to {}", path.display());
+    Ok(())
+}
+
+// ── Model preset system ────────────────────────────────────────
+
+/// Derive "cheap" and "strong" model names from the user's default model.
+/// Falls back to `default_model` for both when the model family is unknown.
+fn derive_cheap_strong(default_model: &str) -> (String, String) {
+    match default_model {
+        // DeepSeek
+        "deepseek-v4-flash" => ("deepseek-v4-flash".into(), "deepseek-4-pro".into()),
+        "deepseek-4-pro" => ("deepseek-v4-flash".into(), "deepseek-4-pro".into()),
+        // Anthropic
+        "claude-sonnet-4-20250514" => {
+            ("claude-haiku-4-5-20251001".into(), "claude-opus-4-7".into())
+        }
+        "claude-haiku-4-5-20251001" => (
+            "claude-haiku-4-5-20251001".into(),
+            "claude-sonnet-4-20250514".into(),
+        ),
+        // OpenAI
+        "gpt-4o" => ("gpt-4o-mini".into(), "gpt-4o".into()),
+        "gpt-4o-mini" => ("gpt-4o-mini".into(), "gpt-4o".into()),
+        // Unknown family — cheap = strong = default
+        _ => (default_model.into(), default_model.into()),
+    }
+}
+
+/// Role-to-tier mapping for "economy" preset.
+/// Roles not listed inherit the default model.
+const ECONOMY_ROLES: &[(&str, &str)] = &[
+    ("menxiashizhong", "cheap"),   // 审查
+    ("xingbushangshu", "cheap"),   // 检查
+    ("liburshangshu", "cheap"),    // 规范
+    ("zhongshuling", "default"),   // 设计 — uses default model
+    ("gongbushangshu", "default"), // 编码
+    ("libushangshu", "default"),   // 详细设计
+];
+
+/// Role-to-tier mapping for "quality" preset.
+const QUALITY_ROLES: &[(&str, &str)] = &[
+    ("zhongshuling", "strong"),   // 方案设计
+    ("gongbushangshu", "strong"), // 编码实现
+    ("libushangshu", "strong"),   // 详细设计
+];
+
+/// Apply a model preset to `config`, updating per-role model fields.
+///
+/// The mapping table is the single source of truth for which roles
+/// receive which model tier. The frontend only sends the preset name.
+pub fn apply_model_preset(config: &mut AppConfig, preset: &str) {
+    let default = match config.roles.get("default") {
+        Some(d) => d.clone(),
+        None => return,
+    };
+    if default.model.is_empty() {
+        return;
+    }
+
+    let (cheap, strong) = derive_cheap_strong(&default.model);
+
+    let map: &[(&str, &str)] = match preset {
+        "economy" => ECONOMY_ROLES,
+        "quality" => QUALITY_ROLES,
+        _ => &[], // balanced: no role overrides
+    };
+
+    if preset == "balanced" {
+        // Remove model-only overrides; reset model on retained custom-API roles
+        config.roles.retain(|k, v| {
+            if k == "default" {
+                return true;
+            }
+            if v.api_key == default.api_key && v.api_url == default.api_url {
+                return false; // Remove pure-model overrides
+            }
+            v.model = default.model.clone(); // Reset to default model
+            true
+        });
+    } else {
+        for (role_name, tier) in map {
+            let model = match *tier {
+                "cheap" => cheap.clone(),
+                "strong" => strong.clone(),
+                _ => default.model.clone(),
+            };
+            config
+                .roles
+                .entry(role_name.to_string())
+                .and_modify(|r| r.model = model.clone())
+                .or_insert(RoleEndpoint {
+                    api_key: default.api_key.clone(),
+                    api_url: default.api_url.clone(),
+                    model,
+                });
+        }
+    }
+
+    config.preset = Some(preset.to_string());
+}
+
+/// Get the current model preset name.
+#[tauri::command]
+pub async fn get_model_preset() -> Result<String, String> {
+    let config = get_config().await?;
+    Ok(config.preset.unwrap_or_else(|| "balanced".to_string()))
+}
+
+/// Set the model preset and apply role model mapping.
+/// Valid presets: "economy", "balanced", "quality".
+#[tauri::command]
+pub async fn set_model_preset(preset: String) -> Result<(), String> {
+    if !["economy", "balanced", "quality", "custom"].contains(&preset.as_str()) {
+        return Err(friendly_error(format!(
+            "无效预设: {}。可选: economy (经济), balanced (均衡), quality (质量)",
+            preset
+        )));
+    }
+
+    let mut config = get_config().await?;
+    apply_model_preset(&mut config, &preset);
+
     let path = api_config_path();
     let content = serde_json::to_string_pretty(&config).map_err(friendly_error)?;
     tokio::fs::write(&path, &content)
         .await
         .map_err(friendly_error)?;
-    log_console!("[debug] saved api_config to {}", path.display());
+    log_console!("[settings] model preset applied: {}", preset);
     Ok(())
 }
 

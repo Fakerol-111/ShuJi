@@ -63,6 +63,17 @@ export async function readShujiDoc(projectDir: string, path: string): Promise<Sh
   return invoke("read_shuji_doc", { projectDir, path });
 }
 
+export interface DocumentDiff {
+  diff: string;
+  has_previous: boolean;
+  added: number;
+  removed: number;
+}
+
+export async function getDocumentDiff(projectDir: string, docPath: string): Promise<DocumentDiff> {
+  return invoke("get_document_diff", { projectDir, docPath });
+}
+
 export async function listLogFiles(): Promise<string[]> {
   return invoke("list_log_files");
 }
@@ -126,6 +137,22 @@ export async function saveContextConfig(config: ContextWindowConfig): Promise<vo
 
 export async function resetContextConfig(): Promise<void> {
   return invoke("reset_context_config");
+}
+
+// ── Model preset ───────────────────────────────────────────
+
+export async function getModelPreset(): Promise<string> {
+  return invoke("get_model_preset");
+}
+
+export async function setModelPreset(preset: string): Promise<void> {
+  return invoke("set_model_preset", { preset });
+}
+
+// ── Pending approvals ─────────────────────────────────────
+
+export async function getPendingApprovals(): Promise<string[]> {
+  return invoke("get_pending_approvals");
 }
 
 // ── Demo project ───────────────────────────────────────────

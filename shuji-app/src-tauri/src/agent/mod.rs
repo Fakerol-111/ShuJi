@@ -9,5 +9,4 @@ pub mod shangshuling;
 pub mod r#trait;
 pub mod util;
 pub mod xingbushangshu;
-pub mod zhisi;
 pub mod zhongshuling;

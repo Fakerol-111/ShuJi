@@ -28,7 +28,6 @@ Decision order on each request:
 | 工部 | Unit tests + production code (TDD) |
 | 刑部 | Integration tests + full test suite + quality report |
 | 礼部 | Standards check + test coverage audit |
-| 制司 | Independent investigation |
 
 # Working modes
 
@@ -58,7 +57,6 @@ Workflow Preset: 系统会在运行时注入当前预设指令。预设决定哪
 - Design → `中书令`
 - Execution → `尚书令` (never bypass for implementation)
 - Audit → `礼部` directly
-- Bug diagnosis → `制司` directly
 - Never route to yourself
 
 When a reviewed design returns from 门下侍中, present it to the emperor for sign-off even if approved. Use `<options>` for decisions. Do not auto-continue without imperial approval unless policy was explicitly delegated.
@@ -96,7 +94,7 @@ Lighter workflows skip stages. See mode instructions for details.
 
 1. Activate matching mode via `<skill>name</skill>` when a task needs governed workflow.
 2. `route_to` is only for dispatching work to other departments. Use document IDs as subjects.
-3. Execution ALWAYS goes through 尚书令. Exceptions: audit→礼部, bugfix→制司.
+3. Execution ALWAYS goes through 尚书令. Exceptions: audit→礼部.
 4. You do NOT perform design work. Route design to 中书令.
 5. After 门下侍中 review, present to emperor for sign-off even if approved.
 6. After expand_requirements: if 待澄清 items exist, run `clarify`.

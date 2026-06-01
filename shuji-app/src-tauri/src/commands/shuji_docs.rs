@@ -5,6 +5,18 @@ use serde::Serialize;
 use crate::commands::friendly_error::friendly_error;
 
 #[derive(Debug, Clone, Serialize)]
+pub struct DocumentDiff {
+    /// Unified diff text. Empty string if no previous version exists.
+    pub diff: String,
+    /// Whether a previous version was found (controls showing/hiding diff tab).
+    pub has_previous: bool,
+    /// Number of added lines in the diff.
+    pub added: usize,
+    /// Number of removed lines in the diff.
+    pub removed: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct ShujiEntry {
     pub name: String,
     pub path: String,
@@ -53,6 +65,86 @@ pub async fn read_shuji_doc(project_dir: String, path: String) -> Result<ShujiDo
         content,
         path: rel.to_string_lossy().replace('\\', "/"),
     })
+}
+
+/// Compute unified diff between the current version of a document and
+/// its previous committed version (if any).
+///
+/// Source priority:
+///   1. Git HEAD (previous commit of the same path)
+///   2. No previous → return `has_previous: false`
+#[tauri::command]
+pub async fn get_document_diff(
+    project_dir: String,
+    doc_path: String,
+) -> Result<DocumentDiff, String> {
+    let root = PathBuf::from(project_dir);
+    let rel = safe_project_path(&doc_path)?;
+    let full_path = root.join(&rel);
+
+    // Read the current version
+    let current = match tokio::fs::read_to_string(&full_path).await {
+        Ok(c) => c,
+        Err(_) => {
+            return Ok(DocumentDiff {
+                diff: String::new(),
+                has_previous: false,
+                added: 0,
+                removed: 0,
+            })
+        }
+    };
+
+    // Try to get the previous version from git HEAD
+    let previous = match git_show(&root, &rel).await {
+        Some(content) => content,
+        None => {
+            return Ok(DocumentDiff {
+                diff: String::new(),
+                has_previous: false,
+                added: 0,
+                removed: 0,
+            })
+        }
+    };
+
+    // Generate unified diff
+    let diff = diffy::create_patch(&previous, &current);
+    let diff_str = diff.to_string();
+
+    // Count added/removed lines
+    let mut added = 0usize;
+    let mut removed = 0usize;
+    for line in diff_str.lines() {
+        if line.starts_with('+') && !line.starts_with("+++") {
+            added += 1;
+        } else if line.starts_with('-') && !line.starts_with("---") {
+            removed += 1;
+        }
+    }
+
+    Ok(DocumentDiff {
+        diff: diff_str,
+        has_previous: true,
+        added,
+        removed,
+    })
+}
+
+/// Run `git show HEAD:<rel_path>` to get the committed version of a file.
+async fn git_show(root: &Path, rel: &Path) -> Option<String> {
+    let git_path = rel.to_string_lossy().replace('\\', "/");
+    let output = tokio::process::Command::new("git")
+        .args(["show", &format!("HEAD:{}", git_path)])
+        .current_dir(root)
+        .output()
+        .await
+        .ok()?;
+    if output.status.success() {
+        String::from_utf8(output.stdout).ok()
+    } else {
+        None
+    }
 }
 
 fn safe_project_path(path: &str) -> Result<PathBuf, String> {

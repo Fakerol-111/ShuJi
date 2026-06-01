@@ -14,7 +14,6 @@ const DEPT_COLORS: Record<string, string> = {
   工部尚书: "#A16207",
   刑部尚书: "#5C6370",
   礼部尚书: "#5B5FC7",
-  制司: "#A3477A",
 };
 
 export default function ChatBubble({ msg, onOption }: { msg: ChatMessage; onOption: (key: string, supplement?: string) => void }) {

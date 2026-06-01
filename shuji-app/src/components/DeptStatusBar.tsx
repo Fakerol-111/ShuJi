@@ -14,10 +14,9 @@ export const DEPT_COLORS: Record<string, string> = {
   刑部尚书: "#5C6370",
   礼部尚书: "#5B5FC7",
   户部: "#0D7A6E",
-  制司: "#A3477A",
 };
 
-const ROLE_ORDER = ["内阁", "中书令", "门下侍中", "尚书令", "吏部", "兵部", "工部", "刑部", "礼部", "户部", "制司"];
+const ROLE_ORDER = ["内阁", "中书令", "门下侍中", "尚书令", "吏部", "兵部", "工部", "刑部", "礼部", "户部"];
 
 const SKILL_LABELS: Record<string, string> = {
   workflow_standard: "标准",

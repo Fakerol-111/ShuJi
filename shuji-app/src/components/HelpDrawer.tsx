@@ -16,7 +16,6 @@ const DEPARTMENTS: DeptInfo[] = [
   { name: "工部尚书", aliases: ["gongbushangshu"], role: "编码实现，写真正的代码" },
   { name: "刑部尚书", aliases: ["xingbushangshu"], role: "测试验证，运行测试确认通过" },
   { name: "礼部尚书", aliases: ["liburshangshu"], role: "规范检查，确保代码风格合规" },
-  { name: "制司", aliases: ["zhisi"], role: "独立调查，特殊任务执行" },
 ];
 
 const WORKFLOW_STEPS = [
@@ -90,6 +89,7 @@ export default function HelpDrawer() {
                     <li>重要节点皇帝需审批文档</li>
                     <li>可随时点击「叫停诸司」停止处理</li>
                     <li>侧边栏可浏览所有 .shuji 文档</li>
+                    <li>系统据需求自动选择工作流程，也可输入 skill 名手动指定</li>
                   </ul>
                 </Section>
               </div>

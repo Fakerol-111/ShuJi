@@ -17,7 +17,6 @@ const ROLE_LABELS: Record<string, string> = {
   gongbushangshu: "工部尚书",
   xingbushangshu: "刑部尚书",
   liburshangshu: "礼部尚书",
-  zhisi: "制司",
 };
 
 function roleLabel(role: string): string {

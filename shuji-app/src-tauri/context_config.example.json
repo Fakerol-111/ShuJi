@@ -36,11 +36,6 @@
       "keep_recent_count": 24,
       "mid_run_compact": false
     },
-    "制司": {
-      "token_threshold": 750000,
-      "keep_recent_count": 24,
-      "mid_run_compact": false
-    },
     "尚书令": {
       "token_threshold": 750000,
       "keep_recent_count": 24,

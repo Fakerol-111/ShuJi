@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { getConfig, saveConfig, checkApiConnection } from "../api";
-import type { AppConfig } from "../types";
+import { getConfig, saveConfig, checkApiConnection, setModelPreset } from "../api";
+import type { AppConfig, RoleEndpoint } from "../types";
 import { SealLogo } from "../components/SealLogo";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
@@ -25,6 +25,7 @@ export default function SetupPage() {
   const [apiUrl, setApiUrl] = useState(API_URL_PRESETS[0].url);
   const [customUrl, setCustomUrl] = useState("");
   const [model, setModel] = useState(MODEL_PRESETS[API_URL_PRESETS[0].url]?.[0] || "");
+  const [preset, setPreset] = useState("balanced");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -57,16 +58,17 @@ export default function SetupPage() {
     setSaving(true);
     setError("");
     try {
-      const config: AppConfig = {
-        roles: {
-          default: {
-            api_key: apiKey.trim(),
-            api_url: effectiveUrl || API_URL_PRESETS[0].url,
-            model: model || MODEL_PRESETS[API_URL_PRESETS[0].url]?.[0] || "",
-          },
+      const roles: Record<string, RoleEndpoint> = {
+        default: {
+          api_key: apiKey.trim(),
+          api_url: effectiveUrl || API_URL_PRESETS[0].url,
+          model: model || MODEL_PRESETS[API_URL_PRESETS[0].url]?.[0] || "",
         },
       };
+      const config: AppConfig = { preset, roles };
       await saveConfig(config);
+      // Apply preset to set per-role models
+      await setModelPreset(preset).catch(() => {});
 
       // Probe the API endpoint before navigating
       await checkApiConnection(
@@ -174,6 +176,32 @@ export default function SetupPage() {
             )}
           </div>
 
+          {/* Model Preset */}
+          <div>
+            <label className="block text-ui font-medium text-ink-600 mb-1.5">模型分级预设</label>
+            <div className="flex gap-1.5 flex-wrap">
+              {[
+                { key: "balanced", label: "均衡", desc: "全部使用同一模型" },
+                { key: "economy", label: "经济", desc: "审查部门用轻量模型" },
+                { key: "quality", label: "质量", desc: "设计/编码部门用强模型" },
+              ].map((p) => (
+                <button
+                  key={p.key}
+                  onClick={() => setPreset(p.key)}
+                  className={`text-ui px-2.5 py-1.5 rounded-lg border transition-colors text-left ${
+                    preset === p.key
+                      ? "bg-ink-900 text-white border-ink-900"
+                      : "bg-surface-parchment text-ink-500 border-fold hover:border-ink-400"
+                  }`}
+                  title={p.desc}
+                >
+                  <div className="font-medium">{p.label}</div>
+                  <div className="text-caption opacity-70">{p.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Advanced */}
           <div>
             <button
@@ -186,6 +214,7 @@ export default function SetupPage() {
               <div className="mt-2 p-3 bg-surface-parchment rounded-lg text-caption text-ink-500 space-y-1">
                 <p>进入主界面后点击右上角 <strong>设置</strong>，可为各部门分别配置 API。</p>
                 <p>当前默认 key 将被所有部门共享，除非在设置中单独覆盖。</p>
+                <p>模型分级预设只影响角色 model 字段，不改 API URL/Key。</p>
               </div>
             )}
           </div>

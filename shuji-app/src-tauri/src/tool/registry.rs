@@ -63,7 +63,7 @@ pub fn route_tool() -> ToolDefinition {
                 "properties": {
                     "to": {
                         "type": "string",
-                        "enum": ["中书令", "门下侍中", "内阁", "尚书令", "吏部", "工部", "兵部", "刑部", "礼部", "制司"]
+                        "enum": ["中书令", "门下侍中", "内阁", "尚书令", "吏部", "工部", "兵部", "刑部", "礼部"]
                     },
                     "type": {
                         "type": "string",
@@ -85,7 +85,7 @@ pub fn cancel_agent_tool() -> ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "cancel_agent".into(),
-            description: "中断指定部门当前操作。可中断: 中书令、门下侍中、尚书令、吏部、兵部、工部、刑部、礼部。不可中断内阁和制司。".into(),
+            description: "中断指定部门当前操作。可中断: 中书令、门下侍中、尚书令、吏部、兵部、工部、刑部、礼部。不可中断内阁。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

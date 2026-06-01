@@ -6,7 +6,7 @@ const ROLE_NAMES: Record<string, string> = {
   zhongshu: "中书省", menxia: "门下省", neige: "内阁",
   shangshu: "尚书省", libup: "吏部", bingbu: "兵部",
   gongbu: "工部", xingbu: "刑部", libur: "礼部",
-  hubu: "户部", zhisi: "制司",
+  hubu: "户部",
 };
 
 export default function TokenPanel() {

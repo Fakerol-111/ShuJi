@@ -12,7 +12,6 @@ pub enum Role {
     BingbuShangshu, // 兵部
     XingbuShangshu, // 刑部
     GongbuShangshu, // 工部
-    Zhisi,          // 制司
 }
 
 impl Role {
@@ -27,7 +26,6 @@ impl Role {
             Role::BingbuShangshu => "兵部",
             Role::XingbuShangshu => "刑部",
             Role::GongbuShangshu => "工部",
-            Role::Zhisi => "制司",
         }
     }
 
@@ -42,7 +40,6 @@ impl Role {
             "兵部" => Some(Role::BingbuShangshu),
             "刑部" => Some(Role::XingbuShangshu),
             "工部" => Some(Role::GongbuShangshu),
-            "制司" => Some(Role::Zhisi),
             _ => None,
         }
     }
@@ -58,7 +55,6 @@ impl Role {
             Role::BingbuShangshu => "你是兵部尚书，负责编写测试并产出接口契约。",
             Role::XingbuShangshu => "你是刑部尚书，负责执行测试验证代码质量。",
             Role::GongbuShangshu => "你是工部尚书，负责编码实现。",
-            Role::Zhisi => "你是制司，负责权限管理，审批权限申请并对越权行为进行审计。",
         }
     }
 }

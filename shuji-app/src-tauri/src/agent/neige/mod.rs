@@ -12,6 +12,8 @@ use crate::api::client::{AnthropicClient, ToolDefinition};
 use crate::models::message::Message;
 use crate::models::role::Role;
 
+pub mod routing;
+
 pub struct NeigeAgent {
     client: AnthropicClient,
     model: String,
@@ -354,6 +356,28 @@ impl Agent for NeigeAgent {
             }
         } // end if !resumed
 
+        // ── Auto-select workflow skill based on task description ──
+        if !input.discuss_mode && !resumed {
+            if let Some(suggestion) = routing::suggest_workflow(&input.task_description) {
+                let msg = match suggestion.confidence {
+                    routing::Confidence::High => format!(
+                        "[Workflow Suggestion: {}]\nThe user explicitly requested the {} workflow. Activate via <skill> tag.",
+                        suggestion.skill, suggestion.skill
+                    ),
+                    routing::Confidence::Medium => format!(
+                        "[Workflow Hint: {}]\nThis task appears to match the {} workflow. Consider activating it with the <skill> tag.",
+                        suggestion.skill, suggestion.skill
+                    ),
+                    routing::Confidence::Low => {
+                        "[Workflow Hint]\nThe request type is not obvious from keywords alone. \
+                        If uncertain which workflow to use, present options to the emperor via <options>."
+                            .to_string()
+                    }
+                };
+                session.inject(&msg);
+            }
+        }
+
         let mut controller = crate::api::control::AgentController::new();
 
         // ── Mid-run compaction ──
@@ -422,6 +446,13 @@ impl Agent for NeigeAgent {
             self.fast_txs.clone();
         let config = input.runtime_config.clone();
         let wd = working_dir.clone();
+
+        // Shared skill state for route_to short-circuit detection in the exec closure.
+        // The closure captures a clone; the original is updated in the outer loop.
+        let skill_state: Arc<Mutex<String>> =
+            Arc::new(Mutex::new(input.current_skill.clone().unwrap_or_default()));
+        let skill_state_for_exec = skill_state.clone();
+
         let exec = move |name: &str, args: &serde_json::Value| -> crate::api::control::ToolFuture {
             let name = name.to_owned();
             let args = args.clone();
@@ -432,7 +463,32 @@ impl Agent for NeigeAgent {
                 model: Some(model.clone()),
                 fast_txs: fast_txs.clone(),
             };
+            let skill_state = skill_state_for_exec.clone();
             Box::pin(async move {
+                // ── Skill-aware short-circuit for route_to ──
+                if name == "route_to" {
+                    let to_name = args["to"].as_str().unwrap_or("");
+                    if to_name == "中书令" || to_name == "门下侍中" {
+                        let skill = skill_state
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .clone();
+                        if skill == "workflow_demo" || skill == "workflow_bugfix" {
+                            let subject = args["subject"].as_str().unwrap_or("");
+                            if !subject.contains("--override-skill-gate") {
+                                return crate::tool::ToolOutput::error(
+                                    "route_to_blocked",
+                                    "",
+                                    "skill_short_circuit",
+                                    &format!(
+                                        "[技能短路] 当前技能「{}」禁止路由到「{}」。workflow_demo/bugfix 模式下应直接路由到尚书令或工部，跳过设计和审查环节。如需强制路由，请在 subject 中包含 --override-skill-gate。",
+                                        skill, to_name
+                                    ),
+                                );
+                            }
+                        }
+                    }
+                }
                 if let Some(result) =
                     crate::tool::tool_handle_neige_special(&name, &args, &ctx).await
                 {
@@ -446,6 +502,7 @@ impl Agent for NeigeAgent {
         let mut result;
         let mut route: Option<crate::api::control::RouteTo>;
         let mut current_skill = input.current_skill.clone().unwrap_or_default();
+        *skill_state.lock().unwrap() = current_skill.clone();
         let mut must_approve_retries = 0u32;
         loop {
             // Suspension point D: check cancel between controller.run() rounds
@@ -517,6 +574,7 @@ impl Agent for NeigeAgent {
                         continue;
                     }
                     current_skill = skill_name.clone();
+                    *skill_state.lock().unwrap() = current_skill.clone();
                     log_console!("[内阁] replace skill: {}", skill_name);
                     session.inject_skill(
                         &skill_name,

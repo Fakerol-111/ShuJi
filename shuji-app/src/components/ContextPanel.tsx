@@ -6,7 +6,6 @@ const ROLE_NAMES: Record<string, string> = {
   zhongshuling: "中书令", menxiashizhong: "门下侍中", neige: "内阁",
   shangshuling: "尚书令", libushangshu: "吏部", bingbushangshu: "兵部",
   gongbushangshu: "工部", xingbushangshu: "刑部", liburshangshu: "礼部",
-  zhisi: "制司",
 };
 
 export default function ContextPanel() {
@@ -111,13 +110,13 @@ function abbr(n: number): string {
 }
 
 function roleOrder(role: string) {
-  const order = ["neige", "zhongshuling", "menxiashizhong", "shangshuling", "libushangshu", "bingbushangshu", "gongbushangshu", "xingbushangshu", "liburshangshu", "zhisi",
-    "内阁", "中书令", "门下侍中", "尚书令", "吏部", "兵部", "工部", "刑部", "礼部", "制司"];
+  const order = ["neige", "zhongshuling", "menxiashizhong", "shangshuling", "libushangshu", "bingbushangshu", "gongbushangshu", "xingbushangshu", "liburshangshu",
+    "内阁", "中书令", "门下侍中", "尚书令", "吏部", "兵部", "工部", "刑部", "礼部"];
   const idx = order.indexOf(role);
   return idx < 0 ? 999 : idx;
 }
 
-const palette = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16", "#14b8a6", "#f97316"];
+const palette = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16", "#14b8a6"];
 function barColor(role: string) {
   return palette[Math.abs(hash(role)) % palette.length];
 }
