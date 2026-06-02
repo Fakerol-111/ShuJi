@@ -38,6 +38,26 @@
   - 驳回时提供快捷理由模板下拉（缺少 API 定义/测试策略/范围过大需拆分）
   - 无上一版时自动隐藏差异 Tab
 
+## [0.4.0] - 2026-06-02
+
+### Added
+- 审计三件套（OPT-015/016/017）：
+  - 新建 `audit/mod.rs` 模块：事件 JSONL 持久化、文档血缘追溯、时间线聚合、交付报告
+  - `create_document` / `set_document_status` / checkpoint / milestone 处自动记录审计日志到 `.shuji/audit.jsonl`
+  - 新增后端命令：`get_document_lineage`、`get_audit_timeline`、`generate_delivery_report`
+  - DocPreview 增加「血缘」Tab，树形展示文档引用链
+  - ActivityBar 增加「朝报」入口，Sidebar 展示审计时间线
+  - ProjectOverview 增加「生成交付报告」按钮，Markdown 格式汇总事件统计与文档产出
+  - 复用 `documents.rs` 的 `parse_doc` / `parse_refs`，无新增依赖
+- 架构文档与实现一致（OPT-011）：
+  - mailbox_design.md 添加 FUTURE DESIGN 状态声明
+  - 新建 `ARCHITECTURE.md` 描述当前实际 Actor + mpsc Push 架构
+  - CLAUDE.md 增加架构文档指引
+- 部门活跃状态精确化：
+  - 后端暴露 `get_active_roles` 命令
+  - 前端轮询替代 5 秒超时推断
+- 部门最终存档：agent 执行完成后强制 git commit + checkpoint
+
 ## [0.2.0] - 2026-05-28
 
 ### Added

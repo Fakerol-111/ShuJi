@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { readShujiDoc, setDocumentStatus as apiSetStatus, sendMessage, getDocumentDiff } from "../api";
+import { readShujiDoc, setDocumentStatus as apiSetStatus, sendMessage, getDocumentDiff, getDocumentLineage } from "../api";
 import type { DocumentDiff } from "../api";
+import type { LineageNode } from "../types";
 import { Card } from "./ui/Card";
 
 interface DocPreviewProps {
@@ -10,7 +11,7 @@ interface DocPreviewProps {
   docPath: string;
 }
 
-type ViewMode = "content" | "diff";
+type ViewMode = "content" | "diff" | "lineage";
 
 const REJECTION_REASONS = [
   { label: "缺少 API 定义", value: "缺少 API 定义" },
@@ -29,12 +30,15 @@ export default function DocPreview({ projectDir, docPath }: DocPreviewProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("content");
   const [diffData, setDiffData] = useState<DocumentDiff | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
+  const [lineage, setLineage] = useState<LineageNode | null>(null);
+  const [lineageLoading, setLineageLoading] = useState(false);
 
   useEffect(() => {
     setLoading(true);
     setError("");
     setApprovalError("");
     setDiffData(null);
+    setLineage(null);
     setViewMode("content");
     readShujiDoc(projectDir, docPath)
       .then((doc) => setContent(doc.content))
@@ -47,6 +51,16 @@ export default function DocPreview({ projectDir, docPath }: DocPreviewProps) {
       .then((d) => setDiffData(d))
       .catch(() => { /* diff is optional, silently fail */ })
       .finally(() => setDiffLoading(false));
+
+    // Fetch lineage for .shuji documents
+    if (docPath.startsWith(".shuji/") && docPath.endsWith(".md")) {
+      setLineageLoading(true);
+      const parsedId = docPath.split("/").pop()?.replace(/\.md$/, "") || "";
+      getDocumentLineage(parsedId)
+        .then((l) => setLineage(l))
+        .catch(() => {})
+        .finally(() => setLineageLoading(false));
+    }
   }, [projectDir, docPath]);
 
   const isShujiMarkdown = docPath.startsWith(".shuji/") && docPath.endsWith(".md");
@@ -121,6 +135,18 @@ export default function DocPreview({ projectDir, docPath }: DocPreviewProps) {
               </span>
             </button>
           )}
+          {docPath.startsWith(".shuji/") && docPath.endsWith(".md") && (
+            <button
+              onClick={() => setViewMode("lineage")}
+              className={`px-4 py-2 text-ui font-bold rounded-t-lg transition -mb-px border-b-2 ${
+                viewMode === "lineage"
+                  ? "border-vermillion text-ink-900"
+                  : "border-transparent text-ink-400 hover:text-ink-600"
+              }`}
+            >
+              血缘
+            </button>
+          )}
         </div>
 
         {/* ── "待陛下朱批" banner ── */}
@@ -171,7 +197,15 @@ export default function DocPreview({ projectDir, docPath }: DocPreviewProps) {
           </div>
         )}
 
-        {viewMode === "diff" && diffData ? (
+        {viewMode === "lineage" ? (
+          lineageLoading ? (
+            <div className="p-6 text-body text-ink-400">追溯血缘中…</div>
+          ) : lineage ? (
+            <LineageTree node={lineage} depth={0} />
+          ) : (
+            <div className="p-6 text-body text-ink-400 text-center">无血缘信息</div>
+          )
+        ) : viewMode === "diff" && diffData ? (
           <DiffView diff={diffData.diff} />
         ) : diffLoading ? (
           <div className="p-6 text-body text-ink-400">加载差异中…</div>
@@ -351,4 +385,29 @@ function parseFrontmatter(raw: string): { meta: Record<string, string> | null; b
     if (idx > 0) meta[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
   }
   return { meta, body };
+}
+
+function LineageTree({ node, depth }: { node: LineageNode; depth: number }) {
+  const statusColor = node.status === "in_review" ? "text-vermillion" :
+    node.status === "approved" ? "text-jade" :
+    node.status === "rejected" ? "text-vermillion/60" :
+    "text-ink-500";
+
+  return (
+    <div className="font-mono text-caption">
+      <div className="flex items-center gap-2 py-1" style={{ paddingLeft: `${depth * 20}px` }}>
+        {depth > 0 && <span className="text-ink-300 shrink-0">└─</span>}
+        <span className="font-bold text-ink-800">{node.id}</span>
+        <span className="text-ink-400">({node.doc_type})</span>
+        <span className="text-ink-400">— {node.author}</span>
+        {node.status && <span className={statusColor}>{node.status}</span>}
+      </div>
+      <div className="text-[9px] text-ink-400" style={{ paddingLeft: `${depth * 20 + 16}px` }}>
+        {node.timestamp}{node.refs.length > 0 && ` · 引用: [${node.refs.join(", ")}]`}
+      </div>
+      {node.children.map((child) => (
+        <LineageTree key={child.id} node={child} depth={depth + 1} />
+      ))}
+    </div>
+  );
 }

@@ -379,6 +379,15 @@ pub async fn run_actor(mut ctx: ActorContext) {
                 log_console!("[actor] {} ← 开始执行: {}", role_name, preview);
                 ctx.agent.execute(&input).await
             };
+
+            // ── Final checkpoint after execution ──
+            let ckpt_desc = content.chars().take(80).collect::<String>();
+            let _ = crate::storage::checkpoint::save_final(
+                &ctx.working_dir,
+                &role_name,
+                &ckpt_desc,
+            ).await;
+
             match step_result {
                 Ok(output) => {
                     let summary = output.content.chars().take(80).collect::<String>();

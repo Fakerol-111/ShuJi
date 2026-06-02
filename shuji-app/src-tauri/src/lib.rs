@@ -16,6 +16,7 @@ macro_rules! log_console {
 pub mod actor;
 pub mod agent;
 pub mod api;
+pub mod audit;
 mod commands;
 pub mod config;
 mod logging;
@@ -92,6 +93,9 @@ pub fn run() {
             commands::shuji_docs::get_document_diff,
             commands::checkpoint::list_checkpoints,
             commands::checkpoint::restore_checkpoint,
+            commands::workflow::get_document_lineage,
+            commands::workflow::get_audit_timeline,
+            commands::workflow::generate_delivery_report,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

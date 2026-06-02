@@ -368,6 +368,12 @@ pub async fn send_message(
                     if let Some(ref project) = snapshot {
                         let _ = s.save_project(project).await;
                     }
+
+                    // Audit log milestone
+                    let event = "milestone";
+                    let role = milestone.split('|').next().unwrap_or("").trim();
+                    let detail = milestone.chars().take(120).collect::<String>();
+                    crate::audit::append(Path::new(&wd), event, role, "", &detail).await;
                 }
             });
 
@@ -863,6 +869,52 @@ pub async fn get_round_metrics() -> Result<Option<crate::round_metrics::RoundMet
 #[tauri::command]
 pub fn get_active_roles() -> Vec<String> {
     crate::round_metrics::get_active_roles()
+}
+
+/// Get the document lineage tree for a given doc ID.
+#[tauri::command]
+pub async fn get_document_lineage(
+    state: State<'_, AppState>,
+    doc_id: String,
+) -> Result<Option<crate::audit::LineageNode>, String> {
+    let working_dir = {
+        let project_opt = state.current_project.lock().await;
+        let p = project_opt
+            .as_ref()
+            .ok_or_else(|| friendly_error("没有加载项目"))?;
+        p.working_dir.clone()
+    };
+    Ok(crate::audit::build_lineage(std::path::Path::new(&working_dir), &doc_id).await)
+}
+
+/// Get the aggregated audit timeline.
+#[tauri::command]
+pub async fn get_audit_timeline(
+    state: State<'_, AppState>,
+) -> Result<crate::audit::TimelineData, String> {
+    let working_dir = {
+        let project_opt = state.current_project.lock().await;
+        let p = project_opt
+            .as_ref()
+            .ok_or_else(|| friendly_error("没有加载项目"))?;
+        p.working_dir.clone()
+    };
+    Ok(crate::audit::build_timeline(std::path::Path::new(&working_dir)).await)
+}
+
+/// Generate a delivery report for the current project.
+#[tauri::command]
+pub async fn generate_delivery_report(
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let working_dir = {
+        let project_opt = state.current_project.lock().await;
+        let p = project_opt
+            .as_ref()
+            .ok_or_else(|| friendly_error("没有加载项目"))?;
+        p.working_dir.clone()
+    };
+    Ok(crate::audit::generate_report(std::path::Path::new(&working_dir)).await)
 }
 
 /// Set a document's approval status (approved/rejected).

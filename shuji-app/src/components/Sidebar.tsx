@@ -2,6 +2,7 @@ import DocTree from "./DocTree";
 import TokenPanel from "./TokenPanel";
 import ContextPanel from "./ContextPanel";
 import CheckpointPanel from "./CheckpointPanel";
+import AuditPanel from "./AuditPanel";
 import type { ActivitySelection } from "./ActivityBar";
 
 const headerLabel: Record<string, string> = {
@@ -9,6 +10,7 @@ const headerLabel: Record<string, string> = {
   stats: "度支",
   context: "文脉",
   archives: "存档",
+  audit: "朝报",
 };
 
 function getHeader(mode: Exclude<ActivitySelection, null>): string {
@@ -21,6 +23,7 @@ function panel(mode: Exclude<ActivitySelection, null>, projectDir: string, selec
     case "stats": return <TokenPanel />;
     case "context": return <ContextPanel />;
     case "archives": return <CheckpointPanel />;
+    case "audit": return <AuditPanel />;
   }
 }
 

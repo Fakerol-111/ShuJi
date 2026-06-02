@@ -39,6 +39,55 @@ impl ShujiDir {
         }
         // Copy default zuxun if not already present — user can edit it later
         self.init_zuxun().await?;
+        // Init isolated git repo for checkpoint system
+        self.init_git_repo().await?;
+        Ok(())
+    }
+
+    /// Initialize an isolated git repository at `.shuji/.git/` for checkpoint use.
+    /// This is completely separate from any user git repo at the project root.
+    async fn init_git_repo(&self) -> anyhow::Result<()> {
+        let git_dir = self.root.join(".git");
+        if fs::try_exists(&git_dir).await? {
+            return Ok(()); // already initialized
+        }
+        let git_dir_str = git_dir.to_string_lossy().to_string();
+        let root = self.root.parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        // git --git-dir=.shuji/.git --work-tree=. init
+        // Creates an isolated repo at .shuji/.git/ with worktree = project root
+        let init = tokio::process::Command::new("git")
+            .args(["--git-dir", &git_dir_str, "--work-tree", &root, "init"])
+            .output()
+            .await?;
+        if !init.status.success() {
+            anyhow::bail!(
+                "git init 失败: {}",
+                String::from_utf8_lossy(&init.stderr)
+            );
+        }
+
+        // Set local user config so commits work without global git config
+        let set_name = tokio::process::Command::new("git")
+            .args(["--git-dir", &git_dir_str, "config", "user.name", "ShuJi"])
+            .output().await?;
+        let set_email = tokio::process::Command::new("git")
+            .args(["--git-dir", &git_dir_str, "config", "user.email", "shuji@local"])
+            .output().await?;
+        if !set_name.status.success() || !set_email.status.success() {
+            anyhow::bail!("设置 git user config 失败");
+        }
+
+        // Initial commit so HEAD exists (required by git diff-index --cached --quiet HEAD)
+        let initial = tokio::process::Command::new("git")
+            .args(["--git-dir", &git_dir_str, "--work-tree", &root, "commit", "--allow-empty", "-m", "shuji: init"])
+            .output().await?;
+        if !initial.status.success() {
+            anyhow::bail!("git 初始提交失败: {}", String::from_utf8_lossy(&initial.stderr));
+        }
+
         Ok(())
     }
 

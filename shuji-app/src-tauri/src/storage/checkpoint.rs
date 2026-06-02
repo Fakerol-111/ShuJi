@@ -72,6 +72,15 @@ pub async fn save(
         &commit_hash[..8]
     );
 
+    crate::audit::append(
+        working_dir,
+        "checkpoint",
+        role,
+        "",
+        &format!("commit={}", &commit_hash[..8]),
+    )
+    .await;
+
     Some(commit_hash)
 }
 
@@ -120,13 +129,26 @@ pub async fn load_snapshot(
     Some(SessionSnapshot::from_messages(data.session))
 }
 
+// ── Git helpers for isolated .shuji/.git repo ─────────────────
+
+/// Build a git Command pre-configured with --git-dir and --work-tree
+/// pointing to the isolated `.shuji/.git` repo with project root as worktree.
+fn git_cmd(working_dir: &Path) -> tokio::process::Command {
+    let git_dir = working_dir.join(".shuji/.git");
+    let git_dir_str = git_dir.to_string_lossy().to_string();
+    let work_tree = working_dir.to_string_lossy().to_string();
+    let mut cmd = tokio::process::Command::new("git");
+    cmd.args(["--git-dir", &git_dir_str, "--work-tree", &work_tree]);
+    cmd.current_dir(working_dir);
+    cmd
+}
+
 // ── Internal helpers ─────────────────────────────────────
 
 async fn git_checkpoint(working_dir: &Path, role: &str, description: &str) -> Option<String> {
     // git add -A
-    let add = tokio::process::Command::new("git")
+    let add = git_cmd(working_dir)
         .args(["add", "-A"])
-        .current_dir(working_dir)
         .output()
         .await
         .ok()?;
@@ -139,9 +161,8 @@ async fn git_checkpoint(working_dir: &Path, role: &str, description: &str) -> Op
     }
 
     // git diff-index --cached --quiet HEAD → 0 means nothing changed
-    let diff = tokio::process::Command::new("git")
+    let diff = git_cmd(working_dir)
         .args(["diff-index", "--cached", "--quiet", "HEAD"])
-        .current_dir(working_dir)
         .output()
         .await
         .ok()?;
@@ -151,9 +172,8 @@ async fn git_checkpoint(working_dir: &Path, role: &str, description: &str) -> Op
 
     // git commit
     let msg = format!("shuji: checkpoint {} — {}", role, description);
-    let commit = tokio::process::Command::new("git")
+    let commit = git_cmd(working_dir)
         .args(["commit", "-m", &msg])
-        .current_dir(working_dir)
         .output()
         .await
         .ok()?;
@@ -166,9 +186,8 @@ async fn git_checkpoint(working_dir: &Path, role: &str, description: &str) -> Op
     }
 
     // git rev-parse HEAD
-    let rev = tokio::process::Command::new("git")
+    let rev = git_cmd(working_dir)
         .args(["rev-parse", "HEAD"])
-        .current_dir(working_dir)
         .output()
         .await
         .ok()?;
@@ -177,6 +196,64 @@ async fn git_checkpoint(working_dir: &Path, role: &str, description: &str) -> Op
         return None;
     }
     Some(hash)
+}
+
+/// Save a final checkpoint after agent execution completes.
+/// Unlike periodic checkpoints, this uses an empty session snapshot
+/// to ensure at least one checkpoint exists even for short runs.
+pub async fn save_final(
+    working_dir: &Path,
+    role: &str,
+    description: &str,
+) -> Option<String> {
+    let commit_hash = git_checkpoint(working_dir, role, description).await?;
+
+    // Write snapshot with empty session (no session context available at actor level)
+    let snapshot_path = working_dir
+        .join(".shuji")
+        .join("checkpoints")
+        .join(role)
+        .join(format!("{}.json", commit_hash));
+    let ts = chrono::Local::now().to_rfc3339();
+    let data = CheckpointData {
+        ts: ts.clone(),
+        role: role.to_string(),
+        description: description.to_string(),
+        commit: commit_hash.clone(),
+        session: vec![],
+    };
+    if let Some(parent) = snapshot_path.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+    if let Ok(json) = serde_json::to_string_pretty(&data) {
+        let _ = tokio::fs::write(&snapshot_path, json).await;
+    }
+
+    let entry = CheckpointEntry {
+        ts,
+        role: role.to_string(),
+        description: description.to_string(),
+        commit: commit_hash.clone(),
+    };
+    append_index(working_dir, &entry).await;
+
+    log_console!(
+        "[checkpoint] final saved: {} — {} (commit {})",
+        role,
+        description,
+        &commit_hash[..8]
+    );
+
+    crate::audit::append(
+        working_dir,
+        "checkpoint",
+        role,
+        "",
+        &format!("commit={}", &commit_hash[..8]),
+    )
+    .await;
+
+    Some(commit_hash)
 }
 
 async fn append_index(working_dir: &Path, entry: &CheckpointEntry) {

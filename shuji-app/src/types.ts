@@ -178,3 +178,34 @@ export interface RoundMetrics {
   total_tokens: number;
   dept_iterations: Record<string, number>;
 }
+
+// ── Audit types ────────────────────────────────────────────────────
+
+export interface AuditEntry {
+  ts: string;
+  event: string;
+  role: string;
+  doc_id: string;
+  detail: string;
+}
+
+export interface LineageNode {
+  id: string;
+  doc_type: string;
+  author: string;
+  timestamp: string;
+  status: string;
+  refs: number[];
+  children: LineageNode[];
+}
+
+export interface TimelineSummary {
+  total_events: number;
+  by_event: [string, number][];
+  by_role: [string, number][];
+}
+
+export interface TimelineData {
+  entries: AuditEntry[];
+  summary: TimelineSummary;
+}

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Project, ProjectSummary, ChatMessage, ProjectSnapshot, DeptLogEntry, AppConfig, ContextWindowConfig, TokenUsage, ContextStats, CheckpointEntry, RoundMetrics } from "./types";
+import type { Project, ProjectSummary, ChatMessage, ProjectSnapshot, DeptLogEntry, AppConfig, ContextWindowConfig, TokenUsage, ContextStats, CheckpointEntry, RoundMetrics, LineageNode, TimelineData } from "./types";
 
 export interface ShujiEntry {
   name: string;
@@ -209,4 +209,18 @@ export async function listCheckpoints(role?: string, limit?: number): Promise<Ch
 
 export async function restoreCheckpoint(commitHash: string): Promise<string> {
   return invoke("restore_checkpoint", { commitHash });
+}
+
+// ── Audit commands ───────────────────────────────────────────────
+
+export async function getDocumentLineage(docId: string): Promise<LineageNode | null> {
+  return invoke("get_document_lineage", { docId });
+}
+
+export async function getAuditTimeline(): Promise<TimelineData> {
+  return invoke("get_audit_timeline");
+}
+
+export async function generateDeliveryReport(): Promise<string> {
+  return invoke("generate_delivery_report");
 }

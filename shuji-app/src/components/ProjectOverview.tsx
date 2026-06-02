@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listShujiTree } from "../api";
+import { listShujiTree, generateDeliveryReport } from "../api";
 import type { ShujiEntry } from "../api";
 import type { PlanInfo, Project } from "../types";
 import { DEPT_COLORS } from "./DeptStatusBar";
@@ -16,6 +16,20 @@ export default function ProjectOverview({ project, activeDepts, planInfo, onOpen
   const [latestDocs, setLatestDocs] = useState<ShujiEntry[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [report, setReport] = useState<string | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+
+  const handleGenerateReport = async () => {
+    setReportLoading(true);
+    try {
+      const r = await generateDeliveryReport();
+      setReport(r);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setReportLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!project?.working_dir) return;
@@ -106,6 +120,21 @@ export default function ProjectOverview({ project, activeDepts, planInfo, onOpen
             </div>
           </section>
         )}
+
+        <section className="mt-6 pt-4 border-t border-fold">
+          <button
+            onClick={handleGenerateReport}
+            disabled={reportLoading}
+            className="px-4 py-2 bg-ink-900 text-ink-50 text-ui rounded-lg hover:bg-ink-800 transition-colors disabled:opacity-50"
+          >
+            {reportLoading ? "生成中…" : "生成交付报告"}
+          </button>
+          {report && (
+            <div className="mt-3 p-3 rounded-lg bg-ink-100/50 border border-fold text-caption font-mono whitespace-pre-wrap text-ink-700 max-h-64 overflow-y-auto">
+              {report}
+            </div>
+          )}
+        </section>
       </Card>
     </div>
   );

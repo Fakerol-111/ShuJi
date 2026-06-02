@@ -28,19 +28,19 @@ async fn next_id(working_dir: &Path) -> Result<u64, String> {
 }
 
 /// ── YAML frontmatter helpers ───────────────────────────────────────
-struct DocMeta {
-    id: String,
-    doc_type: String,
-    author: String,
-    timestamp: String,
-    refs: String,
-    status: String,
-    notes: String,
+pub(crate) struct DocMeta {
+    pub(crate) id: String,
+    pub(crate) doc_type: String,
+    pub(crate) author: String,
+    pub(crate) timestamp: String,
+    pub(crate) refs: String,
+    pub(crate) status: String,
+    pub(crate) notes: String,
 }
 
 /// Parse the YAML frontmatter and body from a document string.
 /// Returns (DocMeta, body_text) or an error.
-fn parse_doc(content: &str) -> Result<(DocMeta, &str), String> {
+pub(crate) fn parse_doc(content: &str) -> Result<(DocMeta, &str), String> {
     let body = content
         .strip_prefix("---\n")
         .ok_or_else(|| "缺少 YAML frontmatter 起始标记".to_string())?;
@@ -113,7 +113,7 @@ fn now_iso() -> String {
 }
 
 /// Map English dept string to Chinese author name.
-fn dept_to_author(dept: &str) -> &'static str {
+pub(crate) fn dept_to_author(dept: &str) -> &'static str {
     match dept {
         "zhongshuling" => "中书令",
         "menxiashizhong" => "门下侍中",
@@ -132,7 +132,7 @@ fn dept_to_author(dept: &str) -> &'static str {
 /// Map document type prefix to subdirectory under `.shuji/`.
 /// Returns empty string for root-level files (e.g. precepts).
 /// For reports, returns the reports base dir — dept subfolder is appended separately.
-fn type_to_dir(doc_type: &str) -> &'static str {
+pub(crate) fn type_to_dir(doc_type: &str) -> &'static str {
     match doc_type {
         "dsgn" | "plan" | "pdsg" => "designs",
         "ddtl" => "designs/detail",
@@ -264,6 +264,9 @@ pub async fn tool_create_document(
             if status == "in_review" {
                 let _ = add_pending_approval(working_dir, &doc_id).await;
             }
+            // Audit log
+            let detail = format!("type={}, refs={}", doc_type, meta.refs);
+            crate::audit::append(working_dir, "create_document", dept, &doc_id, &detail).await;
             ToolOutput::success(
                 "create_document",
                 &doc_id,
@@ -647,6 +650,8 @@ pub async fn tool_set_document_status(working_dir: &Path, args: &serde_json::Val
     match tokio::fs::write(&full, &new_content).await {
         Ok(_) => {
             let _ = remove_pending_approval(working_dir, id).await;
+            let detail = format!("status={}", new_status);
+            crate::audit::append(working_dir, "set_document_status", "皇帝", id, &detail).await;
             ToolOutput::success(
                 "set_document_status",
                 id,
@@ -688,7 +693,7 @@ pub fn set_document_status_tool_def() -> crate::api::client::ToolDefinition {
 
 /// ── Approval gate helpers ────────────────────────────────────────
 /// Parse refs string like "[3, 4]" or "[-1]" into a Vec<u64>.
-fn parse_refs(refs: &str) -> Vec<u64> {
+pub(crate) fn parse_refs(refs: &str) -> Vec<u64> {
     let inner = refs.trim().trim_start_matches('[').trim_end_matches(']');
     if inner.is_empty() || inner == "-1" {
         return vec![];
