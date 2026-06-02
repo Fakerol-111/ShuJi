@@ -106,6 +106,15 @@ pub fn current_role_name() -> Option<String> {
 static ACTIVE_ROLES: std::sync::LazyLock<Mutex<HashSet<String>>> =
     std::sync::LazyLock::new(|| Mutex::new(HashSet::new()));
 
+/// Returns a snapshot of currently active roles.
+pub fn get_active_roles() -> Vec<String> {
+    ACTIVE_ROLES.lock().map_or(vec![], |set| {
+        let mut roles: Vec<_> = set.iter().cloned().collect();
+        roles.sort();
+        roles
+    })
+}
+
 /// Mark a role as actively executing.
 pub fn mark_active(role: &str) {
     if let Ok(mut set) = ACTIVE_ROLES.lock() {

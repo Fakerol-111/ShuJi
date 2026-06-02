@@ -70,6 +70,7 @@ pub fn run() {
             commands::workflow::get_chat_history,
             commands::workflow::get_dept_logs,
             commands::workflow::get_round_metrics,
+            commands::workflow::get_active_roles,
             commands::workflow::get_pending_approvals,
             commands::workflow::set_document_status,
             commands::demo::create_demo_project,

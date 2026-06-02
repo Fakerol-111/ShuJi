@@ -1,3 +1,8 @@
+> **Status: FUTURE DESIGN — NOT IMPLEMENTED**
+> 
+> 本文描述的是 V2 信箱机制的**未来设计方案**，当前实际实现是 **Actor + route_to + mpsc Push 模型**（见 `ARCHITECTURE.md`）。
+> Pull 式信箱、快/慢信箱分离、调度器轮询等机制**尚未实现**，仅供架构讨论和未来规划参考。
+
 # 信箱机制消息流转图（完整版 V2）
 
 ## 核心规则

@@ -95,6 +95,10 @@ export async function getRoundMetrics(): Promise<RoundMetrics | null> {
   return invoke("get_round_metrics");
 }
 
+export async function getActiveRoles(): Promise<string[]> {
+  return invoke("get_active_roles");
+}
+
 export async function getContextStats(): Promise<Record<string, ContextStats>> {
   return invoke("get_context_stats");
 }

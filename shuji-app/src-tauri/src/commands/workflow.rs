@@ -859,6 +859,12 @@ pub async fn get_round_metrics() -> Result<Option<crate::round_metrics::RoundMet
     Ok(crate::round_metrics::snapshot())
 }
 
+/// Get the list of currently active (executing) departments.
+#[tauri::command]
+pub fn get_active_roles() -> Vec<String> {
+    crate::round_metrics::get_active_roles()
+}
+
 /// Set a document's approval status (approved/rejected).
 /// Frontend calls this from the DocPreview "待陛下朱批" banner.
 #[tauri::command]
