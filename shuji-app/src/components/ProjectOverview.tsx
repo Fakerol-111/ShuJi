@@ -10,9 +10,10 @@ interface ProjectOverviewProps {
   activeDepts: string[];
   planInfo: PlanInfo | null;
   onOpenProject: () => void;
+  onDocSelect?: (path: string) => void;
 }
 
-export default function ProjectOverview({ project, activeDepts, planInfo, onOpenProject }: ProjectOverviewProps) {
+export default function ProjectOverview({ project, activeDepts, planInfo, onOpenProject, onDocSelect }: ProjectOverviewProps) {
   const [latestDocs, setLatestDocs] = useState<ShujiEntry[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -97,7 +98,11 @@ export default function ProjectOverview({ project, activeDepts, planInfo, onOpen
           ) : (
             <div className="space-y-1">
               {latestDocs.map((doc) => (
-                <div key={doc.path} className="flex items-center gap-2 text-body">
+                <div
+                  key={doc.path}
+                  onClick={() => onDocSelect?.(doc.path)}
+                  className="flex items-center gap-2 text-body cursor-pointer hover:bg-ink-100/50 rounded px-1 -mx-1 transition-colors"
+                >
                   <span className="font-mono text-ink-800">{doc.name.replace(/\.md$/, "")}</span>
                   <span className="text-ink-300">·</span>
                   <span className="text-ink-500">{doc.type_label}</span>

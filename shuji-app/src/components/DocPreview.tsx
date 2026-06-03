@@ -9,6 +9,8 @@ import { Card } from "./ui/Card";
 interface DocPreviewProps {
   projectDir: string;
   docPath: string;
+  initialTab?: ViewMode;
+  onClose?: () => void;
 }
 
 type ViewMode = "content" | "diff" | "lineage";
@@ -20,14 +22,14 @@ const REJECTION_REASONS = [
   { label: "自定义", value: "" },
 ];
 
-export default function DocPreview({ projectDir, docPath }: DocPreviewProps) {
+export default function DocPreview({ projectDir, docPath, initialTab, onClose }: DocPreviewProps) {
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [approving, setApproving] = useState(false);
   const [approvalError, setApprovalError] = useState("");
   const [comment, setComment] = useState("");
-  const [viewMode, setViewMode] = useState<ViewMode>("content");
+  const [viewMode, setViewMode] = useState<ViewMode>(initialTab || "content");
   const [diffData, setDiffData] = useState<DocumentDiff | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
   const [lineage, setLineage] = useState<LineageNode | null>(null);
@@ -39,7 +41,7 @@ export default function DocPreview({ projectDir, docPath }: DocPreviewProps) {
     setApprovalError("");
     setDiffData(null);
     setLineage(null);
-    setViewMode("content");
+    setViewMode(initialTab || "content");
     readShujiDoc(projectDir, docPath)
       .then((doc) => setContent(doc.content))
       .catch((e) => setError(String(e)))
@@ -100,12 +102,19 @@ export default function DocPreview({ projectDir, docPath }: DocPreviewProps) {
   return (
     <div className="h-full overflow-y-auto surface-paper">
       <div className="px-6 py-6 lg:px-8 lg:py-8">
-        <div className="text-caption text-ink-400 font-mono mb-4 flex flex-wrap gap-1">
-          {parts.map((p, i) => (
-            <span key={`${p}-${i}`}>
-              {i > 0 && <span className="mx-1 text-ink-300">/</span>}{p}
-            </span>
-          ))}
+        <div className="flex items-center gap-2 mb-4">
+          <div className="text-caption text-ink-400 font-mono flex flex-wrap gap-1 flex-1 min-w-0">
+            {parts.map((p, i) => (
+              <span key={`${p}-${i}`}>
+                {i > 0 && <span className="mx-1 text-ink-300">/</span>}{p}
+              </span>
+            ))}
+          </div>
+          {onClose && (
+            <button onClick={onClose} className="shrink-0 w-5 h-5 flex items-center justify-center rounded text-caption text-ink-400 hover:text-ink-900 hover:bg-ink-200/60 transition-colors" title="关闭">
+              ✕
+            </button>
+          )}
         </div>
 
         {/* ── View toggle tabs ── */}

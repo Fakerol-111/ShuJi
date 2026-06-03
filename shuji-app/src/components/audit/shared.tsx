@@ -43,7 +43,7 @@ const STAGE_COLORS: Record<string, string> = {
   contract: "text-ink-600 bg-ink-100", other: "text-ink-400 bg-ink-100",
 };
 
-function docIdToPath(docId: string): string {
+export function docIdToPath(docId: string): string {
   const prefix = docId.split('_')[0];
   const dirMap: Record<string, string> = {
     dsgn: "designs", plan: "designs", pdsg: "designs",

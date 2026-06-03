@@ -14,6 +14,8 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Persist expanded state across tree refreshes so user-closed folders stay closed
+  const expandedRef = useRef<Record<string, boolean>>({});
 
   const loadTree = useCallback(() => {
     if (!projectDir) return;
@@ -44,33 +46,46 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
     };
   }, [debouncedRefresh]);
 
-  if (loading) return <div className="p-3 text-ui text-ink-400">开卷中…</div>;
   if (error) return <div className="p-3 text-ui text-vermillion">{error}</div>;
-  if (tree.length === 0) return <div className="p-3 text-ui text-ink-400">暂无可预览文件</div>;
+  if (tree.length === 0 && !loading) return <div className="p-3 text-ui text-ink-400">暂无可预览文件</div>;
 
   return (
     <div className="py-2 text-ui">
-      <div className="sticky top-0 z-10 bg-surface-parchment px-2 pb-2 flex justify-end border-b border-fold mb-1">
+      <div className="sticky top-0 z-10 bg-surface-parchment px-2 pb-2 flex justify-end items-center gap-2 border-b border-fold mb-1">
+        {loading && <span className="text-[10px] text-ink-400 animate-pulse">刷新中…</span>}
         <button onClick={loadTree} className="px-2 py-1 rounded text-ui text-ink-500 hover:bg-ink-100 hover:text-ink-800">
           刷新
         </button>
       </div>
       {tree.map((entry) => (
-        <DocNode key={entry.path} entry={entry} selectedDoc={selectedDoc} onSelect={onSelect} depth={0} />
+        <DocNode key={entry.path} entry={entry} selectedDoc={selectedDoc} onSelect={onSelect} depth={0}
+          expandedRef={expandedRef} />
       ))}
     </div>
   );
 }
 
-function DocNode({ entry, selectedDoc, onSelect, depth }: { entry: ShujiEntry; selectedDoc: string | null; onSelect: (path: string) => void; depth: number }) {
-  const [open, setOpen] = useState(true);
+function DocNode({ entry, selectedDoc, onSelect, depth, expandedRef }: {
+  entry: ShujiEntry; selectedDoc: string | null; onSelect: (path: string) => void; depth: number;
+  expandedRef: React.MutableRefObject<Record<string, boolean>>;
+}) {
+  const initialState = expandedRef.current[entry.path] ?? true;
+  const [open, setOpen] = useState(initialState);
   const active = selectedDoc === entry.path;
+
+  // Sync toggle changes back to ref (survives remounts from loading state)
+  const handleToggle = () => {
+    const next = !open;
+    expandedRef.current[entry.path] = next;
+    setOpen(next);
+  };
+
 
   if (entry.is_dir) {
     return (
       <div>
         <button
-          onClick={() => setOpen(!open)}
+          onClick={handleToggle}
           className="w-full flex items-center gap-1 px-2 py-1 text-left text-ink-500 hover:text-ink-800 hover:bg-ink-100"
           style={{ paddingLeft: 8 + depth * 12 }}
         >
@@ -79,7 +94,8 @@ function DocNode({ entry, selectedDoc, onSelect, depth }: { entry: ShujiEntry; s
           <span className="ml-auto text-caption text-ink-400">{entry.children.length}</span>
         </button>
         {open && entry.children.map((child) => (
-          <DocNode key={child.path} entry={child} selectedDoc={selectedDoc} onSelect={onSelect} depth={depth + 1} />
+          <DocNode key={child.path} entry={child} selectedDoc={selectedDoc} onSelect={onSelect} depth={depth + 1}
+            expandedRef={expandedRef} />
         ))}
       </div>
     );

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { getAuditTimeline, getDocumentDiffs, getDocumentLineage, generateDeliveryReport, traceDocument } from "../api";
-import type { TimelineData, DocDiffFile, LineageNode, TraceResult } from "../types";
-import { DiffViewer, DocCard, LineageTree } from "./audit/shared";
+import { getAuditTimeline, getDocumentLineage, generateDeliveryReport, traceDocument } from "../api";
+import type { TimelineData, LineageNode, TraceResult } from "../types";
+import { DocCard, LineageTree, docIdToPath } from "./audit/shared";
 
 const EVENT_LABELS: Record<string, string> = {
   create_document: "创建文档", modify_document: "修改文档", append_document: "追加文档",
@@ -19,13 +19,11 @@ const TABS: { key: SubTab; label: string }[] = [
   { key: "trace", label: "追溯" }, { key: "report", label: "报告" }, { key: "dashboard", label: "看板" },
 ];
 
-export default function AuditPanel({ onDocSelect }: { onDocSelect?: (path: string) => void }) {
+export default function AuditPanel({ projectDir, onDocSelect, onShowDiff }: { projectDir?: string; onDocSelect?: (path: string) => void; onShowDiff?: (path: string) => void }) {
   const [tab, setTab] = useState<SubTab>("timeline");
   const [data, setData] = useState<TimelineData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [diffs, setDiffs] = useState<Record<string, DocDiffFile[]>>({});
-  const [expandedDoc, setExpandedDoc] = useState<string | null>(null);
   const [searchText, setSearchText] = useState("");
   const [lineageDocId, setLineageDocId] = useState("");
   const [lineage, setLineage] = useState<LineageNode | null>(null);
@@ -36,16 +34,20 @@ export default function AuditPanel({ onDocSelect }: { onDocSelect?: (path: strin
   const [traceResult, setTraceResult] = useState<TraceResult | null>(null);
   const [traceLoading, setTraceLoading] = useState(false);
 
+  // Re-fetch when project changes — projectDir acts as a refresh key
   useEffect(() => {
     setLoading(true);
+    setData(null);
+    setError("");
     getAuditTimeline().then(setData).catch((e) => setError(String(e))).finally(() => setLoading(false));
-  }, []);
+  }, [projectDir]);
 
   function handleShowDiff(docId: string) {
-    if (expandedDoc === docId) { setExpandedDoc(null); return; }
-    setExpandedDoc(docId);
-    if (!diffs[docId]) {
-      getDocumentDiffs(docId).then((files) => setDiffs((prev) => ({ ...prev, [docId]: files })));
+    const path = docIdToPath(docId);
+    if (onShowDiff) {
+      onShowDiff(path);
+    } else if (onDocSelect) {
+      onDocSelect(path);
     }
   }
 
@@ -117,16 +119,9 @@ export default function AuditPanel({ onDocSelect }: { onDocSelect?: (path: strin
                           <div className="text-caption text-ink-400 mt-0.5 truncate">{entry.detail || "—"}</div>
                           {hasDiff && entry.doc_id && (
                             <div className="mt-0.5">
-                              <button onClick={() => handleShowDiff(entry.doc_id)} className="text-[10px] text-ink-400 hover:text-ink-600 underline">
-                                {expandedDoc === entry.doc_id ? "收起 diff" : "查看 diff"}
+                              <button onClick={() => handleShowDiff(entry.doc_id!)} className="text-[10px] text-ink-400 hover:text-ink-600 underline">
+                                在中心栏查看 diff
                               </button>
-                              {expandedDoc === entry.doc_id && diffs[entry.doc_id] && (
-                                <div className="mt-1 space-y-1">
-                                  {diffs[entry.doc_id]!.length === 0
-                                    ? <div className="text-[10px] text-ink-300">暂无 diff 记录</div>
-                                    : diffs[entry.doc_id]!.map((df) => <DiffViewer key={df.filename} filename={df.filename} />)}
-                                </div>
-                              )}
                             </div>
                           )}
                           <div className="text-[9px] text-ink-300 font-mono mt-0.5">{entry.ts}</div>

@@ -1,29 +1,29 @@
-# Project Standards
+# 祖训 — 项目规范
 
-General project conventions applicable to all projects.
+适用于所有项目的通用开发公约。
 
-## I. Completeness
-- Must have a clear goal and scope definition
-- Must specify technology choices and rationale
-- Must provide an overall architecture description
+## 一、完备性
+- 必须有清晰的目标和范围定义
+- 必须明确技术选型及其理由
+- 必须提供整体架构描述
 
-## II. Feasibility
-- Technical approach should have precedents or references — do not fabricate unproven approaches
-- Timeline estimates must include buffer
-- Resource requirements must be listed honestly
+## 二、可行性
+- 技术方案应有先例或参考依据——不得捏造未经检验的方法
+- 工期估算必须包含缓冲余量
+- 资源需求必须如实列明
 
-## III. Security
-- User data must be encrypted at rest and in transit
-- Privileged operations must have validation that cannot be bypassed
-- External interfaces must have input validation and error handling
+## 三、安全
+- 用户数据必须在存储和传输中加密
+- 特权操作必须有不可绕过的校验机制
+- 外部接口必须有输入验证和错误处理
 
-## IV. Structure
-- Module boundaries must be well-defined with clear responsibilities
-- Inter-module dependencies must be explicit with no circular references
-- Data flow and state changes must be traceable
+## 四、结构
+- 模块边界必须明确，职责清晰
+- 模块间依赖必须显式声明，不得存在循环引用
+- 数据流和状态变更必须可追溯
 
-## V. Conventions
-- Frontend must not connect directly to databases; always use backend APIs
-- Secrets, tokens, and other sensitive information must not be hardcoded
-- Databases must have indexes and migration strategies
-- Logging must record critical operations — neither missing nor excessive
+## 五、惯例
+- 前端不得直连数据库，始终通过后端 API
+- 密钥、令牌等敏感信息不得硬编码
+- 数据库必须有索引和迁移策略
+- 日志必须记录关键操作——既不缺失也不泛滥

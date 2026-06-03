@@ -17,13 +17,13 @@ function getHeader(mode: Exclude<ActivitySelection, null>): string {
   return headerLabel[mode] || mode;
 }
 
-function panel(mode: Exclude<ActivitySelection, null>, projectDir: string, selectedDoc: string | null, onDocSelect: (path: string) => void) {
+function panel(mode: Exclude<ActivitySelection, null>, projectDir: string, selectedDoc: string | null, onDocSelect: (path: string) => void, onShowDiff?: (path: string) => void) {
   switch (mode) {
     case "files": return <DocTree projectDir={projectDir} selectedDoc={selectedDoc} onSelect={onDocSelect} />;
     case "stats": return <TokenPanel />;
     case "context": return <ContextPanel />;
     case "archives": return <CheckpointPanel />;
-    case "audit": return <AuditPanel onDocSelect={onDocSelect} />;
+    case "audit": return <AuditPanel projectDir={projectDir} onDocSelect={onDocSelect} onShowDiff={onShowDiff} />;
   }
 }
 
@@ -32,16 +32,17 @@ interface SidebarProps {
   projectDir: string;
   selectedDoc: string | null;
   onDocSelect: (path: string) => void;
+  onShowDiff?: (path: string) => void;
 }
 
-export default function Sidebar({ mode, projectDir, selectedDoc, onDocSelect }: SidebarProps) {
+export default function Sidebar({ mode, projectDir, selectedDoc, onDocSelect, onShowDiff }: SidebarProps) {
   return (
     <aside className="w-60 bg-surface-parchment border-r border-fold shrink-0 flex flex-col min-h-0">
       <div className="h-9 px-3 border-b border-fold flex items-center font-display text-ui font-semibold text-ink-700">
         {getHeader(mode)}
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {panel(mode, projectDir, selectedDoc, onDocSelect)}
+        {panel(mode, projectDir, selectedDoc, onDocSelect, onShowDiff)}
       </div>
     </aside>
   );

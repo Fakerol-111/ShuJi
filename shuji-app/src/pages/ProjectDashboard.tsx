@@ -22,6 +22,8 @@ import WorkflowStatus from "../components/WorkflowTimeline";
 import { Card } from "../components/ui/Card";
 import { createDemoProject, getPendingApprovals } from "../api";
 import type { ActivitySelection } from "../components/ActivityBar";
+import TabBar, { type TabInfo } from "../components/TabBar";
+import { DEPT_META } from "../constants";
 
 const STORAGE_KEY = "shuji_chat";
 const CHAT_PANEL_MIN = 300;
@@ -32,6 +34,11 @@ function loadSession() {
     const raw = sessionStorage.getItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch { return null; }
+}
+
+function tabLabelFromPath(path: string): string {
+  const name = path.split("/").pop() || path;
+  return name.replace(/\.md$/, "");
 }
 
 export default function ProjectDashboard() {
@@ -94,11 +101,9 @@ export default function ProjectDashboard() {
     if (!demoStartTime || summaryShownRef.current) return;
     if (!project?.working_dir?.includes("calc_demo")) return;
 
-    // Workflow is idle when no active departments and no plan in progress
     const isIdle = activeDepts.length === 0 && !planInfo;
     if (!isIdle) return;
 
-    // Wait at least 20s after start to avoid premature summary
     if (Date.now() - demoStartTime < 20000) return;
 
     summaryShownRef.current = true;
@@ -128,9 +133,49 @@ export default function ProjectDashboard() {
   const error = projError || chatError;
   const clearError = () => { setProjError(""); setChatError(""); };
 
-  // UI-only state
+  // ── Multi-tab document browsing ──────────────────────────
+  const [tabs, setTabs] = useState<TabInfo[]>([]);
+  const [activeIndex, setActiveIndex] = useState(-1);
+
+  const openTab = (path: string, initialView?: TabInfo["initialView"]) => {
+    setTabs((prev) => {
+      const idx = prev.findIndex((t) => t.path === path);
+      if (idx >= 0) {
+        setActiveIndex(idx);
+        if (initialView) {
+          // Update the initial view hint for an existing tab
+          const updated = [...prev];
+          updated[idx] = { ...updated[idx], initialView };
+          return updated;
+        }
+        return prev;
+      }
+      setActiveIndex(prev.length);
+      return [...prev, { path, label: tabLabelFromPath(path), initialView }];
+    });
+  };
+
+  const closeTab = (index: number) => {
+    setTabs((prev) => {
+      if (index < 0 || index >= prev.length) return prev;
+      const next = prev.filter((_, i) => i !== index);
+      // Adjust active index
+      setActiveIndex((current) => {
+        if (current === index) {
+          // Closed the active tab — pick the one to its left, or first
+          return index > 0 ? index - 1 : next.length > 0 ? 0 : -1;
+        }
+        if (current > index) return current - 1;
+        return current;
+      });
+      return next;
+    });
+  };
+
+  const handleDocSelect = (path: string) => openTab(path);
+
+  // ── UI-only state ────────────────────────────────────────
   const [activity, setActivity] = useState<ActivitySelection>("files");
-  const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [chatWidth, setChatWidth] = useState(400);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -160,7 +205,8 @@ export default function ProjectDashboard() {
     setPickerError("");
     try {
       await loadProjectIntoState(path);
-      setSelectedDoc(null);
+      setTabs([]);
+      setActiveIndex(-1);
       resetDiscuss();
       sessionStorage.removeItem(STORAGE_KEY);
       setShowPicker(false);
@@ -190,16 +236,20 @@ export default function ProjectDashboard() {
     try {
       const project = await createDemoProject();
       await loadProjectIntoState(project.working_dir);
-      setSelectedDoc(null);
+      setTabs([]);
+      setActiveIndex(-1);
       resetDiscuss();
       sessionStorage.removeItem(STORAGE_KEY);
       setTab("decision");
-      // Auto-send a command so the user immediately sees departments working
       handleSend("修复 calc.py 中的 power 和 factorial 函数中的 bug，确保所有测试通过");
     } catch (e) {
       setChatError(String(e));
     }
   };
+
+  // Derived: which doc is currently active
+  const activeDoc = activeIndex >= 0 && activeIndex < tabs.length ? tabs[activeIndex] : null;
+  const hasTabs = tabs.length > 0 && activeDoc !== null;
 
   return (
     <div className="h-screen bg-surface-paper flex flex-col overflow-hidden">
@@ -221,8 +271,20 @@ export default function ProjectDashboard() {
 
       <div className="flex-1 flex min-h-0 overflow-hidden">
         <ActivityBar selected={activity} onSelect={setActivity} onLogsClick={() => setLogsExpanded(true)} />
-        {activity && project && <Sidebar mode={activity} projectDir={project.working_dir} selectedDoc={selectedDoc} onDocSelect={setSelectedDoc} />}
+        {activity && project && <Sidebar mode={activity} projectDir={project.working_dir} selectedDoc={activeDoc?.path || null} onDocSelect={handleDocSelect} onShowDiff={(path) => openTab(path, "diff")} />}
         <main className="flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col">
+          {/* Persistent active dept strip */}
+          {project && activeDepts.length > 0 && (
+            <div className="shrink-0 flex items-center gap-2 px-3 py-1 bg-gold/5 border-b border-gold/20 text-caption overflow-x-auto">
+              <span className="text-ink-500 font-medium whitespace-nowrap">当值诸司</span>
+              {activeDepts.map((dept) => (
+                <span key={dept} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-ink-100 text-ink-700 whitespace-nowrap">
+                  <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: DEPT_META[dept]?.color || "#6b7280" }} />
+                  {dept}
+                </span>
+              ))}
+            </div>
+          )}
           {project && (
             <WorkflowStatus
               phaseCount={project.phase_count}
@@ -231,18 +293,33 @@ export default function ProjectDashboard() {
               activeDepts={activeDepts}
               planInfo={planInfo}
               pendingApprovals={pendingApprovals}
-              onSelectDoc={setSelectedDoc}
+              onSelectDoc={(path) => openTab(path)}
             />
           )}
-          <div className="flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            {hasTabs && (
+              <TabBar
+                tabs={tabs}
+                activeIndex={activeIndex}
+                onSelect={setActiveIndex}
+                onClose={closeTab}
+              />
+            )}
             {demoSummary ? (
-            <DemoSummaryCard summary={demoSummary} onOpenProject={openProjectPicker} />
-          ) : project && selectedDoc ? (
-            <DocPreview projectDir={project.working_dir} docPath={selectedDoc} />
-          ) : (
-            <ProjectOverview project={project} activeDepts={activeDepts} planInfo={planInfo} onOpenProject={openProjectPicker} />
-          )}
-        </div></main>
+              <DemoSummaryCard summary={demoSummary} onOpenProject={openProjectPicker} />
+            ) : hasTabs ? (
+              <DocPreview
+                key={activeDoc!.path}
+                projectDir={project!.working_dir}
+                docPath={activeDoc!.path}
+                initialTab={activeDoc!.initialView}
+                onClose={() => closeTab(activeIndex)}
+              />
+            ) : (
+              <ProjectOverview project={project} activeDepts={activeDepts} planInfo={planInfo} onOpenProject={openProjectPicker} onDocSelect={(path) => openTab(path)} />
+            )}
+          </div>
+        </main>
         <section className="relative bg-surface-paper border-l border-fold flex flex-col min-h-0 shrink-0" style={{ width: chatWidth }}>
           <div onMouseDown={startResize} className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-vermillion/40 transition-colors" />
           <div className="border-b border-fold bg-surface-elevated shrink-0 px-3 py-2">
