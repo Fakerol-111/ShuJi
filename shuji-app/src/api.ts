@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Project, ProjectSummary, ChatMessage, ProjectSnapshot, DeptLogEntry, AppConfig, ContextWindowConfig, TokenUsage, ContextStats, CheckpointEntry, RoundMetrics, LineageNode, TimelineData } from "./types";
+import type { Project, ProjectSummary, ChatMessage, ProjectSnapshot, DeptLogEntry, AppConfig, ContextWindowConfig, TokenUsage, ContextStats, CheckpointEntry, RoundMetrics, LineageNode, TimelineData, DocDiffFile, TraceResult } from "./types";
 
 export interface ShujiEntry {
   name: string;
@@ -223,4 +223,16 @@ export async function getAuditTimeline(): Promise<TimelineData> {
 
 export async function generateDeliveryReport(): Promise<string> {
   return invoke("generate_delivery_report");
+}
+
+export async function getDocumentDiffs(docId: string): Promise<DocDiffFile[]> {
+  return invoke("get_document_diffs", { docId });
+}
+
+export async function readDocumentDiff(filename: string): Promise<string> {
+  return invoke("read_document_diff", { filename });
+}
+
+export async function traceDocument(docId: string): Promise<TraceResult> {
+  return invoke("trace_document", { docId });
 }

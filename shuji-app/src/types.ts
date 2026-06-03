@@ -209,3 +209,25 @@ export interface TimelineData {
   entries: AuditEntry[];
   summary: TimelineSummary;
 }
+
+export interface DocDiffFile {
+  filename: string;
+  event: string;
+  ts: string;
+}
+
+export interface ChainNode {
+  id: string;
+  doc_type: string;
+  author: string;
+  timestamp: string;
+  stage: string;
+  content_preview: string;
+  direction: string;
+}
+
+export interface TraceResult {
+  target: ChainNode | null;
+  downstream: ChainNode[];
+  upstream: ChainNode[];
+}
