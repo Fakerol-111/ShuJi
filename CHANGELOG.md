@@ -38,9 +38,17 @@
   - 驳回时提供快捷理由模板下拉（缺少 API 定义/测试策略/范围过大需拆分）
   - 无上一版时自动隐藏差异 Tab
 
-## [0.4.0] - 2026-06-02
+## [0.4.0] - 2026-06-03
 
 ### Added
+- 代码质量优化七项（本版本）：
+  - 部门颜色/角色名统一 — DEPT_META 单一数据源，消除 8 个组件中 12 处重复定义
+  - Agent 执行框架提取 — agent/runner.rs 共享模块，消除 8 个 Agent 中 ~750 行重复
+  - 核心驱动循环测试 — 新增 14 个 session/control 测试（sanitize_messages、PersistedContext、RunResult）
+  - Watchdog 闭环自愈 — 同工具重复/只读不写时向 tool result 注入 [干预] 提示
+  - Audit 反向索引 — RefIndex + check_immutability 实现 O(1) 引用查找
+  - AuditPanel 组件拆分 — 提取 audit/shared.tsx，主文件精简
+  - 配置层扁平化 — config.local.toml merge 加载支持
 - 审计三件套（OPT-015/016/017）：
   - 新建 `audit/mod.rs` 模块：事件 JSONL 持久化、文档血缘追溯、时间线聚合、交付报告
   - `create_document` / `set_document_status` / checkpoint / milestone 处自动记录审计日志到 `.shuji/audit.jsonl`
