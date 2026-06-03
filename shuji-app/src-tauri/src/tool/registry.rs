@@ -8,12 +8,14 @@ use crate::api::client::ToolDefinition;
 
 // ── Tool groups ───────────────────────────────────────────────────
 
-/// Read-only inspection tools: read files, list directories, find documents.
+/// Read-only inspection tools: read files, list directories, find/read/search documents.
 pub fn inspect_tools() -> Vec<ToolDefinition> {
     vec![
         crate::tool::read_file_tool_def("读取文件内容"),
         crate::tool::list_dir_tool_def(),
         crate::tool::documents::find_document_tool_def(),
+        crate::tool::documents::read_document_tool_def(),
+        crate::tool::search_text_tool_def(),
     ]
 }
 
@@ -42,6 +44,11 @@ pub fn document_tools() -> Vec<ToolDefinition> {
 /// Command execution tool.
 pub fn execute_command_tool() -> Vec<ToolDefinition> {
     vec![crate::tool::execute_command_tool_def("执行命令")]
+}
+
+/// Run tests tool (工部专用 — 封装测试命令防拼错).
+pub fn run_tests_tool() -> Vec<ToolDefinition> {
+    vec![crate::tool::run_tests_tool_def()]
 }
 
 /// Log summarization tool.

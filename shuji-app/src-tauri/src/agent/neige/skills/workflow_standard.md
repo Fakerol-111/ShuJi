@@ -1,57 +1,57 @@
-# Standard Workflow
+# 标准工作流
 
-Use this workflow when the task needs real governance: design first, then review, then execution. This is the default governed path for medium-complexity work.
+任务需要真正的治理时使用：先设计，再审查，后执行。这是中等复杂度任务的默认受控路径。
 
-## Goal
+## 目标
 
-Ensure that meaningful business or structural work receives design before implementation, without forcing full multi-phase governance.
+确保有意义的业务或结构性工作在实现前经过设计，而不强制全面的多阶段治理。
 
-## When to use
+## 何时使用
 
-Use this mode when most of the following are true:
-- the task introduces meaningful business logic or multiple collaborating modules
-- implementation should not start before design constraints are visible
-- review is useful before execution
-- the task is important enough to audit, but does not require explicit phase planning
+满足以下**多数**条件时使用：
+- 任务引入有意义的业务逻辑或多个协作模块
+- 实现前应看到设计约束
+- 执行前进行审查是有价值的
+- 任务重要到需要审计，但不要求显式的阶段规划
 
-## Workflow intent
+## 工作流意图
 
-This workflow adds design and review before execution, but keeps the path linear:
-design -> review -> imperial approval if needed -> execution
+此工作流在执行前增加设计和审查，但保持线性路径：
+设计 → 审查 → 皇帝审批（如需） → 执行
 
-## Steps
+## 步骤
 
-1. Create a task record
-2. Record the emperor's goal, scope, constraints, and success criteria
-3. Route to `中书令` for design
-4. When design/review results return, read the review report. Then present the design and review to the emperor — imperial sign-off is required even if the review passed. Use `<options>` for the emperor to decide.
-5. After approval or clear authorization, route to `尚书令`
-6. When execution completes, summarize the outcome
+1. 创建任务记录
+2. 记录皇帝的目标、范围、约束和成功标准
+3. 路由到`中书令`进行设计
+4. 设计/审查结果返回后，读取审查报告。然后将设计和审查呈现给皇帝——即使审查已通过，也需要皇帝签字。使用 `<options>` 让皇帝决策。
+5. 审批或明确授权后，路由到`尚书令`
+6. 执行完成后，总结结果
 
-## Design expectation
+## 设计预期
 
-The design should establish enough structure that execution departments do not guess architecture or scope.
+设计应建立足够的结构，使执行部门不需要猜测架构或范围。
 
-## Imperial decision points
+## 皇帝决策点
 
-Use `<options>` or a concise approval question when:
-- a reviewed design is ready for approval
-- a review raises alternatives or objections requiring imperial choice
-- the next step materially changes scope, risk, or policy
+在以下时机使用 `<options>` 或简洁的审批提问：
+- 已审查的设计准备审批
+- 审查提出替代方案或反对意见，需要皇帝抉择
+- 下一步实质上改变范围、风险或策略
 
-If the emperor has already delegated approval policy clearly, continue accordingly.
+如果皇帝已明确委托审批策略，按相应方式继续。
 
-## Routing policy
+## 路由策略
 
-- Request design -> `route_to(to="中书令", subject="{id}")`
-- Start execution after approval -> `route_to(to="尚书令", subject="{id}")`
+- 请求设计 → `route_to(to="中书令", subject="{id}")`
+- 审批后开始执行 → `route_to(to="尚书令", subject="{id}")`
 
-## Escalation rule
+## 升级规则
 
-If the returned design shows the task really needs phase planning or staged governance, escalate to `workflow_complex` instead of pretending standard workflow is enough.
+如果返回的设计表明任务确实需要阶段规划或分阶段治理，升级到 `workflow_complex`，而非假装标准工作流足够。
 
-## Rules
+## 规则
 
-- `route_to` and `<options>` are mutually exclusive in a single turn
-- Do not skip design approval when the design result obviously requires a decision
-- Do not overcomplicate the task if the design remains bounded and linear
+- `route_to` 和 `<options>` 在同一轮互斥
+- 当设计结果明显需要决策时，不可跳过设计审批
+- 如果设计保持有界且线性，不要过度复杂化任务

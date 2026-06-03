@@ -1,51 +1,51 @@
-# Audit Workflow
+# 审计工作流
 
-Use this workflow for code audit, security review, or compliance inspection. Unlike standard execution workflows, audit is inspection-driven: 礼部 leads the review with compliance check and behavioral analysis.
+用于代码审计、安全审查或合规检查。与标准执行工作流不同，审计是检查驱动的：礼部主导审查，包含合规检查和行为分析。
 
-## Goal
+## 目标
 
-Produce a thorough audit report covering code quality, security concerns, standards compliance, and behavioral correctness. This workflow does NOT modify code — it only inspects and reports.
+产出全面的审计报告，涵盖代码质量、安全问题、标准合规性和行为正确性。此工作流**不修改代码**——只检查和报告。
 
-## When to use
+## 何时使用
 
-Use this mode when the emperor asks to:
-- audit a specific module or the entire codebase
-- perform a security review
-- check compliance with standards or precepts
-- review code written by external contributors
-- inspect for potential vulnerabilities
+皇帝要求以下事项时使用此模式：
+- 审计特定模块或整个代码库
+- 执行安全审查
+- 检查是否符合标准或戒律
+- 审查外部贡献者编写的代码
+- 检查潜在漏洞
 
-## Workflow intent
+## 工作流意图
 
-Inspection-first, with optional fix follow-up: 礼部 performs the audit → findings compiled into report → emperor decides on fixes.
+检查优先，可选修复跟进：礼部执行审计 → 发现编入报告 → 皇帝决定是否修复。
 
-## Steps
+## 步骤
 
-1. Create a task record with audit scope, focus areas, and any specific concerns
-2. Route to `礼部` for standards check + test coverage audit + behavioral review + security-sensitive pattern inspection. 礼部 reads all relevant precepts, contracts, designs, and source files, then produces an audit report.
-3. When the report returns, compile findings into a summary for the emperor. Use `<options>` to let the emperor decide: approve as-is, or route fixes to `尚书令`.
-4. If the emperor orders fixes, route to `尚书令` for execution
-5. After fixes, optionally re-audit the changed files
+1. 创建任务记录，包含审计范围、关注领域和任何特定关切
+2. 路由到`礼部`进行标准检查 + 测试覆盖审计 + 行为审查 + 安全敏感模式检查。礼部阅读所有相关戒律、契约、设计和源文件，然后产出审计报告
+3. 报告返回后，将发现整理为摘要呈现给皇帝。使用 `<options>` 让皇帝决定：按现状批准，或路由修复到`尚书令`
+4. 如果皇帝下令修复，路由到`尚书令`执行
+5. 修复后，可选重新审计变更的文件
 
-## 礼部 audit scope
+## 礼部审计范围
 
-礼部's audit covers:
-- Standards check (precept compliance)
-- Test coverage audit
-- Behavioral consistency review (implementation vs design)
-- Security-sensitive patterns (hardcoded credentials, unsafe input handling, etc.)
-- Permission and access control review
+礼部的审计涵盖：
+- 标准检查（戒律合规性）
+- 测试覆盖审计
+- 行为一致性审查（实现 vs 设计）
+- 安全敏感模式（硬编码凭据、不安全的输入处理等）
+- 权限和访问控制审查
 
-## Routing policy
+## 路由策略
 
-- Standards audit → `route_to(to="礼部", subject="{id}")`
-- Fix execution (if ordered) → `route_to(to="尚书令", subject="{id}")`
+- 标准审计 → `route_to(to="礼部", subject="{id}")`
+- 修复执行（如命令）→ `route_to(to="尚书令", subject="{id}")`
 
-Note: For audit, 内阁 routes directly to 礼部 — this is inspection, not execution dispatch. 尚书令 is only involved if the emperor decides to fix issues.
+注意：审计时，内阁直接路由到礼部——这是检查，不是执行调度。仅在皇帝决定修复问题时才涉及尚书令。
 
-## Rules
+## 规则
 
-- `route_to` and `<options>` are mutually exclusive in a single turn
-- Do not auto-route fixes without imperial decision
-- Audit reports must be presented to the emperor before any action is taken
-- If no issues are found, report the clean audit and close
+- `route_to` 和 `<options>` 在同一轮互斥
+- 未经皇帝决策，不可自动路由修复
+- 审计报告必须呈报皇帝，之后才可采取任何行动
+- 如未发现问题，报告审计通过并关闭

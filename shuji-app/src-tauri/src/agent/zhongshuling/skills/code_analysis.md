@@ -1,48 +1,59 @@
-# Code Structure Analysis
+# 代码结构分析
 
-Use this mode when asked to read and analyze target code, producing a structured analysis report. This is NOT a design document — it describes what exists, not what should be built.
+被要求阅读和分析目标代码，产出结构化分析报告时使用此模式。这不是设计文档——它描述现状，而非应该建成什么样。
 
-## When to use
+## 何时使用
 
-- The task asks you to analyze existing code structure
-- A workflow (optimize, refactor, bugfix) needs a baseline understanding before changes
-- The emperor or 内阁 asks "how does X work" or "analyze module Y"
+- 任务要求你分析现有代码结构
+- 工作流（优化、重构、缺陷修复）需要在变更前建立基线理解
+- 皇帝或内阁问"X 是怎么工作的"或"分析模块 Y"
 
-## Working method
+## 工作方法
 
-1. Read the target files specified in the task
-2. Browse the directory to understand the file tree
-3. For each file, extract:
-   - Public exports (functions, classes, types)
-   - Internal dependencies (what it imports from the project)
-   - External dependencies (what it imports from outside)
-   - Key data structures and their relationships
-4. Create an analysis document via `create_document(type="anls")`
-5. Populate it in chunks via `append_document`
+1. 读取任务中指定的目标文件
+2. 浏览目录以理解文件树
+3. 对每个文件，提取：
+   - 公开导出（函数、类、类型）
+   - 内部依赖（从项目导入的内容）
+   - 外部依赖（从外部导入的内容）
+   - 关键数据结构及其关系
+4. 通过 `create_document(type="anls")` 创建分析文档
+5. 通过 `append_document` 分块填充
 
-## Report structure
+## 报告结构
 
-The analysis document (`.shuji/analysis/`) must contain:
-- **Scope**: files analyzed, total LOC
-- **Module map**: file tree with one-line descriptions
-- **Public API surface**: every exported function/class/type with signature
-- **Dependency graph**: which files depend on which (internal only)
-- **Data flow**: major data structures and how they move through the code
-- **Pain points**: any obvious issues (god files, circular deps, unclear boundaries)
+分析文档（`.shuji/analysis/`）必须包含：
+- **范围**：分析的文件、总代码行数
+- **模块地图**：文件树及一行描述
+- **公开 API 表面**：每个导出的函数/类/类型及签名
+- **依赖图**：哪些文件依赖哪些文件（仅内部）
+- **数据流**：主要数据结构及其在代码中的流动方式
+- **痛点**：任何明显问题（上帝文件、循环依赖、边界不清晰）
 
-## Quality bar
+## 质量标准
 
-- Every public export is listed with its exact signature
-- Dependencies are traceable (file A imports from file B)
-- The report describes what IS, not what SHOULD BE
-- No optimization suggestions, no refactoring plans — just facts
+- 每个公开导出都列出其精确签名
+- 依赖关系可追溯（文件 A 从文件 B 导入）
+- 报告描述"是什么"，而非"应该是什么"
+- 没有优化建议，没有重构方案——只有事实
 
-## Routing
+## 路由
 
-- Analysis complete → report the document ID back; routing depends on the calling workflow
+- 分析完成 → 报告文档 ID；路由取决于调用方工作流
 
-## Rules
+## 规则
 
-- Do not suggest changes or improvements — this is pure analysis
-- Write the report in small chunks (500 chars per `append_document`)
-- Read every file you list in the analysis — do not guess from file names
+- 不提出变更或改进建议——这是纯分析
+- 以小分块编写报告（每次 `append_document` 500 字符）
+- 读取分析中列出的每个文件——不要从文件名猜测
+
+## 输出块
+
+每次分析结束时，输出以下结构化摘要：
+
+```
+分析结论：<核心发现一句话>
+关键发现数：<N>
+涉及时文件：<文件名列表>
+依赖/关联文档：<refs 编号列表>
+```

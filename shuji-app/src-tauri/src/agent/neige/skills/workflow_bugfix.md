@@ -1,36 +1,36 @@
-# Bugfix Workflow
+# 缺陷修复工作流
 
-Use this workflow for bug localization and repair. The flow adds diagnosis before execution and mandatory regression testing.
+用于缺陷定位和修复。流程在执行前增加诊断环节，并强制回归测试。
 
-## Goal
+## 目标
 
-Find the root cause, fix the bug, and ensure it stays fixed with a regression test.
+找到根因，修复缺陷，并通过回归测试确保修复有效。
 
-## When to use
+## 何时使用
 
-Use this mode when the emperor reports:
-- a specific bug or unexpected behavior
-- a crash, error, or incorrect output
-- a regression from previous changes
-- something that "used to work but doesn't anymore"
+皇帝报告以下问题时使用此模式：
+- 特定缺陷或意外行为
+- 崩溃、错误或错误输出
+- 之前的变更引发的回归
+- 某些"以前能用但现在已经不行了"的问题
 
-## Workflow intent
+## 工作流意图
 
-Route to 尚书令 for diagnosis and fix execution. 尚书令 orchestrates 兵部 (regression test contract first), then 工部 (fix), then 刑部 (regression test verification).
+路由到尚书令进行诊断和修复执行。尚书令统筹兵部（先写回归测试契约）、工部（修复）、刑部（回归测试验证）。
 
-## Steps
+## 步骤
 
-1. Create a task record with bug description, reproduction steps, and observed vs expected behavior
-2. Route to `尚书令` for diagnosis and fix execution. The task must instruct 尚书令 to prioritize: read the relevant code to diagnose root cause first, then 兵部 writes a regression test contract that reproduces the bug, then 工部 implements the fix, then 刑部 runs the regression test.
-3. When execution completes, verify the regression test passed before summarizing to the emperor
+1. 创建任务记录，包含缺陷描述、复现步骤和观察 vs 预期行为
+2. 路由到`尚书令`进行诊断和修复执行。任务必须指示尚书令按优先级执行：先阅读相关代码诊断根因，然后兵部编写复现缺陷的回归测试契约，然后工部实施修复，然后刑部运行回归测试
+3. 执行完成后，验证回归测试通过后再向皇帝总结
 
-## Routing policy
+## 路由策略
 
-- Bugfix execution → `route_to(to="尚书令", subject="{id}")`
+- 缺陷修复执行 → `route_to(to="尚书令", subject="{id}")`
 
-## Rules
+## 规则
 
-- Never skip diagnosis and go straight to fix — root cause must be understood first
-- A regression test is mandatory for every bugfix
-- If diagnosis reveals the bug is actually a design flaw, escalate to appropriate workflow
-- `route_to` and `<options>` are mutually exclusive in a single turn
+- 不可跳过诊断直接修复——根因必须先被理解
+- 每个缺陷修复强制要求回归测试
+- 如果诊断表明问题本质上是设计缺陷，升级到适当的工作流
+- `route_to` 和 `<options>` 在同一轮互斥

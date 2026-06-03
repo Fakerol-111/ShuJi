@@ -1,55 +1,55 @@
-# Optimize Workflow
+# 优化工作流
 
-Use this workflow for performance optimization, code profiling, or targeted non-architectural refactoring. The focus is analysis of existing code, not new feature design.
+用于性能优化、代码剖析或定向的非架构性重构。重点是分析现有代码，而非新功能设计。
 
-## Goal
+## 目标
 
-Identify and resolve performance bottlenecks or code quality issues in existing implementation, without changing architecture or adding new capabilities.
+识别并解决现有实现中的性能瓶颈或代码质量问题，不改变架构或增加新能力。
 
-## When to use
+## 何时使用
 
-Use this mode when the emperor asks to:
-- improve performance of a specific module or function
-- profile and optimize resource usage
-- clean up messy code without restructuring architecture
-- reduce memory, CPU, or I/O overhead
+皇帝要求以下事项时使用此模式：
+- 提升特定模块或函数的性能
+- 剖析并优化资源使用
+- 清理混乱代码但不重构架构
+- 减少内存、CPU 或 I/O 开销
 
-Do NOT use this mode for architectural restructuring — use `workflow_refactor` instead.
+不要用于架构性重构——改用 `workflow_refactor`。
 
-## Workflow intent
+## 工作流意图
 
-Analysis-driven optimization: 中书令 profiles/reads existing code → produces optimization analysis → execution chain applies fixes.
+分析驱动的优化：中书令剖析/阅读现有代码 → 产出优化分析 → 执行链实施修复。
 
-## Steps
+## 步骤
 
-1. Create a task record with the optimization target and constraints
-2. Record current baseline (e.g. "login endpoint takes ~800ms") if the emperor provided one
-3. Route to `中书令` for performance analysis — NOT a full design, but an analysis of bottlenecks and recommended optimizations
-4. When analysis returns, present findings to the emperor for approval. Use `<options>` if there are tradeoffs (e.g. speed vs readability)
-5. After approval, route to `尚书令` for execution
-6. When execution completes, summarize outcome
+1. 创建任务记录，包含优化目标和约束条件
+2. 记录当前基线（如皇帝提供了，例如"登录端点需 ~800ms"）
+3. 路由到`中书令`进行性能分析——不是完整设计，而是瓶颈分析和优化建议
+4. 分析返回后，将发现呈现给皇帝审批。如有权衡（如速度 vs 可读性），使用 `<options>`
+5. 审批后，路由到`尚书令`执行
+6. 执行完成后，总结结果
 
-## 中书令 analysis expectation
+## 中书令分析预期
 
-The analysis should identify:
-- specific bottlenecks with file/function locations
-- root causes (algorithm, I/O, allocation, locking, etc.)
-- recommended changes with expected impact
-- any risks or tradeoffs
+分析应识别：
+- 具体瓶颈及其文件/函数位置
+- 根因（算法、I/O、分配、锁竞争等）
+- 建议的变更及其预期影响
+- 任何风险或权衡
 
-This is NOT a full architectural design — it is a focused optimization analysis.
+这不是完整的架构设计——而是聚焦的优化分析。
 
-## Routing policy
+## 路由策略
 
-- Performance analysis → `route_to(to="中书令", subject="{id}")`
-- Execution after approval → `route_to(to="尚书令", subject="{id}")`
+- 性能分析 → `route_to(to="中书令", subject="{id}")`
+- 审批后执行 → `route_to(to="尚书令", subject="{id}")`
 
-## Escalation rule
+## 升级规则
 
-If analysis reveals the problem requires architectural restructuring, escalate to `workflow_refactor`.
+如果分析表明问题需要架构性重构，升级到 `workflow_refactor`。
 
-## Rules
+## 规则
 
-- `route_to` and `<options>` are mutually exclusive in a single turn
-- Do not skip imperial approval when tradeoffs exist
-- Do not inflate a performance fix into a full redesign unless truly necessary
+- `route_to` 和 `<options>` 在同一轮互斥
+- 存在权衡时不可跳过皇帝审批
+- 除非确实必要，不要将性能修复膨胀为完整重新设计

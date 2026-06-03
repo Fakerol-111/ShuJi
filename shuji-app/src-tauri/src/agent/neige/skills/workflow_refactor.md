@@ -1,62 +1,62 @@
-# Refactor Workflow
+# 重构工作流
 
-Use this workflow for architectural restructuring of existing code. Unlike optimize (which targets performance) or standard (which builds new features), refactoring is about changing the shape of existing code.
+用于现有代码的架构性重构。与优化（针对性能）或标准（构建新功能）不同，重构是关于改变现有代码的形状。
 
-## Goal
+## 目标
 
-Restructure existing architecture while preserving or improving external behavior. The key difference from standard workflow: 中书令 first analyzes the current architecture, then designs the target architecture.
+重构现有架构，同时保持或改善外部行为。与标准工作流的关键区别：中书令先分析当前架构，再设计目标架构。
 
-## When to use
+## 何时使用
 
-Use this mode when the emperor asks to:
-- restructure module boundaries
-- change data flow or dependency direction
-- split a monolith into modules, or merge over-split modules
-- introduce a new abstraction layer across the codebase
-- change the storage, messaging, or communication pattern
+皇帝要求以下事项时使用此模式：
+- 重构模块边界
+- 改变数据流或依赖方向
+- 拆分单体为模块，或合并过度拆分的模块
+- 跨代码库引入新的抽象层
+- 改变存储、消息或通信模式
 
-Do NOT use this for performance fixes (use `workflow_optimize`) or bug fixes (use `workflow_bugfix`).
+不要用于性能优化（使用 `workflow_optimize`）或缺陷修复（使用 `workflow_bugfix`）。
 
-## Workflow intent
+## 工作流意图
 
-Two-phase design: current-state analysis → target-state design → review → execution.
+两阶段设计：现状分析 → 目标状态设计 → 审查 → 执行。
 
-## Steps
+## 步骤
 
-1. Create a task record with refactoring goals, scope boundaries, and constraints (e.g. "preserve all existing API behavior", "no data migration")
-2. Route to `中书令` for current-state analysis — 中书令 reads the existing code and documents the current architecture, coupling points, and pain points
-3. When analysis returns, present to the emperor for confirmation that the analysis is accurate
-4. Route to `中书令` for refactoring design — based on the confirmed analysis, produce the target architecture
-5. When design returns, 中书令 routes to 门下侍中 for review
-6. When review returns, present the design and review to the emperor for sign-off. Use `<options>`.
-7. After approval, route to `尚书令` for execution
-8. When execution completes, summarize outcome
+1. 创建任务记录，包含重构目标、范围边界和约束条件（如"保持所有现有 API 行为"、"无需数据迁移"）
+2. 路由到`中书令`进行现状分析——中书令阅读现有代码并记录当前架构、耦合点和痛点
+3. 分析返回后，呈现给皇帝确认分析是否准确
+4. 路由到`中书令`进行重构设计——基于已确认的分析，产出目标架构
+5. 设计返回后，中书令路由到门下侍中审查
+6. 审查返回后，将设计和审查呈现给皇帝签字。使用 `<options>`
+7. 审批后，路由到`尚书令`执行
+8. 执行完成后，总结结果
 
-## 中书令 analysis expectation
+## 中书令分析预期
 
-The current-state analysis should cover:
-- module dependency graph
-- data flow paths
-- coupling hot-spots
-- existing abstraction layers
-- pain points that the refactoring should address
+现状分析应涵盖：
+- 模块依赖图
+- 数据流路径
+- 耦合热点
+- 现有抽象层
+- 重构应解决的痛点
 
-This is analysis, not design — it describes what IS, not what SHOULD BE.
+这是分析，不是设计——描述"是什么"，而非"应该是什么"。
 
-## Routing policy
+## 路由策略
 
-- Current-state analysis → `route_to(to="中书令", subject="{id}")`
-- Refactoring design → `route_to(to="中书令", subject="{id}")`
-- Execution after approval → `route_to(to="尚书令", subject="{id}")`
+- 现状分析 → `route_to(to="中书令", subject="{id}")`
+- 重构设计 → `route_to(to="中书令", subject="{id}")`
+- 审批后执行 → `route_to(to="尚书令", subject="{id}")`
 
-## Imperial decision points
+## 皇帝决策点
 
-- After current-state analysis: does the emperor confirm the analysis?
-- After design + review: does the emperor approve the refactoring plan?
+- 现状分析后：皇帝确认分析结果吗？
+- 设计 + 审查后：皇帝批准重构方案吗？
 
-## Rules
+## 规则
 
-- `route_to` and `<options>` are mutually exclusive in a single turn
-- Current-state analysis MUST precede refactoring design — do not design against an unverified understanding
-- If the refactoring scope expands to include new features, escalate to `workflow_complex`
-- Do not skip review for architectural refactoring
+- `route_to` 和 `<options>` 在同一轮互斥
+- 现状分析必须先于重构设计——不要基于未验证的理解进行设计
+- 如果重构范围扩大到包含新功能，升级到 `workflow_complex`
+- 架构性重构不可跳过审查

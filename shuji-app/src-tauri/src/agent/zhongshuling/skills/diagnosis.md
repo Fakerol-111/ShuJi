@@ -1,50 +1,63 @@
-# Bug Diagnosis
+# 缺陷诊断
 
-Use this mode to independently diagnose a bug through systematic code reading. This is the 中书令-side diagnostic capability used when the bug may have architectural root causes.
+通过系统的代码阅读独立诊断缺陷时使用此模式。这是中书令侧的诊断能力，用于缺陷可能具有架构性根因的场景。
 
-## When to use
+## 何时使用
 
-- 内阁 routes a task asking you to diagnose a bug from a design/architecture perspective
-- The bug may have architectural root causes rather than local implementation errors
-- A broader system understanding is needed to trace the issue across modules
+- 内阁路由任务，要求你从设计/架构角度诊断缺陷
+- 缺陷可能具有架构性根因而非局部实现错误
+- 需要更广泛的系统理解以跨模块追溯问题
 
-Note: For runtime bug diagnosis in the `workflow_bugfix` flow, 内阁 routes to 尚书令 for end-to-end diagnosis and fix. 中书令 diagnosis is used when the bug likely involves design-level issues or cross-module architecture problems.
+注意：在 `workflow_bugfix` 流程中进行运行时缺陷诊断时，内阁路由到尚书令进行端到端诊断和修复。中书令诊断用于缺陷可能涉及设计级问题或跨模块架构问题的场景。
 
-## Working method
+## 工作方法
 
-1. Read the bug description and reproduction steps from the task
-2. Identify candidate modules/files based on architectural knowledge
-3. Read → Hypothesize → Verify:
-   - Read relevant source files
-   - Form a hypothesis about root cause
-   - Read more code to verify or refute the hypothesis
-   - Repeat until root cause is confirmed
-4. Create a diagnosis document via `create_document(type="anls")`
-5. Populate in chunks via `append_document`
+1. 从任务中读取缺陷描述和复现步骤
+2. 基于架构知识识别候选模块/文件
+3. 阅读 → 假设 → 验证：
+   - 阅读相关源文件
+   - 形成关于根因的假设
+   - 阅读更多代码以验证或反驳假设
+   - 重复直至根因确认
+4. 通过 `create_document(type="anls")` 创建诊断文档
+5. 通过 `append_document` 分块填充
 
-## Diagnosis report structure
+## 诊断报告结构
 
-The report (`.shuji/analysis/`) must contain:
-- **Bug summary**: observed vs expected behavior, one sentence
-- **Root cause**: specific file, function, and logic flaw
-- **Trace**: call chain from trigger to failure point
-- **Contributing factors**: design issues that enabled the bug (if any)
-- **Affected scope**: what else might be impacted
-- **Fix guidance**: where to fix (file/function) and what constraint to preserve
+报告（`.shuji/analysis/`）必须包含：
+- **缺陷摘要**：观察 vs 预期行为，一句话
+- **根因**：具体文件、函数和逻辑缺陷
+- **链路**：从触发点到失败点的调用链
+- **促成因素**：使缺陷成为可能的设计问题（如有）
+- **影响范围**：其他可能受影响的内容
+- **修复指导**：在哪里修复（文件/函数）以及需要保持什么约束
 
-## Diagnosis discipline
+## 诊断纪律
 
-- Do NOT write fix code — describe where and what constraint matters
-- Verify your hypothesis with actual code reads, not assumptions
-- If the bug spans multiple modules, trace the full cross-module path
-- If you cannot confirm root cause, say so explicitly — do not guess
+- 不编写修复代码——描述在哪里以及什么约束重要
+- 通过实际代码阅读验证假设，而非凭空猜测
+- 如果缺陷跨多个模块，追溯完整的跨模块路径
+- 如果无法确认根因，明确说明——不猜测
 
-## Routing
+## 路由
 
-- Diagnosis complete → route back to the caller (内阁 or 尚书令)
+- 诊断完成 → 路由回调用方（内阁或尚书令）
 
-## Rules
+## 规则
 
-- Read every file in the trace path — do not guess from architecture knowledge alone
-- Report root cause, not symptoms
-- If the fix requires architectural change, flag it explicitly
+- 读取链路路径中的每个文件——不仅凭架构知识猜测
+- 报告根因，而非症状
+- 如果修复需要架构变更，显式标记
+
+## 输出块
+
+每次诊断结束时，输出以下结构化摘要：
+
+```
+诊断结论：<根因一句话>
+根因文件：<文件名+行号>
+触发链路：<简要调用链>
+影响范围：<受影响模块/文件>
+修复方向：<修改位置+约束>
+依赖/关联文档：<refs 编号列表>
+```

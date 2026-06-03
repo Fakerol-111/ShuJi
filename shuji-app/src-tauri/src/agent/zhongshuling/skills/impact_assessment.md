@@ -1,55 +1,68 @@
-# Impact Assessment
+# 影响评估
 
-Use this mode to evaluate the impact scope of a proposed change — what files, modules, and behaviors would be affected. This is a risk-analysis tool, not a design tool.
+评估提议变更的影响范围——哪些文件、模块和行为会受影响。这是风险分析工具，不是设计工具。
 
-## When to use
+## 何时使用
 
-- Before a major refactoring, to understand what will be touched
-- When the emperor or 内阁 asks "what would be affected if we change X"
-- After a diagnosis identifies a fix, to assess the fix's blast radius
-- Before merging a cross-module change
+- 重大重构前，理解会触及哪些内容
+- 皇帝或内阁问"如果我们改变 X，会影响到什么"
+- 诊断确定修复方案后，评估修复的波及范围
+- 合并跨模块变更前
 
-## Prerequisites
+## 前置条件
 
-- A proposed change: could be a design document, a bug diagnosis, an optimization plan, or a direct request
-- Understanding of the current code structure (read analysis documents or the source)
+- 一项提议变更：可以是设计文档、缺陷诊断、优化方案或直接请求
+- 对当前代码结构的理解（阅读分析文档或源代码）
 
-## Working method
+## 工作方法
 
-1. Read the proposed change (design, diagnosis, optimization plan, or task description)
-2. Identify the change points — what files/functions will be modified
-3. For each change point, trace:
-   - Callers: what depends on this function/signature
-   - Callees: what this function depends on
-   - Data impact: what data structures change, and what reads/writes them
-   - API impact: any public API or contract changes
-   - Test impact: which tests will need updating
-4. Create an impact report via `create_document(type="anls")`
-5. Populate in chunks via `append_document`
+1. 读取提议的变更（设计、诊断、优化方案或任务描述）
+2. 识别变更点——哪些文件/函数将被修改
+3. 对每个变更点，追溯：
+   - 调用者：什么依赖此函数/签名
+   - 被调用者：此函数依赖什么
+   - 数据影响：哪些数据结构变更，以及什么读写它们
+   - API 影响：任何公开 API 或契约变更
+   - 测试影响：哪些测试需要更新
+4. 通过 `create_document(type="anls")` 创建影响报告
+5. 通过 `append_document` 分块填充
 
-## Report structure
+## 报告结构
 
-The impact report (`.shuji/analysis/`) must contain:
-- **Change summary**: what is being proposed, one paragraph
-- **Direct changes**: files/functions that will be modified
-- **Ripple effects**: files that depend on the changed code (callers, importers)
-- **API/contract impact**: any public signature changes, with migration notes
-- **Test impact**: existing tests that will break or need updating
-- **Risk assessment**: low/medium/high, with specific risk factors
-- **Mitigation**: recommended order of changes to minimize risk
+影响报告（`.shuji/analysis/`）必须包含：
+- **变更摘要**：提议的内容，一段话
+- **直接影响**：将被修改的文件/函数
+- **波及效应**：依赖变更代码的文件（调用者、导入者）
+- **API/契约影响**：任何公开签名变更及迁移说明
+- **测试影响**：将破坏或需要更新的现有测试
+- **风险评估**：低/中/高，含具体风险因素
+- **缓解措施**：推荐的变更顺序以最小化风险
 
-## Dependency tracing
+## 依赖追溯
 
-- Use the project's import/dependency structure
-- Start from the change point and walk outward
-- Mark uncertain impacts as "needs verification" rather than guessing
+- 使用项目的导入/依赖结构
+- 从变更点出发向外扩展
+- 将不确定的影响标记为"需要验证"而非猜测
 
-## Routing
+## 路由
 
-- Assessment complete → report back; routing depends on the calling workflow
+- 评估完成 → 报告回去；路由取决于调用方工作流
 
-## Rules
+## 规则
 
-- Trace actual dependencies from code, not assumptions
-- Mark uncertainty explicitly — do not present guesses as facts
-- If the blast radius is unexpectedly large, recommend a smaller first step
+- 从代码中追溯实际依赖，而非假设
+- 显式标记不确定性——不要把猜测当作事实
+- 如果波及范围意外之大，推荐更小的第一步
+
+## 输出块
+
+每次影响评估结束时，输出以下结构化摘要：
+
+```
+评估结论：<影响范围一句话>
+直接影响文件数：<N>
+波及文件数：<N>
+API/契约变更：<有/无>
+风险等级：<低/中/高>
+依赖/关联文档：<refs 编号列表>
+```

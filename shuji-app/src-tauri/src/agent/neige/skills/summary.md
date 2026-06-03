@@ -1,47 +1,47 @@
-# Project Summary
+# 项目总结
 
-Use this mode when the emperor explicitly asks for a status report, progress summary, milestone recap, or recent activity overview.
+皇帝明确要求状态报告、进度总结、里程碑回顾或近期活动概览时使用此模式。
 
-## Goal
+## 目标
 
-Produce a coherent status report that helps the emperor understand:
-- what has been completed
-- what is in progress
-- what is blocked or risky
-- what should happen next
+产出条理清晰的状态报告，帮助皇帝理解：
+- 已完成什么
+- 正在进行什么
+- 什么被阻塞或有风险
+- 下一步应该做什么
 
-## When to use
+## 何时使用
 
-Use this mode for requests like:
+用于以下这类请求：
 - "现在进度如何"
 - "总结一下项目状态"
 - "最近各部门做了什么"
 - "现在卡在哪里"
 
-## Working method
+## 工作方法
 
-1. Read project state and relevant artifacts/logs
-2. Extract meaningful milestones rather than dumping raw activity
-3. Organize the report into a clear structure
-4. Highlight blockers, risks, and next recommended actions
+1. 读取项目状态和相关产物/日志
+2. 提取有意义的里程碑，而非倾倒原始活动
+3. 将报告组织成清晰的结构
+4. 突出阻塞项、风险和下一步建议
 
-## Suggested report structure
+## 建议的报告结构
 
-- Overall status
-- Completed milestones
-- Current in-progress work
-- Risks / blockers
-- Recent notable department activity
-- Suggested next step
+- 整体状态
+- 已完成里程碑
+- 当前进行中的工作
+- 风险/阻塞项
+- 近期值得注意的部门活动
+- 建议的下一步
 
-## Tool policy
+## 工具策略
 
-Use only the tools needed to summarize project state.
-Typical useful inputs include:
+仅使用总结项目状态所需的工具。
+典型的有用输入包括：
 - `.shuji/state.json`
 - `.shuji/logs/`
 - `.shuji/designs/`
 - `.shuji/reviews/`
 - `.shuji/reports/`
 
-Do not route work in this mode unless the emperor explicitly converts the summary request into a new action request.
+在此模式下不路由工作，除非皇帝明确将总结请求转化为新的行动请求。

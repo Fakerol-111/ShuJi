@@ -860,6 +860,184 @@ pub fn create_file_tool_def(description: &str) -> crate::api::client::ToolDefini
     }
 }
 
+// ── search_text helper ──────────────────────────────────────────────
+
+/// Recursively search for a text pattern in project files.
+/// Returns path:line_number: content_line for each match.
+pub async fn tool_search_text(working_dir: &Path, args: &serde_json::Value) -> String {
+    let pattern = args["pattern"].as_str().unwrap_or("");
+    if pattern.is_empty() {
+        return ToolOutput::error("search_text", "", "empty_pattern", "搜索模式不能为空");
+    }
+    let max_results = args["max_results"].as_u64().unwrap_or(50) as usize;
+    let glob = args["glob"].as_str().filter(|s| !s.is_empty());
+    let case_sensitive = args["case_sensitive"].as_bool().unwrap_or(true);
+
+    let mut results: Vec<String> = Vec::new();
+    let mut file_count: usize = 0;
+    let mut error_count: usize = 0;
+
+    // Directories to skip (common noise directories)
+    let skip_dirs: &[&str] = &[".git", ".shuji", "node_modules", "target", ".venv", "__pycache__"];
+
+    let mut stack = vec![working_dir.to_path_buf()];
+
+    while let Some(dir) = stack.pop() {
+        let mut entries = match tokio::fs::read_dir(&dir).await {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        while let Some(entry) = entries.next_entry().await.unwrap_or(None) {
+            let ft = match entry.file_type().await {
+                Ok(t) => t,
+                Err(_) => continue,
+            };
+            let name = entry.file_name().to_string_lossy().to_string();
+            if ft.is_dir() {
+                if !skip_dirs.contains(&name.as_str()) {
+                    stack.push(entry.path());
+                }
+            } else if ft.is_file() {
+                // Apply glob filter on filename
+                if let Some(g) = glob {
+                    if !simple_glob_match(&name, g) {
+                        continue;
+                    }
+                }
+
+                // Read file and search line by line
+                let content = match tokio::fs::read_to_string(entry.path()).await {
+                    Ok(c) => c,
+                    Err(_) => {
+                        error_count += 1;
+                        continue;
+                    }
+                };
+                file_count += 1;
+
+                let rel_path = entry
+                    .path()
+                    .strip_prefix(working_dir)
+                    .unwrap_or(&entry.path())
+                    .to_string_lossy()
+                    .to_string();
+
+                for (line_no, line) in content.lines().enumerate() {
+                    let matched = if case_sensitive {
+                        line.contains(pattern)
+                    } else {
+                        line.to_lowercase().contains(&pattern.to_lowercase())
+                    };
+                    if matched {
+                        results.push(format!("{}:{}:{}", rel_path, line_no + 1, line));
+                        if results.len() >= max_results {
+                            break;
+                        }
+                    }
+                }
+                if results.len() >= max_results {
+                    break;
+                }
+            }
+        }
+        if results.len() >= max_results {
+            break;
+        }
+    }
+
+    if results.is_empty() {
+        let searched = if let Some(g) = glob {
+            format!("在 {} 文件中搜索「{}」（{}）", file_count, pattern, g)
+        } else {
+            format!("在 {} 文件中搜索「{}」", file_count, pattern)
+        };
+        let msg = if error_count > 0 {
+            format!("{}，未找到匹配（{} 个文件因编码/权限跳过）", searched, error_count)
+        } else {
+            format!("{}，未找到匹配", searched)
+        };
+        return ToolOutput::success_raw("search_text", &msg);
+    }
+
+    let summary = format!(
+        "找到 {} 个匹配（共扫描 {} 文件{}），显示前 {} 行：\n{}",
+        results.len(),
+        file_count,
+        if error_count > 0 { format!("，{} 跳过", error_count) } else { String::new() },
+        results.len().min(max_results),
+        results.join("\n")
+    );
+
+    ToolOutput::success_raw("search_text", &summary)
+}
+
+/// Simple glob matching: supports `*` (any sequence) and `?` (single char).
+/// No path separators — matches only against the filename.
+fn simple_glob_match(name: &str, glob: &str) -> bool {
+    let name_chars: Vec<char> = name.chars().collect();
+    let glob_chars: Vec<char> = glob.chars().collect();
+    glob_match_inner(&name_chars, &glob_chars, 0, 0)
+}
+
+fn glob_match_inner(name: &[char], glob: &[char], ni: usize, gi: usize) -> bool {
+    if gi == glob.len() {
+        return ni == name.len();
+    }
+    if glob[gi] == '*' {
+        // Try matching 0, 1, 2, ... characters
+        for i in ni..=name.len() {
+            if glob_match_inner(name, glob, i, gi + 1) {
+                return true;
+            }
+        }
+        false
+    } else if glob[gi] == '?' {
+        if ni < name.len() {
+            glob_match_inner(name, glob, ni + 1, gi + 1)
+        } else {
+            false
+        }
+    } else {
+        if ni < name.len() && name[ni] == glob[gi] {
+            glob_match_inner(name, glob, ni + 1, gi + 1)
+        } else {
+            false
+        }
+    }
+}
+
+pub fn search_text_tool_def() -> crate::api::client::ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "search_text".into(),
+            description: "在项目文件中递归搜索文本模式。返回 文件:行号:内容 格式。替代 list_dir + 多次 read_file。".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "pattern": {
+                        "type": "string",
+                        "description": "要搜索的文本（区分大小写，不支持正则）"
+                    },
+                    "glob": {
+                        "type": "string",
+                        "description": "可选：文件名过滤模式，如 *.rs, *.md, *test*。支持 * 和 ? 通配符"
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "可选：最大返回匹配数（默认 50）"
+                    },
+                    "case_sensitive": {
+                        "type": "boolean",
+                        "description": "可选：是否区分大小写（默认 true）"
+                    }
+                },
+                "required": ["pattern"]
+            }),
+        },
+    }
+}
+
 pub fn list_dir_tool_def() -> crate::api::client::ToolDefinition {
     crate::api::client::ToolDefinition {
         tool_type: "function".into(),
@@ -956,6 +1134,233 @@ pub fn summarize_logs_tool_def() -> crate::api::client::ToolDefinition {
     }
 }
 
+/// ── run_tests (工部专用) ────────────────────────────────────────────
+/// Runs tests with auto-detected project type and structured output.
+/// Reduces LLM command-typing errors that trigger watchdog.
+pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> String {
+    let scope = args["scope"].as_str().unwrap_or("all");
+    let path = args["path"].as_str().filter(|s| !s.is_empty());
+
+    // Detect project type
+    let project_type = detect_project_type(working_dir);
+    let mut cmd = match project_type.as_str() {
+        "rust" => match scope {
+            "unit" => "cargo test --lib".to_string(),
+            "integration" => "cargo test --tests".to_string(),
+            _ => "cargo test".to_string(),
+        },
+        "node" => {
+            // Use project's test script or common runners
+            let has_vitest = working_dir.join("node_modules/.bin/vitest").exists();
+            let has_jest = working_dir.join("node_modules/.bin/jest").exists();
+            if has_vitest {
+                format!("npx vitest run{}", scope_suffix(scope))
+            } else if has_jest {
+                format!("npx jest --verbose{}", scope_suffix(scope))
+            } else {
+                "npm test".to_string()
+            }
+        }
+        "python" => match scope {
+            "unit" => "python -m pytest tests/ -v".to_string(),
+            "integration" => "python -m pytest tests/integration/ -v".to_string(),
+            _ => "python -m pytest -v".to_string(),
+        },
+        _ => {
+            return ToolOutput::success_raw(
+                "run_tests",
+                "未能检测到已知项目类型（Cargo.toml / package.json / pyproject.toml），无法确定测试命令。请使用 execute_command 自定义。",
+            );
+        }
+    };
+
+    // Append specific test file path if provided
+    if let Some(p) = path {
+        // Scope check: reject unit path with integration scope and vice versa
+        if scope == "integration" && !p.contains("integration") {
+            return ToolOutput::error(
+                "run_tests",
+                "",
+                "scope_mismatch",
+                &format!("scope=integration 但路径 {} 不匹配集成测试目录（tests/integration/）", p),
+            );
+        }
+        cmd.push_str(&format!(" -- {}", p));
+    }
+
+    log_console!("[run_tests] executing: {}", cmd);
+    let timeout = std::time::Duration::from_secs(300);
+
+    let (shell, shell_args) = if cfg!(windows) {
+        ("powershell", vec!["-Command"])
+    } else {
+        ("bash", vec!["-l", "-c"])
+    };
+
+    let output = match execute_with_timeout(shell, &shell_args, &cmd, working_dir, timeout).await {
+        Ok(o) => o,
+        Err(e) => return ToolOutput::error("run_tests", "", "exec_error", &e),
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let exit_code = output.status.code().unwrap_or(-1);
+
+    // Parse test results from output
+    let (parsed_pass, parsed_fail, parsed_total) = parse_test_output(&stdout, &stderr);
+
+    let pass_count = parsed_pass.unwrap_or(0);
+    let fail_count = parsed_fail.unwrap_or(0);
+    let total_count = parsed_total.unwrap_or(0);
+
+    // Extract failed test names from output
+    let failed_tests: Vec<&str> = stdout
+        .lines()
+        .filter(|l| l.contains("FAILED") || l.contains("... FAILED"))
+        .map(|l| {
+            l.trim()
+                .trim_start_matches("test ")
+                .trim_end_matches(" ... FAILED")
+                .trim_end_matches(" FAILED")
+        })
+        .collect();
+
+    // Build structured result
+    let mut report = String::new();
+    report.push_str(&format!(
+        "## 测试执行报告\n\n项目类型: {} | 范围: {} | 命令: `{}`\n",
+        project_type, scope, cmd
+    ));
+    report.push_str(&format!(
+        "退出码: {} | 通过: {} | 失败: {}",
+        exit_code, pass_count, fail_count,
+    ));
+    if total_count > 0 {
+        report.push_str(&format!(" | 总计: {}", total_count));
+    }
+    report.push('\n');
+
+    if !failed_tests.is_empty() {
+        report.push_str("\n### 失败用例\n");
+        for t in &failed_tests {
+            report.push_str(&format!("- {}\n", t));
+        }
+    }
+
+    if exit_code != 0 {
+        // Truncate stderr to avoid context overflow
+        let stderr_trimmed = if stderr.len() > 2000 {
+            format!("{}...\n[截断：显示前 2000 字符，共 {} 字符]", &stderr[..2000], stderr.len())
+        } else {
+            stderr.to_string()
+        };
+        if !stderr_trimmed.is_empty() {
+            report.push_str(&format!("\n### stderr 摘要\n{}", stderr_trimmed));
+        }
+    }
+
+    if exit_code == 0 && failed_tests.is_empty() {
+        report.push_str("\n✅ 全部通过");
+    }
+
+    ToolOutput::success_raw("run_tests", &report)
+}
+
+/// Detect project type by checking for key files.
+fn detect_project_type(working_dir: &Path) -> String {
+    if working_dir.join("Cargo.toml").exists() {
+        "rust".to_string()
+    } else if working_dir.join("package.json").exists() {
+        "node".to_string()
+    } else if working_dir.join("pyproject.toml").exists()
+        || working_dir.join("setup.py").exists()
+        || working_dir.join("requirements.txt").exists()
+    {
+        "python".to_string()
+    } else {
+        "unknown".to_string()
+    }
+}
+
+fn scope_suffix(scope: &str) -> &str {
+    match scope {
+        "unit" => " tests/",
+        "integration" => " tests/integration/",
+        _ => "",
+    }
+}
+
+/// Parse test output to extract pass/fail/total counts.
+/// Handles both Rust (cargo test) and Python (pytest) output formats.
+fn parse_test_output(stdout: &str, stderr: &str) -> (Option<usize>, Option<usize>, Option<usize>) {
+    let combined = format!("{}\n{}", stdout, stderr);
+
+    // Rust: "test result: FAILED. 7 passed; 1 failed; 0 ignored; ..."
+    if let Some(line) = combined.lines().find(|l| l.contains("test result:")) {
+        let passed = line
+            .split(';')
+            .find_map(|s| {
+                let s = s.trim();
+                s.strip_suffix(" passed").or_else(|| s.strip_suffix(" passed"))
+            })
+            .and_then(|s| s.trim().parse().ok());
+        let failed = line
+            .split(';')
+            .find_map(|s| {
+                let s = s.trim();
+                s.strip_suffix(" failed").or_else(|| s.strip_suffix(" failed"))
+            })
+            .and_then(|s| s.trim().parse().ok());
+        let total = combined
+            .lines()
+            .filter(|l| l.starts_with("test ") && l.contains("..."))
+            .count();
+        return (passed, failed, Some(total));
+    }
+
+    // Python pytest: "= X passed, Y failed in Z.ZZs ="
+    if let Some(line) = combined.lines().find(|l| l.contains("passed") || l.contains("failed")) {
+        let passed = line
+            .split(|c: char| c == ' ' || c == ',')
+            .filter_map(|s| s.trim().strip_suffix("passed"))
+            .filter_map(|s| s.trim().parse().ok())
+            .next();
+        let failed = line
+            .split(|c: char| c == ' ' || c == ',')
+            .filter_map(|s| s.trim().strip_suffix("failed"))
+            .filter_map(|s| s.trim().parse().ok())
+            .next();
+        return (passed, failed, None);
+    }
+
+    (None, None, None)
+}
+
+pub fn run_tests_tool_def() -> crate::api::client::ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "run_tests".into(),
+            description: "运行测试。自动检测项目类型（Rust/Node/Python），根据 scope 选择子命令。返回结构化报告：通过数、失败用例、stderr 摘要。替代手动拼 execute_command。".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "scope": {
+                        "type": "string",
+                        "enum": ["unit", "integration", "all"],
+                        "description": "unit=单元测试, integration=集成测试, all=全部（默认 all）"
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "可选：指定单个测试文件路径，如 tests/test_user.rs。scope 需匹配"
+                    }
+                },
+                "required": ["scope"]
+            }),
+        },
+    }
+}
+
 pub fn execute_command_tool_def(description: &str) -> crate::api::client::ToolDefinition {
     crate::api::client::ToolDefinition {
         tool_type: "function".into(),
@@ -1012,6 +1417,9 @@ pub async fn execute_named_tool(
             }
         }
         "find_document" => documents::tool_find_document(working_dir, args).await,
+        "read_document" => documents::tool_read_document(working_dir, args).await,
+        "search_text" => tool_search_text(working_dir, args).await,
+        "run_tests" => tool_run_tests(working_dir, args).await,
         "execute_command" => tool_execute_command(working_dir, args, dept).await,
         "summarize_logs" => tool_summarize_logs(working_dir, args).await,
         "route_to" => {

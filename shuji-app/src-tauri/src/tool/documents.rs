@@ -765,6 +765,127 @@ pub async fn check_doc_refs_approved_for_route(
     Ok(())
 }
 
+/// ── read_document ─────────────────────────────────────────────────
+/// Read a document by ID, returning parsed frontmatter and body.
+/// Combines find_document + read_file + YAML parsing into one call.
+/// Optionally extracts a specific section (## heading) from the body.
+pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) -> String {
+    let id = args["id"].as_str().unwrap_or("");
+    if id.is_empty() {
+        return ToolOutput::error("read_document", "", "empty_id", "文档 ID 不能为空");
+    }
+
+    let full = match resolve_doc_path(working_dir, id).await {
+        Ok(p) => p,
+        Err(e) => return ToolOutput::error("read_document", id, "not_found", &e),
+    };
+    if !full.exists() {
+        return ToolOutput::error(
+            "read_document",
+            id,
+            "not_found",
+            &format!("文档 {} 不存在", id),
+        );
+    }
+
+    let content = match tokio::fs::read_to_string(&full).await {
+        Ok(c) => c,
+        Err(e) => return ToolOutput::error("read_document", id, "read_error", &e.to_string()),
+    };
+
+    let (meta, body) = match parse_doc(&content) {
+        Ok(m) => m,
+        Err(e) => return ToolOutput::error("read_document", id, "parse_error", &e),
+    };
+
+    // Optional section extraction
+    let target_section = args["section"].as_str().filter(|s| !s.is_empty());
+    let extracted = if let Some(section_name) = target_section {
+        extract_section(body, section_name)
+    } else {
+        body.to_string()
+    };
+
+    // Optional max_chars truncation
+    let max_chars = args["max_chars"].as_u64().unwrap_or(0) as usize;
+    let display_body = if max_chars > 0 && extracted.len() > max_chars {
+        format!("{}...\n\n[截断：显示前 {} 字符，共 {} 字符]", &extracted[..max_chars], max_chars, extracted.len())
+    } else {
+        extracted
+    };
+
+    let rel_path = full.strip_prefix(working_dir).unwrap_or(&full).to_string_lossy();
+    let meta_line = format!(
+        "📄 {} | 类型: {} | 作者: {} | 时间: {} | 状态: {} | refs: {}",
+        meta.id, meta.doc_type, meta.author, meta.timestamp,
+        if meta.status.is_empty() { "-" } else { &meta.status },
+        meta.refs
+    );
+    let result = if target_section.is_some() {
+        format!("{}\n─── 章节 [{}] ───\n{}", meta_line, target_section.unwrap(), display_body)
+    } else {
+        format!("{}\n─── 正文 ───\n{}", meta_line, display_body)
+    };
+
+    ToolOutput::read_file("read_document", &rel_path, &result)
+}
+
+/// Extract a section (## heading) from markdown body text.
+/// Returns the section content (including the heading line) if found,
+/// or the entire body with a note if not found.
+fn extract_section(body: &str, section_name: &str) -> String {
+    let heading = format!("## {}", section_name);
+    let lines: Vec<&str> = body.lines().collect();
+    let mut start: Option<usize> = None;
+    let mut end: Option<usize> = None;
+
+    for (i, line) in lines.iter().enumerate() {
+        if line.trim() == heading || line.trim().starts_with(&heading) {
+            start = Some(i);
+        } else if start.is_some() {
+            if end.is_none() && line.starts_with("## ") {
+                end = Some(i);
+                break;
+            }
+        }
+    }
+
+    if let Some(s) = start {
+        let e = end.unwrap_or(lines.len());
+        lines[s..e].join("\n")
+    } else {
+        format!("[未找到章节「{}」，返回全文]\n{}", section_name, body)
+    }
+}
+
+pub fn read_document_tool_def() -> crate::api::client::ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "read_document".into(),
+            description: "按文档ID读取文档，返回 YAML 元信息 + 正文。可选按 ## 章节提取。设计/调度类部门首选，替代 find_document → read_file 两步。".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "文档 ID，如 dsgn_003, rprt_32, task_5"
+                    },
+                    "section": {
+                        "type": "string",
+                        "description": "可选：按 ## 标题提取特定章节（如「签名」「数据操作」），不传则返回全文"
+                    },
+                    "max_chars": {
+                        "type": "integer",
+                        "description": "可选：最大返回字符数，超出截断（以防超长文档撑爆上下文）"
+                    }
+                },
+                "required": ["id"]
+            }),
+        },
+    }
+}
+
 /// ── find_document ─────────────────────────────────────────────────
 pub async fn tool_find_document(working_dir: &Path, args: &serde_json::Value) -> String {
     let id = args["id"].as_str().unwrap_or("");

@@ -1,60 +1,60 @@
-# Requirements Clarification
+# 澄清需求
 
-Use this mode AFTER `expand_requirements` has produced a requirements document. Your job is to resolve the "待澄清" items in that document with the emperor.
+在 `expand_requirements` 产出需求文档后使用此模式。你的工作是解决文档中的"待澄清"项，向皇帝确认。
 
-## Goal
+## 目标
 
-Get answers to every unresolved item in the requirements document, then update it so downstream design has zero ambiguity.
+获取需求文档中每个未决项的答案，然后更新文档，使下游设计零歧义。
 
-## When to use
+## 何时使用
 
-Use this mode when:
-- `expand_requirements` has completed and returned a requirements document ID
-- the requirements document contains a non-empty "待澄清" section
-- the emperor hasn't already answered those questions
+满足以下条件时使用：
+- `expand_requirements` 已完成并返回了需求文档 ID
+- 需求文档包含非空的"待澄清"部分
+- 皇帝尚未回答这些问题
 
-Do NOT use this mode:
-- before `expand_requirements` has run (you'd be asking without a structured foundation)
-- if the requirements document has zero "待澄清" items (skip directly to design workflow)
+以下情况**不**使用此模式：
+- `expand_requirements` 尚未运行（没有结构化基础就问问题）
+- 需求文档的"待澄清"项为零（直接跳转到设计工作流）
 
-## Working method
+## 工作方法
 
-1. Read the requirements document to get the full "待澄清" list
-2. Present ALL unresolved items to the emperor in ONE batch:
+1. 读取需求文档获取完整的"待澄清"列表
+2. 一次性向皇帝呈现**所有**未决项：
    ```
    需确认以下事项：
    1. [问题1]
    2. [问题2]
    3. [问题3]
    ```
-   Ask 1-2 at a time only if the list is very short. For 3+ items, present them all.
-3. After the emperor answers, update the requirements document:
-   - Use `append_document` to add a "## 已澄清" section at the end
-   - Record each question and the emperor's answer
-   - Remove the resolved items from "待澄清" (or mark them `[x]`)
-4. Once all items are resolved, switch to the appropriate design workflow
+   仅在列表非常短时一次问 1-2 个。3 项以上时全部呈现。
+3. 皇帝回答后，更新需求文档：
+   - 使用 `append_document` 在末尾添加"## 已澄清"部分
+   - 记录每个问题及皇帝的回答
+   - 从"待澄清"中移除已解决项（或标记为 `[x]`）
+4. 所有项解决后，切换到适当的设计工作流
 
-## Boundaries
+## 边界
 
-Do:
-- Present all unknowns in one batch (don't drip-feed questions)
-- Record answers in the requirements document for downstream traceability
-- Move quickly to workflow selection after resolution
+应做：
+- 一次性呈现所有未知项（不要零散提问）
+- 将答案记录在需求文档中，供下游追溯
+- 解决后快速进入工作流选择
 
-Do not:
-- Start design or execution
-- Ask questions not in the "待澄清" list (scope creep)
-- Keep asking if the emperor says "就这样做" or equivalent (treat as resolved)
+不可：
+- 开始设计或执行
+- 问"待澄清"列表之外的问题（范围蔓延）
+- 如果皇帝说"就这样做"或类似表达，继续追问（视为已解决）
 
-## Routing after clarification
+## 澄清后的路由
 
-All clear → `<skill>workflow_standard</skill>` (or `workflow_complex` if multi-module)
+全部清晰 → `<skill>workflow_standard</skill>`（多模块则用 `workflow_complex`）
 
-If the requirements document was explicitly marked as lightweight/simple → `<skill>workflow_simple</skill>`
+如果需求文档明确标注为轻量级/简单 → `<skill>workflow_simple</skill>`
 
-## Rules
+## 规则
 
-- May use `read_file` to read the requirements document
-- May use `append_document` to record answers
-- Present all questions in one batch — don't make the emperor answer one at a time
-- After the emperor answers, update the doc then immediately switch workflow
+- 可使用 `read_file` 读取需求文档
+- 可使用 `append_document` 记录答案
+- 一次性呈现所有问题——不要让皇帝一个一个回答
+- 皇帝回答后，更新文档并立即切换工作流

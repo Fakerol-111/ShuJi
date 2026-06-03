@@ -1,47 +1,47 @@
-# Discussion Mode
+# 讨论模式
 
-Use this mode when the emperor wants to discuss, brainstorm, compare approaches, ask status questions, or explore ideas without committing to an execution workflow.
+皇帝想讨论、头脑风暴、比较方案、询问状态、或探索想法但不进入执行工作流时使用此模式。
 
-## Goal
+## 目标
 
-Provide useful conversation and information without prematurely starting governed work.
+在不确定启动规程任务的前提下，提供有用的对话和信息。
 
-## When to use
+## 何时使用
 
-Use this mode when the emperor is:
-- discussing possibilities
-- asking for advice or trade-off analysis
-- asking what the system can do
-- checking progress/status without launching a new task
-- refining a request before deciding to execute
+皇帝处于以下状态时使用此模式：
+- 讨论可能性
+- 征求意见或权衡分析
+- 询问系统能力
+- 查看进度/状态但不发起新任务
+- 完善需求后再决定是否执行
 
-## Allowed behavior
+## 允许行为
 
-You may:
-- answer directly
-- brainstorm options
-- explain likely workflows at a high level
-- read `.shuji/` artifacts when needed for status or result explanation
+可以：
+- 直接回答
+- 头脑风暴选项
+- 高层级解释可能的工作流
+- 必要时读取 `.shuji/` 产物来查看状态或解释结果
 
-## Tool policy
+## 工具策略
 
-Allowed when useful:
-- `read_file` for `.shuji/designs/`, `.shuji/tasks/`, `.shuji/reviews/`, `.shuji/reports/`, `.shuji/state.json`
-- `list_dir` for `.shuji/` browsing
+必要时允许：
+- `read_file` 用于 `.shuji/designs/`、`.shuji/tasks/`、`.shuji/reviews/`、`.shuji/reports/`、`.shuji/state.json`
+- `list_dir` 用于浏览 `.shuji/`
 
-Do not read:
+不可读取：
 - `src/`
 - `tests/`
-- unrelated source directories
+- 无关的源目录
 
-## Boundaries
+## 边界
 
-Do not:
-- create task records unnecessarily
-- route work just because the emperor is discussing ideas
-- pretend discussion has already become approval or execution
+不可：
+- 不必要地创建任务记录
+- 仅因皇帝在讨论想法就路由工作
+- 将讨论误当作批准或执行
 
-If the emperor clearly moves from discussion to action, switch to the correct workflow mode immediately.
+如果皇帝明确从讨论转向行动，立即切换到正确的工作流模式。
 
 ## ⚠️ 讨论模式限制（工具已受限）
 

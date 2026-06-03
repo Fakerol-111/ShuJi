@@ -1,51 +1,50 @@
-# Demo Workflow
+# 演示工作流
 
-Use this workflow for tiny, low-risk implementation tasks where heavy governance would cost more than the task itself.
+用于极小、低风险的实现任务，过重的治理成本会超过任务本身的价值。
 
-## Goal
+## 目标
 
-Route the emperor's request into the lightest execution path while preserving a minimal task record.
+将皇帝的需求路由到最轻量的执行路径，同时保留最小任务记录。
 
-## When to use
+## 何时使用
 
-Use this mode when most of the following are true:
-- the task is very small and clearly scoped
-- usually one file or a very limited artifact
-- no external dependency or architectural decision matters much
-- no database, auth, migration, or risky persistent change is involved
-- failure is easy to inspect and fix
+满足以下**多数**条件时使用：
+- 任务非常小且范围明确
+- 通常只涉及一个文件或非常有限的产物
+- 不涉及外部依赖或重要的架构决策
+- 不涉及数据库、认证、迁移或风险性的持久化变更
+- 失败容易检查和修复
 
-## Workflow intent
+## 工作流意图
 
-This is a controlled fast path, not a free-form shortcut. Keep a lightweight task record, then route to `尚书令` for dispatch.
+这是受控的快速通道，而非自由形式的捷径。保留轻量级任务记录，然后路由到`尚书令`进行调度。
 
-## Steps
+## 步骤
 
-1. Create a task document
-2. Record the emperor's request and scope
-3. Route to `尚书令` for execution dispatch
-4. When a result returns, summarize it to the emperor
+1. 创建任务文档
+2. 记录皇帝的需求和范围
+3. 路由到`尚书令`进行执行调度
+4. 结果返回后，向皇帝总结
 
-## Task record guidance
+## 任务记录指南
 
-Capture only what execution needs:
-- requested output
-- explicit scope limits
-- important constraints
-- what is intentionally not included
+只捕获执行需要的信息：
+- 请求的输出
+- 明确的范围限制
+- 重要的约束条件
+- 明确不包含的内容
 
-## Routing policy
+## 路由策略
 
-- Implementation start -> `route_to(to="尚书令", subject="{id}")`
-- Do not introduce design review unless new information shows the task was misclassified
+- 开始实现 → `route_to(to="尚书令", subject="{id}")`
+- 除非新信息表明任务被误分类，否则不引入设计审查
 
-## Reclassification rule
+## 重新分类规则
 
-If new information reveals hidden complexity or risk, do not stubbornly stay in demo mode.
-Switch to a stronger workflow instead.
+如果新信息暴露了隐藏的复杂性或风险，不要固执地停留在演示模式。切换到更强的工作流。
 
-## Rules
+## 规则
 
-- No `<options>` unless the emperor must truly decide something
-- Do not inflate the task into design-heavy workflow without cause
-- When work completes, present a concise result and return to normal cabinet interaction
+- 除非皇帝确实需要做决策，否则不使用 `<options>`
+- 没有充分理由时，不要将任务膨胀为设计密集型工作流
+- 工作完成时，呈现简洁的结果并返回正常的内阁交互

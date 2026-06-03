@@ -1,55 +1,55 @@
-# Simple Workflow
+# 简单工作流
 
-Use this workflow for small but real implementation tasks that need execution coordination, but not formal architecture design.
+用于小规模但真实的实现任务，需要执行协调，但不需要正式的架构设计。
 
-## Goal
+## 目标
 
-Send a low-risk, straightforward task into the execution chain through `尚书令`, while avoiding unnecessary design overhead.
+将低风险、直接的任务通过`尚书令`送入执行链，同时避免不必要的设计开销。
 
-## When to use
+## 何时使用
 
-Use this mode when most of the following are true:
-- the task spans multiple files or a modest feature slice
-- business logic is straightforward
-- architectural impact is limited
-- no major redesign is required
-- risk is low to moderate and manageable through execution/testing
+满足以下**多数**条件时使用：
+- 任务涉及多个文件或适度的功能片段
+- 业务逻辑直接明了
+- 架构影响有限
+- 不需要重大的重新设计
+- 风险低至中等，通过执行/测试可管理
 
-## Workflow intent
+## 工作流意图
 
-This workflow skips design-first governance but still preserves controlled execution through the dispatch chain.
+此工作流跳过了设计优先的治理，但仍通过调度链保留受控执行。
 
-## Steps
+## 步骤
 
-1. Create a task record
-2. Write clear scope, constraints, and completion target
-3. Route to `尚书令`
-4. When execution results return, summarize them to the emperor
+1. 创建任务记录
+2. 写明清晰的范围、约束和完成目标
+3. 路由到`尚书令`
+4. 执行结果返回后，向皇帝总结
 
-## Task record guidance
+## 任务记录指南
 
-Include:
-- requested capability
-- important files/modules if known
-- explicit constraints
-- notable risks if any
-- what is out of scope
+包含：
+- 请求的能力
+- 重要文件/模块（如已知）
+- 明确的约束条件
+- 值得注意的风险（如有）
+- 不在范围内的内容
 
-## Routing policy
+## 路由策略
 
-- Start execution -> `route_to(to="尚书令", subject="{id}")`
-- If hidden architecture issues appear, escalate to a stronger workflow rather than forcing execution blindly
+- 开始执行 → `route_to(to="尚书令", subject="{id}")`
+- 如果隐藏的架构问题浮现，升级到更强的工作流，而非盲目执行
 
-## Escalation triggers
+## 升级触发器
 
-Escalate out of simple workflow if you discover:
-- core module boundary changes
-- data model redesign
-- multi-stage delivery need
-- review/approval necessity before coding
+发现以下情况时从简单工作流升级：
+- 核心模块边界变更
+- 数据模型重新设计
+- 需要多阶段交付
+- 编码前需要审查/审批
 
-## Rules
+## 规则
 
-- No mandatory design review in this mode
-- No `<options>` unless imperial choice is genuinely needed
-- Prefer the lightest controlled path that is still safe
+- 此模式下不强制设计审查
+- 除非确实需要皇帝决策，否则不使用 `<options>`
+- 优先选择仍然安全的最轻量受控路径

@@ -1,68 +1,68 @@
-# Complex Workflow
+# 复杂工作流
 
-Use this workflow for high-impact, high-uncertainty, or multi-stage work that benefits from layered governance: overall design, phase planning when needed, then staged execution.
+用于高影响、高不确定性或多阶段的工作，受益于分层治理：整体设计、阶段规划（如需）、然后分阶段执行。
 
-## Goal
+## 目标
 
-Apply stronger governance to complex tasks while keeping the emperor in control at key decision points.
+对复杂任务施加更强的治理，同时在关键决策点让皇帝保持控制。
 
-## When to use
+## 何时使用
 
-Use this mode when one or more of the following are true:
-- the task spans many modules or subsystems
-- architecture may change materially
-- staged delivery is necessary
-- risk or uncertainty is high
-- different phases need explicit review or approval
-- downstream execution would be unsafe without architecture and phase decomposition first
+满足以下**任一**条件时使用：
+- 任务涉及多个模块或子系统
+- 架构可能发生重大变化
+- 需要分阶段交付
+- 风险或不确定性高
+- 不同阶段需要显式的审查或审批
+- 没有架构和阶段分解，下游执行不安全
 
-## Workflow intent
+## 工作流意图
 
-This workflow is for tasks where one linear design step is insufficient.
-Typical pattern:
-overall design -> review -> phase planning/design as needed -> approval checkpoints -> execution
+此工作流适用于一次线性设计步骤不够的任务。
+典型模式：
+整体设计 → 审查 → 阶段规划/设计（按需） → 审批检查点 → 执行
 
-## Working method
+## 工作方法
 
-1. Create a task record
-2. Record goals, major modules, constraints, risks, and expected outcomes
-3. Route to `中书令` for overall design
-4. When design/review returns, read the review report. Then present the design and review to the emperor — imperial sign-off is required even if the review passed. Use `<options>` for the emperor to decide.
-5. If approved, route to `中书令` for phase planning
-6. When phase planning/review returns, read the report. Present it to the emperor for sign-off — imperial approval is always required after a review, even if the review itself was positive.
-7. If approved, route to `中书令` for phase design(s), one per phase
-8. When phase design/review returns and the task is structured enough to execute, route to `尚书令`
-9. Summarize progress and outcome back to the emperor
+1. 创建任务记录
+2. 记录目标、主要模块、约束、风险和预期成果
+3. 路由到`中书令`进行整体设计
+4. 设计/审查返回后，读取审查报告。然后将设计和审查呈现给皇帝——即使审查已通过，也需要皇帝签字。使用 `<options>` 让皇帝决策。
+5. 审批通过后，路由到`中书令`进行阶段规划
+6. 阶段规划/审查返回后，读取报告。呈现给皇帝签字——审查后总是需要皇帝审批，即使审查本身是积极的。
+7. 审批通过后，路由到`中书令`进行阶段设计，每个阶段一次
+8. 阶段设计/审查返回且任务结构足够清晰后，路由到`尚书令`
+9. 向皇帝总结进度和结果
 
-## Emperor decision points
+## 皇帝决策点
 
-The emperor should usually be involved when:
-- overall design is reviewed and ready for approval
-- a phase plan materially defines delivery order and scope
-- major objections, trade-offs, or scope changes appear
+皇帝通常应在以下时机参与：
+- 整体设计审查完毕，准备审批
+- 阶段规划实质性地定义了交付顺序和范围
+- 出现重大异议、权衡或范围变化
 
-Do not auto-advance through every gate unless the emperor has clearly authorized that behavior.
+不要自动推进每个关口，除非皇帝已明确授权该行为。
 
-## Routing policy
+## 路由策略
 
-- Start design -> `route_to(to="中书令", subject="{id}")`
-- Continue governed design -> `route_to(to="中书令", subject="{id}")`
-- Start execution only after structure is stable -> `route_to(to="尚书令", subject="{id}")`
+- 开始设计 → `route_to(to="中书令", subject="{id}")`
+- 继续受控设计 → `route_to(to="中书令", subject="{id}")`
+- 仅在结构稳定后开始执行 → `route_to(to="尚书令", subject="{id}")`
 
-## Boundaries
+## 边界
 
-Do:
-- preserve governance strength
-- expose major decision points
-- use stronger process when risk justifies it
+应做：
+- 保持治理强度
+- 暴露主要决策点
+- 当风险证明合理时，使用更强的流程
 
-Do not:
-- collapse a complex task into a simple execution shortcut
-- over-specify phase details before design exists
-- hide approval-worthy transitions from the emperor
+不可：
+- 将复杂任务压缩为简单的执行快捷方式
+- 在设计存在之前过度指定阶段细节
+- 向皇帝隐藏值得审批的过渡点
 
-## Rules
+## 规则
 
-- `route_to` and `<options>` are mutually exclusive in a single turn
-- If complexity turns out lower than expected, you may de-escalate to a lighter workflow
-- If new risks appear, stay in governed mode rather than shortcutting execution
+- `route_to` 和 `<options>` 在同一轮互斥
+- 如果复杂度低于预期，可以降级到更轻的工作流
+- 如果出现新风险，保持在受控模式而非走执行捷径
