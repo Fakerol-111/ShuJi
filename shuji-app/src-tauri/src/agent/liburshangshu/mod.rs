@@ -15,7 +15,11 @@ pub struct LibuRShangshuAgent {
 
 impl LibuRShangshuAgent {
     pub fn new(client: AnthropicClient, model: &str, cancel: Arc<AtomicBool>) -> Self {
-        Self { client, model: model.to_string(), cancel }
+        Self {
+            client,
+            model: model.to_string(),
+            cancel,
+        }
     }
 
     fn tools() -> Vec<ToolDefinition> {
@@ -32,9 +36,13 @@ impl LibuRShangshuAgent {
 
 #[async_trait::async_trait]
 impl Agent for LibuRShangshuAgent {
-    fn role(&self) -> Role { Role::LiBuRShangshu }
+    fn role(&self) -> Role {
+        Role::LiBuRShangshu
+    }
 
-    fn set_interrupt_flag(&mut self, flag: Arc<AtomicBool>) { self.cancel = flag; }
+    fn set_interrupt_flag(&mut self, flag: Arc<AtomicBool>) {
+        self.cancel = flag;
+    }
 
     async fn execute(&self, input: &AgentInput) -> anyhow::Result<AgentOutput> {
         let system_prompt = include_str!("prompt.md");
@@ -47,7 +55,12 @@ impl Agent for LibuRShangshuAgent {
 
         let client = Arc::new(self.client.clone());
         let mut session = crate::api::session::Session::new(
-            system_prompt, &msgs, &self.model, &tools, &client, &input.runtime_config,
+            system_prompt,
+            &msgs,
+            &self.model,
+            &tools,
+            &client,
+            &input.runtime_config,
         )
         .with_role(self.role().name())
         .with_debug_dir(input.working_dir.clone());
@@ -58,20 +71,33 @@ impl Agent for LibuRShangshuAgent {
         );
 
         crate::agent::runner::load_and_compact_context(
-            &self.client, &self.model, &working_dir, &role_name,
-            &input.task_description, &mut session, &thresholds, false,
-        ).await;
+            &self.client,
+            &self.model,
+            &working_dir,
+            &role_name,
+            &input.task_description,
+            &mut session,
+            &thresholds,
+            false,
+        )
+        .await;
 
         let mut controller = crate::api::control::AgentController::new();
 
         let (compact_fn, compact_interval) = crate::agent::runner::build_compact_handler(
-            self.client.clone(), self.model.clone(), working_dir.clone(),
-            role_name.clone(), input.runtime_config.clone(), false,
+            self.client.clone(),
+            self.model.clone(),
+            working_dir.clone(),
+            role_name.clone(),
+            input.runtime_config.clone(),
+            false,
         );
         controller.set_compact_handler(compact_fn, compact_interval);
 
         controller.set_checkpoint_handler(crate::agent::runner::build_checkpoint_handler(
-            working_dir.clone(), role_name.clone(), input.task_description.clone(),
+            working_dir.clone(),
+            role_name.clone(),
+            input.task_description.clone(),
         ));
 
         let config = input.runtime_config.clone();
@@ -82,10 +108,18 @@ impl Agent for LibuRShangshuAgent {
             let wd = wd.clone();
             Box::pin(async move { Self::execute_tool(&name, &args, &wd).await })
         };
-        let (result, route) = controller.run(
-            &mut session, &exec, &self.cancel, &tools, None, &config,
-            Some(&*input.fast_cancel),
-        ).await?.into_tuple();
+        let (result, route) = controller
+            .run(
+                &mut session,
+                &exec,
+                &self.cancel,
+                &tools,
+                None,
+                &config,
+                Some(&*input.fast_cancel),
+            )
+            .await?
+            .into_tuple();
 
         crate::agent::runner::save_context(&session, &working_dir, &role_name).await;
 

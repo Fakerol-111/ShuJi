@@ -201,11 +201,7 @@ async fn git_checkpoint(working_dir: &Path, role: &str, description: &str) -> Op
 /// Save a final checkpoint after agent execution completes.
 /// Unlike periodic checkpoints, this uses an empty session snapshot
 /// to ensure at least one checkpoint exists even for short runs.
-pub async fn save_final(
-    working_dir: &Path,
-    role: &str,
-    description: &str,
-) -> Option<String> {
+pub async fn save_final(working_dir: &Path, role: &str, description: &str) -> Option<String> {
     let commit_hash = git_checkpoint(working_dir, role, description).await?;
 
     // Write snapshot with empty session (no session context available at actor level)

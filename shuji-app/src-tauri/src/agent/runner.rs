@@ -92,8 +92,16 @@ pub async fn load_and_compact_context(
     is_cabinet: bool,
 ) -> bool {
     if let Some(mut ctx) = PersistedContext::load_from(working_dir, role_name).await {
-        compact_and_save(client, model, &mut ctx, thresholds, is_cabinet, working_dir, role_name)
-            .await;
+        compact_and_save(
+            client,
+            model,
+            &mut ctx,
+            thresholds,
+            is_cabinet,
+            working_dir,
+            role_name,
+        )
+        .await;
 
         let mut msgs = ctx.to_messages();
         msgs.push(serde_json::json!({"role": "user", "content": task_description}));

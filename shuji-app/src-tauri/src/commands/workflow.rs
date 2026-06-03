@@ -904,9 +904,7 @@ pub async fn get_audit_timeline(
 
 /// Generate a delivery report for the current project.
 #[tauri::command]
-pub async fn generate_delivery_report(
-    state: State<'_, AppState>,
-) -> Result<String, String> {
+pub async fn generate_delivery_report(state: State<'_, AppState>) -> Result<String, String> {
     let working_dir = {
         let project_opt = state.current_project.lock().await;
         let p = project_opt
@@ -938,7 +936,9 @@ pub async fn get_document_diffs(
         p.working_dir.clone()
     };
     let diff_dir = std::path::Path::new(&working_dir)
-        .join(".shuji").join("audit").join("diffs");
+        .join(".shuji")
+        .join("audit")
+        .join("diffs");
     let mut diffs = Vec::new();
 
     match tokio::fs::read_dir(&diff_dir).await {
@@ -952,9 +952,21 @@ pub async fn get_document_diffs(
                 if name.starts_with(&format!("{}_", doc_id)) {
                     let stripped = name.strip_suffix(".patch").unwrap_or(&name);
                     let parts: Vec<&str> = stripped.splitn(3, '_').collect();
-                    let event = if parts.len() > 1 { parts[1].to_string() } else { String::new() };
-                    let ts = if parts.len() > 2 { parts[2].to_string() } else { String::new() };
-                    diffs.push(DocDiffFile { filename: name, event, ts });
+                    let event = if parts.len() > 1 {
+                        parts[1].to_string()
+                    } else {
+                        String::new()
+                    };
+                    let ts = if parts.len() > 2 {
+                        parts[2].to_string()
+                    } else {
+                        String::new()
+                    };
+                    diffs.push(DocDiffFile {
+                        filename: name,
+                        event,
+                        ts,
+                    });
                 }
             }
         }
@@ -978,7 +990,10 @@ pub async fn read_document_diff(
         p.working_dir.clone()
     };
     let path = std::path::Path::new(&working_dir)
-        .join(".shuji").join("audit").join("diffs").join(&filename);
+        .join(".shuji")
+        .join("audit")
+        .join("diffs")
+        .join(&filename);
     tokio::fs::read_to_string(&path)
         .await
         .map_err(|e| format!("读取 diff 失败: {}", e))

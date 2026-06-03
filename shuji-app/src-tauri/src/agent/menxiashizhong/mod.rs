@@ -16,7 +16,11 @@ pub struct MenxiaShizhongAgent {
 
 impl MenxiaShizhongAgent {
     pub fn new(client: AnthropicClient, model: &str, cancel: Arc<AtomicBool>) -> Self {
-        Self { client, model: model.to_string(), cancel }
+        Self {
+            client,
+            model: model.to_string(),
+            cancel,
+        }
     }
 
     fn tools() -> Vec<ToolDefinition> {
@@ -40,9 +44,13 @@ impl MenxiaShizhongAgent {
 
 #[async_trait::async_trait]
 impl Agent for MenxiaShizhongAgent {
-    fn role(&self) -> Role { Role::MenxiaShizhong }
+    fn role(&self) -> Role {
+        Role::MenxiaShizhong
+    }
 
-    fn set_interrupt_flag(&mut self, flag: Arc<AtomicBool>) { self.cancel = flag; }
+    fn set_interrupt_flag(&mut self, flag: Arc<AtomicBool>) {
+        self.cancel = flag;
+    }
 
     async fn execute(&self, input: &AgentInput) -> anyhow::Result<AgentOutput> {
         let system_prompt = include_str!("prompt.md");
@@ -55,7 +63,12 @@ impl Agent for MenxiaShizhongAgent {
 
         let client = Arc::new(self.client.clone());
         let mut session = crate::api::session::Session::new(
-            system_prompt, &msgs, &self.model, &tools, &client, &input.runtime_config,
+            system_prompt,
+            &msgs,
+            &self.model,
+            &tools,
+            &client,
+            &input.runtime_config,
         )
         .with_role(self.role().name())
         .with_debug_dir(input.working_dir.clone());
@@ -66,20 +79,33 @@ impl Agent for MenxiaShizhongAgent {
         );
 
         crate::agent::runner::load_and_compact_context(
-            &self.client, &self.model, &working_dir, &role_name,
-            &input.task_description, &mut session, &thresholds, false,
-        ).await;
+            &self.client,
+            &self.model,
+            &working_dir,
+            &role_name,
+            &input.task_description,
+            &mut session,
+            &thresholds,
+            false,
+        )
+        .await;
 
         let mut controller = crate::api::control::AgentController::new();
 
         let (compact_fn, compact_interval) = crate::agent::runner::build_compact_handler(
-            self.client.clone(), self.model.clone(), working_dir.clone(),
-            role_name.clone(), input.runtime_config.clone(), false,
+            self.client.clone(),
+            self.model.clone(),
+            working_dir.clone(),
+            role_name.clone(),
+            input.runtime_config.clone(),
+            false,
         );
         controller.set_compact_handler(compact_fn, compact_interval);
 
         controller.set_checkpoint_handler(crate::agent::runner::build_checkpoint_handler(
-            working_dir.clone(), role_name.clone(), input.task_description.clone(),
+            working_dir.clone(),
+            role_name.clone(),
+            input.task_description.clone(),
         ));
 
         let config = input.runtime_config.clone();
@@ -94,17 +120,30 @@ impl Agent for MenxiaShizhongAgent {
         let (mut result, mut route);
         let mut current_skill = String::new();
         loop {
-            (result, route) = controller.run(
-                &mut session, &exec, &self.cancel, &tools, None, &config,
-                Some(&*input.fast_cancel),
-            ).await?.into_tuple();
+            (result, route) = controller
+                .run(
+                    &mut session,
+                    &exec,
+                    &self.cancel,
+                    &tools,
+                    None,
+                    &config,
+                    Some(&*input.fast_cancel),
+                )
+                .await?
+                .into_tuple();
 
-            if route.is_some() { break; }
+            if route.is_some() {
+                break;
+            }
 
             match extract_skill(&result) {
                 Some(ref skill_name) if !Self::load_skill(skill_name).is_empty() => {
                     if skill_name == &current_skill {
-                        log_console!("[门下侍中] skill {} already loaded, prompting continue", skill_name);
+                        log_console!(
+                            "[门下侍中] skill {} already loaded, prompting continue",
+                            skill_name
+                        );
                         session.inject(&format!("[系统] 技能 {} 已在当前会话中。请直接继续执行该技能的指令，不要重复输出 <skill> 标签。", skill_name));
                         continue;
                     }

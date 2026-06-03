@@ -45,19 +45,20 @@ fn sanitize_strips_dangling_tool_calls() {
     let ctx = PersistedContext {
         base_prompt: "system".into(),
         soul_prompt: None,
-        context_messages: vec![
-            serde_json::json!({
-                "role": "assistant",
-                "content": "let me read",
-                "tool_calls": [{"id": "call_no_result", "type": "function", "function": {"name": "read_file", "arguments": "{}"}}]
-            }),
-        ],
+        context_messages: vec![serde_json::json!({
+            "role": "assistant",
+            "content": "let me read",
+            "tool_calls": [{"id": "call_no_result", "type": "function", "function": {"name": "read_file", "arguments": "{}"}}]
+        })],
     };
     let msgs = ctx.to_messages();
     let assistant: Vec<_> = msgs.iter().filter(|m| m["role"] == "assistant").collect();
     assert_eq!(assistant.len(), 1, "assistant message should be kept");
     assert!(
-        assistant[0]["tool_calls"].as_array().map(|a| a.is_empty()).unwrap_or(true),
+        assistant[0]["tool_calls"]
+            .as_array()
+            .map(|a| a.is_empty())
+            .unwrap_or(true),
         "dangling tool_calls should be stripped, got: {:?}",
         assistant[0]["tool_calls"]
     );
@@ -85,9 +86,17 @@ fn sanitize_keeps_partial_valid_tool_calls() {
     let assistant: Vec<_> = msgs.iter().filter(|m| m["role"] == "assistant").collect();
     let remaining_ids: Vec<String> = assistant[0]["tool_calls"]
         .as_array()
-        .map(|arr| arr.iter().filter_map(|tc| tc["id"].as_str().map(String::from)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|tc| tc["id"].as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
-    assert_eq!(remaining_ids, vec!["call_valid"], "only the matched tool call should remain");
+    assert_eq!(
+        remaining_ids,
+        vec!["call_valid"],
+        "only the matched tool call should remain"
+    );
 }
 
 #[test]
@@ -101,7 +110,10 @@ fn sanitize_handles_empty_tool_call_id() {
     };
     let msgs = ctx.to_messages();
     let tool_msgs: Vec<_> = msgs.iter().filter(|m| m["role"] == "tool").collect();
-    assert!(tool_msgs.is_empty(), "tool messages with empty id should be removed");
+    assert!(
+        tool_msgs.is_empty(),
+        "tool messages with empty id should be removed"
+    );
 }
 
 // ── PersistedContext round-trip ──────────────────────────────────────────
@@ -121,10 +133,15 @@ fn persisted_context_round_trip_preserves_skill_messages() {
     let rehydrated = PersistedContext::from_messages(&msgs);
     assert_eq!(rehydrated.base_prompt, original.base_prompt);
     assert_eq!(rehydrated.soul_prompt, original.soul_prompt);
-    assert_eq!(rehydrated.context_messages.len(), original.context_messages.len());
+    assert_eq!(
+        rehydrated.context_messages.len(),
+        original.context_messages.len()
+    );
     let skill_msg = &rehydrated.context_messages[0];
-    assert!(skill_msg["content"].as_str().unwrap().contains("[skill:"),
-        "skill message should survive round-trip");
+    assert!(
+        skill_msg["content"].as_str().unwrap().contains("[skill:"),
+        "skill message should survive round-trip"
+    );
 }
 
 #[test]
@@ -140,7 +157,10 @@ fn persisted_context_round_trip_with_summary() {
     let msgs = original.to_messages();
     let rehydrated = PersistedContext::from_messages(&msgs);
     assert_eq!(rehydrated.context_messages.len(), 2);
-    assert!(rehydrated.context_messages[0]["content"].as_str().unwrap().contains("[对话摘要]"));
+    assert!(rehydrated.context_messages[0]["content"]
+        .as_str()
+        .unwrap()
+        .contains("[对话摘要]"));
 }
 
 // ── PersistedContext::trim_tool_results ──────────────────────────────────
@@ -194,10 +214,16 @@ fn from_messages_splits_layers_correctly() {
     assert_eq!(ctx.base_prompt, "base prompt text");
     assert_eq!(ctx.soul_prompt.as_deref(), Some("[soul: neige]\nbe wise"));
     assert_eq!(ctx.context_messages.len(), 4);
-    assert!(ctx.context_messages[0]["content"].as_str().unwrap().contains("[skill:"));
+    assert!(ctx.context_messages[0]["content"]
+        .as_str()
+        .unwrap()
+        .contains("[skill:"));
     assert_eq!(ctx.context_messages[1]["role"], "user");
     assert_eq!(ctx.context_messages[2]["role"], "assistant");
-    assert!(ctx.context_messages[3]["content"].as_str().unwrap().contains("[对话摘要]"));
+    assert!(ctx.context_messages[3]["content"]
+        .as_str()
+        .unwrap()
+        .contains("[对话摘要]"));
 }
 
 #[test]
@@ -232,7 +258,10 @@ fn run_result_routed_text_and_route() {
         subject: "dsgn_001".to_string(),
         payload: None,
     };
-    let result = RunResult::Routed { text: "已路由".to_string(), route: route.clone() };
+    let result = RunResult::Routed {
+        text: "已路由".to_string(),
+        route: route.clone(),
+    };
     assert_eq!(result.text(), "已路由");
     let extracted = result.into_route();
     assert!(extracted.is_some());

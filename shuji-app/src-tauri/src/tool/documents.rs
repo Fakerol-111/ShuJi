@@ -356,7 +356,11 @@ pub async fn tool_modify_document(
 
     match tokio::fs::write(&full, &new_content).await {
         Ok(_) => {
-            let detail = format!("old_text_len={}, new_text_len={}", args["old_text"].as_str().unwrap_or("").len(), args["new_text"].as_str().unwrap_or("").len());
+            let detail = format!(
+                "old_text_len={}, new_text_len={}",
+                args["old_text"].as_str().unwrap_or("").len(),
+                args["new_text"].as_str().unwrap_or("").len()
+            );
             crate::audit::append(working_dir, "modify_document", dept, id, &detail).await;
             crate::audit::save_diff(working_dir, id, "modify_document", &body, &new_body).await;
             ToolOutput::success("modify_document", id, "修改成功")
@@ -819,20 +823,40 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
     // Optional max_chars truncation
     let max_chars = args["max_chars"].as_u64().unwrap_or(0) as usize;
     let display_body = if max_chars > 0 && extracted.len() > max_chars {
-        format!("{}...\n\n[截断：显示前 {} 字符，共 {} 字符]", &extracted[..max_chars], max_chars, extracted.len())
+        format!(
+            "{}...\n\n[截断：显示前 {} 字符，共 {} 字符]",
+            &extracted[..max_chars],
+            max_chars,
+            extracted.len()
+        )
     } else {
         extracted
     };
 
-    let rel_path = full.strip_prefix(working_dir).unwrap_or(&full).to_string_lossy();
+    let rel_path = full
+        .strip_prefix(working_dir)
+        .unwrap_or(&full)
+        .to_string_lossy();
     let meta_line = format!(
         "📄 {} | 类型: {} | 作者: {} | 时间: {} | 状态: {} | refs: {}",
-        meta.id, meta.doc_type, meta.author, meta.timestamp,
-        if meta.status.is_empty() { "-" } else { &meta.status },
+        meta.id,
+        meta.doc_type,
+        meta.author,
+        meta.timestamp,
+        if meta.status.is_empty() {
+            "-"
+        } else {
+            &meta.status
+        },
         meta.refs
     );
     let result = if target_section.is_some() {
-        format!("{}\n─── 章节 [{}] ───\n{}", meta_line, target_section.unwrap(), display_body)
+        format!(
+            "{}\n─── 章节 [{}] ───\n{}",
+            meta_line,
+            target_section.unwrap(),
+            display_body
+        )
     } else {
         format!("{}\n─── 正文 ───\n{}", meta_line, display_body)
     };

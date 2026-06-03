@@ -234,7 +234,8 @@ pub fn audit_checklist_tools() -> Vec<ToolDefinition> {
             tool_type: "function".into(),
             function: crate::api::client::ToolFunction {
                 name: "init_checklist".into(),
-                description: "初始化审计检查清单，按类别生成标准检查项。类别: spec/test/general。".into(),
+                description: "初始化审计检查清单，按类别生成标准检查项。类别: spec/test/general。"
+                    .into(),
                 parameters: serde_json::json!({
                     "type": "object",
                     "properties": {
@@ -289,7 +290,9 @@ pub fn reauth_tool() -> Vec<ToolDefinition> {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "request_reauth".into(),
-            description: "请求礼部对指定文档重新审计。会自动路由到目标部门。修复完成后由尚书令/刑部调用。".into(),
+            description:
+                "请求礼部对指定文档重新审计。会自动路由到目标部门。修复完成后由尚书令/刑部调用。"
+                    .into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

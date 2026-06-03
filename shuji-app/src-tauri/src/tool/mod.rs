@@ -878,7 +878,14 @@ pub async fn tool_search_text(working_dir: &Path, args: &serde_json::Value) -> S
     let mut error_count: usize = 0;
 
     // Directories to skip (common noise directories)
-    let skip_dirs: &[&str] = &[".git", ".shuji", "node_modules", "target", ".venv", "__pycache__"];
+    let skip_dirs: &[&str] = &[
+        ".git",
+        ".shuji",
+        "node_modules",
+        "target",
+        ".venv",
+        "__pycache__",
+    ];
 
     let mut stack = vec![working_dir.to_path_buf()];
 
@@ -952,7 +959,10 @@ pub async fn tool_search_text(working_dir: &Path, args: &serde_json::Value) -> S
             format!("在 {} 文件中搜索「{}」", file_count, pattern)
         };
         let msg = if error_count > 0 {
-            format!("{}，未找到匹配（{} 个文件因编码/权限跳过）", searched, error_count)
+            format!(
+                "{}，未找到匹配（{} 个文件因编码/权限跳过）",
+                searched, error_count
+            )
         } else {
             format!("{}，未找到匹配", searched)
         };
@@ -963,7 +973,11 @@ pub async fn tool_search_text(working_dir: &Path, args: &serde_json::Value) -> S
         "找到 {} 个匹配（共扫描 {} 文件{}），显示前 {} 行：\n{}",
         results.len(),
         file_count,
-        if error_count > 0 { format!("，{} 跳过", error_count) } else { String::new() },
+        if error_count > 0 {
+            format!("，{} 跳过", error_count)
+        } else {
+            String::new()
+        },
         results.len().min(max_results),
         results.join("\n")
     );
@@ -1182,7 +1196,10 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
                 "run_tests",
                 "",
                 "scope_mismatch",
-                &format!("scope=integration 但路径 {} 不匹配集成测试目录（tests/integration/）", p),
+                &format!(
+                    "scope=integration 但路径 {} 不匹配集成测试目录（tests/integration/）",
+                    p
+                ),
             );
         }
         cmd.push_str(&format!(" -- {}", p));
@@ -1250,7 +1267,11 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
     if exit_code != 0 {
         // Truncate stderr to avoid context overflow
         let stderr_trimmed = if stderr.len() > 2000 {
-            format!("{}...\n[截断：显示前 2000 字符，共 {} 字符]", &stderr[..2000], stderr.len())
+            format!(
+                "{}...\n[截断：显示前 2000 字符，共 {} 字符]",
+                &stderr[..2000],
+                stderr.len()
+            )
         } else {
             stderr.to_string()
         };
@@ -1301,14 +1322,16 @@ fn parse_test_output(stdout: &str, stderr: &str) -> (Option<usize>, Option<usize
             .split(';')
             .find_map(|s| {
                 let s = s.trim();
-                s.strip_suffix(" passed").or_else(|| s.strip_suffix(" passed"))
+                s.strip_suffix(" passed")
+                    .or_else(|| s.strip_suffix(" passed"))
             })
             .and_then(|s| s.trim().parse().ok());
         let failed = line
             .split(';')
             .find_map(|s| {
                 let s = s.trim();
-                s.strip_suffix(" failed").or_else(|| s.strip_suffix(" failed"))
+                s.strip_suffix(" failed")
+                    .or_else(|| s.strip_suffix(" failed"))
             })
             .and_then(|s| s.trim().parse().ok());
         let total = combined
@@ -1319,7 +1342,10 @@ fn parse_test_output(stdout: &str, stderr: &str) -> (Option<usize>, Option<usize
     }
 
     // Python pytest: "= X passed, Y failed in Z.ZZs ="
-    if let Some(line) = combined.lines().find(|l| l.contains("passed") || l.contains("failed")) {
+    if let Some(line) = combined
+        .lines()
+        .find(|l| l.contains("passed") || l.contains("failed"))
+    {
         let passed = line
             .split(|c: char| c == ' ' || c == ',')
             .filter_map(|s| s.trim().strip_suffix("passed"))
@@ -1519,7 +1545,14 @@ async fn tool_cancel_agent(args: &serde_json::Value, ctx: &ToolContext) -> Strin
             }
         }
         log_console!("[tool] cancel_agent → {} interrupted", target);
-        crate::audit::append(&ctx.working_dir, "cancel_agent", "内阁", target, "cancel_agent 操作").await;
+        crate::audit::append(
+            &ctx.working_dir,
+            "cancel_agent",
+            "内阁",
+            target,
+            "cancel_agent 操作",
+        )
+        .await;
         return serde_json::json!({"ok": true, "message": format!("已中断 {} 的当前操作", target)})
             .to_string();
     }
@@ -1832,7 +1865,8 @@ pub async fn tool_add_violation(args: &serde_json::Value, working_dir: &Path) ->
     let location = args["location"].as_str().unwrap_or("");
     let description = args["description"].as_str().unwrap_or("");
     if rule_id.is_empty() || description.is_empty() {
-        return serde_json::json!({"ok": false, "message": "rule_id 和 description 不能为空"}).to_string();
+        return serde_json::json!({"ok": false, "message": "rule_id 和 description 不能为空"})
+            .to_string();
     }
     crate::audit::add_violation(working_dir, severity, rule_id, location, description).await;
     serde_json::json!({"ok": true, "message": format!("违规记录已添加: {} — {}", rule_id, description)}).to_string()
@@ -1842,10 +1876,14 @@ pub async fn tool_request_reauth(args: &serde_json::Value, working_dir: &Path) -
     let subject = args["subject"].as_str().unwrap_or("");
     let reason = args["reason"].as_str().unwrap_or("");
     if subject.is_empty() || reason.is_empty() {
-        return serde_json::json!({"ok": false, "message": "subject 和 reason 不能为空"}).to_string();
+        return serde_json::json!({"ok": false, "message": "subject 和 reason 不能为空"})
+            .to_string();
     }
     let _ = crate::audit::request_reauth(working_dir, subject, reason).await;
     // Return route_to operation so the AgentController automatically routes to the target
-    let msg = format!("已提交复验请求，自动路由到 {} 进行重新审计。{}", "礼部", reason);
+    let msg = format!(
+        "已提交复验请求，自动路由到 {} 进行重新审计。{}",
+        "礼部", reason
+    );
     ToolOutput::success("route_to", subject, &msg)
 }

@@ -27,7 +27,12 @@ pub struct PlanState {
 
 impl PlanState {
     fn from_batches(batches: Vec<PlanBatch>) -> Self {
-        Self { batches, current: 0, complete: false, fresh_batch: true }
+        Self {
+            batches,
+            current: 0,
+            complete: false,
+            fresh_batch: true,
+        }
     }
 
     fn current_batch(&self) -> Option<&PlanBatch> {
@@ -57,7 +62,12 @@ pub struct GongbuShangshuAgent {
 
 impl GongbuShangshuAgent {
     pub fn new(client: AnthropicClient, model: &str, cancel: Arc<AtomicBool>) -> Self {
-        Self { client, model: model.to_string(), cancel, plan: Arc::new(Mutex::new(None)) }
+        Self {
+            client,
+            model: model.to_string(),
+            cancel,
+            plan: Arc::new(Mutex::new(None)),
+        }
     }
 
     fn tools() -> Vec<ToolDefinition> {
@@ -77,9 +87,13 @@ impl GongbuShangshuAgent {
 
 #[async_trait::async_trait]
 impl Agent for GongbuShangshuAgent {
-    fn role(&self) -> Role { Role::GongbuShangshu }
+    fn role(&self) -> Role {
+        Role::GongbuShangshu
+    }
 
-    fn set_interrupt_flag(&mut self, flag: Arc<AtomicBool>) { self.cancel = flag; }
+    fn set_interrupt_flag(&mut self, flag: Arc<AtomicBool>) {
+        self.cancel = flag;
+    }
 
     async fn execute(&self, input: &AgentInput) -> anyhow::Result<AgentOutput> {
         let system_prompt = include_str!("prompt.md");
@@ -92,7 +106,12 @@ impl Agent for GongbuShangshuAgent {
 
         let client = Arc::new(self.client.clone());
         let mut session = crate::api::session::Session::new(
-            system_prompt, &msgs, &self.model, &tools, &client, &input.runtime_config,
+            system_prompt,
+            &msgs,
+            &self.model,
+            &tools,
+            &client,
+            &input.runtime_config,
         )
         .with_role(self.role().name())
         .with_debug_dir(input.working_dir.clone());
@@ -114,8 +133,12 @@ impl Agent for GongbuShangshuAgent {
                 if plan.fresh_batch {
                     plan.fresh_batch = false;
                     true
-                } else { false }
-            } else { false }
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
         };
 
         // Extract plan info before any async operations
@@ -123,7 +146,9 @@ impl Agent for GongbuShangshuAgent {
             let plan_guard = self.plan.lock().unwrap();
             match *plan_guard {
                 Some(ref p) => (
-                    p.complete, p.current, p.batches.len(),
+                    p.complete,
+                    p.current,
+                    p.batches.len(),
                     p.current_batch().map(|b| b.name.clone()),
                     p.current_batch().map(|b| b.goal.clone()),
                 ),
@@ -148,11 +173,14 @@ impl Agent for GongbuShangshuAgent {
                             )}));
                             log_console!(
                                 "[工部] batch {}/{} started, appended instruction only",
-                                plan_current + 1, plan_total
+                                plan_current + 1,
+                                plan_total
                             );
                         }
                     }
-                    msgs.push(serde_json::json!({"role": "user", "content": input.task_description}));
+                    msgs.push(
+                        serde_json::json!({"role": "user", "content": input.task_description}),
+                    );
                     let snap = crate::api::session::SessionSnapshot::from_messages(msgs);
                     session.restore(&snap);
                 }
@@ -168,13 +196,19 @@ impl Agent for GongbuShangshuAgent {
         let mut controller = crate::api::control::AgentController::new();
 
         let (compact_fn, compact_interval) = crate::agent::runner::build_compact_handler(
-            self.client.clone(), self.model.clone(), working_dir.clone(),
-            role_name.clone(), input.runtime_config.clone(), false,
+            self.client.clone(),
+            self.model.clone(),
+            working_dir.clone(),
+            role_name.clone(),
+            input.runtime_config.clone(),
+            false,
         );
         controller.set_compact_handler(compact_fn, compact_interval);
 
         controller.set_checkpoint_handler(crate::agent::runner::build_checkpoint_handler(
-            working_dir.clone(), role_name.clone(), input.task_description.clone(),
+            working_dir.clone(),
+            role_name.clone(),
+            input.task_description.clone(),
         ));
 
         let config = input.runtime_config.clone();
@@ -202,13 +236,17 @@ impl Agent for GongbuShangshuAgent {
                             None => vec![],
                         };
                         if batches.is_empty() {
-                            return r#"{"ok":false,"message":"batches 参数为空或格式错误"}"#.to_string();
+                            return r#"{"ok":false,"message":"batches 参数为空或格式错误"}"#
+                                .to_string();
                         }
                         let count = batches.len();
                         let mut guard = plan_ref.lock().unwrap();
                         *guard = Some(PlanState::from_batches(batches));
                         force_stop_clone.store(true, Ordering::SeqCst);
-                        log_console!("[工部] submit_plan: {} batches — force-stopping controller", count);
+                        log_console!(
+                            "[工部] submit_plan: {} batches — force-stopping controller",
+                            count
+                        );
                         serde_json::json!({"ok":true,"message":format!("计划已提交：{} 个批次。请等待系统推进到第一个批次。", count)}).to_string()
                     }
                     "complete_task" => {
@@ -236,10 +274,18 @@ impl Agent for GongbuShangshuAgent {
                 }
             })
         };
-        let (result, route) = controller.run(
-            &mut session, &exec, &self.cancel, &tools,
-            Some(&force_stop), &config, Some(&*input.fast_cancel),
-        ).await?.into_tuple();
+        let (result, route) = controller
+            .run(
+                &mut session,
+                &exec,
+                &self.cancel,
+                &tools,
+                Some(&force_stop),
+                &config,
+                Some(&*input.fast_cancel),
+            )
+            .await?
+            .into_tuple();
 
         // Persist for continuation within the batch
         let snap = session.snapshot();
@@ -273,7 +319,9 @@ impl Agent for GongbuShangshuAgent {
         match *guard {
             Some(ref plan) => {
                 let batches: Vec<serde_json::Value> = plan
-                    .batches.iter().enumerate()
+                    .batches
+                    .iter()
+                    .enumerate()
                     .map(|(i, b)| {
                         let status = if i < plan.current {
                             "done"

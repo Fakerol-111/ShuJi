@@ -343,7 +343,9 @@ impl AgentController {
                         }
                         let is_read =
                             matches!(tc.name.as_str(), "read_file" | "list_dir" | "find_document");
-                        if is_read && read_without_write >= config.watchdog.read_without_write_warning {
+                        if is_read
+                            && read_without_write >= config.watchdog.read_without_write_warning
+                        {
                             intervention_hints.push(format!(
                                 "⚠️ 你已读取 {} 次文件但尚未产生任何输出。请检查是否需要创建文件或修改代码。",
                                 read_without_write + 1,
@@ -487,7 +489,10 @@ impl AgentController {
                         }
                         if !intervention_note.is_empty() {
                             tool_content.push_str(&intervention_note);
-                            log_console!("[control] WATCHDOG: intervention hint injected for {}", tc.name);
+                            log_console!(
+                                "[control] WATCHDOG: intervention hint injected for {}",
+                                tc.name
+                            );
                         }
 
                         if is_error {

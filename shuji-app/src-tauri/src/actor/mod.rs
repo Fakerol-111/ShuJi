@@ -382,11 +382,9 @@ pub async fn run_actor(mut ctx: ActorContext) {
 
             // ── Final checkpoint after execution ──
             let ckpt_desc = content.chars().take(80).collect::<String>();
-            let _ = crate::storage::checkpoint::save_final(
-                &ctx.working_dir,
-                &role_name,
-                &ckpt_desc,
-            ).await;
+            let _ =
+                crate::storage::checkpoint::save_final(&ctx.working_dir, &role_name, &ckpt_desc)
+                    .await;
 
             match step_result {
                 Ok(output) => {

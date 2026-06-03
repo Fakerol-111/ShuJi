@@ -15,13 +15,7 @@ pub struct AuditEntry {
 }
 
 /// Append a single audit entry to .shuji/audit.jsonl.
-pub async fn append(
-    working_dir: &Path,
-    event: &str,
-    role: &str,
-    doc_id: &str,
-    detail: &str,
-) {
+pub async fn append(working_dir: &Path, event: &str, role: &str, doc_id: &str, detail: &str) {
     let entry = AuditEntry {
         ts: chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string(),
         event: event.to_string(),
@@ -214,7 +208,10 @@ pub struct Checklist {
 
 /// Load the audit checklist from `.shuji/audit/checklist.json`.
 pub async fn load_checklist(working_dir: &Path) -> Checklist {
-    let path = working_dir.join(".shuji").join("audit").join("checklist.json");
+    let path = working_dir
+        .join(".shuji")
+        .join("audit")
+        .join("checklist.json");
     tokio::fs::read_to_string(&path)
         .await
         .ok()
@@ -224,7 +221,10 @@ pub async fn load_checklist(working_dir: &Path) -> Checklist {
 
 /// Save the audit checklist to `.shuji/audit/checklist.json`.
 pub async fn save_checklist(working_dir: &Path, checklist: &Checklist) {
-    let path = working_dir.join(".shuji").join("audit").join("checklist.json");
+    let path = working_dir
+        .join(".shuji")
+        .join("audit")
+        .join("checklist.json");
     let _ = tokio::fs::create_dir_all(path.parent().unwrap()).await;
     if let Ok(json) = serde_json::to_string_pretty(checklist) {
         let _ = tokio::fs::write(&path, &json).await;
@@ -235,19 +235,65 @@ pub async fn save_checklist(working_dir: &Path, checklist: &Checklist) {
 pub async fn init_checklist(working_dir: &Path, category: &str) -> String {
     let items = match category {
         "spec" => vec![
-            ChecklistItem { id: "spec-001".into(), description: "所有公共函数有文档注释".into(), category: category.into(), status: "pending".into(), note: String::new() },
-            ChecklistItem { id: "spec-002".into(), description: "命名符合 Rust 命名规范（snake_case / CamelCase）".into(), category: category.into(), status: "pending".into(), note: String::new() },
-            ChecklistItem { id: "spec-003".into(), description: "无未使用的导入或变量".into(), category: category.into(), status: "pending".into(), note: String::new() },
-            ChecklistItem { id: "spec-004".into(), description: "错误处理完整（无 unwrap/expect 滥用）".into(), category: category.into(), status: "pending".into(), note: String::new() },
+            ChecklistItem {
+                id: "spec-001".into(),
+                description: "所有公共函数有文档注释".into(),
+                category: category.into(),
+                status: "pending".into(),
+                note: String::new(),
+            },
+            ChecklistItem {
+                id: "spec-002".into(),
+                description: "命名符合 Rust 命名规范（snake_case / CamelCase）".into(),
+                category: category.into(),
+                status: "pending".into(),
+                note: String::new(),
+            },
+            ChecklistItem {
+                id: "spec-003".into(),
+                description: "无未使用的导入或变量".into(),
+                category: category.into(),
+                status: "pending".into(),
+                note: String::new(),
+            },
+            ChecklistItem {
+                id: "spec-004".into(),
+                description: "错误处理完整（无 unwrap/expect 滥用）".into(),
+                category: category.into(),
+                status: "pending".into(),
+                note: String::new(),
+            },
         ],
         "test" => vec![
-            ChecklistItem { id: "test-001".into(), description: "所有公共函数有对应测试".into(), category: category.into(), status: "pending".into(), note: String::new() },
-            ChecklistItem { id: "test-002".into(), description: "测试覆盖边界条件".into(), category: category.into(), status: "pending".into(), note: String::new() },
-            ChecklistItem { id: "test-003".into(), description: "测试可独立运行（无共享可变状态）".into(), category: category.into(), status: "pending".into(), note: String::new() },
+            ChecklistItem {
+                id: "test-001".into(),
+                description: "所有公共函数有对应测试".into(),
+                category: category.into(),
+                status: "pending".into(),
+                note: String::new(),
+            },
+            ChecklistItem {
+                id: "test-002".into(),
+                description: "测试覆盖边界条件".into(),
+                category: category.into(),
+                status: "pending".into(),
+                note: String::new(),
+            },
+            ChecklistItem {
+                id: "test-003".into(),
+                description: "测试可独立运行（无共享可变状态）".into(),
+                category: category.into(),
+                status: "pending".into(),
+                note: String::new(),
+            },
         ],
-        _ => vec![
-            ChecklistItem { id: "gen-001".into(), description: format!("审计类别：{}", category), category: category.into(), status: "pending".into(), note: String::new() },
-        ],
+        _ => vec![ChecklistItem {
+            id: "gen-001".into(),
+            description: format!("审计类别：{}", category),
+            category: category.into(),
+            status: "pending".into(),
+            note: String::new(),
+        }],
     };
     let count = items.len();
     let checklist = Checklist { items };
@@ -280,11 +326,11 @@ pub async fn update_checklist_item(
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Violation {
     pub ts: String,
-    pub severity: String,   // error | warning | info
+    pub severity: String, // error | warning | info
     pub rule_id: String,
     pub location: String,
     pub description: String,
-    pub status: String,     // open | fixed | waived
+    pub status: String, // open | fixed | waived
 }
 
 /// Record a violation to `.shuji/audit/violations.jsonl`.
@@ -308,7 +354,12 @@ pub async fn add_violation(
     let path = dir.join("violations.jsonl");
     if let Ok(json) = serde_json::to_string(&violation) {
         use tokio::io::AsyncWriteExt;
-        if let Ok(mut f) = tokio::fs::OpenOptions::new().create(true).append(true).open(&path).await {
+        if let Ok(mut f) = tokio::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .await
+        {
             let _ = f.write_all(format!("{}\n", json).as_bytes()).await;
         }
     }
@@ -316,9 +367,15 @@ pub async fn add_violation(
 
 /// Read all violations.
 pub async fn load_violations(working_dir: &Path) -> Vec<Violation> {
-    let path = working_dir.join(".shuji").join("audit").join("violations.jsonl");
+    let path = working_dir
+        .join(".shuji")
+        .join("audit")
+        .join("violations.jsonl");
     let content = tokio::fs::read_to_string(&path).await.unwrap_or_default();
-    content.lines().filter_map(|l| serde_json::from_str(l).ok()).collect()
+    content
+        .lines()
+        .filter_map(|l| serde_json::from_str(l).ok())
+        .collect()
 }
 
 /// Update a violation's status (e.g. mark as fixed or waived).
@@ -331,7 +388,10 @@ pub async fn update_violation_status(
     if let Some(v) = violations.iter_mut().find(|v| v.ts == ts) {
         v.status = new_status.to_string();
         // Rewrite the file
-        let path = working_dir.join(".shuji").join("audit").join("violations.jsonl");
+        let path = working_dir
+            .join(".shuji")
+            .join("audit")
+            .join("violations.jsonl");
         let _ = tokio::fs::create_dir_all(path.parent().unwrap()).await;
         let mut content = String::new();
         for v in &violations {
@@ -351,11 +411,7 @@ pub async fn update_violation_status(
 
 /// Write a re-audit request file that the actor system can detect.
 /// The `subject` is a document ID that 礼部 should re-audit.
-pub async fn request_reauth(
-    working_dir: &Path,
-    subject: &str,
-    reason: &str,
-) -> String {
+pub async fn request_reauth(working_dir: &Path, subject: &str, reason: &str) -> String {
     let dir = working_dir.join(".shuji").join("audit");
     let _ = tokio::fs::create_dir_all(&dir).await;
     let path = dir.join("reauth_request.json");
@@ -367,13 +423,23 @@ pub async fn request_reauth(
     if let Ok(json) = serde_json::to_string_pretty(&request) {
         let _ = tokio::fs::write(&path, &json).await;
     }
-    append(&working_dir, "reauth_request", "系统", subject, &format!("请求复验: {}", reason)).await;
+    append(
+        &working_dir,
+        "reauth_request",
+        "系统",
+        subject,
+        &format!("请求复验: {}", reason),
+    )
+    .await;
     format!("已提交复验请求：{} ({})", subject, reason)
 }
 
 /// Check if there's a pending re-auth request and clear it.
 pub async fn consume_reauth_request(working_dir: &Path) -> Option<(String, String)> {
-    let path = working_dir.join(".shuji").join("audit").join("reauth_request.json");
+    let path = working_dir
+        .join(".shuji")
+        .join("audit")
+        .join("reauth_request.json");
     let content = tokio::fs::read_to_string(&path).await.ok()?;
     let v: serde_json::Value = serde_json::from_str(&content).ok()?;
     let _ = tokio::fs::remove_file(&path).await;
@@ -414,21 +480,19 @@ pub struct TraceResult {
 pub async fn trace_document(working_dir: &Path, doc_id: &str) -> TraceResult {
     // 1. Get the target document itself
     let target_node = match read_doc_by_id(working_dir, doc_id).await {
-        Some(content) => {
-            documents::parse_doc(&content).ok().map(|(meta, body)| {
-                let preview = body.lines().next().unwrap_or("").chars().take(80).collect();
-                let stage = stage_for_type(&meta.doc_type);
-                ChainNode {
-                    id: doc_id.to_string(),
-                    doc_type: meta.doc_type,
-                    author: meta.author,
-                    timestamp: meta.timestamp,
-                    stage,
-                    content_preview: preview,
-                    direction: "self".to_string(),
-                }
-            })
-        }
+        Some(content) => documents::parse_doc(&content).ok().map(|(meta, body)| {
+            let preview = body.lines().next().unwrap_or("").chars().take(80).collect();
+            let stage = stage_for_type(&meta.doc_type);
+            ChainNode {
+                id: doc_id.to_string(),
+                doc_type: meta.doc_type,
+                author: meta.author,
+                timestamp: meta.timestamp,
+                stage,
+                content_preview: preview,
+                direction: "self".to_string(),
+            }
+        }),
         None => None,
     };
 
@@ -439,7 +503,13 @@ pub async fn trace_document(working_dir: &Path, doc_id: &str) -> TraceResult {
             for num in documents::parse_refs(&meta.refs) {
                 if let Some((ref_id, ref_content)) = find_by_numeric_id(working_dir, num).await {
                     if let Ok((ref_meta, ref_body)) = documents::parse_doc(&ref_content) {
-                        let preview = ref_body.lines().next().unwrap_or("").chars().take(80).collect();
+                        let preview = ref_body
+                            .lines()
+                            .next()
+                            .unwrap_or("")
+                            .chars()
+                            .take(80)
+                            .collect();
                         let stage = stage_for_type(&ref_meta.doc_type);
                         downstream.push(ChainNode {
                             id: ref_id,
@@ -481,8 +551,13 @@ pub async fn trace_document(working_dir: &Path, doc_id: &str) -> TraceResult {
                     if let Ok((meta, body)) = documents::parse_doc(&content) {
                         let ref_nums = documents::parse_refs(&meta.refs);
                         if ref_nums.contains(&num) {
-                            let fname = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
-                            let preview = body.lines().next().unwrap_or("").chars().take(80).collect();
+                            let fname = path
+                                .file_stem()
+                                .and_then(|s| s.to_str())
+                                .unwrap_or("")
+                                .to_string();
+                            let preview =
+                                body.lines().next().unwrap_or("").chars().take(80).collect();
                             let stage = stage_for_type(&meta.doc_type);
                             upstream.push(ChainNode {
                                 id: fname,
@@ -614,7 +689,10 @@ const TYPE_TO_DIR: &[(&str, &str)] = &[
 impl RefIndex {
     /// Load ref index from `.shuji/audit/ref_index.json`.
     pub async fn load(working_dir: &Path) -> Self {
-        let path = working_dir.join(".shuji").join("audit").join("ref_index.json");
+        let path = working_dir
+            .join(".shuji")
+            .join("audit")
+            .join("ref_index.json");
         match tokio::fs::read_to_string(&path).await {
             Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
             Err(_) => Self::default(),
@@ -623,7 +701,10 @@ impl RefIndex {
 
     /// Save ref index to `.shuji/audit/ref_index.json`.
     pub async fn save(&self, working_dir: &Path) {
-        let path = working_dir.join(".shuji").join("audit").join("ref_index.json");
+        let path = working_dir
+            .join(".shuji")
+            .join("audit")
+            .join("ref_index.json");
         let _ = tokio::fs::create_dir_all(path.parent().unwrap()).await;
         if let Ok(json) = serde_json::to_string_pretty(self) {
             let _ = tokio::fs::write(&path, &json).await;
@@ -633,10 +714,14 @@ impl RefIndex {
     /// Add or update an entry for a document.
     pub fn upsert(&mut self, doc_id: &str, path: &str, refs: &[u64]) {
         // Clone old refs to avoid borrow conflicts
-        let old_refs: Vec<u64> = self.entries.get(doc_id)
+        let old_refs: Vec<u64> = self
+            .entries
+            .get(doc_id)
             .map(|e| e.refs.clone())
             .unwrap_or_default();
-        let old_ref_by: Vec<String> = self.entries.get(doc_id)
+        let old_ref_by: Vec<String> = self
+            .entries
+            .get(doc_id)
             .map(|e| e.ref_by.clone())
             .unwrap_or_default();
 
@@ -661,16 +746,20 @@ impl RefIndex {
             }
         }
 
-        self.entries.insert(doc_id.to_string(), RefIndexEntry {
-            path: path.to_string(),
-            refs: refs.to_vec(),
-            ref_by: old_ref_by,
-        });
+        self.entries.insert(
+            doc_id.to_string(),
+            RefIndexEntry {
+                path: path.to_string(),
+                refs: refs.to_vec(),
+                ref_by: old_ref_by,
+            },
+        );
     }
 
     /// Get documents that reference `doc_id` (reverse refs — downstream impact).
     pub fn get_ref_by(&self, doc_id: &str) -> Vec<String> {
-        self.entries.get(doc_id)
+        self.entries
+            .get(doc_id)
             .map(|e| e.ref_by.clone())
             .unwrap_or_default()
     }
@@ -698,9 +787,15 @@ pub async fn build_ref_index(working_dir: &Path) -> RefIndex {
         };
         while let Ok(Some(entry)) = entries.next_entry().await {
             let path = entry.path();
-            if path.extension().map_or(true, |e| e != "md") { continue; }
-            let Ok(content) = tokio::fs::read_to_string(&path).await else { continue };
-            let Ok((meta, _body)) = documents::parse_doc(&content) else { continue };
+            if path.extension().map_or(true, |e| e != "md") {
+                continue;
+            }
+            let Ok(content) = tokio::fs::read_to_string(&path).await else {
+                continue;
+            };
+            let Ok((meta, _body)) = documents::parse_doc(&content) else {
+                continue;
+            };
             let ref_nums = documents::parse_refs(&meta.refs);
             let rel_path = path.strip_prefix(&shuji_dir).unwrap_or(&path);
             // Map numeric refs to full doc_ids for reverse-indexing
@@ -715,13 +810,18 @@ pub async fn build_ref_index(working_dir: &Path) -> RefIndex {
                     entry.ref_by.push(meta.id.clone());
                 }
             }
-            index.entries.insert(meta.id.clone(), RefIndexEntry {
-                path: rel_path.to_string_lossy().to_string(),
-                refs: ref_nums,
-                ref_by: index.entries.get(&meta.id)
-                    .map(|e| e.ref_by.clone())
-                    .unwrap_or_default(),
-            });
+            index.entries.insert(
+                meta.id.clone(),
+                RefIndexEntry {
+                    path: rel_path.to_string_lossy().to_string(),
+                    refs: ref_nums,
+                    ref_by: index
+                        .entries
+                        .get(&meta.id)
+                        .map(|e| e.ref_by.clone())
+                        .unwrap_or_default(),
+                },
+            );
         }
     }
 
