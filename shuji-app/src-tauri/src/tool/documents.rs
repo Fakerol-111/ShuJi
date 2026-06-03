@@ -281,7 +281,7 @@ pub async fn tool_create_document(
 pub async fn tool_modify_document(
     working_dir: &Path,
     args: &serde_json::Value,
-    _dept: &str,
+    dept: &str,
 ) -> String {
     let id = args["id"].as_str().unwrap_or("");
     if id.is_empty() {
@@ -355,7 +355,12 @@ pub async fn tool_modify_document(
     let new_content = build_doc(&meta, &new_body);
 
     match tokio::fs::write(&full, &new_content).await {
-        Ok(_) => ToolOutput::success("modify_document", id, "修改成功"),
+        Ok(_) => {
+            let detail = format!("old_text_len={}, new_text_len={}", args["old_text"].as_str().unwrap_or("").len(), args["new_text"].as_str().unwrap_or("").len());
+            crate::audit::append(working_dir, "modify_document", dept, id, &detail).await;
+            crate::audit::save_diff(working_dir, id, "modify_document", &body, &new_body).await;
+            ToolOutput::success("modify_document", id, "修改成功")
+        }
         Err(e) => ToolOutput::error("modify_document", id, "write_error", &e.to_string()),
     }
 }
@@ -364,7 +369,7 @@ pub async fn tool_modify_document(
 pub async fn tool_append_document(
     working_dir: &Path,
     args: &serde_json::Value,
-    _dept: &str,
+    dept: &str,
 ) -> String {
     let id = args["id"].as_str().unwrap_or("");
     let append_content = args["content"].as_str().unwrap_or("");
@@ -429,7 +434,12 @@ pub async fn tool_append_document(
     let new_content = build_doc(&meta, &new_body);
 
     match tokio::fs::write(&full, &new_content).await {
-        Ok(_) => ToolOutput::success("append_document", id, "追加成功"),
+        Ok(_) => {
+            let detail = format!("append_len={}", append_content.len());
+            crate::audit::append(working_dir, "append_document", dept, id, &detail).await;
+            crate::audit::save_diff(working_dir, id, "append_document", &body, &new_body).await;
+            ToolOutput::success("append_document", id, "追加成功")
+        }
         Err(e) => ToolOutput::error("append_document", id, "write_error", &e.to_string()),
     }
 }

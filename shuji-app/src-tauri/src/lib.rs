@@ -96,6 +96,9 @@ pub fn run() {
             commands::workflow::get_document_lineage,
             commands::workflow::get_audit_timeline,
             commands::workflow::generate_delivery_report,
+            commands::workflow::get_document_diffs,
+            commands::workflow::read_document_diff,
+            commands::workflow::trace_document,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

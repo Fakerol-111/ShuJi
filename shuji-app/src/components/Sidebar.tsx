@@ -23,7 +23,7 @@ function panel(mode: Exclude<ActivitySelection, null>, projectDir: string, selec
     case "stats": return <TokenPanel />;
     case "context": return <ContextPanel />;
     case "archives": return <CheckpointPanel />;
-    case "audit": return <AuditPanel />;
+    case "audit": return <AuditPanel onDocSelect={onDocSelect} />;
   }
 }
 

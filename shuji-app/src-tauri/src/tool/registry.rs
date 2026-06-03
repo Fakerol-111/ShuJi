@@ -225,3 +225,84 @@ pub fn update_soul_tool() -> ToolDefinition {
         },
     }
 }
+
+// ── Audit tools (礼部/尚书令) ────────────────────────────────
+
+pub fn audit_checklist_tools() -> Vec<ToolDefinition> {
+    vec![
+        ToolDefinition {
+            tool_type: "function".into(),
+            function: crate::api::client::ToolFunction {
+                name: "init_checklist".into(),
+                description: "初始化审计检查清单，按类别生成标准检查项。类别: spec/test/general。".into(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "category": {
+                            "type": "string",
+                            "enum": ["spec", "test", "general"],
+                            "description": "检查类别"
+                        }
+                    },
+                    "required": ["category"]
+                }),
+            },
+        },
+        ToolDefinition {
+            tool_type: "function".into(),
+            function: crate::api::client::ToolFunction {
+                name: "update_checklist_item".into(),
+                description: "更新审计检查项状态（pass/fail/na）。".into(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string", "description": "检查项 ID，如 spec-001"},
+                        "status": {"type": "string", "enum": ["pass", "fail", "na"], "description": "新状态"},
+                        "note": {"type": "string", "description": "备注说明（可选）"}
+                    },
+                    "required": ["id", "status"]
+                }),
+            },
+        },
+        ToolDefinition {
+            tool_type: "function".into(),
+            function: crate::api::client::ToolFunction {
+                name: "add_violation".into(),
+                description: "记录一条审计违规。".into(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "severity": {"type": "string", "enum": ["error", "warning", "info"], "description": "严重程度"},
+                        "rule_id": {"type": "string", "description": "规则 ID，如 spec-001"},
+                        "location": {"type": "string", "description": "违规位置，文件路径或行号"},
+                        "description": {"type": "string", "description": "违规描述"}
+                    },
+                    "required": ["rule_id", "description"]
+                }),
+            },
+        },
+    ]
+}
+
+pub fn reauth_tool() -> Vec<ToolDefinition> {
+    vec![ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "request_reauth".into(),
+            description: "请求礼部对指定文档重新审计。会自动路由到目标部门。修复完成后由尚书令/刑部调用。".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "subject": {"type": "string", "description": "需要复验的文档 ID"},
+                    "reason": {"type": "string", "description": "复验原因"},
+                    "to": {
+                        "type": "string",
+                        "enum": ["礼部"],
+                        "description": "目标部门（默认礼部）"
+                    }
+                },
+                "required": ["subject", "reason"]
+            }),
+        },
+    }]
+}
