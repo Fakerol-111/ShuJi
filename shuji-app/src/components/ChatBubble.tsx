@@ -3,22 +3,11 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import type { ChatMessage, ChatOption } from "../types";
-
-const DEPT_COLORS: Record<string, string> = {
-  内阁: "#6B4E9E",
-  中书令: "#3D6B8E",
-  门下侍中: "#2E7D8C",
-  尚书令: "#B45309",
-  吏部尚书: "#2F7A4F",
-  兵部尚书: "#B83A3A",
-  工部尚书: "#A16207",
-  刑部尚书: "#5C6370",
-  礼部尚书: "#5B5FC7",
-};
+import { DEPT_META } from "../constants";
 
 export default function ChatBubble({ msg, onOption }: { msg: ChatMessage; onOption: (key: string, supplement?: string) => void }) {
   const isEmperor = msg.role === "皇帝";
-  const deptColor = DEPT_COLORS[msg.role];
+  const deptColor = DEPT_META[msg.role]?.color;
 
   return (
     <div className={`flex ${isEmperor ? "justify-end" : "justify-start"}`}>

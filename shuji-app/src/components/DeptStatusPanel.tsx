@@ -1,33 +1,10 @@
 import { useEffect, useState, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getDeptLogs } from "../api";
+import { DEPT_META } from "../constants";
 import type { DeptLogEntry } from "../types";
 
 const MAX_ENTRIES = 300;
-
-const DEPT_BG: Record<string, string> = {
-  内阁: "bg-purple-50 border-purple-200", 中书令: "bg-blue-50 border-blue-200",
-  门下侍中: "bg-cyan-50 border-cyan-200", 尚书令: "bg-orange-50 border-orange-200",
-  吏部: "bg-green-50 border-green-200", 兵部: "bg-red-50 border-red-200",
-  工部: "bg-amber-50 border-amber-200", 刑部: "bg-gray-50 border-gray-200",
-  礼部: "bg-indigo-50 border-indigo-200",
-};
-
-const DEPT_ACCENT: Record<string, string> = {
-  内阁: "border-l-purple-400", 中书令: "border-l-blue-400",
-  门下侍中: "border-l-cyan-400", 尚书令: "border-l-orange-400",
-  吏部: "border-l-green-400", 兵部: "border-l-red-400",
-  工部: "border-l-amber-400", 刑部: "border-l-gray-400",
-  礼部: "border-l-indigo-400",
-};
-
-const DEPT_TEXT: Record<string, string> = {
-  内阁: "text-purple-700", 中书令: "text-blue-700",
-  门下侍中: "text-cyan-700", 尚书令: "text-orange-700",
-  吏部: "text-green-700", 兵部: "text-red-700",
-  工部: "text-amber-700", 刑部: "text-gray-600",
-  礼部: "text-indigo-700",
-};
 
 function isRouteEntry(a: string) { return a.startsWith("→ "); }
 function isErrorEntry(a: string) { return a.startsWith("❌"); }
@@ -94,9 +71,10 @@ export default function DeptStatusPanel() {
           const open = expanded.has(i);
 
           if (route) {
+            const routeAccent = DEPT_META[e.dept]?.accent?.replace("border-l-", "bg-") || "bg-gray-300";
             return (
               <div key={i} className="flex items-center gap-1.5 text-[10px] font-mono py-0.5 px-1 opacity-60 hover:opacity-100 transition-opacity">
-                <span className={`w-1 h-1 rounded-full shrink-0 ${e.dept ? DEPT_ACCENT[e.dept]?.replace("border-l-", "bg-") || "bg-gray-300" : "bg-gray-300"}`} />
+                <span className={`w-1 h-1 rounded-full shrink-0 ${e.dept ? routeAccent : "bg-gray-300"}`} />
                 <span className="font-medium text-ink-500 shrink-0">{e.dept}</span>
                 <span className="text-vermillion/70 shrink-0">→</span>
                 <span className="text-ink-500 truncate">{e.action.replace("→ ", "")}</span>
@@ -124,9 +102,10 @@ export default function DeptStatusPanel() {
           }
 
           // Execution bubble
-          const accent = DEPT_ACCENT[e.dept] || "border-l-gray-300";
-          const bg = DEPT_BG[e.dept] || "bg-gray-50 border-gray-200";
-          const txt = DEPT_TEXT[e.dept] || "text-gray-600";
+          const meta = DEPT_META[e.dept];
+          const accent = meta?.accent || "border-l-gray-300";
+          const bg = meta?.bg ? `${meta.bg} border-current/10` : "bg-gray-50 border-gray-200";
+          const txt = meta?.text || "text-gray-600";
 
           return (
             <div key={i}>

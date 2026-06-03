@@ -1,22 +1,10 @@
 import { useEffect, useState } from "react";
 import { getTokenStats, getRoundMetrics } from "../api";
 import { useActiveDepts } from "../hooks/useActiveDepts";
+import { DEPT_META, DEPT_ORDER } from "../constants";
 import type { RoundMetrics } from "../types";
 
-export const DEPT_COLORS: Record<string, string> = {
-  内阁: "#6B4E9E",
-  中书令: "#3D6B8E",
-  门下侍中: "#2E7D8C",
-  尚书令: "#B45309",
-  吏部尚书: "#2F7A4F",
-  兵部尚书: "#B83A3A",
-  工部尚书: "#A16207",
-  刑部尚书: "#5C6370",
-  礼部尚书: "#5B5FC7",
-  户部: "#0D7A6E",
-};
-
-const ROLE_ORDER = ["内阁", "中书令", "门下侍中", "尚书令", "吏部", "兵部", "工部", "刑部", "礼部", "户部"];
+const ROLE_ORDER = DEPT_ORDER;
 
 const SKILL_LABELS: Record<string, string> = {
   workflow_standard: "标准",
@@ -126,7 +114,7 @@ export default function DeptStatusBar() {
 }
 
 function DeptLight({ dept, active }: { dept: string; active: boolean }) {
-  const color = DEPT_COLORS[dept] || "#8B7355";
+  const color = DEPT_META[dept]?.color || "#8B7355";
   return (
     <span className="flex items-center gap-1 whitespace-nowrap">
       <span className={`w-2 h-2 rounded-full ${active ? "animate-pulse" : "opacity-30"}`} style={{ backgroundColor: active ? color : "#8B7355" }} />

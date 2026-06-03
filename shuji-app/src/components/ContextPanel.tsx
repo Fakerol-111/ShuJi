@@ -1,12 +1,7 @@
 import { useEffect, useState } from "react";
 import { getContextStats, compactContext } from "../api";
 import type { ContextStats } from "../api";
-
-const ROLE_NAMES: Record<string, string> = {
-  zhongshuling: "中书令", menxiashizhong: "门下侍中", neige: "内阁",
-  shangshuling: "尚书令", libushangshu: "吏部", bingbushangshu: "兵部",
-  gongbushangshu: "工部", xingbushangshu: "刑部", liburshangshu: "礼部",
-};
+import { getDeptMeta, DEPT_ORDER } from "../constants";
 
 export default function ContextPanel() {
   const [stats, setStats] = useState<Record<string, ContextStats> | null>(null);
@@ -44,7 +39,7 @@ export default function ContextPanel() {
             return (
               <div key={role}>
                 <div className="flex justify-between text-[11px] mb-1">
-                  <span className="font-medium text-ink-700">{ROLE_NAMES[role] || role}</span>
+                  <span className="font-medium text-ink-700">{getDeptMeta(role)?.label || role}</span>
                   <span className={cs.token_count >= cs.token_threshold ? "text-vermillion text-[10px]" : "text-ink-500"}>
                     {abbr(cs.token_count)} / {abbr(cs.token_threshold)} tokens
                   </span>
@@ -110,16 +105,12 @@ function abbr(n: number): string {
 }
 
 function roleOrder(role: string) {
-  const order = ["neige", "zhongshuling", "menxiashizhong", "shangshuling", "libushangshu", "bingbushangshu", "gongbushangshu", "xingbushangshu", "liburshangshu",
-    "内阁", "中书令", "门下侍中", "尚书令", "吏部", "兵部", "工部", "刑部", "礼部"];
-  const idx = order.indexOf(role);
+  const meta = getDeptMeta(role);
+  if (!meta) return 999;
+  const idx = DEPT_ORDER.indexOf(meta.label);
   return idx < 0 ? 999 : idx;
 }
 
-const palette = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16", "#14b8a6"];
 function barColor(role: string) {
-  return palette[Math.abs(hash(role)) % palette.length];
-}
-function hash(s: string) {
-  return s.split("").reduce((n, ch) => n + ch.charCodeAt(0), 0);
+  return getDeptMeta(role)?.color || "#6b7280";
 }

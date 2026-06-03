@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { listCheckpoints, restoreCheckpoint } from "../api";
+import { DEPT_META_BY_KEY } from "../constants";
 import type { CheckpointEntry } from "../types";
 
 interface RestoreConfirm {
@@ -7,20 +8,8 @@ interface RestoreConfirm {
   desc: string;
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  neige: "内阁",
-  zhongshuling: "中书令",
-  menxiashizhong: "门下侍中",
-  shangshuling: "尚书令",
-  libushangshu: "吏部尚书",
-  bingbushangshu: "兵部尚书",
-  gongbushangshu: "工部尚书",
-  xingbushangshu: "刑部尚书",
-  liburshangshu: "礼部尚书",
-};
-
 function roleLabel(role: string): string {
-  return ROLE_LABELS[role] || role;
+  return DEPT_META_BY_KEY[role]?.label || role;
 }
 
 function formatTime(ts: string): string {

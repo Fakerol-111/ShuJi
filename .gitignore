@@ -29,6 +29,8 @@ api_config.json
 **/api_config.json
 context_config.json
 **/context_config.json
+config.local.toml
+**/config.local.toml
 
 # Logs
 *.log

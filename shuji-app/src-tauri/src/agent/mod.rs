@@ -5,6 +5,7 @@ pub mod liburshangshu;
 pub mod libushangshu;
 pub mod menxiashizhong;
 pub mod neige;
+pub mod runner;
 pub mod shangshuling;
 pub mod r#trait;
 pub mod util;

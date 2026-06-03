@@ -329,6 +329,32 @@ impl AgentController {
                         // ── Execute tool (unified, no special-case intercept) ──
                         let result = tool_exec(&tc.name, &tc.args).await;
 
+                        // ── Watchdog intervention hints ──
+                        // Append corrective reminders to the tool result when
+                        // the LLM is stuck in a loop. This is a closed-loop
+                        // intervention: the LLM sees these as part of the tool
+                        // output and can self-correct without a full stop.
+                        let mut intervention_hints: Vec<String> = Vec::new();
+                        if same_tool_count >= config.watchdog.same_tool_warning_count {
+                            intervention_hints.push(format!(
+                                "⚠️ 你已连续调用 {} 工具 {} 次（相同参数）。如果这不是有意的分批操作，请考虑切换操作类型或进入下一步。",
+                                tc.name, same_tool_count + 1,
+                            ));
+                        }
+                        let is_read =
+                            matches!(tc.name.as_str(), "read_file" | "list_dir" | "find_document");
+                        if is_read && read_without_write >= config.watchdog.read_without_write_warning {
+                            intervention_hints.push(format!(
+                                "⚠️ 你已读取 {} 次文件但尚未产生任何输出。请检查是否需要创建文件或修改代码。",
+                                read_without_write + 1,
+                            ));
+                        }
+                        let intervention_note = if intervention_hints.is_empty() {
+                            String::new()
+                        } else {
+                            format!("\n\n[干预] {}", intervention_hints.join(" "))
+                        };
+
                         // ── Route detection (output-driven) ──
                         // Check the tool output for operation=="route_to" instead of
                         // matching tool names before execution. This keeps the dispatcher
@@ -415,8 +441,6 @@ impl AgentController {
                                 | "delete_file"
                                 | "rename_file"
                         );
-                        let is_read =
-                            matches!(tc.name.as_str(), "read_file" | "list_dir" | "find_document");
                         if is_write {
                             write_count += 1;
                             read_without_write = 0;
@@ -457,11 +481,14 @@ impl AgentController {
                                     || result.contains("未知工具")
                             });
 
-                        let tool_content = if progress_note.is_empty() {
-                            result.clone()
-                        } else {
-                            format!("{}{}", result.clone(), progress_note)
-                        };
+                        let mut tool_content = result.clone();
+                        if !progress_note.is_empty() {
+                            tool_content.push_str(&progress_note);
+                        }
+                        if !intervention_note.is_empty() {
+                            tool_content.push_str(&intervention_note);
+                            log_console!("[control] WATCHDOG: intervention hint injected for {}", tc.name);
+                        }
 
                         if is_error {
                             consecutive_errors += 1;
