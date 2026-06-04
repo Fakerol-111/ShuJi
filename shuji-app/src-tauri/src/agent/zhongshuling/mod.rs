@@ -95,6 +95,27 @@ impl Agent for ZhongshulingAgent {
         )
         .await;
 
+        // ── Skill Gate: profile-based skill restrictions ──
+        if let Some(wf_state) = crate::workflow::WorkflowState::load_from(&working_dir).await {
+            let mut hints = Vec::new();
+            match wf_state.profile_id.as_str() {
+                "brownfield_optimize" => {
+                    hints.push("当前为存量优化模式（brownfield_optimize）");
+                    hints.push("禁止使用 overall_design 技能（无需完整方案设计）");
+                    hints.push("推荐使用 code_analysis 或 optimization_plan 技能");
+                }
+                "bugfix" | "demo" => {
+                    hints.push("当前模式不需要方案设计");
+                    hints.push("禁止使用 overall_design、phase_plan、phase_design 技能");
+                    hints.push("如需分析可直接使用 diagnosis 或 impact_assessment");
+                }
+                _ => {}
+            }
+            if !hints.is_empty() {
+                session.inject(&format!("[技能门禁]\n{}", hints.join("\n")));
+            }
+        }
+
         let mut controller = crate::api::control::AgentController::new();
 
         let (compact_fn, compact_interval) = crate::agent::runner::build_compact_handler(

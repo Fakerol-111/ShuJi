@@ -1,0 +1,13 @@
+id: brownfield_optimize
+version: 1
+label: "存量优化"
+cabinet_skill: workflow_optimize
+execution_chain: brownfield_patch
+gates:
+  forbid_tools:
+    - expand_requirements
+  forbid_route_to:
+    - 门下侍中
+escalations:
+  - when_keyword: ["架构重构", "restructure"]
+    to_intent: brownfield_refactor

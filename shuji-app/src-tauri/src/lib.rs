@@ -25,6 +25,7 @@ mod round_metrics;
 mod storage;
 mod token_tracker;
 pub mod tool;
+pub mod workflow;
 
 use std::collections::HashSet;
 use std::sync::atomic::AtomicBool;
@@ -84,6 +85,8 @@ pub fn run() {
             commands::settings::check_api_connection,
             commands::settings::get_workflow_preset,
             commands::settings::set_workflow_preset,
+            commands::settings::get_workflow_config,
+            commands::settings::set_workflow_config,
             commands::settings::get_soul_content,
             commands::settings::clear_soul,
             commands::settings::get_model_preset,
@@ -99,6 +102,7 @@ pub fn run() {
             commands::workflow::get_document_diffs,
             commands::workflow::read_document_diff,
             commands::workflow::trace_document,
+            commands::workflow::get_workflow_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

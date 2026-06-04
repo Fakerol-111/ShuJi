@@ -546,6 +546,37 @@ pub async fn set_workflow_preset(
     Ok(())
 }
 
+// ── Workflow config (Intent × Governance) ────────────────────
+
+/// Read the current workflow config from the project.
+#[tauri::command]
+pub async fn get_workflow_config(
+    state: tauri::State<'_, crate::commands::project::AppState>,
+) -> Result<crate::workflow::WorkflowConfig, String> {
+    let dir = state
+        .current_dir
+        .lock()
+        .await
+        .clone()
+        .ok_or("没有打开的项目")?;
+    Ok(crate::workflow::WorkflowConfig::load_from(std::path::Path::new(&dir)).await)
+}
+
+/// Save workflow config to the project.
+#[tauri::command]
+pub async fn set_workflow_config(
+    state: tauri::State<'_, crate::commands::project::AppState>,
+    config: crate::workflow::WorkflowConfig,
+) -> Result<(), String> {
+    let dir = state
+        .current_dir
+        .lock()
+        .await
+        .clone()
+        .ok_or("没有打开的项目")?;
+    config.save_to(std::path::Path::new(&dir)).await
+}
+
 // ── Soul management ─────────────────────────────────────────────────
 
 fn soul_path(project_dir: &str) -> std::path::PathBuf {

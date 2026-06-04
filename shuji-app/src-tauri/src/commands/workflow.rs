@@ -1037,6 +1037,20 @@ pub async fn set_document_status(
     }
 }
 
+// ── Workflow state command ────────────────────────────────
+
+/// Read the current workflow state (profile id, governance, stage, execution chain).
+#[tauri::command]
+pub async fn get_workflow_state(
+    state: State<'_, AppState>,
+) -> Result<Option<crate::workflow::WorkflowState>, String> {
+    let dir = {
+        let d = state.current_dir.lock().await;
+        d.clone().ok_or("没有打开的项目")?
+    };
+    Ok(crate::workflow::WorkflowState::load_from(&std::path::Path::new(&dir)).await)
+}
+
 // ── Traceability commands ───────────────────────────────────
 
 #[tauri::command]

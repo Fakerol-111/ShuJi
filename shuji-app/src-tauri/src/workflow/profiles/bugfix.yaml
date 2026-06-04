@@ -1,0 +1,12 @@
+id: bugfix
+version: 1
+label: "缺陷修复"
+cabinet_skill: workflow_bugfix
+execution_chain: brownfield_patch
+gates:
+  forbid_tools:
+    - expand_requirements
+  forbid_route_to:
+    - 中书令
+    - 门下侍中
+escalations: []

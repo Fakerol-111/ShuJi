@@ -1,5 +1,6 @@
-import { useState } from "react";
-import type { PlanInfo, PhaseRuntime, PhaseExecutionStatus } from "../types";
+import { useState, useEffect } from "react";
+import { getWorkflowState } from "../api";
+import type { PlanInfo, PhaseRuntime, PhaseExecutionStatus, WorkflowState as WFState } from "../types";
 
 interface WorkflowStatusProps {
   phaseCount: number;
@@ -9,6 +10,36 @@ interface WorkflowStatusProps {
   planInfo: PlanInfo | null;
   pendingApprovals: string[];
   onSelectDoc: (docPath: string) => void;
+}
+
+// ── Profile display names ──────────────────────────────────────
+
+const PROFILE_LABELS: Record<string, string> = {
+  greenfield_standard: "新功能",
+  brownfield_optimize: "存量优化",
+  bugfix: "缺陷修复",
+  demo: "快速原型",
+};
+
+const STAGE_LABELS: Record<string, string> = {
+  init: "初始化",
+  expand: "需求展开",
+  design: "方案设计",
+  analysis: "代码分析",
+  plan: "方案规划",
+  review: "审查",
+  approval: "批复",
+  execution: "执行",
+  summary: "汇总",
+  done: "完成",
+};
+
+function stageLabel(id: string): string {
+  return STAGE_LABELS[id] || id;
+}
+
+function profileLabel(id: string): string {
+  return PROFILE_LABELS[id] || id;
 }
 
 // ── Color tokens mapped to status ───────────────────────────
@@ -68,6 +99,17 @@ export default function WorkflowStatus({
   onSelectDoc,
 }: WorkflowStatusProps) {
   const [expanded, setExpanded] = useState(false);
+  const [wfState, setWfState] = useState<WFState | null>(null);
+
+  // ── Poll workflow state every 3s (created after first send_message) ──
+  useEffect(() => {
+    const fetch = () => {
+      getWorkflowState().then(setWfState).catch(() => setWfState(null));
+    };
+    fetch();
+    const timer = setInterval(fetch, 3000);
+    return () => clearInterval(timer);
+  }, []);
 
   // ── Calculate overall progress ──
   const total = (phaseCount || phases.length) * 2 + 1;
@@ -107,7 +149,7 @@ export default function WorkflowStatus({
     });
   }
 
-  if (phases.length === 0) {
+  if (phases.length === 0 && !wfState) {
     return (
       <div className="bg-surface-paper border-b border-fold shrink-0 px-4 py-1.5">
         <span className="text-caption text-ink-400">尚未启动流程</span>
@@ -130,6 +172,20 @@ export default function WorkflowStatus({
             {progress}%
           </span>
         </div>
+
+        {/* Workflow profile badge */}
+        {wfState && (
+          <span className="text-caption px-1.5 py-[1px] rounded-full border border-ink-300 text-ink-500 bg-ink-100/30 whitespace-nowrap">
+            {profileLabel(wfState.profile_id)}
+          </span>
+        )}
+
+        {/* Current stage badge */}
+        {wfState && wfState.current_stage !== "init" && (
+          <span className="text-caption px-1.5 py-[1px] rounded-full border border-gold/30 text-gold-700 bg-gold/8 whitespace-nowrap">
+            {stageLabel(wfState.current_stage)}
+          </span>
+        )}
 
         {/* Blocker badges */}
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -166,8 +222,8 @@ export default function WorkflowStatus({
             </button>
           ))}
 
-          {blockers.length === 0 &&
-            (overall === "Approved" &&
+          {blockers.length === 0 && (
+            overall === "Approved" &&
             phases.every((p) => p.execution === "Completed")
               ? (
                 <span className="text-caption text-jade">所有阶段已完成</span>
@@ -178,7 +234,7 @@ export default function WorkflowStatus({
         </div>
 
         {/* Expand toggle */}
-        {phases.length > 0 && (
+        {(phases.length > 0 || wfState) && (
           <button
             onClick={() => setExpanded(!expanded)}
             className="text-caption text-ink-400 hover:text-ink-600 shrink-0"
@@ -188,42 +244,69 @@ export default function WorkflowStatus({
         )}
       </div>
 
-      {/* Expanded phase details */}
-      {expanded && phases.length > 0 && (
+      {/* Expanded details */}
+      {expanded && (
         <div className="px-4 pb-2 border-t border-fold/50 text-caption text-ink-600">
-          <div className="space-y-0.5 pt-1.5">
-            {phases.map((phase) => {
-              const dStatus = phase.design as string;
-              const eObj = phase.execution as PhaseExecutionStatus;
-              const eIsBlocked =
-                typeof eObj === "object" && eObj !== null && "Blocked" in eObj;
-              const eStr = eIsBlocked ? "Blocked" : (eObj as string);
-              return (
-                <div key={phase.index} className="flex items-center gap-2">
-                  <span className="font-mono text-ink-400 w-14 shrink-0">
-                    阶段{phase.index}
-                  </span>
-                  <span
-                    className={`${statusColor(dStatus)} ${isBlocked(dStatus) ? "font-medium" : ""}`}
-                  >
-                    {statusDisplay(designShortLabel(dStatus))}
-                  </span>
-                  <span className="text-ink-300 mx-0.5">|</span>
-                  <span
-                    className={
-                      eIsBlocked
-                        ? "text-vermillion font-medium"
-                        : statusColor(eStr)
-                    }
-                  >
-                    {eIsBlocked
-                      ? `⚑ 阻塞`
-                      : statusDisplay(execShortLabel(eStr))}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          {/* Workflow stage section */}
+          {wfState && (
+            <div className="pt-1.5 pb-1">
+              <div className="flex items-center gap-2 mb-1 text-ink-500 font-medium">
+                <span>工作流</span>
+                <span className="text-[10px] px-1 rounded bg-ink-100/50">
+                  {wfState.governance}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="px-2 py-0.5 rounded-full border border-ink-200 text-ink-500">
+                  {profileLabel(wfState.profile_id)}
+                </span>
+                <span className="text-ink-300">→</span>
+                <span className="px-2 py-0.5 rounded-full border border-gold/30 text-gold-700 bg-gold/8">
+                  {stageLabel(wfState.current_stage)}
+                </span>
+                <span className="text-ink-300 mx-1 text-[10px]">
+                  ({wfState.execution_chain_id})
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Phase details section */}
+          {phases.length > 0 && (
+            <div className="space-y-0.5 pt-1.5 border-t border-fold/30">
+              {phases.map((phase) => {
+                const dStatus = phase.design as string;
+                const eObj = phase.execution as PhaseExecutionStatus;
+                const eIsBlocked =
+                  typeof eObj === "object" && eObj !== null && "Blocked" in eObj;
+                const eStr = eIsBlocked ? "Blocked" : (eObj as string);
+                return (
+                  <div key={phase.index} className="flex items-center gap-2">
+                    <span className="font-mono text-ink-400 w-14 shrink-0">
+                      阶段{phase.index}
+                    </span>
+                    <span
+                      className={`${statusColor(dStatus)} ${isBlocked(dStatus) ? "font-medium" : ""}`}
+                    >
+                      {statusDisplay(designShortLabel(dStatus))}
+                    </span>
+                    <span className="text-ink-300 mx-0.5">|</span>
+                    <span
+                      className={
+                        eIsBlocked
+                          ? "text-vermillion font-medium"
+                          : statusColor(eStr)
+                      }
+                    >
+                      {eIsBlocked
+                        ? `⚑ 阻塞`
+                        : statusDisplay(execShortLabel(eStr))}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

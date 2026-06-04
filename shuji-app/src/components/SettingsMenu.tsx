@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { getConfig, saveConfig, getContextConfig, saveContextConfig, checkApiConnection, getWorkflowPreset as apiGetPreset, setWorkflowPreset as apiSetPreset, getModelPreset, setModelPreset } from "../api";
+import { getConfig, saveConfig, getContextConfig, saveContextConfig, checkApiConnection, getWorkflowPreset as apiGetPreset, setWorkflowPreset as apiSetPreset, getModelPreset, setModelPreset, getWorkflowConfig as apiGetWorkflowConfig, setWorkflowConfig as apiSetWorkflowConfig } from "../api";
 import { ALL_ROLES, CODE_THEMES, ROLE_CONTEXT_DEFAULTS, getCodeTheme, setCodeTheme as persistCodeTheme } from "../constants";
-import type { RoleEndpoint, ContextWindowConfig, RoleContextConfig } from "../types";
+import type { RoleEndpoint, ContextWindowConfig, RoleContextConfig, WorkflowConfig as WFConfig } from "../types";
 
 // ── Provider presets (shared with SetupPage) ───────────────
 
@@ -82,6 +82,7 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
   const [healthStatus, setHealthStatus] = useState<"idle" | "checking" | "ok" | "fail">("idle");
   const [healthMsg, setHealthMsg] = useState("");
   const [workflowPreset, setWorkflowPresetLocal] = useState("standard");
+  const [workflowIntent, setWorkflowIntent] = useState<string>("auto");
   const [modelPreset, setModelPresetLocal] = useState("balanced");
   const [codeTheme, setCodeThemeLocal] = useState(getCodeTheme);
 
@@ -128,8 +129,16 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
     }).catch((e) => console.error("读取上下文配置失败:", e));
   };
 
-  const loadWorkflowPreset = () => {
-    apiGetPreset().then(setWorkflowPresetLocal).catch(() => setWorkflowPresetLocal("standard"));
+  const loadWorkflowConfig = () => {
+    apiGetWorkflowConfig().then((cfg: WFConfig) => {
+      setWorkflowIntent(cfg.intent);
+      // Governance 也来自 workflow_config.json（单一来源）
+      setWorkflowPresetLocal(cfg.governance);
+    }).catch(() => {
+      setWorkflowIntent("auto");
+      // 回退到旧 preset 路径
+      apiGetPreset().then(setWorkflowPresetLocal).catch(() => setWorkflowPresetLocal("standard"));
+    });
   };
 
   const loadModelPreset = () => {
@@ -137,7 +146,7 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
   };
 
   const toggle = () => {
-    if (!open) { loadConfig(); loadContextConfig(); loadWorkflowPreset(); loadModelPreset(); }
+    if (!open) { loadConfig(); loadContextConfig(); loadWorkflowConfig(); loadModelPreset(); }
     setOpen(!open);
   };
 
@@ -228,6 +237,13 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
 
       // Save workflow preset
       await apiSetPreset(workflowPreset);
+
+      // Save workflow config (Intent × Governance)
+      await apiSetWorkflowConfig({
+        intent: workflowIntent as WFConfig["intent"],
+        governance: workflowPreset as WFConfig["governance"],
+        intent_override: null,
+      });
 
       setSavedMsg("已保存");
       setTimeout(() => setSavedMsg(""), 2000);
@@ -472,6 +488,41 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
             </div>
             <div className="text-[10px] text-ink-500 px-1">
               soul 超 8KB 时将自动压缩。单条经验/教训/偏好 ≤500 字符。
+            </div>
+          </div>
+
+          {/* ── Workflow Intent ── */}
+          <div className="space-y-1 pt-2 border-t border-ink-700">
+            <span className="text-[11px] font-semibold text-ink-300">任务意图 (Intent)</span>
+            <div className="flex gap-1 flex-wrap">
+              {[
+                { key: "auto", label: "自动" },
+                { key: "greenfield_standard", label: "新功能" },
+                { key: "brownfield_optimize", label: "存量优化" },
+                { key: "bugfix", label: "缺陷修复" },
+                { key: "demo", label: "快速原型" },
+              ].map((p) => (
+                <button
+                  key={p.key}
+                  onClick={() => setWorkflowIntent(p.key)}
+                  className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${
+                    workflowIntent === p.key
+                      ? "bg-ink-700 text-ink-100 border-ink-600"
+                      : "bg-ink-800 text-ink-400 border-ink-700 hover:border-ink-500"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <div className="text-[10px] text-ink-500 px-1">
+              {{
+                auto: "根据任务描述自动推断意图。（默认）",
+                greenfield_standard: "全新功能开发，走完整设计→审查→执行流程。",
+                brownfield_optimize: "对现有代码进行优化，跳过需求展开和门下审查。",
+                bugfix: "修复缺陷，直接路由到工部编码修复。",
+                demo: "快速原型/演示，最轻量流程。",
+              }[workflowIntent] || ""}
             </div>
           </div>
 

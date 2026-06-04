@@ -1,0 +1,6 @@
+id: fast
+label: "极速模式"
+forbid_tools:
+  - expand_requirements
+forbid_route_to:
+  - 门下侍中

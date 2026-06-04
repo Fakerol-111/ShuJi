@@ -103,6 +103,12 @@ pub fn suggest_workflow(task: &str) -> Option<RoutingSuggestion> {
             "加速",
             "performance",
             "提速",
+            "现有代码",
+            "存量代码",
+            "读 repo",
+            "读仓库",
+            "改现有",
+            "改代码",
         ],
     ) {
         return Some(RoutingSuggestion {
@@ -311,6 +317,24 @@ mod tests {
     }
 
     // ── Standard (low confidence fallback) ──
+
+    #[test]
+    fn test_brownfield_existing_code() {
+        let s = suggest_workflow("优化现有代码的性能").unwrap();
+        assert_eq!(s.skill, "workflow_optimize");
+    }
+
+    #[test]
+    fn test_brownfield_read_repo() {
+        let s = suggest_workflow("读 repo 分析瓶颈").unwrap();
+        assert_eq!(s.skill, "workflow_optimize");
+    }
+
+    #[test]
+    fn test_brownfield_modify_existing() {
+        let s = suggest_workflow("改现有模块的代码").unwrap();
+        assert_eq!(s.skill, "workflow_optimize");
+    }
 
     #[test]
     fn test_standard_fallback() {

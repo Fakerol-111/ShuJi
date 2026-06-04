@@ -1,0 +1,9 @@
+id: greenfield_standard
+version: 1
+label: "绿场标准"
+cabinet_skill: workflow_standard
+execution_chain: greenfield_full
+gates:
+  forbid_tools: []
+  forbid_route_to: []
+escalations: []

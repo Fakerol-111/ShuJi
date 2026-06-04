@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Project, ProjectSummary, ChatMessage, ProjectSnapshot, DeptLogEntry, AppConfig, ContextWindowConfig, TokenUsage, ContextStats, CheckpointEntry, RoundMetrics, LineageNode, TimelineData, DocDiffFile, TraceResult } from "./types";
+import type { Project, ProjectSummary, ChatMessage, ProjectSnapshot, DeptLogEntry, AppConfig, ContextWindowConfig, TokenUsage, ContextStats, CheckpointEntry, RoundMetrics, LineageNode, TimelineData, DocDiffFile, TraceResult, WorkflowConfig, WorkflowState } from "./types";
 
 export interface ShujiEntry {
   name: string;
@@ -179,6 +179,22 @@ export async function getWorkflowPreset(): Promise<string> {
 
 export async function setWorkflowPreset(preset: string): Promise<void> {
   return invoke("set_workflow_preset", { preset });
+}
+
+// ── Workflow config (Intent × Governance) ───────────────────
+
+export async function getWorkflowConfig(): Promise<WorkflowConfig> {
+  return invoke("get_workflow_config");
+}
+
+export async function setWorkflowConfig(config: WorkflowConfig): Promise<void> {
+  return invoke("set_workflow_config", { config });
+}
+
+// ── Workflow state (runtime) ────────────────────────────────
+
+export async function getWorkflowState(): Promise<WorkflowState | null> {
+  return invoke("get_workflow_state");
 }
 
 // ── Document approval ─────────────────────────────────────────

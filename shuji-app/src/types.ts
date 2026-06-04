@@ -179,7 +179,26 @@ export interface RoundMetrics {
   dept_iterations: Record<string, number>;
 }
 
-// ── Audit types ────────────────────────────────────────────────────
+// ── Workflow Config (Intent × Governance) ───────────────────
+
+export type Intent = "auto" | "greenfield_standard" | "brownfield_optimize" | "bugfix" | "demo";
+export type Governance = "full" | "standard" | "fast" | "audit";
+
+export interface WorkflowConfig {
+  intent: Intent;
+  governance: Governance;
+  intent_override: Intent | null;
+}
+
+// ── Workflow state (runtime) ──────────────────────────────
+
+export interface WorkflowState {
+  profile_id: string;
+  governance: string;
+  execution_chain_id: string;
+  current_stage: string;
+  artifacts: Record<string, string>;
+}
 
 export interface AuditEntry {
   ts: string;

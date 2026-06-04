@@ -65,6 +65,22 @@ impl Agent for ShangshulingAgent {
         .with_role(self.role().name())
         .with_debug_dir(input.working_dir.clone());
 
+        // ── ChainEngine: inject execution chain from workflow state ──
+        if let Some(wf_state) = crate::workflow::WorkflowState::load_from(&working_dir).await {
+            if let Some(injection) =
+                crate::workflow::ChainEngine::build_injection(&wf_state.execution_chain_id)
+            {
+                session.inject(&injection);
+                log_console!(
+                    "[尚书令] injected execution chain: {}",
+                    wf_state.execution_chain_id
+                );
+            }
+            let mut wf_state = wf_state;
+            wf_state.transition("execution");
+            wf_state.save_to(&working_dir).await;
+        }
+
         let thresholds = input.runtime_config.resolve_compact_thresholds(
             self.role().name(),
             input.context_window_config.get(self.role().name()),
