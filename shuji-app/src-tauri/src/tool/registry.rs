@@ -172,6 +172,26 @@ pub fn expand_requirements_tool() -> ToolDefinition {
     }
 }
 
+pub fn survey_codebase_tool() -> ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "survey_codebase".into(),
+            description: "唤起代码库勘察 sub-agent。扫描目标仓库结构生成分析文档。只需传入任务描述。返回分析文档ID（anls_xxx）。".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "task_description": {
+                        "type": "string",
+                        "description": "任务描述，告知 sub-agent 勘察的重点方向和关注点"
+                    }
+                },
+                "required": ["task_description"]
+            }),
+        },
+    }
+}
+
 pub fn create_skill_tool() -> ToolDefinition {
     crate::api::client::ToolDefinition {
         tool_type: "function".into(),

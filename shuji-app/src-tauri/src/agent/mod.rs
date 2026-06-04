@@ -1,5 +1,6 @@
 pub mod bingbushangshu;
 pub mod expand_requirements;
+pub mod survey_codebase;
 pub mod gongbushangshu;
 pub mod liburshangshu;
 pub mod libushangshu;

@@ -1522,6 +1522,7 @@ pub async fn tool_handle_neige_special(
         "cancel_agent" => Some(tool_cancel_agent(args, ctx).await),
         "update_soul" => Some(tool_update_soul(args, ctx).await),
         "expand_requirements" => Some(tool_expand_requirements(args, ctx).await),
+        "survey_codebase" => Some(tool_survey_codebase(args, ctx).await),
         "create_skill" => Some(tool_create_skill(args, ctx).await),
         _ => None,
     }
@@ -1757,6 +1758,31 @@ async fn tool_expand_requirements(args: &serde_json::Value, ctx: &ToolContext) -
         }
         Err(e) => {
             log_console!("[tool] expand_requirements 失败: {}", e);
+            serde_json::json!({"ok": false, "message": e}).to_string()
+        }
+    }
+}
+
+async fn tool_survey_codebase(args: &serde_json::Value, ctx: &ToolContext) -> String {
+    let task_description = args["task_description"].as_str().unwrap_or("");
+    if task_description.is_empty() {
+        return r#"{"ok": false, "message": "task_description 不能为空"}"#.to_string();
+    }
+    let client = match ctx.client.as_ref() {
+        Some(c) => c,
+        None => return serde_json::json!({"ok": false, "message": "API客户端不可用"}).to_string(),
+    };
+    let model = match ctx.model.as_ref() {
+        Some(m) => m,
+        None => return serde_json::json!({"ok": false, "message": "模型不可用"}).to_string(),
+    };
+    match crate::agent::survey_codebase::run(task_description, &ctx.working_dir, client, model).await {
+        Ok(doc_id) => {
+            log_console!("[tool] survey_codebase → {}", doc_id);
+            serde_json::json!({"ok": true, "document_id": doc_id}).to_string()
+        }
+        Err(e) => {
+            log_console!("[tool] survey_codebase 失败: {}", e);
             serde_json::json!({"ok": false, "message": e}).to_string()
         }
     }

@@ -48,6 +48,7 @@ impl NeigeAgent {
         tools.push(crate::tool::registry::update_soul_tool());
         tools.push(crate::tool::registry::create_skill_tool());
         tools.push(crate::tool::registry::expand_requirements_tool());
+        tools.push(crate::tool::registry::survey_codebase_tool());
         tools
     }
 
