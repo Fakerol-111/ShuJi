@@ -295,6 +295,15 @@ impl Agent for NeigeAgent {
         // Inject workflow preset rules after soul is loaded
         Self::inject_workflow_preset(&mut session, &working_dir).await;
 
+        // ── Inject project profile (maintained by survey_codebase) ──
+        let profile_path = working_dir.join(".shuji").join("project_profile.md");
+        if let Ok(content) = tokio::fs::read_to_string(&profile_path).await {
+            if !content.trim().is_empty() {
+                let truncated: String = content.chars().take(4000).collect();
+                session.inject(&format!("[Project Profile]\n{}", truncated));
+            }
+        }
+
         // ── Discuss mode: force-inject discuss skill ──
         if input.discuss_mode {
             let discuss_skill = Self::load_skill("discuss", &working_dir).await;

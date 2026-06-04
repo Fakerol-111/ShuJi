@@ -1776,7 +1776,9 @@ async fn tool_survey_codebase(args: &serde_json::Value, ctx: &ToolContext) -> St
         Some(m) => m,
         None => return serde_json::json!({"ok": false, "message": "模型不可用"}).to_string(),
     };
-    match crate::agent::survey_codebase::run(task_description, &ctx.working_dir, client, model).await {
+    match crate::agent::survey_codebase::run(task_description, &ctx.working_dir, client, model)
+        .await
+    {
         Ok(doc_id) => {
             log_console!("[tool] survey_codebase → {}", doc_id);
             serde_json::json!({"ok": true, "document_id": doc_id}).to_string()

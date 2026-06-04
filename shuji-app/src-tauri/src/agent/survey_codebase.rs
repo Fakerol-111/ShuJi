@@ -23,10 +23,19 @@ pub async fn run(
     let tools = {
         let mut t = crate::tool::registry::inspect_tools();
         t.extend(crate::tool::registry::document_tools());
+        // create_file + modify_file for project_profile.md maintenance
+        t.push(crate::tool::create_file_tool_def(
+            "创建/更新 project_profile.md",
+        ));
+        t.push(crate::tool::modify_file_tool_def());
         t
     };
 
-    let prompt = format!("对以下项目进行代码库勘察：\n\n项目目录: {}\n\n任务背景: {}", working_dir.display(), task_description);
+    let prompt = format!(
+        "对以下项目进行代码库勘察：\n\n项目目录: {}\n\n任务背景: {}",
+        working_dir.display(),
+        task_description
+    );
     let msgs = vec![Message::user(&prompt)];
 
     let config = Arc::new(crate::config::RuntimeConfig::default());
@@ -41,9 +50,9 @@ pub async fn run(
         let name = name.to_owned();
         let args = args.clone();
         let wd = wd.clone();
-        Box::pin(async move {
-            crate::tool::execute_named_tool(&name, &wd, &args, "survey_agent").await
-        })
+        Box::pin(
+            async move { crate::tool::execute_named_tool(&name, &wd, &args, "survey_agent").await },
+        )
     };
 
     let mut controller = crate::api::control::AgentController::new();
