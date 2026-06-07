@@ -107,6 +107,7 @@ impl Agent for ShangshulingAgent {
             role_name.clone(),
             input.runtime_config.clone(),
             false,
+            input.context_window_config.clone(),
         );
         controller.set_compact_handler(compact_fn, compact_interval);
 

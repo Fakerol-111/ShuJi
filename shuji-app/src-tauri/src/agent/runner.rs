@@ -25,6 +25,7 @@ pub fn build_compact_handler(
     role_name: String,
     runtime_config: Arc<RuntimeConfig>,
     is_cabinet: bool,
+    context_window_config: Arc<std::collections::HashMap<String, crate::config::RoleContextConfig>>,
 ) -> (CompactFn, u32) {
     let cb: CompactFn = Box::new(move |messages: Vec<serde_json::Value>| {
         let client = client.clone();
@@ -32,15 +33,8 @@ pub fn build_compact_handler(
         let wd = working_dir.clone();
         let role = role_name.clone();
         let cfg = runtime_config.clone();
+        let ctx_roles = context_window_config.clone();
         Box::pin(async move {
-            let ctx_roles = tokio::fs::read_to_string(wd.join("context_config.json"))
-                .await
-                .ok()
-                .and_then(|c| {
-                    serde_json::from_str::<crate::commands::settings::ContextWindowConfig>(&c).ok()
-                })
-                .map(|c| c.roles)
-                .unwrap_or_default();
             let thresholds = cfg.resolve_compact_thresholds(&role, ctx_roles.get(&role));
 
             let mut ctx = PersistedContext::from_messages(&messages);
