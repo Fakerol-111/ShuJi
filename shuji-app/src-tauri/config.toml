@@ -52,8 +52,10 @@ token_threshold = 750000
 # 压缩后保留的最近消息数
 keep_recent_count = 24
 
-# 关闭 mid-run 压缩：与「接近窗口再压」策略一致，避免 tool loop 中途改写持久化上下文
-mid_run_compact = false
+# 启用 mid-run 压缩：长运行 actor（工部 60 轮、内阁 100 轮）在 tool loop 中途
+# 将上下文持久化到磁盘，避免进程崩溃时丢失中期状态。
+# 运行中的 session 不受影响——压缩版在下次 execute() 时自动加载。
+mid_run_compact = true
 
 [actor]
 # 单个 actor 执行的最大迭代次数
