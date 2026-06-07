@@ -11,7 +11,6 @@ const SKILL_LABELS: Record<string, string> = {
   summary: "奏报", clarify: "问对",
 };
 
-/** 值事牌：六部当值看板。仿古制，显示当前在值诸司及进度。 */
 export default function DeptStatusBar() {
   const activeSet = useActiveDepts();
   const [tokenPrompt, setTokenPrompt] = useState(0);
@@ -46,6 +45,9 @@ export default function DeptStatusBar() {
   useEffect(() => {
     if (!round) { setElapsed(""); return; }
     const tick = () => {
+      // 停止计时：诸司无事时冻结时间
+      const hasActive = DEPT_ORDER.some((d) => activeSet.has(d));
+      if (!hasActive) return;
       const secs = Math.floor((Date.now() - round.started_at) / 1000);
       if (secs < 60) setElapsed(`${secs}s`);
       else if (secs < 3600) setElapsed(`${Math.floor(secs / 60)}m${secs % 60}s`);
@@ -54,98 +56,55 @@ export default function DeptStatusBar() {
     tick();
     const timer = window.setInterval(tick, 1000);
     return () => clearInterval(timer);
-  }, [round]);
+  }, [round, activeSet]);
 
   const activeDepts = DEPT_ORDER.filter((d) => activeSet.has(d));
-  const idleDepts = DEPT_ORDER.filter((d) => !activeSet.has(d));
 
   return (
-    <div className="bg-ink-900 border-t border-gold/20 shrink-0">
-      {/* ── 值事牌（上部）：在值部门 + 实时指标 ── */}
-      <div className="flex items-stretch min-h-[32px]">
-        {/* 左侧：值事牌匾 */}
-        <div className="flex items-center gap-0.5 pl-2 pr-1 py-1 overflow-x-auto">
-          <span className="text-caption font-semibold text-gold/70 tracking-wider mr-1 whitespace-nowrap font-serif">
-            值事
-          </span>
-          {activeDepts.length === 0 && (
-            <span className="text-caption text-ink-600 italic whitespace-nowrap">诸司无事</span>
-          )}
-          {activeDepts.map((dept) => {
+    <div className="h-7 bg-ink-900 border-t border-ink-800 shrink-0 flex items-center px-2 text-[11px] gap-0">
+      {/* ── 值事 ── */}
+      <div className="flex items-center gap-1 min-w-0 shrink-0">
+        <span className="text-gold/60 text-[10px] font-serif font-semibold tracking-wider mr-0.5">值事</span>
+        {activeDepts.length === 0 ? (
+          <span className="text-ink-500 italic text-[10px]">诸司无事</span>
+        ) : (
+          activeDepts.map((dept) => {
             const meta = DEPT_META[dept];
+            const color = meta?.color || "#8B7355";
             return (
-              <DutyPlaque
+              <span
                 key={dept}
-                label={meta?.shortLabel || dept}
-                color={meta?.color || "#8B7355"}
-                active={true}
-              />
-            );
-          })}
-          {idleDepts.slice(0, 3).map((dept) => {
-            const meta = DEPT_META[dept];
-            return (
-              <DutyPlaque
-                key={dept}
-                label={meta?.shortLabel || dept}
-                color={meta?.color || "#8B7355"}
-                active={false}
-              />
-            );
-          })}
-        </div>
-
-        {/* 中间：当前轮次信息 */}
-        {round && round.started_at > 0 && (
-          <div className="flex items-center gap-2 px-2 border-l border-ink-700/50 text-caption text-ink-400 font-mono shrink-0">
-            {round.current_role && (
-              <span className="text-gold/80 font-semibold">{round.current_role}</span>
-            )}
-            {round.skill && (
-              <span className="text-ink-500 bg-ink-800/50 px-1.5 rounded text-[10px]">
-                {SKILL_LABELS[round.skill] || round.skill}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-serif"
+                style={{ backgroundColor: `${color}18` }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0" style={{ backgroundColor: color }} />
+                <span className="text-ink-200 font-medium">{meta?.shortLabel || dept}</span>
               </span>
-            )}
-            {elapsed && <span className="text-ink-500">{elapsed}</span>}
-          </div>
+            );
+          })
         )}
-
-        {/* 右侧：Token 计数 */}
-        <div className="ml-auto flex items-center gap-2 px-2 text-[10px] font-mono text-ink-500 shrink-0">
-          <span title={`输入缓存 ${formatToken(tokenCached)} / ${formatToken(tokenPrompt)}`}>
-            <span className="text-jade/80">缓存</span> {formatToken(tokenCached)}
-          </span>
-          <span className="text-ink-700">·</span>
-          <span title={`输出 ${formatToken(tokenCompletion)}`}>
-            <span className="text-gold/60">出</span> {formatToken(tokenCompletion)}
-          </span>
-        </div>
       </div>
-    </div>
-  );
-}
 
-// ── 值事牌块 ─────────────────────────────────────────────
-function DutyPlaque({ label, color, active }: { label: string; color: string; active: boolean }) {
-  return (
-    <div
-      className={`relative flex items-center gap-1 px-2 py-0.5 rounded text-caption font-serif transition-all ${
-        active
-          ? "text-ink-50 font-semibold shadow-sm"
-          : "text-ink-600/50"
-      }`}
-      style={{
-        backgroundColor: active ? `${color}22` : "transparent",
-        borderLeft: active ? `2px solid ${color}` : "2px solid transparent",
-      }}
-    >
-      {active && (
-        <span
-          className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0"
-          style={{ backgroundColor: color }}
-        />
+      {/* ── 轮次信息 ── */}
+      {round && round.started_at > 0 && (
+        <div className="flex items-center gap-2 ml-2 pl-2 border-l border-ink-800 text-[10px] text-ink-400 font-mono shrink-0">
+          {round.current_role && <span className="text-gold/80 font-semibold">{round.current_role}</span>}
+          {round.skill && <span className="text-ink-500">· {SKILL_LABELS[round.skill] || round.skill}</span>}
+          {elapsed && <span className="text-ink-500">· {elapsed}</span>}
+        </div>
       )}
-      <span className={active ? "" : "line-through decoration-ink-700/30"}>{label}</span>
+
+      {/* ── Token 计数 ── */}
+      <div className="ml-auto flex items-center gap-2 text-[10px] font-mono text-ink-500 shrink-0">
+        <span className="text-jade/80">输入缓存命中</span>
+        <span className="text-ink-300">{formatToken(tokenCached)}</span>
+        <span className="text-ink-700">|</span>
+        <span className="text-ink-400">输入缓存未命中</span>
+        <span className="text-ink-300">{formatToken(tokenPrompt - tokenCached)}</span>
+        <span className="text-ink-700">|</span>
+        <span className="text-gold/60">输出</span>
+        <span className="text-ink-300">{formatToken(tokenCompletion)}</span>
+      </div>
     </div>
   );
 }

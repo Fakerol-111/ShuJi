@@ -129,6 +129,9 @@ export default function WorkflowGraphView() {
         {graph && (
           <span className="text-caption text-ink-500">
             {graph.nodes.length} 节点 · {graph.edges.length} 边
+            {layoutResult && layoutResult.totalDuration !== "" && (
+              <span className="ml-2 text-ink-400">· 总耗时 {layoutResult.totalDuration}</span>
+            )}
           </span>
         )}
       </div>
@@ -213,8 +216,15 @@ export default function WorkflowGraphView() {
                 const meta = DEPT_META[n.role] || { color: "#6b7280", label: n.role };
                 const isMulti = n.instance > 1;
                 const color = n.status === "failed" ? "#C41E3A" : n.status === "completed" ? "#2D5A3F" : meta.color;
+                const durStr = layoutResult.nodeDurations.get(n.id);
                 return (
-                  <g key={`node-${n.id}`}>
+                  <g key={`node-${n.id}`} className="group">
+                    <title>
+                      {n.role}{isMulti ? `#${n.instance}` : ""}
+                      {durStr ? `\n处理耗时: ${durStr}` : ""}
+                      {n.task_summary ? `\n任务: ${n.task_summary}` : ""}
+                      {n.created_at ? `\n开始: ${n.created_at}` : ""}
+                    </title>
                     <rect x={n.x} y={n.y} width={NODE_W} height={NODE_H} rx="8" ry="8"
                       fill={n.status === "failed" ? "#FDE8EC" : "#F5F0E8"}
                       stroke={color}
@@ -232,6 +242,7 @@ export default function WorkflowGraphView() {
                     {/* Timestamp */}
                     <text x={n.x + NODE_W - 4} y={n.y + NODE_H - 4} textAnchor="end" fill="#A8926D" fontSize="9">
                       {n.created_at}
+                      {durStr ? ` · ${durStr}` : ""}
                     </text>
                   </g>
                 );
@@ -246,12 +257,31 @@ export default function WorkflowGraphView() {
   );
 }
 
+function timeToSecs(t: string): number {
+  const parts = t.split(":");
+  if (parts.length === 3) {
+    return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+  }
+  if (parts.length === 2) {
+    return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+  }
+  return 0;
+}
+
+function fmtDuration(secs: number): string {
+  if (secs < 60) return `${secs}s`;
+  if (secs < 3600) return `${Math.floor(secs / 60)}m${secs % 60}s`;
+  return `${Math.floor(secs / 3600)}h${Math.floor((secs % 3600) / 60)}m`;
+}
+
 // ── Layout computation (pure function) ──
 function computeLayout(graph: WorkflowGraph): {
   layoutNodes: LayoutNode[];
   edges: LayoutEdge[];
   svgW: number;
   svgH: number;
+  totalDuration: string;
+  nodeDurations: Map<number, string>;
 } {
   const nodeMap = new Map<number, GraphNode>();
   for (const n of graph.nodes) nodeMap.set(n.id, n);
@@ -325,9 +355,33 @@ function computeLayout(graph: WorkflowGraph): {
     if (src && dst) layoutEdges.push({ ...e, src, dst });
   }
 
+  // ── 耗时计算 ──
+  const nodeDurations = new Map<number, string>();
+  for (const node of graph.nodes) {
+    // 找到该节点的第一个出边时间
+    const outEdge = graph.edges
+      .filter((e) => e.source === node.id)
+      .sort((a, b) => timeToSecs(a.timestamp) - timeToSecs(b.timestamp))[0];
+    if (outEdge && node.created_at) {
+      const startSecs = timeToSecs(node.created_at);
+      const endSecs = timeToSecs(outEdge.timestamp);
+      if (endSecs > startSecs) {
+        nodeDurations.set(node.id, fmtDuration(endSecs - startSecs));
+      }
+    }
+  }
+
+  // 总耗时：最新边 - 最早边
+  let totalDuration = "";
+  if (graph.edges.length > 0) {
+    const allTimes = graph.edges.map((e) => timeToSecs(e.timestamp)).sort((a, b) => a - b);
+    const diff = allTimes[allTimes.length - 1] - allTimes[0];
+    if (diff > 0) totalDuration = fmtDuration(diff);
+  }
+
   const maxLayerWidth = Math.max(...layers.map((l) => l.length), 1);
   const svgW = PADDING * 2 + maxLayerWidth * (NODE_W + H_GAP) - H_GAP;
   const svgH = PADDING * 2 + layers.length * (NODE_H + V_GAP) - V_GAP;
 
-  return { layoutNodes, edges: layoutEdges, svgW, svgH };
+  return { layoutNodes, edges: layoutEdges, svgW, svgH, totalDuration, nodeDurations };
 }

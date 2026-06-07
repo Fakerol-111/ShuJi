@@ -30,6 +30,8 @@ pub struct GraphNode {
     pub task_summary: String,
     pub status: NodeStatus,
     pub created_at: String,
+    /// 该节点处理耗时（秒），完成时记录
+    pub duration_secs: Option<u64>,
 }
 
 /// 有向边：一次 route_to 调用
@@ -142,7 +144,6 @@ impl WorkflowGraph {
         };
 
         // 创建边
-        let edge = GraphEdge {
             id: self.next_edge_id,
             source: from_id,
             target: target_id,
@@ -172,6 +173,7 @@ impl WorkflowGraph {
             task_summary: task.to_string(),
             status: NodeStatus::Active,
             created_at: Local::now().format("%H:%M:%S").to_string(),
+            duration_secs: None,
         };
         self.next_node_id += 1;
 
