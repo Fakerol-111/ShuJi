@@ -192,6 +192,11 @@ async fn start_actor_system(
     let talk_history: Arc<std::sync::Mutex<Vec<String>>> =
         Arc::new(std::sync::Mutex::new(Vec::new()));
 
+    // ── 文移图初始化 ──
+    let workflow_graph = Arc::new(tokio::sync::Mutex::new(
+        crate::workflow::WorkflowGraph::load_or_new(working_dir).await,
+    ));
+
     for (role, agent, rx) in contexts {
         let mut peers: HashMap<Role, mpsc::UnboundedSender<ActorMessage>> = HashMap::new();
         for (other_role, tx) in &all_senders {
@@ -231,6 +236,7 @@ async fn start_actor_system(
             failure_retries: failure_retries.clone(),
             talk_history: talk_history.clone(),
             current_skill: Arc::new(std::sync::Mutex::new(None)),
+            workflow_graph: Some(workflow_graph.clone()),
             runtime_config: runtime_config.clone(),
         };
 
@@ -1047,6 +1053,19 @@ pub async fn get_workflow_state(
         d.clone().ok_or("没有打开的项目")?
     };
     Ok(crate::workflow::WorkflowState::load_from(std::path::Path::new(&dir)).await)
+}
+
+// ── 文移图 ──────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn get_workflow_graph(
+    state: State<'_, AppState>,
+) -> Result<Option<crate::workflow::WorkflowGraph>, String> {
+    let dir = {
+        let d = state.current_dir.lock().await;
+        d.clone().ok_or("没有打开的项目")?
+    };
+    Ok(crate::workflow::WorkflowGraph::load_from(std::path::Path::new(&dir)).await)
 }
 
 // ── Traceability commands ───────────────────────────────────

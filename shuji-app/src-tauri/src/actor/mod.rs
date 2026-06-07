@@ -117,6 +117,8 @@ pub struct ActorContext {
     pub plan: Arc<Mutex<Vec<String>>>,
     /// Current skill name for cross-turn persistence (内阁 only).
     pub current_skill: Arc<Mutex<Option<String>>>,
+    /// 文移图 — 部门间任务流转 DAG（共享引用，由 forward_route 写入）
+    pub workflow_graph: Option<Arc<tokio::sync::Mutex<crate::workflow::WorkflowGraph>>>,
     /// Runtime configuration
     pub runtime_config: Arc<RuntimeConfig>,
 }
@@ -605,21 +607,29 @@ async fn fallback_to_dispatcher(ctx: &ActorContext, role_name: &str, error: &str
 
 /// Forward a RouteTo instruction to the target actor.
 async fn forward_route(ctx: &ActorContext, route: RouteTo) {
-    let subject = route.subject.clone();
-    let mut actor_msg = ActorMessage::new(route.subject, route.msg_type);
+    let subject_for_graph = route.subject.clone();
+    let mut actor_msg = ActorMessage::new(subject_for_graph.clone(), route.msg_type);
     actor_msg.payload = route.payload;
 
     let target_name = route.target.name();
-    log_dept(ctx, ctx.role.name(), &format!("→ {}", subject));
+    log_dept(ctx, ctx.role.name(), &format!("→ {}", subject_for_graph));
 
     // Log routing event to activity log
     ctx.logger
-        .log_route(ctx.role.name(), target_name, &subject)
+        .log_route(ctx.role.name(), target_name, &subject_for_graph)
         .await;
 
     match ctx.peers.get(&route.target) {
         Some(tx) => {
             let _ = tx.send(actor_msg);
+            // ── 记录文移图边 ──
+            if let Some(ref graph_lock) = ctx.workflow_graph {
+                let mut g = graph_lock.lock().await;
+                // 用 msg_type + subject 作为任务标识
+                let task_id = format!("{:?}/{}", route.msg_type, subject_for_graph);
+                g.add_edge(ctx.role.name(), target_name, &task_id, &subject_for_graph);
+                let _ = g.save_to(&ctx.working_dir).await;
+            }
         }
         None => {
             let _ = ctx.emperor_tx.send(ChatMessage::new(

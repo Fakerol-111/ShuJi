@@ -105,6 +105,7 @@ pub fn run() {
             commands::workflow::read_document_diff,
             commands::workflow::trace_document,
             commands::workflow::get_workflow_state,
+            commands::workflow::get_workflow_graph,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
