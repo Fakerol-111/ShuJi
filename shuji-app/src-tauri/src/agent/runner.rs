@@ -81,6 +81,7 @@ pub fn build_checkpoint_handler(
 ///
 /// Returns true if context was loaded + restored (i.e. this is a continuation),
 /// false if no persisted context exists (fresh start).
+#[allow(clippy::too_many_arguments)]
 pub async fn load_and_compact_context(
     client: &AnthropicClient,
     model: &str,

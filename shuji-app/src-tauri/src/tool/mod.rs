@@ -2,13 +2,11 @@ use crate::actor::FastMessage;
 use crate::api::client::AnthropicClient;
 use crate::models::role::Role;
 use serde::Serialize;
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use tokio::io::AsyncReadExt;
-use tokio::sync::mpsc;
 
 pub mod documents;
 pub mod registry;
@@ -22,11 +20,11 @@ mod tool_log;
 /// expand_requirements, create_skill).
 pub struct ToolContext {
     pub working_dir: PathBuf,
-    pub cancel_map: Option<Arc<Mutex<HashMap<Role, Arc<AtomicBool>>>>>,
+    pub cancel_map: Option<crate::CancelMap>,
     pub client: Option<Arc<AnthropicClient>>,
     pub model: Option<String>,
     /// Fast mailbox senders for interrupting departments immediately.
-    pub fast_txs: Option<Arc<HashMap<Role, mpsc::UnboundedSender<FastMessage>>>>,
+    pub fast_txs: Option<crate::FastTxMap>,
 }
 
 /// Resolve a project-relative path against root with safety checks.
@@ -1347,12 +1345,12 @@ fn parse_test_output(stdout: &str, stderr: &str) -> (Option<usize>, Option<usize
         .find(|l| l.contains("passed") || l.contains("failed"))
     {
         let passed = line
-            .split(|c: char| c == ' ' || c == ',')
+            .split([' ', ','])
             .filter_map(|s| s.trim().strip_suffix("passed"))
             .filter_map(|s| s.trim().parse().ok())
             .next();
         let failed = line
-            .split(|c: char| c == ' ' || c == ',')
+            .split([' ', ','])
             .filter_map(|s| s.trim().strip_suffix("failed"))
             .filter_map(|s| s.trim().parse().ok())
             .next();

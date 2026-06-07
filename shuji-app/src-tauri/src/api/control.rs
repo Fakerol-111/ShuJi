@@ -141,6 +141,12 @@ pub struct AgentController {
     compact_iter_interval: u32,
 }
 
+impl Default for AgentController {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AgentController {
     pub fn new() -> Self {
         Self {
@@ -180,6 +186,7 @@ impl AgentController {
     /// the result JSON is checked for `operation == "route_to"`. This keeps the
     /// dispatcher generic — any tool can signal a control-flow transition via
     /// its output, not via pre-execution name matching.
+    #[allow(clippy::too_many_arguments)]
     pub async fn run(
         &mut self,
         session: &mut Session,

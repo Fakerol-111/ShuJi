@@ -1,7 +1,4 @@
-// 存量 clippy warning 允许项 — 逐文件消解
-#![allow(clippy::type_complexity, clippy::too_many_arguments)]
-#![allow(clippy::new_without_default, clippy::derivable_impls)]
-#![allow(clippy::doc_lazy_continuation)]
+// 存量 clippy warning 允许项 — 逐文件消解（已全部消解完毕）
 
 /// Console logging via a dedicated writer task.
 /// Sends formatted lines through an mpsc channel; a single background
@@ -27,10 +24,15 @@ mod token_tracker;
 pub mod tool;
 pub mod workflow;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+
+/// Shared type alias for the complex cancel-flag map used by agents and tools.
+/// 内阁 uses this to interrupt other agents via the `cancel_agent` tool.
+pub type CancelMap = Arc<std::sync::Mutex<HashMap<crate::models::role::Role, Arc<AtomicBool>>>>;
+pub type FastTxMap = Arc<HashMap<crate::models::role::Role, tokio::sync::mpsc::UnboundedSender<crate::actor::FastMessage>>>;
 
 use commands::project::AppState;
 use config::RuntimeConfig;

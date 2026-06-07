@@ -9,9 +9,10 @@ use super::profile::{build_active, ActiveProfile};
 use crate::agent::neige::routing::{self, Confidence, RoutingSuggestion};
 
 /// Intent: what kind of task this is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum Intent {
     #[serde(rename = "auto")]
+    #[default]
     Auto,
     #[serde(rename = "greenfield_standard")]
     GreenfieldStandard,
@@ -48,18 +49,13 @@ impl Intent {
     }
 }
 
-impl Default for Intent {
-    fn default() -> Self {
-        Intent::Auto
-    }
-}
-
 /// Governance: how thorough the process should be.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum Governance {
     #[serde(rename = "full")]
     Full,
     #[serde(rename = "standard")]
+    #[default]
     Standard,
     #[serde(rename = "fast")]
     Fast,
@@ -75,12 +71,6 @@ impl Governance {
             Governance::Fast => "fast",
             Governance::Audit => "audit",
         }
-    }
-}
-
-impl Default for Governance {
-    fn default() -> Self {
-        Governance::Standard
     }
 }
 

@@ -105,7 +105,7 @@ pub struct ActorContext {
     pub cancel: Arc<AtomicBool>,
     /// Cancel flags for ALL agents. Only populated for 内阁.
     /// 内阁 uses this to interrupt other agents via the `cancel_agent` tool.
-    pub cancel_map: Option<Arc<std::sync::Mutex<HashMap<Role, Arc<AtomicBool>>>>>,
+    pub cancel_map: Option<crate::CancelMap>,
     pub logger: Logger,
     /// Shared context across all actors — stores last output per role.
     pub shared_context: Arc<Mutex<HashMap<Role, String>>>,
@@ -133,7 +133,7 @@ pub struct ActorSystem {
     /// Sender for department log entries (→ frontend DeptStatusPanel).
     pub dept_log_tx: mpsc::UnboundedSender<DeptLogEntry>,
     /// Per-agent cancel flags, indexed by Role.
-    pub cancel_map: Arc<std::sync::Mutex<HashMap<Role, Arc<AtomicBool>>>>,
+    pub cancel_map: crate::CancelMap,
     /// Global cancel flag for the frontend cancel button.
     pub cancel: Arc<AtomicBool>,
 }
@@ -144,7 +144,7 @@ impl ActorSystem {
         fast_txs: HashMap<Role, mpsc::UnboundedSender<FastMessage>>,
         emperor_tx: mpsc::UnboundedSender<ChatMessage>,
         dept_log_tx: mpsc::UnboundedSender<DeptLogEntry>,
-        cancel_map: Arc<std::sync::Mutex<HashMap<Role, Arc<AtomicBool>>>>,
+        cancel_map: crate::CancelMap,
         cancel: Arc<AtomicBool>,
     ) -> Self {
         Self {

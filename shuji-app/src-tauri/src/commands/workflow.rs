@@ -47,8 +47,8 @@ pub struct ContextStats {
 fn build_agents(
     config: &AppConfig,
     cancel: Arc<AtomicBool>,
-    cancel_map: Arc<std::sync::Mutex<HashMap<Role, Arc<AtomicBool>>>>,
-    fast_txs: Arc<HashMap<Role, mpsc::UnboundedSender<FastMessage>>>,
+    cancel_map: crate::CancelMap,
+    fast_txs: crate::FastTxMap,
 ) -> HashMap<Role, Box<dyn Agent>> {
     let mut agents: HashMap<Role, Box<dyn Agent>> = HashMap::new();
 
@@ -127,6 +127,7 @@ fn build_agents(
 
 /// Build the actor system: create all agents, spawn one actor
 /// per role, return the ActorSystem with all channel senders.
+#[allow(clippy::too_many_arguments)]
 async fn start_actor_system(
     config: &AppConfig,
     runtime_config: Arc<crate::config::RuntimeConfig>,
@@ -139,7 +140,7 @@ async fn start_actor_system(
     milestone_tx: mpsc::UnboundedSender<String>,
 ) -> ActorSystem {
     // Per-agent cancel flags — 内阁 gets access to cancel any agent
-    let cancel_map: Arc<std::sync::Mutex<HashMap<Role, Arc<AtomicBool>>>> =
+    let cancel_map: crate::CancelMap =
         Arc::new(std::sync::Mutex::new(HashMap::new()));
 
     // Create fast mailboxes for all roles before building agents,
@@ -729,7 +730,7 @@ async fn compact_impl(
     };
 
     // Load persisted context
-    let mut ctx = PersistedContext::load_from(working_dir, &role)
+    let mut ctx = PersistedContext::load_from(working_dir, role)
         .await
         .ok_or_else(|| friendly_error(format!("角色 {} 没有找到上下文文件", role)))?;
 
@@ -752,7 +753,7 @@ async fn compact_impl(
     let config = crate::commands::settings::get_config()
         .await
         .map_err(friendly_error)?;
-    let ep = config.for_role(&role);
+    let ep = config.for_role(role);
 
     if ep.api_key.is_empty() {
         return Err(friendly_error(format!(
@@ -782,7 +783,7 @@ async fn compact_impl(
         &force_thresholds,
         is_cabinet,
         working_dir,
-        &role,
+        role,
     )
     .await;
 
@@ -941,36 +942,33 @@ pub async fn get_document_diffs(
         .join("diffs");
     let mut diffs = Vec::new();
 
-    match tokio::fs::read_dir(&diff_dir).await {
-        Ok(mut rd) => {
-            let mut entries = Vec::new();
-            while let Ok(Some(entry)) = rd.next_entry().await {
-                entries.push(entry);
-            }
-            for entry in entries {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with(&format!("{}_", doc_id)) {
-                    let stripped = name.strip_suffix(".patch").unwrap_or(&name);
-                    let parts: Vec<&str> = stripped.splitn(3, '_').collect();
-                    let event = if parts.len() > 1 {
-                        parts[1].to_string()
-                    } else {
-                        String::new()
-                    };
-                    let ts = if parts.len() > 2 {
-                        parts[2].to_string()
-                    } else {
-                        String::new()
-                    };
-                    diffs.push(DocDiffFile {
-                        filename: name,
-                        event,
-                        ts,
-                    });
-                }
+    if let Ok(mut rd) = tokio::fs::read_dir(&diff_dir).await {
+        let mut entries = Vec::new();
+        while let Ok(Some(entry)) = rd.next_entry().await {
+            entries.push(entry);
+        }
+        for entry in entries {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with(&format!("{}_", doc_id)) {
+                let stripped = name.strip_suffix(".patch").unwrap_or(&name);
+                let parts: Vec<&str> = stripped.splitn(3, '_').collect();
+                let event = if parts.len() > 1 {
+                    parts[1].to_string()
+                } else {
+                    String::new()
+                };
+                let ts = if parts.len() > 2 {
+                    parts[2].to_string()
+                } else {
+                    String::new()
+                };
+                diffs.push(DocDiffFile {
+                    filename: name,
+                    event,
+                    ts,
+                });
             }
         }
-        Err(_) => {}
     }
     diffs.sort_by(|a, b| b.ts.cmp(&a.ts));
     Ok(diffs)
@@ -1048,7 +1046,7 @@ pub async fn get_workflow_state(
         let d = state.current_dir.lock().await;
         d.clone().ok_or("没有打开的项目")?
     };
-    Ok(crate::workflow::WorkflowState::load_from(&std::path::Path::new(&dir)).await)
+    Ok(crate::workflow::WorkflowState::load_from(std::path::Path::new(&dir)).await)
 }
 
 // ── Traceability commands ───────────────────────────────────

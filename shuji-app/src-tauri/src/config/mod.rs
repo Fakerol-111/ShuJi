@@ -3,7 +3,7 @@ use std::path::Path;
 use std::time::Duration;
 
 /// 系统运行时配置
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RuntimeConfig {
     pub api: ApiConfig,
     pub tool_iterations: ToolIterationsConfig,
@@ -238,19 +238,6 @@ impl Default for CheckpointConfig {
     }
 }
 
-impl Default for RuntimeConfig {
-    fn default() -> Self {
-        Self {
-            api: ApiConfig::default(),
-            tool_iterations: ToolIterationsConfig::default(),
-            context_compaction: ContextCompactionConfig::default(),
-            actor: ActorConfig::default(),
-            watchdog: WatchdogConfig::default(),
-            checkpoint: CheckpointConfig::default(),
-        }
-    }
-}
-
 impl Default for ReasoningConfig {
     fn default() -> Self {
         Self {
@@ -476,7 +463,7 @@ impl RuntimeConfig {
         role_config: Option<&RoleContextConfig>,
     ) -> CompactThresholds {
         let base =
-            default_compact_thresholds_for_role(role_name).unwrap_or_else(|| CompactThresholds {
+            default_compact_thresholds_for_role(role_name).unwrap_or(CompactThresholds {
                 token_threshold: self.context_compaction.token_threshold,
                 keep_recent_count: self.context_compaction.keep_recent_count,
                 mid_run_compact: self.context_compaction.mid_run_compact,

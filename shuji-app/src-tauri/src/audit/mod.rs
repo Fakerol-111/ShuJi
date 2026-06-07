@@ -151,8 +151,8 @@ pub async fn build_timeline(working_dir: &Path) -> TimelineData {
 
     let mut by_event_vec: Vec<_> = by_event.into_iter().collect();
     let mut by_role_vec: Vec<_> = by_role.into_iter().collect();
-    by_event_vec.sort_by(|a, b| b.1.cmp(&a.1));
-    by_role_vec.sort_by(|a, b| b.1.cmp(&a.1));
+    by_event_vec.sort_by_key(|b| std::cmp::Reverse(b.1));
+    by_role_vec.sort_by_key(|b| std::cmp::Reverse(b.1));
 
     TimelineData {
         summary: TimelineSummary {
@@ -424,7 +424,7 @@ pub async fn request_reauth(working_dir: &Path, subject: &str, reason: &str) -> 
         let _ = tokio::fs::write(&path, &json).await;
     }
     append(
-        &working_dir,
+        working_dir,
         "reauth_request",
         "系统",
         subject,
@@ -533,7 +533,7 @@ pub async fn trace_document(working_dir: &Path, doc_id: &str) -> TraceResult {
         for type_prefix in ALL_DOC_TYPES {
             let dir = documents::type_to_dir(type_prefix);
             let rel_dir = if dir.is_empty() {
-                format!(".shuji/")
+                ".shuji/".to_string()
             } else {
                 format!(".shuji/{}/", dir)
             };
@@ -627,8 +627,8 @@ pub async fn generate_report(working_dir: &Path) -> String {
 
     let mut by_event_vec: Vec<_> = by_event.into_iter().collect();
     let mut by_role_vec: Vec<_> = by_role.into_iter().collect();
-    by_event_vec.sort_by(|a, b| b.1.cmp(&a.1));
-    by_role_vec.sort_by(|a, b| b.1.cmp(&a.1));
+    by_event_vec.sort_by_key(|b| std::cmp::Reverse(b.1));
+    by_role_vec.sort_by_key(|b| std::cmp::Reverse(b.1));
 
     report.push_str("### 事件统计\n\n");
     report.push_str("| 事件 | 次数 |\n|------|------|\n");
@@ -787,7 +787,7 @@ pub async fn build_ref_index(working_dir: &Path) -> RefIndex {
         };
         while let Ok(Some(entry)) = entries.next_entry().await {
             let path = entry.path();
-            if path.extension().map_or(true, |e| e != "md") {
+            if path.extension().is_none_or(|e| e != "md") {
                 continue;
             }
             let Ok(content) = tokio::fs::read_to_string(&path).await else {

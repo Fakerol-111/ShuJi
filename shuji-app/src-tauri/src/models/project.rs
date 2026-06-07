@@ -35,7 +35,7 @@ pub struct Project {
     /// Conversation log with smart retention:
     /// - Keeps last ~20 entries in full
     /// - Older entries are compressed into a summary line (derived from task milestones)
-    /// Format: [摘要行]\n[近期详细条目...]
+    ///   Format: `[摘要行]\n[近期详细条目...]`
     #[serde(default)]
     pub talk: String,
 }

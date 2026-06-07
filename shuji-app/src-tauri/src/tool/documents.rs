@@ -362,7 +362,7 @@ pub async fn tool_modify_document(
                 args["new_text"].as_str().unwrap_or("").len()
             );
             crate::audit::append(working_dir, "modify_document", dept, id, &detail).await;
-            crate::audit::save_diff(working_dir, id, "modify_document", &body, &new_body).await;
+            crate::audit::save_diff(working_dir, id, "modify_document", body, &new_body).await;
             ToolOutput::success("modify_document", id, "修改成功")
         }
         Err(e) => ToolOutput::error("modify_document", id, "write_error", &e.to_string()),
@@ -441,7 +441,7 @@ pub async fn tool_append_document(
         Ok(_) => {
             let detail = format!("append_len={}", append_content.len());
             crate::audit::append(working_dir, "append_document", dept, id, &detail).await;
-            crate::audit::save_diff(working_dir, id, "append_document", &body, &new_body).await;
+            crate::audit::save_diff(working_dir, id, "append_document", body, &new_body).await;
             ToolOutput::success("append_document", id, "追加成功")
         }
         Err(e) => ToolOutput::error("append_document", id, "write_error", &e.to_string()),
@@ -850,11 +850,11 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
         },
         meta.refs
     );
-    let result = if target_section.is_some() {
+    let result = if let Some(ref section) = target_section {
         format!(
             "{}\n─── 章节 [{}] ───\n{}",
             meta_line,
-            target_section.unwrap(),
+            section,
             display_body
         )
     } else {
@@ -876,12 +876,11 @@ fn extract_section(body: &str, section_name: &str) -> String {
     for (i, line) in lines.iter().enumerate() {
         if line.trim() == heading || line.trim().starts_with(&heading) {
             start = Some(i);
-        } else if start.is_some() {
-            if end.is_none() && line.starts_with("## ") {
+        } else if start.is_some()
+            && end.is_none() && line.starts_with("## ") {
                 end = Some(i);
                 break;
             }
-        }
     }
 
     if let Some(s) = start {

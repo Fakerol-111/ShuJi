@@ -131,5 +131,5 @@ pub fn mark_idle(role: &str) {
 
 /// Check whether a role is currently executing.
 pub fn is_active(role: &str) -> bool {
-    ACTIVE_ROLES.lock().map_or(false, |set| set.contains(role))
+    ACTIVE_ROLES.lock().is_ok_and(|set| set.contains(role))
 }

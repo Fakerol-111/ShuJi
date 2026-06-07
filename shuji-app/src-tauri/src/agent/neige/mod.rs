@@ -1,11 +1,8 @@
-use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
-use tokio::sync::mpsc;
 
-use crate::actor::FastMessage;
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput};
 use crate::agent::util::{extract_skill, strip_skill_tag};
 use crate::api::client::{AnthropicClient, ToolDefinition};
@@ -19,8 +16,8 @@ pub struct NeigeAgent {
     client: AnthropicClient,
     model: String,
     cancel: Arc<AtomicBool>,
-    cancel_map: Option<Arc<Mutex<HashMap<Role, Arc<AtomicBool>>>>>,
-    fast_txs: Option<Arc<HashMap<Role, mpsc::UnboundedSender<FastMessage>>>>,
+    cancel_map: Option<crate::CancelMap>,
+    fast_txs: Option<crate::FastTxMap>,
 }
 
 impl NeigeAgent {
@@ -28,8 +25,8 @@ impl NeigeAgent {
         client: AnthropicClient,
         model: &str,
         cancel: Arc<AtomicBool>,
-        cancel_map: Option<Arc<Mutex<HashMap<Role, Arc<AtomicBool>>>>>,
-        fast_txs: Option<Arc<HashMap<Role, mpsc::UnboundedSender<FastMessage>>>>,
+        cancel_map: Option<crate::CancelMap>,
+        fast_txs: Option<crate::FastTxMap>,
     ) -> Self {
         Self {
             client,
@@ -473,7 +470,7 @@ impl Agent for NeigeAgent {
         }));
 
         let cancel_map = self.cancel_map.clone();
-        let fast_txs: Option<Arc<HashMap<Role, mpsc::UnboundedSender<FastMessage>>>> =
+        let fast_txs: Option<crate::FastTxMap> =
             self.fast_txs.clone();
         let config = input.runtime_config.clone();
         let wd = working_dir.clone();
