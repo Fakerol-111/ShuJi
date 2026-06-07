@@ -105,7 +105,16 @@ pub async fn load_and_compact_context(
         .await;
 
         let mut msgs = ctx.to_messages();
-        msgs.push(serde_json::json!({"role": "user", "content": task_description}));
+        // 防止双份注入：检查末尾是否已有相同 task
+        let last_is_task = msgs
+            .last()
+            .filter(|m| m["role"].as_str() == Some("user"))
+            .and_then(|m| m["content"].as_str())
+            .map(|c| c.contains(task_description))
+            .unwrap_or(false);
+        if !last_is_task {
+            msgs.push(serde_json::json!({"role": "user", "content": task_description}));
+        }
         let snap = SessionSnapshot::from_messages(msgs);
         session.restore(&snap);
         true

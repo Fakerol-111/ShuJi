@@ -144,6 +144,7 @@ impl WorkflowGraph {
         };
 
         // 创建边
+        let edge = GraphEdge {
             id: self.next_edge_id,
             source: from_id,
             target: target_id,
