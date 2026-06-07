@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getRecentDirs, getRoundMetrics } from "../api";
-import { useActiveDepts } from "../hooks/useActiveDepts";
+import { useActiveDepts, DeptActiveProvider } from "../hooks/useActiveDepts";
 import { useProject } from "../hooks/useProject";
 import { useChat, type Tab } from "../hooks/useChat";
 import ActivityBar from "../components/ActivityBar";
@@ -54,7 +54,9 @@ export default function ProjectDashboard() {
   const { messages, discussMsgs, discussing, tab, planInfo, error: chatError, setError: setChatError, setTab, handleSend, handleDiscuss, resetDiscuss, chatEndRef } = useChat(session?.msgs || []);
 
   // Save session on message changes
-  try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ msgs: messages, discuss: discussMsgs })); } catch {}
+  useEffect(() => {
+    try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ msgs: messages, discuss: discussMsgs })); } catch {}
+  }, [messages, discussMsgs]);
 
   // Demo flow state
   const [showDemoTour, setShowDemoTour] = useState(false);
@@ -260,6 +262,7 @@ export default function ProjectDashboard() {
   const hasTabs = tabs.length > 0 && activeDoc !== null;
 
   return (
+    <DeptActiveProvider>
     <div className="h-screen bg-surface-paper flex flex-col overflow-hidden">
       <header className="bg-ink-900 border-b border-gold/30 shrink-0 h-12 px-4 flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
@@ -378,6 +381,7 @@ export default function ProjectDashboard() {
       {showPicker && <ProjectPicker recentDirs={recentDirs} pickerPath={pickerPath} pickerError={pickerError} pickerLoading={pickerLoading} setPickerPath={setPickerPath} onBrowse={handleBrowse} onLoad={handleLoadProject} onClose={() => setShowPicker(false)} />}
       {showDemoTour && <DemoTour onClose={() => setShowDemoTour(false)} />}
     </div>
+    </DeptActiveProvider>
   );
 }
 
