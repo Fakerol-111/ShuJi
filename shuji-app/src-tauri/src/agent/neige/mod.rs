@@ -289,8 +289,11 @@ impl Agent for NeigeAgent {
         )
         .with_debug_dir(input.working_dir.clone());
 
-        // Inject workflow preset rules after soul is loaded
-        Self::inject_workflow_preset(&mut session, &working_dir).await;
+        // Inject workflow preset (discuss mode only — normal mode uses combined
+        // resolver block below; resume mode restores session with preset already embedded)
+        if input.discuss_mode {
+            Self::inject_workflow_preset(&mut session, &working_dir).await;
+        }
 
         // ── Discuss mode: force-inject discuss skill ──
         if input.discuss_mode {
@@ -383,9 +386,13 @@ impl Agent for NeigeAgent {
             session.inject("[系统] 皇帝已回复澄清问题。请根据新信息重新评估工作流选择——如果任务类型与最初判断不同，用 <skill> 标签切换到合适的工作流。");
         }
 
+        // ── Workflow preset + resolver hint (combined for cache efficiency) ──
+        // DeepSeek prefix cache: contiguous system messages = longer stable prefix.
+        // Always inject workflow preset first, then resolver hint/skill right after.
         if !input.discuss_mode && !resumed {
-            if resolve_result.locked {
-                // Hard mode: force-inject cabinet skill, skip routing.rs hints
+            Self::inject_workflow_preset(&mut session, &working_dir).await;
+
+            let resolve_note = if resolve_result.locked {
                 let skill_content =
                     Self::load_skill(&resolve_result.profile.cabinet_skill, &working_dir).await;
                 if !skill_content.is_empty() {
@@ -396,11 +403,15 @@ impl Agent for NeigeAgent {
                     );
                     session.inject_skill(&resolve_result.profile.cabinet_skill, &skill_content);
                 }
+                String::new()
             } else {
-                // Auto mode: inject resolver hints (may include routing.rs mapping)
-                if let Some(hint) = &resolve_result.hint {
-                    session.inject(hint);
-                }
+                resolve_result
+                    .hint
+                    .clone()
+                    .unwrap_or_default()
+            };
+            if !resolve_note.is_empty() {
+                session.inject(&resolve_note);
             }
         }
 
