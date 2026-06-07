@@ -4,24 +4,16 @@ import { useActiveDepts } from "../hooks/useActiveDepts";
 import { DEPT_META, DEPT_ORDER } from "../constants";
 import type { RoundMetrics } from "../types";
 
-const ROLE_ORDER = DEPT_ORDER;
-
 const SKILL_LABELS: Record<string, string> = {
-  workflow_standard: "标准",
-  workflow_demo: "演示",
-  workflow_simple: "简单",
-  workflow_complex: "复杂",
-  workflow_optimize: "优化",
-  workflow_bugfix: "修复",
-  workflow_refactor: "重构",
-  workflow_audit: "审计",
-  discuss: "讨论",
-  summary: "总结",
-  clarify: "澄清",
+  workflow_standard: "标准", workflow_demo: "演示", workflow_simple: "简单",
+  workflow_complex: "复杂", workflow_optimize: "优化", workflow_bugfix: "修复",
+  workflow_refactor: "重构", workflow_audit: "审计", discuss: "廷议",
+  summary: "奏报", clarify: "问对",
 };
 
+/** 值事牌：六部当值看板。仿古制，显示当前在值诸司及进度。 */
 export default function DeptStatusBar() {
-  const active = useActiveDepts();
+  const activeSet = useActiveDepts();
   const [tokenPrompt, setTokenPrompt] = useState(0);
   const [tokenCached, setTokenCached] = useState(0);
   const [tokenCompletion, setTokenCompletion] = useState(0);
@@ -32,98 +24,134 @@ export default function DeptStatusBar() {
     const load = () => {
       getTokenStats().then((stats) => {
         const roles = Object.values(stats["汇总"] || {});
-        setTokenPrompt(roles.reduce((sum, u) => sum + u.prompt_tokens, 0));
-        setTokenCached(roles.reduce((sum, u) => sum + (u.cached_prompt_tokens ?? 0), 0));
-        setTokenCompletion(roles.reduce((sum, u) => sum + u.completion_tokens, 0));
-      }).catch((e) => console.error("Token统计加载失败:", e));
+        setTokenPrompt(roles.reduce((sum: number, u: any) => sum + u.prompt_tokens, 0));
+        setTokenCached(roles.reduce((sum: number, u: any) => sum + (u.cached_prompt_tokens ?? 0), 0));
+        setTokenCompletion(roles.reduce((sum: number, u: any) => sum + u.completion_tokens, 0));
+      }).catch(() => {});
     };
     load();
     const timer = window.setInterval(load, 30000);
     return () => window.clearInterval(timer);
   }, []);
 
-  // Poll round metrics every 3s
   useEffect(() => {
     const load = () => {
-      getRoundMetrics().then((m) => {
-        setRound(m);
-      }).catch(() => {});
+      getRoundMetrics().then((m) => setRound(m)).catch(() => {});
     };
     load();
     const timer = window.setInterval(load, 3000);
     return () => window.clearInterval(timer);
   }, []);
 
-  // Update elapsed time every second when round is active
   useEffect(() => {
     if (!round) { setElapsed(""); return; }
     const tick = () => {
       const secs = Math.floor((Date.now() - round.started_at) / 1000);
       if (secs < 60) setElapsed(`${secs}s`);
-      else if (secs < 3600) setElapsed(`${Math.floor(secs / 60)}min${secs % 60}s`);
-      else setElapsed(`${Math.floor(secs / 3600)}h${Math.floor((secs % 3600) / 60)}min`);
+      else if (secs < 3600) setElapsed(`${Math.floor(secs / 60)}m${secs % 60}s`);
+      else setElapsed(`${Math.floor(secs / 3600)}h${Math.floor((secs % 3600) / 60)}m`);
     };
     tick();
     const timer = window.setInterval(tick, 1000);
-    return () => window.clearInterval(timer);
+    return () => clearInterval(timer);
   }, [round]);
 
-  const visible = ROLE_ORDER.slice(0, 10);
-  const hidden = ROLE_ORDER.slice(10);
-
-  // Build round summary string
-  const roundParts: string[] = [];
-  if (round && round.started_at > 0) {
-    if (round.current_role) roundParts.push(round.current_role);
-    if (round.skill) roundParts.push(SKILL_LABELS[round.skill] || round.skill);
-    // Show top active dept iteration
-    const iterEntries = Object.entries(round.dept_iterations).filter(([, c]) => c > 0);
-    if (iterEntries.length > 0) {
-      const top = iterEntries.sort((a, b) => b[1] - a[1])[0];
-      roundParts.push(`${top[0]}(${top[1]}次)`);
-    }
-    if (round.total_tokens > 0) roundParts.push(formatToken(round.total_tokens) + " tokens");
-    if (elapsed) roundParts.push(elapsed);
-  }
+  const activeDepts = DEPT_ORDER.filter((d) => activeSet.has(d));
+  const idleDepts = DEPT_ORDER.filter((d) => !activeSet.has(d));
 
   return (
-    <div className="h-7 bg-ink-900 text-ink-300 border-t border-ink-800 px-3 flex items-center justify-between text-ui shrink-0">
-      <div className="flex items-center gap-2 min-w-0">
-        <span className="text-ink-500 shrink-0 text-caption">当值</span>
-        {visible.map((dept) => <DeptLight key={dept} dept={dept} active={active.has(dept)} />)}
-        {hidden.length > 0 && (
-          <span className="group relative text-ink-500 cursor-default text-caption">
-            +{hidden.length}
-            <span className="hidden group-hover:flex absolute bottom-6 left-0 bg-ink-800 border border-ink-700 rounded px-2 py-1 gap-2 whitespace-nowrap shadow-lg z-10">
-              {hidden.map((dept) => <DeptLight key={dept} dept={dept} active={active.has(dept)} />)}
-            </span>
+    <div className="bg-ink-900 border-t border-gold/20 shrink-0">
+      {/* ── 值事牌（上部）：在值部门 + 实时指标 ── */}
+      <div className="flex items-stretch min-h-[32px]">
+        {/* 左侧：值事牌匾 */}
+        <div className="flex items-center gap-0.5 pl-2 pr-1 py-1 overflow-x-auto">
+          <span className="text-caption font-semibold text-gold/70 tracking-wider mr-1 whitespace-nowrap font-serif">
+            值事
           </span>
-        )}
-      </div>
-
-      {/* Round metrics (center) */}
-      {roundParts.length > 0 && (
-        <div className="text-ink-400 font-mono truncate mx-2 text-caption" title={roundParts.join(" · ")}>
-          {roundParts.join(" · ")}
+          {activeDepts.length === 0 && (
+            <span className="text-caption text-ink-600 italic whitespace-nowrap">诸司无事</span>
+          )}
+          {activeDepts.map((dept) => {
+            const meta = DEPT_META[dept];
+            return (
+              <DutyPlaque
+                key={dept}
+                label={meta?.shortLabel || dept}
+                color={meta?.color || "#8B7355"}
+                active={true}
+              />
+            );
+          })}
+          {idleDepts.slice(0, 3).map((dept) => {
+            const meta = DEPT_META[dept];
+            return (
+              <DutyPlaque
+                key={dept}
+                label={meta?.shortLabel || dept}
+                color={meta?.color || "#8B7355"}
+                active={false}
+              />
+            );
+          })}
         </div>
-      )}
 
-      <div className="font-mono text-ink-400 shrink-0 ml-3 text-caption whitespace-nowrap">输入缓存命中 {formatToken(tokenCached)} · 输入缓存未命中 {formatToken(tokenPrompt - tokenCached)} · 输出 {formatToken(tokenCompletion)}</div>
+        {/* 中间：当前轮次信息 */}
+        {round && round.started_at > 0 && (
+          <div className="flex items-center gap-2 px-2 border-l border-ink-700/50 text-caption text-ink-400 font-mono shrink-0">
+            {round.current_role && (
+              <span className="text-gold/80 font-semibold">{round.current_role}</span>
+            )}
+            {round.skill && (
+              <span className="text-ink-500 bg-ink-800/50 px-1.5 rounded text-[10px]">
+                {SKILL_LABELS[round.skill] || round.skill}
+              </span>
+            )}
+            {elapsed && <span className="text-ink-500">{elapsed}</span>}
+          </div>
+        )}
+
+        {/* 右侧：Token 计数 */}
+        <div className="ml-auto flex items-center gap-2 px-2 text-[10px] font-mono text-ink-500 shrink-0">
+          <span title={`输入缓存 ${formatToken(tokenCached)} / ${formatToken(tokenPrompt)}`}>
+            <span className="text-jade/80">缓存</span> {formatToken(tokenCached)}
+          </span>
+          <span className="text-ink-700">·</span>
+          <span title={`输出 ${formatToken(tokenCompletion)}`}>
+            <span className="text-gold/60">出</span> {formatToken(tokenCompletion)}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
 
-function DeptLight({ dept, active }: { dept: string; active: boolean }) {
-  const color = DEPT_META[dept]?.color || "#8B7355";
+// ── 值事牌块 ─────────────────────────────────────────────
+function DutyPlaque({ label, color, active }: { label: string; color: string; active: boolean }) {
   return (
-    <span className="flex items-center gap-1 whitespace-nowrap">
-      <span className={`w-2 h-2 rounded-full ${active ? "animate-pulse" : "opacity-30"}`} style={{ backgroundColor: active ? color : "#8B7355" }} />
-      {active && <span className="text-ink-200 text-caption">{dept}</span>}
-    </span>
+    <div
+      className={`relative flex items-center gap-1 px-2 py-0.5 rounded text-caption font-serif transition-all ${
+        active
+          ? "text-ink-50 font-semibold shadow-sm"
+          : "text-ink-600/50"
+      }`}
+      style={{
+        backgroundColor: active ? `${color}22` : "transparent",
+        borderLeft: active ? `2px solid ${color}` : "2px solid transparent",
+      }}
+    >
+      {active && (
+        <span
+          className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0"
+          style={{ backgroundColor: color }}
+        />
+      )}
+      <span className={active ? "" : "line-through decoration-ink-700/30"}>{label}</span>
+    </div>
   );
 }
 
 function formatToken(n: number) {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(n);
 }
