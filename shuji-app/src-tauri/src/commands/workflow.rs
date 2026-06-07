@@ -250,6 +250,7 @@ async fn start_actor_system(
         dept_log_tx,
         cancel_map,
         cancel,
+        workflow_graph: workflow_graph.clone(),
     }
 }
 
@@ -406,20 +407,21 @@ pub async fn send_message(
         }
     }
 
-    // ── 归档上次命令的文移图，开始新会话 ──
-    {
-        let wd = Path::new(&p_working_dir);
-        let mut graph = crate::workflow::WorkflowGraph::load_or_new(wd).await;
-        // 用皇帝命令的前60字作为新会话标签
-        let label: String = message.chars().take(60).collect();
-        graph.archive_and_new(wd, label.trim()).await;
-    }
-
     // Send message to 内阁 actor
     let sys_lock = state.actor_system.lock().await;
     let system = sys_lock
         .as_ref()
         .ok_or_else(|| friendly_error("Actor 系统未初始化"))?;
+
+    // ── 归档上次命令的文移图，开始新会话 ──
+    // 使用 actor system 共享的 workflow_graph，而非从磁盘独立加载，避免
+    // 与 actor 内 forward_route 写入的内存图不同步。
+    {
+        let wd = Path::new(&p_working_dir);
+        let mut graph = system.workflow_graph.lock().await;
+        let label: String = message.chars().take(60).collect();
+        graph.archive_and_new(wd, label.trim()).await;
+    }
 
     // Interrupt any currently active non-cabinet department via fast mailbox,
     // so the emperor's new instruction is handled promptly instead of waiting
@@ -591,13 +593,46 @@ pub async fn read_log_file(
         .map_err(friendly_error)
 }
 
+/// Persist and retrieve recent project directories.
+/// Stored at `~/.shuji/recent_dirs.json` with cap of 20 entries.
+fn recent_dirs_path() -> std::path::PathBuf {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
+    std::path::PathBuf::from(home).join(".shuji").join("recent_dirs.json")
+}
+
+fn load_recent_dirs() -> Vec<String> {
+    let path = recent_dirs_path();
+    std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn save_recent_dirs(dirs: &[String]) {
+    let path = recent_dirs_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(json) = serde_json::to_string(dirs) {
+        let _ = std::fs::write(&path, json);
+    }
+}
+
+pub fn add_recent_dir(working_dir: &str) {
+    let mut dirs = load_recent_dirs();
+    // Remove existing entry if present (move to front)
+    dirs.retain(|d| d != working_dir);
+    dirs.insert(0, working_dir.to_string());
+    // Cap at 20
+    dirs.truncate(20);
+    save_recent_dirs(&dirs);
+}
+
 #[tauri::command]
-pub async fn get_recent_dirs(state: State<'_, AppState>) -> Result<Vec<String>, String> {
-    let dir = state.current_dir.lock().await;
-    Ok(match dir.as_ref() {
-        Some(d) => vec![d.clone()],
-        None => vec![],
-    })
+pub async fn get_recent_dirs() -> Result<Vec<String>, String> {
+    Ok(load_recent_dirs())
 }
 
 /// Get token usage statistics for all roles (dashboard data).

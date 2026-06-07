@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { cancelProcessing } from "../api";
 import ChatBubble from "./ChatBubble";
 import ChatInput from "./ChatInput";
@@ -9,6 +10,7 @@ interface ChatPanelProps {
   discussMsgs: ChatMessage[];
   discussing: boolean;
   planInfo: PlanInfo | null;
+  activeDeptsCount: number;
   onOption: (key: string, supplement?: string) => void;
   onSend: (text: string) => void;
   onDiscuss: (text: string) => void;
@@ -17,21 +19,43 @@ interface ChatPanelProps {
 }
 
 export default function ChatPanel(props: ChatPanelProps) {
-  const { tab, messages, discussMsgs, discussing, planInfo, onOption, onSend, onDiscuss, onConvertToCommand, endRef } = props;
+  const { tab, messages, discussMsgs, discussing, planInfo, activeDeptsCount, onOption, onSend, onDiscuss, onConvertToCommand, endRef } = props;
+  const [toast, setToast] = useState("");
+  const isProcessing = activeDeptsCount > 0;
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 2500);
+  };
+
+  const handleCancel = async () => {
+    try {
+      await cancelProcessing();
+      showToast("已叫停诸司");
+    } catch {
+      showToast("叫停失败");
+    }
+  };
+
   if (tab === "decision") {
     return (
       <>
+        {toast && (
+          <div className="shrink-0 -mb-px text-center text-xs text-gold bg-gold-light/60 rounded-b px-3 py-1.5">
+            {toast}
+          </div>
+        )}
         {planInfo && <PlanCard info={planInfo} />}
-        <MessageList messages={messages} onOption={onOption} endRef={endRef} />
+        <MessageList messages={messages} onOption={onOption} endRef={endRef} thinking={isProcessing} thinkingLabel="诸司处理中…" />
         <div className="shrink-0 px-4 py-2 border-t border-fold bg-surface-elevated flex justify-end">
           <button
-            onClick={() => cancelProcessing()}
+            onClick={handleCancel}
             className="text-ui px-3 py-1.5 font-medium text-ink-600 hover:text-vermillion hover:bg-vermillion-light rounded-lg transition-colors"
           >
             叫停诸司
           </button>
         </div>
-        <ChatInput onSend={onSend} disabled={false} placeholder="拟旨…" />
+        <ChatInput onSend={onSend} disabled={isProcessing} placeholder={isProcessing ? "诸司处理中…" : "拟旨…"} />
       </>
     );
   }
@@ -56,11 +80,11 @@ export default function ChatPanel(props: ChatPanelProps) {
   );
 }
 
-function MessageList({ messages, onOption, endRef, thinking }: { messages: ChatMessage[]; onOption: (key: string, supplement?: string) => void; endRef: React.RefObject<HTMLDivElement | null>; thinking?: boolean }) {
+function MessageList({ messages, onOption, endRef, thinking, thinkingLabel }: { messages: ChatMessage[]; onOption: (key: string, supplement?: string) => void; endRef: React.RefObject<HTMLDivElement | null>; thinking?: boolean; thinkingLabel?: string }) {
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
       {messages.map((msg, i) => <ChatBubble key={messageKey(msg, i)} msg={msg} onOption={onOption} />)}
-      {thinking && <div className="flex items-center justify-center gap-3 py-2"><span className="text-xs text-ink-500">内阁思考中...</span></div>}
+      {thinking && <div className="flex items-center justify-center gap-3 py-2"><span className="text-xs text-ink-500">{thinkingLabel || "内阁思考中…"}</span></div>}
       <div ref={endRef} />
     </div>
   );

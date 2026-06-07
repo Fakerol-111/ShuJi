@@ -1,8 +1,9 @@
 use std::path::Path;
 
+use crate::api::session::PersistedContext;
 use crate::commands::friendly_error::friendly_error;
 use crate::commands::project::AppState;
-use crate::storage::checkpoint::{find_checkpoint, load_index, load_snapshot, CheckpointEntry};
+use crate::storage::checkpoint::{find_checkpoint, git_cmd, load_index, load_snapshot, CheckpointEntry};
 
 /// List all checkpoints in the current project.
 /// Optionally filter by role, limit the number of results.
@@ -48,19 +49,18 @@ pub async fn restore_checkpoint(
     let dir_path = Path::new(&dir);
 
     // 1. Find the checkpoint in the index
-    let (_role, _entry) = find_checkpoint(dir_path, &commit_hash)
+    let (role, _entry) = find_checkpoint(dir_path, &commit_hash)
         .await
         .ok_or_else(|| format!("未找到 checkpoint: {}", commit_hash))?;
 
-    // 2. Load the session snapshot (before git checkout)
-    let _snapshot = load_snapshot(dir_path, &_role, &commit_hash)
+    // 2. Load the session snapshot (before git checkout, so we can write it back after)
+    let snapshot = load_snapshot(dir_path, &role, &commit_hash)
         .await
         .ok_or_else(|| format!("无法加载 checkpoint 快照: {}", commit_hash))?;
 
-    // 3. Check for uncommitted changes
-    let status = tokio::process::Command::new("git")
+    // 3. Check for uncommitted changes in the isolated .shuji/.git repo
+    let status = git_cmd(dir_path)
         .args(["status", "--porcelain"])
-        .current_dir(dir_path)
         .output()
         .await
         .map_err(friendly_error)?;
@@ -69,9 +69,8 @@ pub async fn restore_checkpoint(
     if has_changes {
         // Stash uncommitted changes
         let stash_msg = format!("shuji: before restore {}", &commit_hash[..8]);
-        let stash = tokio::process::Command::new("git")
+        let stash = git_cmd(dir_path)
             .args(["stash", "push", "-m", &stash_msg])
-            .current_dir(dir_path)
             .output()
             .await
             .map_err(friendly_error)?;
@@ -83,10 +82,9 @@ pub async fn restore_checkpoint(
         }
     }
 
-    // 4. git checkout (detached HEAD)
-    let checkout = tokio::process::Command::new("git")
+    // 4. git checkout (detached HEAD) using the isolated .shuji/.git repo
+    let checkout = git_cmd(dir_path)
         .args(["checkout", "--detach", &commit_hash])
-        .current_dir(dir_path)
         .output()
         .await
         .map_err(friendly_error)?;
@@ -97,13 +95,25 @@ pub async fn restore_checkpoint(
         ));
     }
 
+    // 5. Write session snapshot back to .shuji/context/{role}.json
+    //    so the agent can continue from the checkpoint state.
+    let ctx = PersistedContext {
+        base_prompt: String::new(),
+        soul_prompt: None,
+        context_messages: snapshot.messages.clone(),
+    };
+    ctx.save_to(dir_path, &role).await;
+
     let summary = if has_changes {
         format!(
-            "已恢复到 {}（detached HEAD）。未提交的变更已暂存，可通过 git stash pop 取回。",
+            "已恢复到 {}（detached HEAD）。上下文已回滚，未提交的变更已暂存（git stash pop 可恢复）。",
             &commit_hash[..8]
         )
     } else {
-        format!("已恢复到 {}（detached HEAD）。", &commit_hash[..8])
+        format!(
+            "已恢复到 {}（detached HEAD）。上下文已回滚。",
+            &commit_hash[..8]
+        )
     };
 
     Ok(summary)

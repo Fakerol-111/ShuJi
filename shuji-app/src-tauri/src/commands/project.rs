@@ -72,6 +72,13 @@ pub async fn load_project(
     state: State<'_, AppState>,
     working_dir: String,
 ) -> Result<Project, String> {
+    // ── Teardown old actor system before switching projects ──
+    // This prevents old project actors from emitting events to the new project's UI.
+    {
+        let mut sys_lock = state.actor_system.lock().await;
+        *sys_lock = None; // Drop triggers ActorSystem::drop() → cancel all actors
+    }
+
     let shuji_dir = ShujiDir::new(&working_dir);
     let storage_path = Path::new(&working_dir)
         .join(".shuji")
@@ -118,6 +125,9 @@ pub async fn load_project(
     *current = Some(project.clone());
     let mut dir = state.current_dir.lock().await;
     *dir = Some(working_dir.clone());
+
+    // Track in recent dirs (moved to front, persisted to ~/.shuji/recent_dirs.json)
+    crate::commands::workflow::add_recent_dir(&working_dir);
 
     // Restore persisted chat history into buffer
     {

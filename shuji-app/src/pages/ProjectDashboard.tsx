@@ -26,7 +26,7 @@ import type { Project } from "../types";
 import { createDemoProject, getPendingApprovals } from "../api";
 import type { ActivitySelection } from "../components/ActivityBar";
 import TabBar, { type TabInfo } from "../components/TabBar";
-import { DEPT_META } from "../constants";
+import { getDeptMeta } from "../constants";
 
 const STORAGE_KEY = "shuji_chat";
 const CHAT_PANEL_MIN = 300;
@@ -299,7 +299,7 @@ export default function ProjectDashboard() {
             <div className="shrink-0 flex items-center gap-1 px-3 py-1 bg-gold/[0.03] border-b border-gold/15 text-caption overflow-x-auto">
               <span className="text-gold/60 font-semibold tracking-wider mr-1 whitespace-nowrap font-serif text-[10px]">值事</span>
               {activeDepts.map((dept) => {
-                const meta = DEPT_META[dept];
+                const meta = getDeptMeta(dept);
                 const color = meta?.color || "#6b7280";
                 return (
                   <span
@@ -382,7 +382,7 @@ export default function ProjectDashboard() {
             />
             <div className="text-ui text-ink-600 mt-1">{tabSubtitles[tab]}</div>
           </div>
-          {!project ? <div className="flex-1 flex items-center justify-center text-body text-ink-400">请先开卷</div> : <ChatPanel tab={tab} messages={messages} discussMsgs={discussMsgs} discussing={discussing} planInfo={planInfo} onOption={(key, supplement) => handleSend(supplement ? `${key}\n${supplement}` : key)} onSend={handleSend} onDiscuss={handleDiscuss} onConvertToCommand={handleConvertToCommand} endRef={chatEndRef} />}
+          {!project ? <div className="flex-1 flex items-center justify-center text-body text-ink-400">请先开卷</div> : <ChatPanel tab={tab} messages={messages} discussMsgs={discussMsgs} discussing={discussing} planInfo={planInfo} activeDeptsCount={activeDepts.length} onOption={(key, supplement) => handleSend(supplement ? `${key}\n${supplement}` : key)} onSend={handleSend} onDiscuss={handleDiscuss} onConvertToCommand={handleConvertToCommand} endRef={chatEndRef} />}
         </section>
       </div>
 

@@ -3,11 +3,11 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import type { ChatMessage, ChatOption } from "../types";
-import { DEPT_META } from "../constants";
+import { getDeptMeta } from "../constants";
 
 export default function ChatBubble({ msg, onOption }: { msg: ChatMessage; onOption: (key: string, supplement?: string) => void }) {
   const isEmperor = msg.role === "皇帝";
-  const deptColor = DEPT_META[msg.role]?.color;
+  const deptColor = getDeptMeta(msg.role)?.color;
 
   return (
     <div className={`flex ${isEmperor ? "justify-end" : "justify-start"}`}>

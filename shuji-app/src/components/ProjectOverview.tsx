@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { listShujiTree, generateDeliveryReport } from "../api";
 import type { ShujiEntry } from "../api";
 import type { PlanInfo, Project } from "../types";
-import { DEPT_META } from "../constants";
+import { getDeptMeta } from "../constants";
 import { Card } from "./ui/Card";
 
 interface ProjectOverviewProps {
@@ -80,7 +80,7 @@ export default function ProjectOverview({ project, activeDepts, planInfo, onOpen
             <div className="flex flex-wrap gap-2">
               {activeDepts.map((dept) => (
                 <span key={dept} className="px-2 py-1 rounded-full bg-ink-100 text-ui text-ink-700 flex items-center gap-1">
-                  <span className="animate-pulse" style={{ color: DEPT_META[dept]?.color || "#6b7280" }}>●</span>{dept}
+                  <span className="animate-pulse" style={{ color: getDeptMeta(dept)?.color || "#6b7280" }}>●</span>{dept}
                 </span>
               ))}
             </div>

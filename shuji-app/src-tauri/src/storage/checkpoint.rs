@@ -133,7 +133,9 @@ pub async fn load_snapshot(
 
 /// Build a git Command pre-configured with --git-dir and --work-tree
 /// pointing to the isolated `.shuji/.git` repo with project root as worktree.
-fn git_cmd(working_dir: &Path) -> tokio::process::Command {
+/// Build a git Command pre-configured with --git-dir and --work-tree
+/// pointing to the isolated `.shuji/.git` repo with project root as worktree.
+pub fn git_cmd(working_dir: &Path) -> tokio::process::Command {
     let git_dir = working_dir.join(".shuji/.git");
     let git_dir_str = git_dir.to_string_lossy().to_string();
     let work_tree = working_dir.to_string_lossy().to_string();

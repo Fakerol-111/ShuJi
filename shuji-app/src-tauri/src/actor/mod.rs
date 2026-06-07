@@ -138,6 +138,8 @@ pub struct ActorSystem {
     pub cancel_map: crate::CancelMap,
     /// Global cancel flag for the frontend cancel button.
     pub cancel: Arc<AtomicBool>,
+    /// 文移图 — 共享引用，send_message 归档和 actor 写入都用同一个 Arc。
+    pub workflow_graph: Arc<tokio::sync::Mutex<crate::workflow::WorkflowGraph>>,
 }
 
 impl ActorSystem {
@@ -148,6 +150,7 @@ impl ActorSystem {
         dept_log_tx: mpsc::UnboundedSender<DeptLogEntry>,
         cancel_map: crate::CancelMap,
         cancel: Arc<AtomicBool>,
+        workflow_graph: Arc<tokio::sync::Mutex<crate::workflow::WorkflowGraph>>,
     ) -> Self {
         Self {
             senders,
@@ -156,6 +159,7 @@ impl ActorSystem {
             dept_log_tx,
             cancel_map,
             cancel,
+            workflow_graph,
         }
     }
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getWorkflowGraph, listWorkflowArchives, loadWorkflowArchive } from "../api";
 import type { WorkflowGraph, GraphNode, GraphEdge } from "../types";
-import { DEPT_META } from "../constants";
+import { getDeptMeta } from "../constants";
 
 const NODE_W = 180;
 const NODE_H = 64;
@@ -213,7 +213,7 @@ export default function WorkflowGraphView() {
               })}
               {/* Nodes */}
               {layoutResult.layoutNodes.map((n) => {
-                const meta = DEPT_META[n.role] || { color: "#6b7280", label: n.role };
+                const meta = getDeptMeta(n.role) || { color: "#6b7280", label: n.role };
                 const isMulti = n.instance > 1;
                 const color = n.status === "failed" ? "#C41E3A" : n.status === "completed" ? "#2D5A3F" : meta.color;
                 const durStr = layoutResult.nodeDurations.get(n.id);

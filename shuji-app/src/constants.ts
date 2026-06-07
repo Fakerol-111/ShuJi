@@ -134,10 +134,17 @@ const DEPT_KEY_ALIASES: Record<string, string> = {
   hubu: "hubu",
 };
 
-/** Resolve any role key (Chinese, full English, abbreviated English) to DeptMeta */
+/** Short-label → long-label mapping (backend Role::name() uses short names for 尚书 roles) */
+const DEPT_SHORT_TO_LONG: Record<string, string> = Object.fromEntries(
+  DEPT_META_LIST.map((d) => [d.shortLabel, d.label])
+);
+
+/** Resolve any role key (Chinese long, Chinese short, full English, abbreviated English) to DeptMeta */
 export function getDeptMeta(key: string): DeptMeta | undefined {
-  // Try Chinese label first
+  // Try Chinese long label first
   if (DEPT_META[key]) return DEPT_META[key];
+  // Try Chinese short label
+  if (DEPT_SHORT_TO_LONG[key]) return DEPT_META[DEPT_SHORT_TO_LONG[key]];
   // Try full English key
   if (DEPT_META_BY_KEY[key]) return DEPT_META_BY_KEY[key];
   // Try abbreviated alias

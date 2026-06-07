@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getDeptLogs } from "../api";
-import { DEPT_META } from "../constants";
+import { getDeptMeta } from "../constants";
 import type { DeptLogEntry } from "../types";
 
 const MAX_ENTRIES = 300;
@@ -71,7 +71,7 @@ export default function DeptStatusPanel() {
           const open = expanded.has(i);
 
           if (route) {
-            const routeAccent = DEPT_META[e.dept]?.accent?.replace("border-l-", "bg-") || "bg-gray-300";
+            const routeAccent = getDeptMeta(e.dept)?.accent?.replace("border-l-", "bg-") || "bg-gray-300";
             return (
               <div key={i} className="flex items-center gap-1.5 text-[10px] font-mono py-0.5 px-1 opacity-60 hover:opacity-100 transition-opacity">
                 <span className={`w-1 h-1 rounded-full shrink-0 ${e.dept ? routeAccent : "bg-gray-300"}`} />
@@ -102,7 +102,7 @@ export default function DeptStatusPanel() {
           }
 
           // Execution bubble
-          const meta = DEPT_META[e.dept];
+          const meta = getDeptMeta(e.dept);
           const accent = meta?.accent || "border-l-gray-300";
           const bg = meta?.bg ? `${meta.bg} border-current/10` : "bg-gray-50 border-gray-200";
           const txt = meta?.text || "text-gray-600";

@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getDeptLogs } from "../api";
 import type { DeptLogEntry } from "../types";
 import DeptStatusPanel from "./DeptStatusPanel";
-import { DEPT_META } from "../constants";
+import { getDeptMeta } from "../constants";
 
 interface LogBarProps {
   expanded: boolean;
@@ -39,7 +39,7 @@ export default function LogBar({ expanded, onExpandedChange }: LogBarProps) {
         {latest ? (
           <>
             <span className="text-ink-400">{latest.ts}</span>
-            <span style={{ color: DEPT_META[latest.dept]?.color || "#6b7280" }}>{latest.dept}</span>
+            <span style={{ color: getDeptMeta(latest.dept)?.color || "#6b7280" }}>{latest.dept}</span>
             <span className="text-ink-400">→</span>
             <span className="text-ink-600 truncate">{latest.action}</span>
           </>

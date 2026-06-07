@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getTokenStats, getRoundMetrics } from "../api";
 import { useActiveDepts } from "../hooks/useActiveDepts";
-import { DEPT_META, DEPT_ORDER } from "../constants";
+import { getDeptMeta, DEPT_META_LIST } from "../constants";
 import type { RoundMetrics } from "../types";
 
 const SKILL_LABELS: Record<string, string> = {
@@ -46,7 +46,7 @@ export default function DeptStatusBar() {
     if (!round) { setElapsed(""); return; }
     const tick = () => {
       // 停止计时：诸司无事时冻结时间
-      const hasActive = DEPT_ORDER.some((d) => activeSet.has(d));
+      const hasActive = DEPT_META_LIST.some((d) => activeSet.has(d.label) || activeSet.has(d.shortLabel));
       if (!hasActive) return;
       const secs = Math.floor((Date.now() - round.started_at) / 1000);
       if (secs < 60) setElapsed(`${secs}s`);
@@ -58,7 +58,7 @@ export default function DeptStatusBar() {
     return () => clearInterval(timer);
   }, [round, activeSet]);
 
-  const activeDepts = DEPT_ORDER.filter((d) => activeSet.has(d));
+  const activeDepts = DEPT_META_LIST.filter((d) => activeSet.has(d.label) || activeSet.has(d.shortLabel)).map((d) => d.label);
 
   return (
     <div className="h-7 bg-ink-900 border-t border-ink-800 shrink-0 flex items-center px-2 text-[11px] gap-0">
@@ -69,7 +69,7 @@ export default function DeptStatusBar() {
           <span className="text-ink-500 italic text-[10px]">诸司无事</span>
         ) : (
           activeDepts.map((dept) => {
-            const meta = DEPT_META[dept];
+            const meta = getDeptMeta(dept);
             const color = meta?.color || "#8B7355";
             return (
               <span
