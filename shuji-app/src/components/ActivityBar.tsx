@@ -4,6 +4,7 @@ interface ActivityBarProps {
   selected: ActivitySelection;
   onSelect: (selected: ActivitySelection) => void;
   onLogsClick: () => void;
+  pendingApprovalsCount?: number;
 }
 
 function FolderIcon({ active }: { active: boolean }) {
@@ -91,11 +92,12 @@ const ITEMS: Array<{ id: Exclude<ActivitySelection, null>; icon: (active: boolea
   { id: "graph", icon: (a) => <GraphIcon active={a} />, label: "文移图" },
 ];
 
-export default function ActivityBar({ selected, onSelect, onLogsClick }: ActivityBarProps) {
+export default function ActivityBar({ selected, onSelect, onLogsClick, pendingApprovalsCount }: ActivityBarProps) {
   return (
     <div className="w-12 bg-ink-900 border-r border-ink-800 flex flex-col items-center py-2 shrink-0">
       {ITEMS.map((item) => {
         const active = selected === item.id;
+        const hasBadge = item.id === "files" && (pendingApprovalsCount ?? 0) > 0;
         return (
           <button
             key={item.id}
@@ -106,6 +108,9 @@ export default function ActivityBar({ selected, onSelect, onLogsClick }: Activit
           >
             {active && <span className="absolute left-0 top-1 bottom-1 w-0.5 bg-vermillion rounded-r" />}
             {item.icon(active)}
+            {hasBadge && (
+              <span className="absolute top-1 right-1.5 w-2 h-2 bg-gold rounded-full animate-pulse" title={`${pendingApprovalsCount} 份朱批待批`} />
+            )}
             <span className="absolute left-full ml-2 whitespace-nowrap bg-ink-800 text-ink-200 text-xs px-2 py-1 rounded border border-ink-700 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
               {item.label}
             </span>

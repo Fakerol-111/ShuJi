@@ -84,7 +84,14 @@ export default function SetupPage() {
     }
   };
 
+  const [showSkipConfirm, setShowSkipConfirm] = useState(false);
+
   const handleSkip = () => {
+    setShowSkipConfirm(true);
+  };
+
+  const confirmSkip = () => {
+    setShowSkipConfirm(false);
     navigate("/", { replace: true });
   };
 
@@ -245,6 +252,22 @@ export default function SetupPage() {
             </Button>
           </div>
         </Card>
+
+        {/* ── Skip confirmation modal ── */}
+        {showSkipConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+            <Card variant="paper" className="max-w-sm mx-4 p-6 shadow-lg">
+              <h2 className="font-display text-sm font-bold text-ink-900 mb-2">跳过配置？</h2>
+              <p className="text-body text-ink-600 mb-4">
+                未配置 API 密钥将无法下诏驱动各部门执行。您可以浏览已打开的项目或无密钥测试 Demo。
+              </p>
+              <div className="flex gap-2 justify-end">
+                <Button variant="ghost" onClick={() => setShowSkipConfirm(false)}>继续配置</Button>
+                <Button variant="primary" onClick={confirmSkip}>仅浏览</Button>
+              </div>
+            </Card>
+          </div>
+        )}
 
         <p className="text-center text-caption text-ink-400 mt-6">
           密钥仅保存在本地，可在进入主界面后随时修改

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { listShujiTree } from "../api";
+import { formatError } from "../utils/error";
 import type { ShujiEntry } from "../api";
 
 interface DocTreeProps {
@@ -23,7 +24,7 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
     setError("");
     listShujiTree(projectDir)
       .then(setTree)
-      .catch((e) => setError(String(e)))
+      .catch((e) => setError(formatError(e)))
       .finally(() => setLoading(false));
   }, [projectDir]);
 
@@ -47,6 +48,7 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
   }, [debouncedRefresh]);
 
   if (error) return <div className="p-3 text-ui text-vermillion">{error}</div>;
+  if (loading && tree.length === 0) return <div className="p-3 space-y-2"><LoadingSkeleton /><LoadingSkeleton /></div>;
   if (tree.length === 0 && !loading) return <div className="p-3 text-ui text-ink-400">暂无可预览文件</div>;
 
   return (
@@ -122,4 +124,14 @@ function fileIcon(name: string) {
   if (/\.(ts|tsx|js|jsx|rs|py|css|html)$/.test(name)) return "<>";
   if (/\.(json|toml|ya?ml)$/.test(name)) return "{}";
   return "·";
+}
+
+/** Skeleton placeholder for loading state */
+function LoadingSkeleton() {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 animate-pulse">
+      <div className="w-3 h-3 rounded bg-ink-200" />
+      <div className="h-3 flex-1 rounded bg-ink-200" />
+    </div>
+  );
 }

@@ -71,6 +71,7 @@ export default function ProjectDashboard() {
 
   // Demo flow state
   const [showDemoTour, setShowDemoTour] = useState(false);
+  const [demoCreating, setDemoCreating] = useState(false);
   const [demoStartTime, setDemoStartTime] = useState<number | null>(null);
   const [demoSummary, setDemoSummary] = useState<{
     elapsed: string;
@@ -254,6 +255,7 @@ export default function ProjectDashboard() {
   };
 
   const handleDemoProject = async () => {
+    setDemoCreating(true);
     try {
       const project = await createDemoProject();
       await loadProjectIntoState(project.working_dir);
@@ -265,6 +267,8 @@ export default function ProjectDashboard() {
       handleSend("修复 calc.py 中的 power 和 factorial 函数中的 bug，确保所有测试通过");
     } catch (e) {
       setChatError(formatError(e));
+    } finally {
+      setDemoCreating(false);
     }
   };
 
@@ -282,7 +286,7 @@ export default function ProjectDashboard() {
           <span className="text-caption text-ink-500 font-mono truncate max-w-[520px]">{project?.working_dir}</span>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="seal" className="text-xs !px-2 !py-1" onClick={handleDemoProject}>体验枢机</Button>
+          <Button variant="seal" className="text-xs !px-2 !py-1" onClick={handleDemoProject} disabled={demoCreating}>{demoCreating ? "创建中…" : "体验枢机"}</Button>
           <Button variant="ghost" className="text-xs !px-2 !py-1 text-ink-400" onClick={openProjectPicker}>打开项目</Button>
           <HelpDrawer />
           <SettingsMenu open={settingsOpen} setOpen={setSettingsOpen} />
@@ -292,7 +296,7 @@ export default function ProjectDashboard() {
       {error && <div className="px-4 py-2 bg-vermillion-light border-b border-vermillion/20 text-vermillion-dark text-ui shrink-0">{error}<button onClick={clearError} className="ml-2 font-bold">&times;</button></div>}
 
       <div className="flex-1 flex min-h-0 overflow-hidden">
-        <ActivityBar selected={activity} onSelect={setActivity} onLogsClick={() => setLogsExpanded(true)} />
+        <ActivityBar selected={activity} onSelect={setActivity} onLogsClick={() => setLogsExpanded(true)} pendingApprovalsCount={pendingApprovals.length} />
         {activity && activity !== "graph" && project && <Sidebar mode={activity} projectDir={project.working_dir} selectedDoc={activeDoc?.path || null} onDocSelect={handleDocSelect} onShowDiff={(path) => openTab(path, "diff")} />}
         <main className="flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col">
           {/* Persistent active dept strip */}
