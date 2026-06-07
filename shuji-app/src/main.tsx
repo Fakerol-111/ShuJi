@@ -5,6 +5,7 @@ import WorkspaceSelect from "./pages/WorkspaceSelect";
 import ProjectDashboard from "./pages/ProjectDashboard";
 import LogsPage from "./pages/LogsPage";
 import SetupPage from "./pages/SetupPage";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { getCodeTheme } from "./constants";
 import "./styles/globals.css";
 
@@ -16,12 +17,14 @@ if (!rootEl) throw new Error("root element not found");
 ReactDOM.createRoot(rootEl).render(
   <React.StrictMode>
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<WorkspaceSelect />} />
-        <Route path="/project" element={<ProjectDashboard />} />
-        <Route path="/setup" element={<SetupPage />} />
-        <Route path="/logs" element={<LogsPage />} />
-      </Routes>
+      <ErrorBoundary>
+        <Routes>
+          <Route path="/" element={<WorkspaceSelect />} />
+          <Route path="/project" element={<ProjectDashboard />} />
+          <Route path="/setup" element={<SetupPage />} />
+          <Route path="/logs" element={<LogsPage />} />
+        </Routes>
+      </ErrorBoundary>
     </BrowserRouter>
   </React.StrictMode>,
 );

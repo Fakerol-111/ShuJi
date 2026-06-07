@@ -133,6 +133,13 @@ export default function ProjectDashboard() {
   const error = projError || chatError;
   const clearError = () => { setProjError(""); setChatError(""); };
 
+  // Auto-dismiss error after 8 seconds
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(clearError, 8000);
+    return () => clearTimeout(timer);
+  }, [error]);
+
   // ── Multi-tab document browsing ──────────────────────────
   const [tabs, setTabs] = useState<TabInfo[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
