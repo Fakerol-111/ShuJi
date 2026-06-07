@@ -274,6 +274,7 @@ export interface GraphEdge {
 }
 
 export interface WorkflowGraph {
+  session_label: string;
   nodes: GraphNode[];
   edges: GraphEdge[];
 }

@@ -48,6 +48,9 @@ pub struct GraphEdge {
 pub struct WorkflowGraph {
     pub nodes: Vec<GraphNode>,
     pub edges: Vec<GraphEdge>,
+    /// 本次会话的描述（皇帝命令摘要），用于归档显示
+    #[serde(default)]
+    pub session_label: String,
     next_node_id: usize,
     next_edge_id: usize,
     /// 角色 → 当前活跃节点 ID（运行时状态，不持久化）
@@ -70,6 +73,7 @@ impl WorkflowGraph {
         let mut graph = Self {
             nodes: Vec::new(),
             edges: Vec::new(),
+            session_label: String::new(),
             next_node_id: 1,
             next_edge_id: 1,
             current_nodes: HashMap::new(),
@@ -217,6 +221,11 @@ impl WorkflowGraph {
         }
     }
 
+    /// 设置本次会话标签
+    pub fn set_session_label(&mut self, label: &str) {
+        self.session_label = label.to_string();
+    }
+
     /// 标记一个角色的当前节点为 failed
     pub fn mark_failed(&mut self, role: &str) {
         if let Some(id) = self.current_nodes.get(role) {
@@ -227,6 +236,74 @@ impl WorkflowGraph {
     }
 
     // ── 持久化 ──
+
+    /// 将当前图归档到 `.shuji/workflow_graphs/{ts}_{label}.json` 并清空
+    /// 下次新命令启动时调用，确保每次命令对应一张独立的图
+    pub async fn archive_and_new(&mut self, working_dir: &Path, new_label: &str) {
+        // 如果当前图有实际内容（非仅有初始内阁节点），先归档
+        if self.edges.len() > 0 || self.nodes.len() > 1 {
+            let ts = Local::now().format("%Y%m%d_%H%M%S");
+            // 生成文件名校友好标签
+            let safe_label: String = self
+                .session_label
+                .chars()
+                .take(30)
+                .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-')
+                .collect();
+            let slug = if safe_label.is_empty() {
+                "unnamed".to_string()
+            } else {
+                safe_label
+            };
+            let dir = working_dir.join(".shuji").join("workflow_graphs");
+            let _ = tokio::fs::create_dir_all(&dir).await;
+            let filename = format!("{}_{}.json", ts, slug);
+            let path = dir.join(&filename);
+            if let Ok(json) = serde_json::to_string_pretty(self) {
+                let _ = tokio::fs::write(&path, &json).await;
+                log_console!("[graph] 已归档: {}", filename);
+            }
+        }
+        // 重置为新会话
+        *self = Self::new();
+        self.session_label = new_label.to_string();
+        self.save_to(working_dir).await;
+    }
+
+    /// 列出所有归档文移图文件
+    pub async fn list_archives(working_dir: &Path) -> Vec<(String, String)> {
+        let dir = working_dir.join(".shuji").join("workflow_graphs");
+        let mut entries = Vec::new();
+        if let Ok(mut rd) = tokio::fs::read_dir(&dir).await {
+            while let Ok(Some(entry)) = rd.next_entry().await {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.ends_with(".json") {
+                    let label = name
+                        .strip_suffix(".json")
+                        .unwrap_or(&name)
+                        .splitn(2, '_')
+                        .nth(1)
+                        .unwrap_or("")
+                        .to_string();
+                    entries.push((name, label));
+                }
+            }
+        }
+        entries.sort_by(|a, b| b.0.cmp(&a.0)); // newest first
+        entries
+    }
+
+    /// 加载一个归档文移图
+    pub async fn load_archive(working_dir: &Path, filename: &str) -> Option<Self> {
+        let path = working_dir
+            .join(".shuji")
+            .join("workflow_graphs")
+            .join(filename);
+        let data = tokio::fs::read_to_string(&path).await.ok()?;
+        let mut graph: Self = serde_json::from_str(&data).ok()?;
+        graph.rebuild_state();
+        Some(graph)
+    }
 
     /// 保存到 `.shuji/workflow_graph.json`
     pub async fn save_to(&self, working_dir: &Path) {

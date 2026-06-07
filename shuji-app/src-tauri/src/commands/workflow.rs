@@ -401,6 +401,15 @@ pub async fn send_message(
         }
     }
 
+    // ── 归档上次命令的文移图，开始新会话 ──
+    {
+        let wd = Path::new(&p_working_dir);
+        let mut graph = crate::workflow::WorkflowGraph::load_or_new(wd).await;
+        // 用皇帝命令的前60字作为新会话标签
+        let label: String = message.chars().take(60).collect();
+        graph.archive_and_new(wd, label.trim()).await;
+    }
+
     // Send message to 内阁 actor
     let sys_lock = state.actor_system.lock().await;
     let system = sys_lock
@@ -1066,6 +1075,34 @@ pub async fn get_workflow_graph(
         d.clone().ok_or("没有打开的项目")?
     };
     Ok(crate::workflow::WorkflowGraph::load_from(std::path::Path::new(&dir)).await)
+}
+
+#[tauri::command]
+pub async fn list_workflow_archives(
+    state: State<'_, AppState>,
+) -> Result<Vec<Vec<String>>, String> {
+    let dir = {
+        let d = state.current_dir.lock().await;
+        d.clone().ok_or("没有打开的项目")?
+    };
+    let archives = crate::workflow::WorkflowGraph::list_archives(std::path::Path::new(&dir)).await;
+    // Return as Vec<[filename, label]> for frontend
+    Ok(archives.into_iter().map(|(f, l)| vec![f, l]).collect())
+}
+
+#[tauri::command]
+pub async fn load_workflow_archive(
+    state: State<'_, AppState>,
+    filename: String,
+) -> Result<Option<crate::workflow::WorkflowGraph>, String> {
+    let dir = {
+        let d = state.current_dir.lock().await;
+        d.clone().ok_or("没有打开的项目")?
+    };
+    Ok(
+        crate::workflow::WorkflowGraph::load_archive(std::path::Path::new(&dir), &filename)
+            .await,
+    )
 }
 
 // ── Traceability commands ───────────────────────────────────

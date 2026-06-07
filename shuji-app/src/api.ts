@@ -203,6 +203,14 @@ export async function getWorkflowGraph(): Promise<WorkflowGraph | null> {
   return invoke("get_workflow_graph");
 }
 
+export async function listWorkflowArchives(): Promise<[string, string][]> {
+  return invoke("list_workflow_archives");
+}
+
+export async function loadWorkflowArchive(filename: string): Promise<WorkflowGraph | null> {
+  return invoke("load_workflow_archive", { filename });
+}
+
 // ── Document approval ─────────────────────────────────────────
 
 export async function setDocumentStatus(
