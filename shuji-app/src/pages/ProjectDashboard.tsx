@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getRecentDirs, getRoundMetrics } from "../api";
 import { useActiveDepts, DeptActiveProvider } from "../hooks/useActiveDepts";
@@ -21,6 +22,7 @@ import DemoTour from "../components/DemoTour";
 import WorkflowStatus from "../components/WorkflowTimeline";
 import WorkflowGraphView from "../components/WorkflowGraph";
 import { Card } from "../components/ui/Card";
+import type { Project } from "../types";
 import { createDemoProject, getPendingApprovals } from "../api";
 import type { ActivitySelection } from "../components/ActivityBar";
 import TabBar, { type TabInfo } from "../components/TabBar";
@@ -47,7 +49,7 @@ export default function ProjectDashboard() {
   const activeDepts = Array.from(useActiveDepts());
 
   // Project state
-  const { project, messages: initialMsgs, recentDirs, setRecentDirs, error: projError, setError: setProjError, loadProjectIntoState } = useProject();
+  const { project, setProject, messages: initialMsgs, recentDirs, setRecentDirs, error: projError, setError: setProjError, loadProjectIntoState } = useProject();
   if (initialMsgs.length > 0 && session) session.msgs = initialMsgs;
 
   // Chat state
@@ -57,6 +59,14 @@ export default function ProjectDashboard() {
   useEffect(() => {
     try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ msgs: messages, discuss: discussMsgs })); } catch {}
   }, [messages, discussMsgs]);
+
+  // Listen for project-update events (milestone changes)
+  useEffect(() => {
+    const unlisten = listen("project-update", (event: { payload: Project }) => {
+      setProject(event.payload);
+    });
+    return () => { unlisten.then((f) => f()); };
+  }, [setProject]);
 
   // Demo flow state
   const [showDemoTour, setShowDemoTour] = useState(false);

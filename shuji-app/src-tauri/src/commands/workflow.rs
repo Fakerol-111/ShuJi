@@ -376,6 +376,11 @@ pub async fn send_message(
                         let _ = s.save_project(project).await;
                     }
 
+                    // Emit project-update event for frontend
+                    if let Some(ref project) = snapshot {
+                        let _ = app3.emit("project-update", project);
+                    }
+
                     // Audit log milestone
                     let event = "milestone";
                     let role = milestone.split('|').next().unwrap_or("").trim();
