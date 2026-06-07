@@ -250,3 +250,30 @@ export interface TraceResult {
   downstream: ChainNode[];
   upstream: ChainNode[];
 }
+
+// ── 文移图 DAG ───────────────────────────────────────
+
+export type GraphNodeStatus = "active" | "completed" | "failed";
+
+export interface GraphNode {
+  id: number;
+  role: string;
+  instance: number;
+  task_summary: string;
+  status: GraphNodeStatus;
+  created_at: string;
+}
+
+export interface GraphEdge {
+  id: number;
+  source: number;
+  target: number;
+  task_id: string;
+  description: string;
+  timestamp: string;
+}
+
+export interface WorkflowGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}

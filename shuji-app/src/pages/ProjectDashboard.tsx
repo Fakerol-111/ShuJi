@@ -19,6 +19,7 @@ import { Tabs } from "../components/ui/Tabs";
 import { Button } from "../components/ui/Button";
 import DemoTour from "../components/DemoTour";
 import WorkflowStatus from "../components/WorkflowTimeline";
+import WorkflowGraphView from "../components/WorkflowGraph";
 import { Card } from "../components/ui/Card";
 import { createDemoProject, getPendingApprovals } from "../api";
 import type { ActivitySelection } from "../components/ActivityBar";
@@ -278,7 +279,7 @@ export default function ProjectDashboard() {
 
       <div className="flex-1 flex min-h-0 overflow-hidden">
         <ActivityBar selected={activity} onSelect={setActivity} onLogsClick={() => setLogsExpanded(true)} />
-        {activity && project && <Sidebar mode={activity} projectDir={project.working_dir} selectedDoc={activeDoc?.path || null} onDocSelect={handleDocSelect} onShowDiff={(path) => openTab(path, "diff")} />}
+        {activity && activity !== "graph" && project && <Sidebar mode={activity} projectDir={project.working_dir} selectedDoc={activeDoc?.path || null} onDocSelect={handleDocSelect} onShowDiff={(path) => openTab(path, "diff")} />}
         <main className="flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col">
           {/* Persistent active dept strip */}
           {project && activeDepts.length > 0 && (
@@ -304,26 +305,32 @@ export default function ProjectDashboard() {
             />
           )}
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-            {hasTabs && (
-              <TabBar
-                tabs={tabs}
-                activeIndex={activeIndex}
-                onSelect={setActiveIndex}
-                onClose={closeTab}
-              />
-            )}
-            {demoSummary ? (
-              <DemoSummaryCard summary={demoSummary} onOpenProject={openProjectPicker} />
-            ) : hasTabs ? (
-              <DocPreview
-                key={activeDoc!.path}
-                projectDir={project!.working_dir}
-                docPath={activeDoc!.path}
-                initialTab={activeDoc!.initialView}
-                onClose={() => closeTab(activeIndex)}
-              />
+            {activity === "graph" ? (
+              <WorkflowGraphView />
             ) : (
-              <ProjectOverview project={project} activeDepts={activeDepts} planInfo={planInfo} onOpenProject={openProjectPicker} onDocSelect={(path) => openTab(path)} />
+              <>
+                {hasTabs && (
+                  <TabBar
+                    tabs={tabs}
+                    activeIndex={activeIndex}
+                    onSelect={setActiveIndex}
+                    onClose={closeTab}
+                  />
+                )}
+                {demoSummary ? (
+                  <DemoSummaryCard summary={demoSummary} onOpenProject={openProjectPicker} />
+                ) : hasTabs ? (
+                  <DocPreview
+                    key={activeDoc!.path}
+                    projectDir={project!.working_dir}
+                    docPath={activeDoc!.path}
+                    initialTab={activeDoc!.initialView}
+                    onClose={() => closeTab(activeIndex)}
+                  />
+                ) : (
+                  <ProjectOverview project={project} activeDepts={activeDepts} planInfo={planInfo} onOpenProject={openProjectPicker} onDocSelect={(path) => openTab(path)} />
+                )}
+              </>
             )}
           </div>
         </main>

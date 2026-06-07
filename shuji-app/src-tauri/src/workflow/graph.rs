@@ -58,6 +58,12 @@ pub struct WorkflowGraph {
     instance_counts: HashMap<String, u32>,
 }
 
+impl Default for WorkflowGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WorkflowGraph {
     /// 创建新图，默认包含一个 内阁#1 起始节点
     pub fn new() -> Self {
@@ -115,8 +121,7 @@ impl WorkflowGraph {
             Some(candidate_id) if self.has_path(*candidate_id, from_id) => {
                 // 环路！创建新实例
                 let instance = self.instance_counts.get(to_role).copied().unwrap_or(0) + 1;
-                let new_node_id = self.alloc_node(to_role, instance, task_description);
-                new_node_id
+                self.alloc_node(to_role, instance, task_description)
             }
             Some(candidate_id) => {
                 // 无环路，更新已有节点的任务摘要
@@ -128,8 +133,7 @@ impl WorkflowGraph {
             None => {
                 // to_role 首次出现
                 let instance = 1;
-                let new_node_id = self.alloc_node(to_role, instance, task_description);
-                new_node_id
+                self.alloc_node(to_role, instance, task_description)
             }
         };
 

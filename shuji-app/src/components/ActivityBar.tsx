@@ -1,4 +1,4 @@
-export type ActivitySelection = "files" | "stats" | "context" | "archives" | "audit" | null;
+export type ActivitySelection = "files" | "stats" | "context" | "archives" | "audit" | "graph" | null;
 
 interface ActivityBarProps {
   selected: ActivitySelection;
@@ -45,6 +45,19 @@ function ArchiveIcon({ active }: { active: boolean }) {
   );
 }
 
+function GraphIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={active ? "text-ink-50" : ""}>
+      <circle cx="5" cy="12" r="2" />
+      <circle cx="19" cy="5" r="2" />
+      <circle cx="19" cy="19" r="2" />
+      <line x1="7" y1="12" x2="17" y2="5" />
+      <line x1="7" y1="12" x2="17" y2="19" />
+      <line x1="17" y1="7" x2="17" y2="17" />
+    </svg>
+  );
+}
+
 function NewspaperIcon({ active }: { active: boolean }) {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={active ? "text-ink-50" : ""}>
@@ -75,6 +88,7 @@ const ITEMS: Array<{ id: Exclude<ActivitySelection, null>; icon: (active: boolea
   { id: "context", icon: (a) => <ScrollIcon active={a} />, label: "文脉" },
   { id: "archives", icon: (a) => <ArchiveIcon active={a} />, label: "存档" },
   { id: "audit", icon: (a) => <NewspaperIcon active={a} />, label: "朝报" },
+  { id: "graph", icon: (a) => <GraphIcon active={a} />, label: "文移图" },
 ];
 
 export default function ActivityBar({ selected, onSelect, onLogsClick }: ActivityBarProps) {
