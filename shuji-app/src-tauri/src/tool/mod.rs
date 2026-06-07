@@ -526,7 +526,7 @@ pub fn modify_file_tool_def() -> crate::api::client::ToolDefinition {
         function: crate::api::client::ToolFunction {
             name: "modify_file".into(),
             description:
-                "替换文件中的文本 (find+replace)。≤800字符。大块修改用 read→delete→create。".into(),
+                "替换文件中的文本 (find+replace)。≤800字符。大块修改请用 apply_patch（支持 50000 字符）。工部/刑部已禁用此工具——使用 apply_patch。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -797,6 +797,172 @@ pub async fn tool_list_dir(working_dir: &Path, args: &serde_json::Value) -> Stri
         }
         Ok(Err(e)) => ToolOutput::error("list_dir", path, "list_error", &e.to_string()),
         Err(_) => ToolOutput::error("list_dir", path, "join_error", "后台任务异常"),
+    }
+}
+
+/// Recursive directory tree listing (P0-5). Returns indented tree with depth limit.
+/// Parameters: path, depth (default 2, max 5), glob filter.
+pub async fn tool_list_dir_tree(working_dir: &Path, args: &serde_json::Value) -> String {
+    let path = args["path"].as_str().unwrap_or("");
+    let max_depth = args["depth"].as_u64().unwrap_or(2).min(5) as usize;
+    let glob = args["glob"].as_str().filter(|s| !s.is_empty());
+
+    let full = match resolve_scoped_path(working_dir, path).await {
+        Ok(p) => p,
+        Err(e) => return ToolOutput::error("list_dir_tree", path, "path_error", &e),
+    };
+
+    let skip_dirs: &[&str] = &[
+        ".git", ".shuji", "node_modules", "target", ".venv", "__pycache__", "dist", "build",
+    ];
+
+    let mut lines = Vec::new();
+    let mut total = 0usize;
+    let max_items = 200usize;
+
+    // Use BFS-like recursion with depth tracking
+    fn collect(
+        dir: &Path,
+        working_dir: &Path,
+        prefix: &str,
+        depth: usize,
+        max_depth: usize,
+        glob: Option<&str>,
+        skip_dirs: &[&str],
+        lines: &mut Vec<String>,
+        total: &mut usize,
+        max_items: usize,
+    ) {
+        if *total >= max_items {
+            return;
+        }
+        let entries = match std::fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(_) => return,
+        };
+        let mut items: Vec<_> = entries
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                let name = e.file_name().to_string_lossy().to_string();
+                if let Some(g) = glob {
+                    simple_glob_match(&name, g)
+                } else {
+                    true
+                }
+            })
+            .collect();
+        // Sort: dirs first, then alpha
+        items.sort_by(|a, b| {
+            let a_is_dir = a.file_type().map(|t| t.is_dir()).unwrap_or(false);
+            let b_is_dir = b.file_type().map(|t| t.is_dir()).unwrap_or(false);
+            if a_is_dir != b_is_dir {
+                b_is_dir.cmp(&a_is_dir)
+            } else {
+                a.file_name().cmp(&b.file_name())
+            }
+        });
+
+        for (i, entry) in items.iter().enumerate() {
+            if *total >= max_items {
+                break;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+            let is_last = i == items.len() - 1;
+            let connector = if is_last { "└── " } else { "├── " };
+            let ep = entry.path();
+            let rel = ep.strip_prefix(working_dir).unwrap_or(&ep);
+            let line = if is_dir {
+                format!("{}{}{}/", prefix, connector, rel.display())
+            } else {
+                format!("{}{}{}", prefix, connector, rel.display())
+            };
+            // Only add connector for direct children; deeper levels just show path
+            lines.push(if depth == 0 {
+                line
+            } else {
+                line
+            });
+            *total += 1;
+
+            if is_dir && depth < max_depth {
+                let child_prefix = if is_last {
+                    format!("{}    ", prefix)
+                } else {
+                    format!("{}│   ", prefix)
+                };
+                if !skip_dirs.contains(&name.as_str()) {
+                    collect(
+                        &entry.path(),
+                        working_dir,
+                        &child_prefix,
+                        depth + 1,
+                        max_depth,
+                        glob,
+                        skip_dirs,
+                        lines,
+                        total,
+                        max_items,
+                    );
+                }
+            }
+        }
+    }
+
+    collect(
+        &full,
+        working_dir,
+        "",
+        0,
+        max_depth,
+        glob,
+        skip_dirs,
+        &mut lines,
+        &mut total,
+        max_items,
+    );
+
+    if lines.is_empty() {
+        return ToolOutput::success_raw("list_dir_tree", "(空)");
+    }
+
+    let mut output = lines.join("\n");
+    if total >= max_items {
+        output.push_str(&format!(
+            "\n\n… 显示前 {} 项，如需更多请缩小范围",
+            max_items
+        ));
+    }
+    output.push_str(&format!("\n\n共 {} 项", total));
+    ToolOutput::success_raw("list_dir_tree", &output)
+}
+
+/// Tool definition for list_dir_tree.
+pub fn list_dir_tree_tool_def() -> crate::api::client::ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "list_dir_tree".into(),
+            description: "递归目录树浏览。列出目录下所有子目录和文件（带缩进）。替代多次 list_dir。depth 默认 2，最大 5。支持 glob 过滤。".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "目录路径，相对于项目根目录"
+                    },
+                    "depth": {
+                        "type": "integer",
+                        "description": "递归深度（默认 2，最大 5）"
+                    },
+                    "glob": {
+                        "type": "string",
+                        "description": "可选：文件名过滤，如 *.rs, *.md"
+                    }
+                },
+                "required": ["path"]
+            }),
+        },
     }
 }
 
@@ -1365,7 +1531,7 @@ pub fn run_tests_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "run_tests".into(),
-            description: "运行测试。自动检测项目类型（Rust/Node/Python），根据 scope 选择子命令。返回结构化报告：通过数、失败用例、stderr 摘要。替代手动拼 execute_command。".into(),
+            description: "首选跑测试工具。自动检测项目类型（Rust/Node/Python），根据 scope 选择子命令。返回结构化报告：通过数、失败用例、stderr 摘要。禁止手写 cargo test/pytest——请使用本工具。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -1390,7 +1556,7 @@ pub fn execute_command_tool_def(description: &str) -> crate::api::client::ToolDe
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "execute_command".into(),
-            description: description.into(),
+            description: format!("{}。注意：运行测试请用 run_tests 工具（自动检测项目类型）。execute_command 仅用于 lint/format/构建等非测试命令。", description),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -1405,6 +1571,31 @@ pub fn execute_command_tool_def(description: &str) -> crate::api::client::ToolDe
     }
 }
 
+/// Truncate verbose tool results to avoid blowing up context.
+/// Uses per-tool limits. Truncated results include a hint for continuation.
+fn truncate_tool_result_by_name(name: &str, content: &str) -> String {
+    let limit = match name {
+        "read_file" | "read_document" => 8000,
+        "search_text" => 8000,
+        "list_dir" => 8000,
+        "execute_command" => 4000,
+        "run_tests" => 4000,
+        "summarize_logs" => 4000,
+        _ => 16000,
+    };
+    if content.len() > limit {
+        let head: String = content.chars().take(limit).collect();
+        format!(
+            "{}...\n[截断：显示前 {} 字符，共 {} 字符。如需继续，请缩小范围后重试 (truncated: true)]",
+            head,
+            limit,
+            content.len()
+        )
+    } else {
+        content.to_string()
+    }
+}
+
 /// Central tool dispatch: all agents call this instead of writing their own match block.
 pub async fn execute_named_tool(
     name: &str,
@@ -1413,10 +1604,11 @@ pub async fn execute_named_tool(
     dept: &str,
 ) -> String {
     tool_log::log_tool_call(dept, name, args, working_dir).await;
-    match name {
+    let raw_result = match name {
         "read_file" => tool_read_file(working_dir, args).await,
         "create_file" => tool_create_file(working_dir, args).await,
         "list_dir" => tool_list_dir(working_dir, args).await,
+        "list_dir_tree" => tool_list_dir_tree(working_dir, args).await,
         "append_file" => tool_append_file(working_dir, args).await,
         "delete_file" => tool_delete_file(working_dir, args).await,
         "rename_file" => tool_rename_file(working_dir, args).await,
@@ -1471,7 +1663,8 @@ pub async fn execute_named_tool(
         "add_violation" => tool_add_violation(args, working_dir).await,
         "request_reauth" => tool_request_reauth(args, working_dir).await,
         _ => ToolOutput::error("unknown_tool", name, "unknown_tool", "未知工具"),
-    }
+    };
+    truncate_tool_result_by_name(name, &raw_result)
 }
 
 /// Validate and execute route_to — returns a ToolOutput with `operation: "route_to"`

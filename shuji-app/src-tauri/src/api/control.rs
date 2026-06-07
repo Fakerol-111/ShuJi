@@ -311,10 +311,14 @@ impl AgentController {
                         }
 
                         // ── Same-tool watchdog ─────────────
+                        // Extract key argument for similarity detection:
+                        // - file/command tools → "path" or "command"
+                        // - document tools → "id" (read_document, append_document, etc.)
                         let key_arg = tc
                             .args
                             .get("path")
                             .or_else(|| tc.args.get("command"))
+                            .or_else(|| tc.args.get("id"))
                             .and_then(|v| v.as_str())
                             .unwrap_or("");
                         if tc.name == last_tool_name && key_arg == last_tool_args {
@@ -349,7 +353,8 @@ impl AgentController {
                             ));
                         }
                         let is_read =
-                            matches!(tc.name.as_str(), "read_file" | "list_dir" | "find_document");
+                            matches!(tc.name.as_str(), "read_file" | "list_dir" | "list_dir_tree"
+                                | "find_document" | "read_document" | "search_text");
                         if is_read
                             && read_without_write >= config.watchdog.read_without_write_warning
                         {

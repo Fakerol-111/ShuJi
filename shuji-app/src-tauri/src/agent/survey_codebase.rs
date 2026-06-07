@@ -21,13 +21,16 @@ pub async fn run(
     model: &str,
 ) -> Result<String, String> {
     let tools = {
-        let mut t = crate::tool::registry::inspect_tools();
-        t.extend(crate::tool::registry::document_tools());
-        // create_file + modify_file for project_profile.md maintenance
+        let mut t = crate::tool::registry::code_inspect_tools();
+        t.push(crate::tool::list_dir_tool_def());
+        // Documents for analysis reports
+        t.push(crate::tool::documents::create_document_tool_def());
+        t.push(crate::tool::documents::append_document_tool_def());
+        // File write for project_profile.md
         t.push(crate::tool::create_file_tool_def(
             "创建/更新 project_profile.md",
         ));
-        t.push(crate::tool::modify_file_tool_def());
+        t.push(crate::tool::apply_patch_tool_def());
         t
     };
 

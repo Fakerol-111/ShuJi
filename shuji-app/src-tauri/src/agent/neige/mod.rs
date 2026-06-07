@@ -38,20 +38,24 @@ impl NeigeAgent {
     }
 
     fn tools() -> Vec<ToolDefinition> {
-        let mut tools = crate::tool::registry::inspect_tools();
-        tools.extend(crate::tool::registry::document_tools());
+        let mut tools = crate::tool::registry::minimal_inspect_tools();
+        // Documents: create + append only (no modify_document, no set_document_status)
+        tools.push(crate::tool::documents::create_document_tool_def());
+        tools.push(crate::tool::documents::append_document_tool_def());
+        // Special tools
         tools.extend(crate::tool::registry::summarize_logs_tool());
         tools.push(crate::tool::registry::cancel_agent_tool());
         tools.push(crate::tool::registry::update_soul_tool());
         tools.push(crate::tool::registry::create_skill_tool());
         tools.push(crate::tool::registry::expand_requirements_tool());
         tools.push(crate::tool::registry::survey_codebase_tool());
+        tools.push(crate::tool::registry::route_tool());
         tools
     }
 
     /// Read-only tool set for discuss mode — no document mutation, no routing.
     fn discuss_tools() -> Vec<ToolDefinition> {
-        let mut tools = crate::tool::registry::inspect_tools();
+        let mut tools = crate::tool::registry::minimal_inspect_tools();
         tools.extend(crate::tool::registry::summarize_logs_tool());
         tools
     }

@@ -343,9 +343,10 @@ impl Session {
             tokens => Some(tokens),
         };
 
-        // Inject the cross-department route_to tool for every agent.
-        let mut all_tools = tools.to_vec();
-        all_tools.push(crate::tool::registry::route_tool());
+        // route_to is NOT injected here anymore — each agent's tools()
+        // explicitly includes it if the agent can route.  Sub-agents
+        // (expand_requirements, survey_codebase) intentionally lack it.
+        let all_tools = tools.to_vec();
 
         Self {
             messages,

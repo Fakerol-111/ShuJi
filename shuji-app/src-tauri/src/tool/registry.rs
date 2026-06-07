@@ -8,18 +8,53 @@ use crate::api::client::ToolDefinition;
 
 // ── Tool groups ───────────────────────────────────────────────────
 
-/// Read-only inspection tools: read files, list directories, find/read/search documents.
-pub fn inspect_tools() -> Vec<ToolDefinition> {
+// ── Role-based inspection groups ─────────────────────────────
+
+/// Document-oriented inspection tools: for agents that work with .shuji documents.
+pub fn doc_inspect_tools() -> Vec<ToolDefinition> {
     vec![
-        crate::tool::read_file_tool_def("读取文件内容"),
-        crate::tool::list_dir_tool_def(),
-        crate::tool::documents::find_document_tool_def(),
         crate::tool::documents::read_document_tool_def(),
+        crate::tool::list_dir_tool_def(),
         crate::tool::search_text_tool_def(),
     ]
 }
 
-/// File write tools: create, modify, append, delete, rename, apply_patch.
+/// Code-oriented inspection tools: for agents that read/modify source files.
+pub fn code_inspect_tools() -> Vec<ToolDefinition> {
+    vec![
+        crate::tool::read_file_tool_def("读取文件内容"),
+        crate::tool::list_dir_tree_tool_def(),
+        crate::tool::search_text_tool_def(),
+    ]
+}
+
+/// Minimal inspection: for agents that only need read_document + list_dir.
+pub fn minimal_inspect_tools() -> Vec<ToolDefinition> {
+    vec![
+        crate::tool::documents::read_document_tool_def(),
+        crate::tool::list_dir_tool_def(),
+    ]
+}
+
+/// Legacy alias — kept for backward compat, prefer role-specific groups.
+pub fn inspect_tools() -> Vec<ToolDefinition> {
+    doc_inspect_tools()
+}
+
+// ── Write tool groups ────────────────────────────────────────
+
+/// File write tools for code agents (工部/刑部): create, apply_patch, delete, rename.
+/// Intentionally excludes modify_file and append_file — use apply_patch for all edits.
+pub fn file_write_tools_for_code() -> Vec<ToolDefinition> {
+    vec![
+        crate::tool::create_file_tool_def("写入新文件"),
+        crate::tool::apply_patch_tool_def(),
+        crate::tool::delete_file_tool_def(),
+        crate::tool::rename_file_tool_def(),
+    ]
+}
+
+/// Full file write tools (legacy, for non-code agents that still need modify/append).
 pub fn file_write_tools() -> Vec<ToolDefinition> {
     vec![
         crate::tool::create_file_tool_def("写入新文件"),

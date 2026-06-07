@@ -23,8 +23,9 @@ impl LibuShangshuAgent {
     }
 
     fn tools() -> Vec<ToolDefinition> {
-        let mut tools = crate::tool::registry::inspect_tools();
+        let mut tools = crate::tool::registry::doc_inspect_tools();
         tools.extend(crate::tool::registry::document_tools());
+        tools.push(crate::tool::registry::route_tool());
         tools
     }
 

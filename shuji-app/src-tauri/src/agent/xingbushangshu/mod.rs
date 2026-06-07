@@ -23,10 +23,14 @@ impl XingbuShangshuAgent {
     }
 
     fn tools() -> Vec<ToolDefinition> {
-        let mut tools = crate::tool::registry::inspect_tools();
-        tools.extend(crate::tool::registry::file_write_tools());
-        tools.extend(crate::tool::registry::document_tools());
-        tools.extend(crate::tool::registry::execute_command_tool());
+        let mut tools = crate::tool::registry::code_inspect_tools();
+        tools.push(crate::tool::list_dir_tool_def());
+        tools.extend(crate::tool::registry::file_write_tools_for_code());
+        // Documents for report writing only
+        tools.push(crate::tool::documents::create_document_tool_def());
+        tools.push(crate::tool::documents::append_document_tool_def());
+        tools.extend(crate::tool::registry::run_tests_tool());
+        tools.push(crate::tool::registry::route_tool());
         tools
     }
 

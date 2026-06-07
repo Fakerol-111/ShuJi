@@ -23,9 +23,16 @@ impl LibuRShangshuAgent {
     }
 
     fn tools() -> Vec<ToolDefinition> {
-        let mut tools = crate::tool::registry::inspect_tools();
-        tools.extend(crate::tool::registry::document_tools());
+        let mut tools: Vec<ToolDefinition> = Vec::new();
+        // 礼部: read-only inspection — files + documents
+        tools.push(crate::tool::read_file_tool_def("读取源文件内容"));
+        tools.push(crate::tool::documents::read_document_tool_def());
+        // Write: only create + append for audit reports
+        tools.push(crate::tool::documents::create_document_tool_def());
+        tools.push(crate::tool::documents::append_document_tool_def());
+        // Audit checklist
         tools.extend(crate::tool::registry::audit_checklist_tools());
+        tools.push(crate::tool::registry::route_tool());
         tools
     }
 

@@ -20,8 +20,9 @@ pub async fn run(
     model: &str,
 ) -> Result<String, String> {
     let tools = {
-        let mut t = crate::tool::registry::inspect_tools();
-        t.extend(crate::tool::registry::document_tools());
+        let mut t = crate::tool::registry::minimal_inspect_tools();
+        t.push(crate::tool::documents::create_document_tool_def());
+        t.push(crate::tool::documents::append_document_tool_def());
         t
     };
 

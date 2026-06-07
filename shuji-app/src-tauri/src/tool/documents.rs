@@ -288,6 +288,21 @@ pub async fn tool_modify_document(
         return ToolOutput::error("modify_document", "", "empty_id", "文档 ID 不能为空");
     }
 
+    // Runtime length check (P1-3): new_text ≤ 300 chars
+    if let Some(new_text) = args["new_text"].as_str() {
+        if new_text.len() > 300 {
+            return ToolOutput::error(
+                "modify_document",
+                id,
+                "content_too_long",
+                &format!(
+                    "new_text 过长（{} 字符），最大 300。请分批修改或使用 append_document。",
+                    new_text.len()
+                ),
+            );
+        }
+    }
+
     let type_prefix = id.split('_').next().unwrap_or("");
     let full = if type_prefix == "rprt" {
         match find_rprt_path(working_dir, id).await {
@@ -382,6 +397,19 @@ pub async fn tool_append_document(
     }
     if append_content.is_empty() {
         return ToolOutput::error("append_document", id, "empty_content", "追加内容不能为空");
+    }
+
+    // Runtime length check (P1-3): content ≤ 2000 chars per call
+    if append_content.len() > 2000 {
+        return ToolOutput::error(
+            "append_document",
+            id,
+            "content_too_long",
+            &format!(
+                "追加内容过长（{} 字符），最大 2000 字符。请分批追加，每次 ≤2000 字符。",
+                append_content.len()
+            ),
+        );
     }
 
     let type_prefix = id.split('_').next().unwrap_or("");
@@ -820,8 +848,9 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
         body.to_string()
     };
 
-    // Optional max_chars truncation
-    let max_chars = args["max_chars"].as_u64().unwrap_or(0) as usize;
+    // Default max_chars=4000 to prevent context blowup (P1-2).
+    // Pass max_chars=0 explicitly to disable truncation for small docs.
+    let max_chars = args["max_chars"].as_u64().unwrap_or(4000) as usize;
     let display_body = if max_chars > 0 && extracted.len() > max_chars {
         format!(
             "{}...\n\n[截断：显示前 {} 字符，共 {} 字符]",
@@ -896,7 +925,7 @@ pub fn read_document_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "read_document".into(),
-            description: "按文档ID读取文档，返回 YAML 元信息 + 正文。可选按 ## 章节提取。设计/调度类部门首选，替代 find_document → read_file 两步。".into(),
+            description: "首选读文档方式。按文档ID读取，返回 YAML 元信息 + 正文。默认截断 4000 字符（传 max_chars=0 禁用）。可选按 ## 章节提取。替代 find_document → read_file 两步。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -969,7 +998,7 @@ pub fn find_document_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "find_document".into(),
-            description: "根据文档ID查找文档路径".into(),
+            description: "⚠️ 降级建议：除非 read_document 失败，否则勿用。read_document 已合并查找+读取+章节提取，一次调用即可。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
