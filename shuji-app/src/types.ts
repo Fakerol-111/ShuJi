@@ -82,6 +82,8 @@ export interface ChatMessage {
   options: ChatOption[];
   documents: Document[];
   timestamp: string;
+  /** Optional status for emperor messages: 'failed' on send error, undefined = sent OK */
+  status?: 'failed';
 }
 
 export interface ChatOption {

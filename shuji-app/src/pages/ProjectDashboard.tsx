@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { formatError, classifyError } from "../utils/error";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getRecentDirs, getRoundMetrics } from "../api";
 import { useActiveDepts, DeptActiveProvider } from "../hooks/useActiveDepts";
@@ -53,7 +54,7 @@ export default function ProjectDashboard() {
   if (initialMsgs.length > 0 && session) session.msgs = initialMsgs;
 
   // Chat state
-  const { messages, discussMsgs, discussing, tab, planInfo, error: chatError, setError: setChatError, setTab, handleSend, handleDiscuss, resetDiscuss, chatEndRef } = useChat(session?.msgs || []);
+  const { messages, discussMsgs, discussing, tab, planInfo, error: chatError, setError: setChatError, setTab, handleSend, retrySend, handleDiscuss, cancelDiscuss, resetDiscuss, chatEndRef } = useChat(session?.msgs || []);
 
   // Save session on message changes
   useEffect(() => {
@@ -146,9 +147,9 @@ export default function ProjectDashboard() {
   const error = projError || chatError;
   const clearError = () => { setProjError(""); setChatError(""); };
 
-  // Auto-dismiss error after 8 seconds
+  // Auto-dismiss error after 8 seconds (critical errors: manual close only)
   useEffect(() => {
-    if (!error) return;
+    if (!error || classifyError(error) === 'critical') return;
     const timer = setTimeout(clearError, 8000);
     return () => clearTimeout(timer);
   }, [error]);
@@ -215,7 +216,7 @@ export default function ProjectDashboard() {
     try {
       const selected = await open({ directory: true, multiple: false, title: "选择工作目录" });
       if (selected) setPickerPath(selected);
-    } catch (e) { setPickerError(String(e)); }
+    } catch (e) { setPickerError(formatError(e)); }
   };
 
   const handleLoadProject = async (dir?: string) => {
@@ -230,7 +231,7 @@ export default function ProjectDashboard() {
       resetDiscuss();
       sessionStorage.removeItem(STORAGE_KEY);
       setShowPicker(false);
-    } catch (e) { setPickerError(String(e)); }
+    } catch (e) { setPickerError(formatError(e)); }
     finally { setPickerLoading(false); }
   };
 
@@ -263,7 +264,7 @@ export default function ProjectDashboard() {
       setTab("decision");
       handleSend("修复 calc.py 中的 power 和 factorial 函数中的 bug，确保所有测试通过");
     } catch (e) {
-      setChatError(String(e));
+      setChatError(formatError(e));
     }
   };
 
@@ -382,7 +383,7 @@ export default function ProjectDashboard() {
             />
             <div className="text-ui text-ink-600 mt-1">{tabSubtitles[tab]}</div>
           </div>
-          {!project ? <div className="flex-1 flex items-center justify-center text-body text-ink-400">请先开卷</div> : <ChatPanel tab={tab} messages={messages} discussMsgs={discussMsgs} discussing={discussing} planInfo={planInfo} activeDeptsCount={activeDepts.length} onOption={(key, supplement) => handleSend(supplement ? `${key}\n${supplement}` : key)} onSend={handleSend} onDiscuss={handleDiscuss} onConvertToCommand={handleConvertToCommand} endRef={chatEndRef} />}
+          {!project ? <div className="flex-1 flex items-center justify-center text-body text-ink-400">请先开卷</div> : <ChatPanel tab={tab} messages={messages} discussMsgs={discussMsgs} discussing={discussing} planInfo={planInfo} activeDeptsCount={activeDepts.length} onOption={(key, supplement) => handleSend(supplement ? `${key}\n${supplement}` : key)} onSend={handleSend} onRetrySend={retrySend} onDiscuss={handleDiscuss} onCancelDiscuss={cancelDiscuss} onConvertToCommand={handleConvertToCommand} endRef={chatEndRef} />}
         </section>
       </div>
 

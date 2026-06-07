@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { sendMessage, discussWithCabinet, getChatHistory } from "../api";
+import { formatError } from "../utils/error";
 import type { ChatMessage, PlanInfo } from "../types";
 
 function initialCabinetMessage(content: string): ChatMessage {
@@ -31,7 +32,7 @@ export function useChat(initialMessages: ChatMessage[]) {
   useEffect(() => {
     getChatHistory().then((hist) => {
       if (hist.length > 0) setMessages((prev) => mergeMessages(prev, hist));
-    }).catch((e) => setError(`读取聊天历史失败：${e}`));
+    }).catch((e) => setError(`读取聊天历史失败：${formatError(e)}`));
   }, []);
 
   // Listen for real-time chat messages
@@ -47,22 +48,51 @@ export function useChat(initialMessages: ChatMessage[]) {
   }, []);
 
   const handleSend = async (text: string) => {
+    const ts = new Date().toISOString();
     setError("");
-    setMessages((prev) => [...prev, { role: "皇帝", content: text, options: [], documents: [], timestamp: new Date().toISOString() }]);
-    try { await sendMessage(text); } catch (e) { setError(String(e)); }
+    const msg: ChatMessage = { role: "皇帝", content: text, options: [], documents: [], timestamp: ts };
+    setMessages((prev) => [...prev, msg]);
+    try { await sendMessage(text); } catch (e) {
+      setError(formatError(e));
+      // Mark the optimistic message as failed
+      setMessages((prev) => prev.map((m) => m.timestamp === ts && m.role === "皇帝" ? { ...m, status: "failed" } : m));
+    }
   };
 
+  const retrySend = async (text: string, originalTs: string) => {
+    // Remove the failed message, then re-send
+    setMessages((prev) => prev.filter((m) => m.timestamp !== originalTs || m.role !== "皇帝"));
+    await handleSend(text);
+  };
+
+  // ── Discuss cancellation support ──
+  const discussCancelRef = useRef(false);
+
   const handleDiscuss = async (text: string) => {
+    discussCancelRef.current = false;
     setDiscussing(true);
     setDiscussMsgs((prev) => [...prev, { role: "皇帝", content: text, options: [], documents: [], timestamp: new Date().toISOString() }]);
     try {
       const reply = await discussWithCabinet(text);
+      // If cancelled while in flight, ignore the result
+      if (discussCancelRef.current) {
+        setDiscussMsgs((prev) => [...prev, initialCabinetMessage("讨论已取消。")]);
+        return;
+      }
       setDiscussMsgs((prev) => [...prev, reply]);
-    } catch (e) { setDiscussMsgs((prev) => [...prev, initialCabinetMessage(`讨论出错：${e}`)]); }
-    finally { setDiscussing(false); }
+    } catch (e) { setDiscussMsgs((prev) => [...prev, initialCabinetMessage(`讨论出错：${formatError(e)}`)]); }
+    finally { setDiscussing(false); discussCancelRef.current = false; }
   };
+
+  const cancelDiscuss = useCallback(() => {
+    if (discussing) {
+      discussCancelRef.current = true;
+      setDiscussing(false);
+      setDiscussMsgs((prev) => [...prev, initialCabinetMessage("讨论已取消。")]);
+    }
+  }, [discussing]);
 
   const resetDiscuss = () => setDiscussMsgs([initialCabinetMessage("想讨论什么？我随时可以聊。")]);
 
-  return { messages, discussMsgs, discussing, tab, planInfo, error, setError, setTab, setMessages, handleSend, handleDiscuss, resetDiscuss, chatEndRef };
+  return { messages, discussMsgs, discussing, tab, planInfo, error, setError, setTab, setMessages, handleSend, retrySend, handleDiscuss, cancelDiscuss, resetDiscuss, chatEndRef };
 }

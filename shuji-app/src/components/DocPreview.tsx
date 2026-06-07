@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { readShujiDoc, setDocumentStatus as apiSetStatus, sendMessage, getDocumentDiff, getDocumentLineage } from "../api";
+import { formatError } from "../utils/error";
 import type { DocumentDiff } from "../api";
 import type { LineageNode } from "../types";
 import { Card } from "./ui/Card";
@@ -44,7 +45,7 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
     setViewMode(initialTab || "content");
     readShujiDoc(projectDir, docPath)
       .then((doc) => setContent(doc.content))
-      .catch((e) => setError(String(e)))
+      .catch((e) => setError(formatError(e)))
       .finally(() => setLoading(false));
 
     // Fetch diff in parallel
@@ -79,12 +80,22 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
       const msg = status === "approved"
         ? `朕已御批。${comment ? " " + comment : ""}`
         : `驳回。${comment ? " " + comment : ""}`;
+      // 1. Write judgment to document (must succeed)
       await apiSetStatus(docId, status, comment || undefined);
-      await sendMessage(msg);
+      // 2. Notify 内阁 (best-effort — judgment is already saved)
+      try {
+        await sendMessage(msg);
+      } catch (e) {
+        setApprovalError(`已朱批但未通知内阁：${formatError(e)}。您可以手动发送消息继续`);
+        // Still refresh the doc to show updated status
+        const doc = await readShujiDoc(projectDir, docPath);
+        setContent(doc.content);
+        return;
+      }
       const doc = await readShujiDoc(projectDir, docPath);
       setContent(doc.content);
     } catch (e) {
-      setApprovalError(String(e));
+      setApprovalError(formatError(e));
     } finally {
       setApproving(false);
     }

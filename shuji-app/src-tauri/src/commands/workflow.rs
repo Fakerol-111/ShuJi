@@ -844,9 +844,18 @@ async fn compact_impl(
 
     if performed {
         log_console!("[compact:manual] compaction completed for {}", role);
-        Ok("压缩完成".to_string())
+        Ok(format!(
+            "压缩完成（角色: {}，原始 {} tokens → 摘要 + {} 条最近消息）",
+            role,
+            total_tokens,
+            thresholds.keep_recent_count,
+        ))
     } else {
-        Ok("无需压缩".to_string())
+        // With force_thresholds=0, "not performed" means summarization failed.
+        Err(friendly_error(format!(
+            "角色 {} 压缩失败——API 调用未返回有效摘要。请检查 API 配置后重试",
+            role
+        )))
     }
 }
 

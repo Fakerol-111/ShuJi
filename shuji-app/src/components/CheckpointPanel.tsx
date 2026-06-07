@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { listCheckpoints, restoreCheckpoint } from "../api";
 import { DEPT_META_BY_KEY } from "../constants";
+import { formatError } from "../utils/error";
 import type { CheckpointEntry } from "../types";
 
 interface RestoreConfirm {
@@ -41,7 +42,7 @@ export default function CheckpointPanel() {
       setEntries(data);
       setError(null);
     } catch (e) {
-      setError(String(e));
+      setError(formatError(e));
     } finally {
       setLoading(false);
     }
@@ -58,7 +59,7 @@ export default function CheckpointPanel() {
       setRestoreMsg(msg);
       setConfirm(null);
     } catch (e) {
-      setError(String(e));
+      setError(formatError(e));
     } finally {
       setRestoring(false);
     }

@@ -13,13 +13,15 @@ interface ChatPanelProps {
   activeDeptsCount: number;
   onOption: (key: string, supplement?: string) => void;
   onSend: (text: string) => void;
+  onRetrySend: (text: string, ts: string) => void;
   onDiscuss: (text: string) => void;
+  onCancelDiscuss?: () => void;
   onConvertToCommand: (text: string) => void;
   endRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export default function ChatPanel(props: ChatPanelProps) {
-  const { tab, messages, discussMsgs, discussing, planInfo, activeDeptsCount, onOption, onSend, onDiscuss, onConvertToCommand, endRef } = props;
+  const { tab, messages, discussMsgs, discussing, planInfo, activeDeptsCount, onOption, onSend, onRetrySend, onDiscuss, onCancelDiscuss, onConvertToCommand, endRef } = props;
   const [toast, setToast] = useState("");
   const isProcessing = activeDeptsCount > 0;
 
@@ -46,7 +48,7 @@ export default function ChatPanel(props: ChatPanelProps) {
           </div>
         )}
         {planInfo && <PlanCard info={planInfo} />}
-        <MessageList messages={messages} onOption={onOption} endRef={endRef} thinking={isProcessing} thinkingLabel="诸司处理中…" />
+        <MessageList messages={messages} onOption={onOption} onRetry={onRetrySend} endRef={endRef} thinking={isProcessing} thinkingLabel="诸司处理中…" />
         <div className="shrink-0 px-4 py-2 border-t border-fold bg-surface-elevated flex justify-end">
           <button
             onClick={handleCancel}
@@ -61,6 +63,16 @@ export default function ChatPanel(props: ChatPanelProps) {
   }
   return (
     <>
+      {discussing && onCancelDiscuss && (
+        <div className="shrink-0 px-4 py-2 border-t border-fold bg-surface-elevated flex justify-end">
+          <button
+            onClick={onCancelDiscuss}
+            className="text-ui px-3 py-1.5 font-medium text-vermillion hover:bg-vermillion-light rounded-lg transition-colors"
+          >
+            叫停讨论
+          </button>
+        </div>
+      )}
       <MessageList messages={discussMsgs} onOption={() => {}} endRef={endRef} thinking={discussing} />
       {discussMsgs.length > 0 && !discussing && (
         <div className="shrink-0 px-4 py-2 border-t border-fold bg-surface-elevated">
@@ -80,10 +92,10 @@ export default function ChatPanel(props: ChatPanelProps) {
   );
 }
 
-function MessageList({ messages, onOption, endRef, thinking, thinkingLabel }: { messages: ChatMessage[]; onOption: (key: string, supplement?: string) => void; endRef: React.RefObject<HTMLDivElement | null>; thinking?: boolean; thinkingLabel?: string }) {
+function MessageList({ messages, onOption, onRetry, endRef, thinking, thinkingLabel }: { messages: ChatMessage[]; onOption: (key: string, supplement?: string) => void; onRetry?: (text: string, ts: string) => void; endRef: React.RefObject<HTMLDivElement | null>; thinking?: boolean; thinkingLabel?: string }) {
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
-      {messages.map((msg, i) => <ChatBubble key={messageKey(msg, i)} msg={msg} onOption={onOption} />)}
+      {messages.map((msg, i) => <ChatBubble key={messageKey(msg, i)} msg={msg} onOption={onOption} onRetry={onRetry} />)}
       {thinking && <div className="flex items-center justify-center gap-3 py-2"><span className="text-xs text-ink-500">{thinkingLabel || "内阁思考中…"}</span></div>}
       <div ref={endRef} />
     </div>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getContextStats, compactContext } from "../api";
 import type { ContextStats } from "../api";
 import { getDeptMeta, DEPT_ORDER } from "../constants";
+import { formatError } from "../utils/error";
 
 export default function ContextPanel() {
   const [stats, setStats] = useState<Record<string, ContextStats> | null>(null);
@@ -11,7 +12,7 @@ export default function ContextPanel() {
 
   const load = () => {
     setError("");
-    getContextStats().then(setStats).catch((e) => setError(String(e)));
+    getContextStats().then(setStats).catch((e) => setError(formatError(e)));
   };
 
   useEffect(load, []);
@@ -70,7 +71,7 @@ export default function ContextPanel() {
                           const newStats = await getContextStats();
                           setStats(newStats);
                         } catch (e) {
-                          setError(String(e));
+                          setError(formatError(e));
                         } finally {
                           setCompactingRole(null);
                         }

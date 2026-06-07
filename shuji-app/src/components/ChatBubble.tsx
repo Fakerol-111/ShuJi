@@ -5,8 +5,9 @@ import rehypeHighlight from "rehype-highlight";
 import type { ChatMessage, ChatOption } from "../types";
 import { getDeptMeta } from "../constants";
 
-export default function ChatBubble({ msg, onOption }: { msg: ChatMessage; onOption: (key: string, supplement?: string) => void }) {
+export default function ChatBubble({ msg, onOption, onRetry }: { msg: ChatMessage; onOption: (key: string, supplement?: string) => void; onRetry?: (text: string, ts: string) => void }) {
   const isEmperor = msg.role === "皇帝";
+  const isFailed = msg.status === "failed";
   const deptColor = getDeptMeta(msg.role)?.color;
 
   return (
@@ -19,8 +20,21 @@ export default function ChatBubble({ msg, onOption }: { msg: ChatMessage; onOpti
 
         {/* Emperor bubble */}
         {isEmperor ? (
-          <div className="bg-ink-900 text-ink-50 rounded-xl rounded-tr-sm px-4 py-2.5 text-body leading-relaxed">
+          <div className={`rounded-xl rounded-tr-sm px-4 py-2.5 text-body leading-relaxed ${
+            isFailed ? "bg-vermillion/10 border border-vermillion/30 text-ink-800" : "bg-ink-900 text-ink-50"
+          }`}>
             <p className="whitespace-pre-wrap break-words overflow-hidden">{msg.content}</p>
+            {isFailed && onRetry && (
+              <div className="flex items-center gap-2 mt-2 pt-2 border-t border-vermillion/20">
+                <span className="text-caption text-vermillion">发送失败</span>
+                <button
+                  onClick={() => onRetry(msg.content, msg.timestamp)}
+                  className="text-caption font-semibold px-2 py-0.5 rounded bg-vermillion text-white hover:bg-vermillion-dark"
+                >
+                  重试
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           /* Department bubble: 3px left color bar */
