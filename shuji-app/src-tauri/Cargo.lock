@@ -3322,6 +3322,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "diffy",
+ "futures",
  "rand",
  "reqwest 0.12.28",
  "serde",

@@ -391,26 +391,73 @@ pub async fn tool_append_document(
     dept: &str,
 ) -> String {
     let id = args["id"].as_str().unwrap_or("");
-    let append_content = args["content"].as_str().unwrap_or("");
     if id.is_empty() {
         return ToolOutput::error("append_document", "", "empty_id", "文档 ID 不能为空");
     }
-    if append_content.is_empty() {
-        return ToolOutput::error("append_document", id, "empty_content", "追加内容不能为空");
-    }
 
-    // Runtime length check (P1-3): content ≤ 2000 chars per call
-    if append_content.len() > 2000 {
-        return ToolOutput::error(
-            "append_document",
-            id,
-            "content_too_long",
-            &format!(
-                "追加内容过长（{} 字符），最大 2000 字符。请分批追加，每次 ≤2000 字符。",
-                append_content.len()
-            ),
-        );
-    }
+    // P2-4: Support both single `content` and batch `contents` array
+    let append_parts: Vec<String> = if let Some(parts) = args["contents"].as_array() {
+        if parts.is_empty() {
+            return ToolOutput::error(
+                "append_document",
+                id,
+                "empty_contents",
+                "contents 数组不能为空",
+            );
+        }
+        if parts.len() > 5 {
+            return ToolOutput::error(
+                "append_document",
+                id,
+                "too_many_contents",
+                "contents 最多 5 项，请分批调用",
+            );
+        }
+        // Validate each part
+        for (i, part) in parts.iter().enumerate() {
+            let text = part.as_str().unwrap_or("");
+            if text.is_empty() {
+                return ToolOutput::error(
+                    "append_document",
+                    id,
+                    "empty_content_item",
+                    &format!("contents[{}] 不能为空", i),
+                );
+            }
+            if text.len() > 2000 {
+                return ToolOutput::error(
+                    "append_document",
+                    id,
+                    "content_too_long",
+                    &format!(
+                        "contents[{}] 过长（{} 字符），最大 2000 字符。",
+                        i,
+                        text.len()
+                    ),
+                );
+            }
+        }
+        parts.iter().filter_map(|p| p.as_str().map(|s| s.to_string())).collect()
+    } else {
+        // Single content mode
+        let single = args["content"].as_str().unwrap_or("").to_string();
+        if single.is_empty() {
+            return ToolOutput::error("append_document", id, "empty_content",
+                "请传入 content（单段）或 contents（批量）参数");
+        }
+        if single.len() > 2000 {
+            return ToolOutput::error(
+                "append_document",
+                id,
+                "content_too_long",
+                &format!(
+                    "追加内容过长（{} 字符），最大 2000 字符。请分批追加或使用 contents 数组。",
+                    single.len()
+                ),
+            );
+        }
+        vec![single]
+    };
 
     let type_prefix = id.split('_').next().unwrap_or("");
     let full = if type_prefix == "rprt" {
@@ -456,10 +503,16 @@ pub async fn tool_append_document(
         Err(e) => return ToolOutput::error("append_document", id, "parse_error", &e),
     };
 
+    // P2-4: Join all parts into one body (batch mode)
     let new_body = if body.is_empty() {
-        append_content.to_string()
+        append_parts.join("\n")
     } else {
-        format!("{}\n{}", body, append_content)
+        let mut b = body.to_string();
+        for part in &append_parts {
+            b.push_str("\n");
+            b.push_str(part);
+        }
+        b
     };
 
     meta.timestamp = now_iso();
@@ -467,7 +520,8 @@ pub async fn tool_append_document(
 
     match tokio::fs::write(&full, &new_content).await {
         Ok(_) => {
-            let detail = format!("append_len={}", append_content.len());
+            let total: usize = append_parts.iter().map(|s| s.len()).sum();
+            let detail = format!("append_parts={}, total_chars={}", append_parts.len(), total);
             crate::audit::append(working_dir, "append_document", dept, id, &detail).await;
             crate::audit::save_diff(working_dir, id, "append_document", body, &new_body).await;
             ToolOutput::success("append_document", id, "追加成功")
@@ -538,7 +592,7 @@ pub fn append_document_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "append_document".into(),
-            description: "追加内容到已有文档的正文末尾。每次调用的 content 参数不超过 2000 字符，充分利用单次调用容量。".into(),
+            description: "追加内容到已有文档的正文末尾。单个 content ≤2000 字符。批量追加请用 contents 数组（每项 ≤2000，最多 5 项），一次调用完成多段追加。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -548,11 +602,23 @@ pub fn append_document_tool_def() -> crate::api::client::ToolDefinition {
                     },
                     "content": {
                         "type": "string",
-                        "description": "要追加的内容（每次最多 2000 字符）",
+                        "description": "单段追加内容（≤2000 字符，与 contents 二选一）",
                         "maxLength": 2000
+                    },
+                    "contents": {
+                        "type": "array",
+                        "description": "批量追加内容数组（每项 ≤2000 字符，最多 5 项。与 content 二选一）",
+                        "items": {
+                            "type": "string",
+                            "maxLength": 2000
+                        },
+                        "maxItems": 5
                     }
                 },
-                "required": ["id", "content"]
+                "anyOf": [
+                    {"required": ["id", "content"]},
+                    {"required": ["id", "contents"]}
+                ]
             }),
         },
     }

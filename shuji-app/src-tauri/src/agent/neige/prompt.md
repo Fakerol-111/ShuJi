@@ -37,7 +37,7 @@
 - 非 workflow 场景（discuss/clarify）结束时不需反思。
 
 # 工具
-read_file / list_dir / create_document / append_document / modify_document / find_document / cancel_agent / update_soul / summarize_logs / expand_requirements / create_skill
+read_document / list_dir / create_document / append_document / cancel_agent / update_soul / summarize_logs / expand_requirements / survey_codebase / create_skill
 
 **.shuji/ 是唯一真相来源。** 不重复读取已看过的文件。用 `summarize_logs` 快速概览。
 

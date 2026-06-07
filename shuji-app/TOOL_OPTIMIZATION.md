@@ -512,11 +512,11 @@ let is_read = matches!(tc.name.as_str(),
 | P1-4 刑部 run_tests | ✅ | file_write_tools_for_code + run_tests_tool，移除 execute_command |
 | P1-5 内阁瘦身 | ✅ | minimal_inspect_tools + create/append → ~10 工具；discuss 模式 3 个 |
 | P1-6 礼部瘦身 | ✅ | 定制工具集：read_file + read_document + create/append + audit 三件套 + route |
-| P2-1 并行只读 | ⬜ | 复杂改动，需 control.rs 改造 — 暂缓 |
-| P2-2 读缓存 | ⬜ | 需 ToolContext 改造 — 暂缓 |
-| P2-3 ripgrep search | ⬜ | 需依赖安装逻辑 — 暂缓 |
-| P2-4 文档批量写入 | ⬜ | append_document 多段支持 — 暂缓 |
-| P3-1 prompt 同步 | ⬜ | 需逐一 patch 所有 prompt.md 工具表 — 半自动进行 |
+| P2-1 并行只读 | ✅ | join_all 并发执行 reads，writes 串行 |
+| P2-2 读缓存 | ✅ | static LazyLock<HashMap>，mtime 校验，写操作自动 invalidation |
+| P2-3 ripgrep search | ✅ | try_rg_search() 优先，无 rg 时 fallback 现有实现 |
+| P2-4 文档批量写入 | ✅ | append_document contents 数组（≤5 项，每项 ≤2000） |
+| P3-1 prompt 同步 | ✅ | 4 个 prompt 中的 find_document → read_document，工具列表对齐 |
 | P3-2 Watchdog 扩展 | ✅ | key_arg 含 id，is_read 含 read_document/search_text/list_dir_tree |
 | P3-3 工具描述决策树 | ✅ | run_tests/execute_command/modify_file 描述内嵌"首选/勿用"引导 |
 
@@ -542,17 +542,18 @@ let is_read = matches!(tc.name.as_str(),
 10. ✅ P1-5 内阁瘦身
 11. ✅ P1-6 礼部瘦身
 
-### 里程碑 4：基础设施（部分完成）
+### ✅ 里程碑 4：基础设施（已完成）
 
 12. ✅ P0-5 list_dir_tree
-13. ⬜ P2-1 并行只读
-14. ⬜ P2-2 读缓存
-15. ⬜ P2-3 ripgrep search
+13. ✅ P2-1 并行只读
+14. ✅ P2-2 读缓存
+15. ✅ P2-3 ripgrep search
 
-### 里程碑 5：批量写入（部分完成）
+### ✅ 里程碑 5：批量写入与收尾（已完成）
 
-16. ⬜ P2-4 文档批量写入
+16. ✅ P2-4 文档批量写入
 17. ✅ P3-2/P3-3 watchdog + 描述优化
+18. ✅ P3-1 prompt 同步
 
 ---
 

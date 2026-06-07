@@ -56,7 +56,7 @@
 | `create_document` | 创建任务（type="task"）或报告（type="rprt"） |
 | `modify_document` | 修改文档（查找替换） |
 | `append_document` | 追加内容 |
-| `find_document` | 通过 ID 查找文档路径 |
+| `read_document` | 按 ID 读取文档（附元信息+正文），默认截断 4000 字符。直接读，无需先 find |
 
 # 硬规则
 

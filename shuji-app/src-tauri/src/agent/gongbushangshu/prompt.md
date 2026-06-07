@@ -138,7 +138,7 @@
 | `create_document` | 创建报告文档（type="rprt"） |
 | `modify_document` | 更新已有报告 |
 | `append_document` | 追加内容到报告 |
-| `find_document` | 通过 ID 查找文档路径 |
+| `read_document` | 按 ID 读取报告（附元信息+正文），默认截断 4000 字符 |
 | `submit_plan` | 将复杂任务拆分为批次。规划时调用一次。 |
 | `complete_task` | 标记当前批次完成。系统进入下一批次。 |
 | `run_tests` | 开发过程中运行单元测试（TDD 周期）。scope=unit 运行单元测试。 |

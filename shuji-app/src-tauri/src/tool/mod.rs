@@ -1,3 +1,8 @@
+use std::collections::HashMap;
+use std::sync::LazyLock;
+use std::sync::Mutex;
+use std::time::SystemTime;
+
 use crate::actor::FastMessage;
 use crate::api::client::AnthropicClient;
 use crate::models::role::Role;
@@ -7,6 +12,44 @@ use std::process::Stdio;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tokio::io::AsyncReadExt;
+
+// ── P2-2: In-memory read cache ─────────────────────────────
+/// Session-level read cache: maps resolved path → (mtime, cached result string).
+/// After any write/delete/rename/patch, the affected path(s) are invalidated.
+static READ_CACHE: LazyLock<Mutex<HashMap<PathBuf, (SystemTime, String)>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Look up a cached read result. Returns `Some(result)` if the file's mtime
+/// hasn't changed since the cache entry was created.
+fn cache_lookup(path: &Path) -> Option<String> {
+    let cache = READ_CACHE.lock().ok()?;
+    if let Some((cached_mtime, cached_result)) = cache.get(path) {
+        if let Ok(current_mtime) = std::fs::metadata(path).and_then(|m| m.modified()) {
+            if current_mtime == *cached_mtime {
+                return Some(format!(
+                    "{}[缓存命中: 内容未变 (cached: true)]",
+                    cached_result
+                ));
+            }
+        }
+    }
+    None
+}
+
+/// Insert a read result into the cache.
+fn cache_insert(path: PathBuf, mtime: SystemTime, result: String) {
+    if let Ok(mut cache) = READ_CACHE.lock() {
+        cache.insert(path, (mtime, result));
+    }
+}
+
+/// Invalidate cache entries whose key starts with or equals `path`.
+/// Call after any write/delete/rename/patch operation.
+fn cache_invalidate(path: &Path) {
+    if let Ok(mut cache) = READ_CACHE.lock() {
+        cache.retain(|k, _| !k.starts_with(path));
+    }
+}
 
 pub mod documents;
 pub mod registry;
@@ -697,8 +740,25 @@ pub async fn tool_read_file(working_dir: &Path, args: &serde_json::Value) -> Str
         Ok(p) => p,
         Err(e) => return ToolOutput::error("read_file", path, "path_error", &e),
     };
+
+    // P2-2: Read cache — return cached result for full-file reads
+    let is_full_read = offset == 0 && limit == u64::MAX;
+    if is_full_read {
+        if let Some(cached) = cache_lookup(&full) {
+            return cached;
+        }
+    }
+
     let content = match tokio::fs::read_to_string(&full).await {
-        Ok(c) => c,
+        Ok(c) => {
+            // Cache raw content with mtime for future reads
+            if let Ok(meta) = tokio::fs::metadata(&full).await {
+                if let Ok(mtime) = meta.modified() {
+                    cache_insert(full.clone(), mtime, c.clone());
+                }
+            }
+            c
+        }
         Err(e) => return ToolOutput::error("read_file", path, "read_error", &e.to_string()),
     };
 
@@ -1026,7 +1086,75 @@ pub fn create_file_tool_def(description: &str) -> crate::api::client::ToolDefini
 
 // ── search_text helper ──────────────────────────────────────────────
 
-/// Recursively search for a text pattern in project files.
+/// Try ripgrep (`rg --json`) for fast text search. Falls back to the
+/// Rust implementation if `rg` is not installed or returns an error.
+async fn try_rg_search(
+    working_dir: &Path,
+    pattern: &str,
+    max_results: usize,
+    glob: Option<&str>,
+    case_sensitive: bool,
+) -> Result<String, ()> {
+    use std::process::Stdio;
+
+    let mut cmd = tokio::process::Command::new("rg");
+    cmd.arg("--json")
+        .arg("-e")
+        .arg(pattern)
+        .arg("--max-count")
+        .arg(max_results.to_string())
+        .current_dir(working_dir);
+
+    if !case_sensitive {
+        cmd.arg("-i");
+    }
+    if let Some(g) = glob {
+        cmd.arg("-g").arg(g);
+    }
+
+    // Skip noise directories automatically (rg respects .gitignore by default)
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::null());
+
+    let output = cmd.output().await.map_err(|_| ())?;
+    if !output.status.success() {
+        return Err(());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut results: Vec<String> = Vec::new();
+    let mut file_count = 0usize;
+
+    for line in stdout.lines() {
+        if results.len() >= max_results {
+            break;
+        }
+        if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) {
+            if entry["type"].as_str() == Some("match") {
+                let path = entry["data"]["path"]["text"].as_str().unwrap_or("?");
+                let line_no = entry["data"]["line_number"].as_u64().unwrap_or(0);
+                let content = entry["data"]["lines"]["text"].as_str().unwrap_or("");
+                results.push(format!("{}:{}:{}", path, line_no, content.trim()));
+                file_count += 1;
+            }
+        }
+    }
+
+    if results.is_empty() {
+        return Err(());
+    }
+
+    let summary = format!(
+        "[ripgrep] 在 {} 文件中搜索「{}」，匹配 {} 处：\n{}",
+        file_count,
+        pattern,
+        results.len(),
+        results.join("\n")
+    );
+    Ok(ToolOutput::success_raw("search_text", &summary))
+}
+
+/// Search for a text pattern in project files. (P2-3: tries `rg` first, then fallback.)
 /// Returns path:line_number: content_line for each match.
 pub async fn tool_search_text(working_dir: &Path, args: &serde_json::Value) -> String {
     let pattern = args["pattern"].as_str().unwrap_or("");
@@ -1036,6 +1164,12 @@ pub async fn tool_search_text(working_dir: &Path, args: &serde_json::Value) -> S
     let max_results = args["max_results"].as_u64().unwrap_or(50) as usize;
     let glob = args["glob"].as_str().filter(|s| !s.is_empty());
     let case_sensitive = args["case_sensitive"].as_bool().unwrap_or(true);
+
+    // P2-3: Try ripgrep first for speed, fall back to Rust implementation.
+    if let Ok(result) = try_rg_search(working_dir, pattern, max_results, glob, case_sensitive).await
+    {
+        return result;
+    }
 
     let mut results: Vec<String> = Vec::new();
     let mut file_count: usize = 0;
@@ -1664,6 +1798,27 @@ pub async fn execute_named_tool(
         "request_reauth" => tool_request_reauth(args, working_dir).await,
         _ => ToolOutput::error("unknown_tool", name, "unknown_tool", "未知工具"),
     };
+    // P2-2: Invalidate read cache after write operations
+    match name {
+        "create_file" | "modify_file" | "append_file" | "delete_file" | "rename_file"
+        | "apply_patch" => {
+            if let Some(path) = args.get("path").and_then(|v| v.as_str()) {
+                if let Ok(full) = resolve_scoped_path(working_dir, path).await {
+                    cache_invalidate(&full);
+                    // Also invalidate parent directory (list_dir results change)
+                    if let Some(parent) = full.parent() {
+                        cache_invalidate(parent);
+                    }
+                }
+            }
+        }
+        "create_document" | "modify_document" | "append_document" | "set_document_status" => {
+            // Invalidate .shuji/ dir since document listings and reads may change
+            let shuji_dir = working_dir.join(".shuji");
+            cache_invalidate(&shuji_dir);
+        }
+        _ => {}
+    }
     truncate_tool_result_by_name(name, &raw_result)
 }
 

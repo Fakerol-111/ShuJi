@@ -51,7 +51,7 @@
 | `create_document` | 创建设计文档（type=dsgn/plan/pdsg）或分析文档（type=anls）。系统分配 ID。 |
 | `modify_document` | 修改现有文档（查找替换）。每参数 ≤300 字。 |
 | `append_document` | 向文档追加内容。大文档分多次追加。 |
-| `find_document` | 通过 ID 查找文档路径 |
+| `read_document` | 按 ID 读取文档（附元信息+正文），可选按章节提取，默认截断 4000 字符 |
 
 # 硬规则
 

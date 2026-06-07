@@ -1,7 +1,10 @@
+use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
+
+use futures::future::join_all;
 
 use crate::api::client::ToolDefinition;
 use crate::api::session::{Session, SessionSnapshot};
@@ -102,6 +105,20 @@ fn route_msg_type_from_str(s: &str) -> Option<RouteMsgType> {
 
 pub fn role_from_name(s: &str) -> Option<Role> {
     Role::from_name(s)
+}
+
+/// Check if a tool name is a read-only operation (safe to parallelize).
+fn is_read_tool(name: &str) -> bool {
+    matches!(
+        name,
+        "read_file"
+            | "read_document"
+            | "list_dir"
+            | "list_dir_tree"
+            | "find_document"
+            | "search_text"
+            | "summarize_logs"
+    )
 }
 
 /// Iteration budget based on tool set.
@@ -294,6 +311,29 @@ impl AgentController {
                     if !text.is_empty() {
                         last_text.push_str(&text);
                     }
+
+                    // ── P2-1: Parallel read-only execution ─────────────
+                    // Execute all read tools concurrently, store results by index.
+                    // Writes still execute serially below to avoid file contention.
+                    let mut read_results: HashMap<usize, String> = HashMap::new();
+                    {
+                        let read_futures: Vec<_> = calls
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, tc)| is_read_tool(&tc.name))
+                            .map(|(idx, tc)| {
+                                let name = tc.name.clone();
+                                let args = tc.args.clone();
+                                // tool_exec is Sync, so it's safe to call from multiple futures
+                                let fut = tool_exec(&name, &args);
+                                async move { (idx, fut.await) }
+                            })
+                            .collect();
+                        for (idx, result) in join_all(read_futures).await {
+                            read_results.insert(idx, result);
+                        }
+                    }
+
                     for (idx, tc) in calls.iter().enumerate() {
                         // ── Fast cancel check before each tool ──
                         if fast_cancel.is_some_and(|f| f.load(Ordering::SeqCst)) {
@@ -338,7 +378,13 @@ impl AgentController {
                         }
 
                         // ── Execute tool (unified, no special-case intercept) ──
-                        let result = tool_exec(&tc.name, &tc.args).await;
+                        // Use pre-computed result for reads (P2-1 parallel exec),
+                        // execute writes serially to avoid file contention.
+                        let result = if let Some(pre) = read_results.remove(&idx) {
+                            pre
+                        } else {
+                            tool_exec(&tc.name, &tc.args).await
+                        };
 
                         // ── Watchdog intervention hints ──
                         // Append corrective reminders to the tool result when
