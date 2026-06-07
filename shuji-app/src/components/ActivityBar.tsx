@@ -102,6 +102,7 @@ export default function ActivityBar({ selected, onSelect, onLogsClick, pendingAp
           <button
             key={item.id}
             onClick={() => onSelect(active ? null : item.id)}
+            aria-label={item.label}
             className={`group relative w-full h-11 flex items-center justify-center transition-colors ${
               active ? "bg-ink-800" : "text-ink-500 hover:text-ink-200 hover:bg-ink-800/60"
             }`}
@@ -119,6 +120,7 @@ export default function ActivityBar({ selected, onSelect, onLogsClick, pendingAp
       })}
       <button
         onClick={onLogsClick}
+        aria-label="展开日志"
         className="group relative mt-1 w-full h-11 flex items-center justify-center text-ink-500 hover:text-ink-200 hover:bg-ink-800/60 transition-colors"
       >
         <ListIcon />

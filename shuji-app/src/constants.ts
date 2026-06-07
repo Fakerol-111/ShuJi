@@ -9,8 +9,7 @@ export const TOKEN_REFRESH_INTERVAL_MS = 30000;
 
 // ── Token 预警 ────────────────────────────────────────────
 
-export const MONTHLY_TOKEN_WARNING = 0.8; // 80% 时黄色预警
-export const MONTHLY_TOKEN_LIMIT = 10_000_000; // 1000 万 tokens
+// (已清理: MONTHLY_TOKEN_WARNING / LIMIT 无 UI 引用，TokenPanel 直接使用 API 数据)
 
 // ── 代码主题 ────────────────────────────────────────────
 
