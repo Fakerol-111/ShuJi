@@ -38,6 +38,10 @@ impl NeigeAgent {
 
     fn tools() -> Vec<ToolDefinition> {
         let mut tools = crate::tool::registry::minimal_inspect_tools();
+        // read_file for reading source code & .shuji/ files (read_document only finds docs by ID)
+        tools.push(crate::tool::read_file_tool_def(
+            "读取源代码文件和 .shuji/ 中的普通文件",
+        ));
         // Documents: create + append only (no modify_document, no set_document_status)
         tools.push(crate::tool::documents::create_document_tool_def());
         tools.push(crate::tool::documents::append_document_tool_def());
@@ -49,6 +53,7 @@ impl NeigeAgent {
         tools.push(crate::tool::registry::expand_requirements_tool());
         tools.push(crate::tool::registry::survey_codebase_tool());
         tools.push(crate::tool::registry::route_tool());
+        tools.push(crate::tool::request_decision_tool_def());
         tools
     }
 
@@ -553,26 +558,40 @@ impl Agent for NeigeAgent {
                 break;
             }
 
-            // ── Hard enforcement: must-approve doc pending but no <options> ──
-            if !result.contains("<options>") {
-                let pending_id =
-                    crate::tool::documents::get_first_pending_approval(&working_dir).await;
-                if let Some(ref id) = pending_id {
+            // ── Hard enforcement: must-approve doc pending but no request_decision ──
+            let pending_id = crate::tool::documents::get_first_pending_approval(&working_dir).await;
+            if let Some(ref id) = pending_id {
+                // Check if last message contains a request_decision tool call
+                let snap = session.snapshot();
+                let already_asked = snap.messages.iter().rev().take(3).any(|m| {
+                    m.get("tool_calls")
+                        .and_then(|tc| tc.as_array())
+                        .map(|calls| {
+                            calls.iter().any(|c| {
+                                c.get("function")
+                                    .and_then(|f| f.get("name"))
+                                    .and_then(|n| n.as_str())
+                                    == Some("request_decision")
+                            })
+                        })
+                        .unwrap_or(false)
+                });
+                if !already_asked {
                     must_approve_retries += 1;
                     if must_approve_retries >= 3 {
-                        log_console!("[内阁] must-approve doc {} 重试{must_approve_retries}次仍无<options>，自动批复", id);
+                        log_console!("[内阁] must-approve doc {} 重试{must_approve_retries}次仍无request_decision，自动批复", id);
                         let _ =
                             crate::tool::documents::remove_pending_approval(&working_dir, id).await;
                         let msg = format!(
-                            "[系统] 文档 {} 已自动御批（内阁{}次重试仍未输出选项）。继续执行。",
+                            "[系统] 文档 {} 已自动御批（内阁{}次重试仍未请求皇帝决策）。继续执行。",
                             id, must_approve_retries
                         );
                         session.inject(&msg);
                         continue;
                     }
-                    log_console!("[内阁] must-approve doc {} pending (retry {must_approve_retries}/3), no <options> — re-prompting", id);
+                    log_console!("[内阁] must-approve doc {} pending (retry {must_approve_retries}/3) — re-prompting", id);
                     let msg = format!(
-                        "[系统] 文档 {} 已创建但未经皇帝御批。请立即在回复中包含 <options> 标签，提供选项供皇帝决策。注意：route_to 和 <options> 不能在同一回合使用。请先输出 <options>，等待皇帝批复后再路由。",
+                        "[系统] 文档 {} 已创建但未经皇帝御批。请立即调用 request_decision 工具，传入选项供皇帝决策。注意：route_to 和 request_decision 不能在同一回合使用。",
                         id
                     );
                     session.inject(&msg);
@@ -620,24 +639,37 @@ impl Agent for NeigeAgent {
         };
         session.inject(level_prompt);
 
-        // ── Pause detection: save raw session when waiting for emperor ──
-        let has_options = result.contains("<options>");
+        // ── Pause detection: check for request_decision tool call ──
+        let snap = session.snapshot();
+        let has_decision_call = snap.messages.iter().rev().take(3).any(|m| {
+            m.get("tool_calls")
+                .and_then(|tc| tc.as_array())
+                .map(|calls| {
+                    calls.iter().any(|c| {
+                        c.get("function")
+                            .and_then(|f| f.get("name"))
+                            .and_then(|n| n.as_str())
+                            == Some("request_decision")
+                    })
+                })
+                .unwrap_or(false)
+        });
 
-        if has_options && route.is_none() {
+        if has_decision_call && route.is_none() {
             // Save raw session (bypasses PersistedContext compression)
-            let snap = session.snapshot();
             Self::save_paused_session(&snap.messages, &working_dir).await;
-            log_console!("[内阁] <options> detected — session paused, awaiting emperor decision");
+            log_console!(
+                "[内阁] request_decision detected — session paused, awaiting emperor decision"
+            );
         } else {
             // Normal: save to PersistedContext
-            let snap = session.snapshot();
             let ctx = crate::api::session::PersistedContext::from_messages(&snap.messages);
             ctx.save_to(&working_dir, &role_name).await;
         }
 
         let clean = strip_skill_tag(result);
         let mut output = AgentOutput::new(clean);
-        output.paused = has_options && route.is_none();
+        output.paused = has_decision_call && route.is_none();
         output.route = route;
         if !current_skill.is_empty() {
             output.skill = Some(current_skill);

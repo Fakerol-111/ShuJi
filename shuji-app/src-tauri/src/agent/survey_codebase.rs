@@ -26,11 +26,10 @@ pub async fn run(
         // Documents for analysis reports
         t.push(crate::tool::documents::create_document_tool_def());
         t.push(crate::tool::documents::append_document_tool_def());
-        // File write for project_profile.md
+        // File write for project_profile.md (only tool allowed to write)
         t.push(crate::tool::create_file_tool_def(
             "创建/更新 project_profile.md",
         ));
-        t.push(crate::tool::apply_patch_tool_def());
         t
     };
 

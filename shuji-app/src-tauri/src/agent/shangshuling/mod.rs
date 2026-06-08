@@ -24,6 +24,10 @@ impl ShangshulingAgent {
 
     fn tools() -> Vec<ToolDefinition> {
         let mut tools = crate::tool::registry::doc_inspect_tools();
+        // read_file for reading source code (prompt references it for "仅在报告不足以决策时才读")
+        tools.push(crate::tool::read_file_tool_def(
+            "读取源文件和 .shuji/ 中的普通文件",
+        ));
         tools.extend(crate::tool::registry::document_tools());
         tools.extend(crate::tool::registry::reauth_tool());
         tools.push(crate::tool::registry::route_tool());

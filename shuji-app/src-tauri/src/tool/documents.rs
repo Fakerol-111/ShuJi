@@ -270,7 +270,10 @@ pub async fn tool_create_document(
             ToolOutput::success(
                 "create_document",
                 &doc_id,
-                &format!("文档 {} 创建成功", doc_id),
+                &format!(
+                    "文档 {} 创建成功\n【重要】后续操作（append/modify/set-status/route）请使用此 ID: {}",
+                    doc_id, doc_id
+                ),
             )
         }
         Err(e) => ToolOutput::error("create_document", &doc_id, "write_error", &e.to_string()),
@@ -612,7 +615,7 @@ pub fn append_document_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "append_document".into(),
-            description: "追加内容到已有文档的正文末尾。单个 content ≤2000 字符。批量追加请用 contents 数组（每项 ≤2000，最多 5 项），一次调用完成多段追加。".into(),
+            description: "追加内容到已有文档的正文末尾。每次追加一段（content ≤2000 字符），多段内容分多次调用。不要用 contents 数组——数组 JSON 在长内容下易截断。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -622,12 +625,12 @@ pub fn append_document_tool_def() -> crate::api::client::ToolDefinition {
                     },
                     "content": {
                         "type": "string",
-                        "description": "单段追加内容（≤2000 字符，与 contents 二选一）",
+                        "description": "追加内容（≤2000 字符）。多段请分多次调，不要用 contents 数组。",
                         "maxLength": 2000
                     },
                     "contents": {
                         "type": "array",
-                        "description": "批量追加内容数组（每项 ≤2000 字符，最多 5 项。与 content 二选一）",
+                        "description": "【不推荐】数组 JSON 在长内容下易被截断导致错误。请用单段 content 分多次调用。",
                         "items": {
                             "type": "string",
                             "maxLength": 2000
@@ -951,10 +954,12 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
     // Pass max_chars=0 explicitly to disable truncation for small docs.
     let max_chars = args["max_chars"].as_u64().unwrap_or(4000) as usize;
     let display_body = if max_chars > 0 && extracted.len() > max_chars {
+        // Floor to the nearest valid UTF-8 char boundary to avoid panic on multi-byte chars
+        let cutoff = extracted.floor_char_boundary(max_chars);
         format!(
             "{}...\n\n[截断：显示前 {} 字符，共 {} 字符]",
-            &extracted[..max_chars],
-            max_chars,
+            &extracted[..cutoff],
+            cutoff,
             extracted.len()
         )
     } else {

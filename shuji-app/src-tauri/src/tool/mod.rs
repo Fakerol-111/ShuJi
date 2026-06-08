@@ -417,10 +417,19 @@ pub fn rename_file_tool_def() -> crate::api::client::ToolDefinition {
 
 // ── apply_patch helper ────────────────────────────────────────
 
-/// Apply a unified diff patch to an existing file using the `diffy` crate.
-/// The patch format is standard unified diff (`diff -u old new`).
-/// Supports both creating new files (patch to /dev/null) and modifying
-/// existing files.  Returns the full patched file content on success.
+/// Apply SEARCH/REPLACE blocks to a file (Claude Code style).
+///
+/// The `patch` parameter contains one or more blocks of the form:
+/// ```text
+/// <<<<<<< SEARCH
+/// exact text to find in the file (must be unique)
+/// =======
+/// replacement text
+/// >>>>>>> REPLACE
+/// ```
+///
+/// Multiple blocks are applied sequentially to the same file.
+/// Empty SEARCH text creates the file with the REPLACE content.
 pub async fn tool_apply_patch(working_dir: &Path, args: &serde_json::Value) -> String {
     let path = args["path"].as_str().unwrap_or("");
     let patch_str = args["patch"].as_str().unwrap_or("");
@@ -453,34 +462,151 @@ pub async fn tool_apply_patch(working_dir: &Path, args: &serde_json::Value) -> S
         let _ = tokio::fs::create_dir_all(parent).await;
     }
 
-    // Read current content (empty string if file doesn't exist — /dev/null case)
-    let old_content = tokio::fs::read_to_string(&full).await.unwrap_or_default();
+    // Read current content (empty string if file doesn't exist — allows creation)
+    let mut content = tokio::fs::read_to_string(&full).await.unwrap_or_default();
+    let original_len = content.len();
 
-    // Parse and apply the unified diff
-    let patch = match diffy::Patch::from_str(patch_str) {
-        Ok(p) => p,
-        Err(e) => return ToolOutput::error("apply_patch", path, "patch_parse_error",
-            &format!("patch 解析失败: {}\n\npatch 必须是 unified diff 格式（diff -u 输出）。请使用 --- a/file 和 +++ b/file 头。", e)),
+    // Parse SEARCH/REPLACE blocks
+    let blocks = match parse_search_replace_blocks(patch_str) {
+        Ok(b) => b,
+        Err(e) => return ToolOutput::error("apply_patch", path, "parse_error", &e),
     };
 
-    let new_content = match diffy::apply(&old_content, &patch) {
-        Ok(c) => c,
-        Err(e) => return ToolOutput::error("apply_patch", path, "patch_apply_error",
-            &format!("patch 应用失败: {}。请确认 patch 的上下文行与原文件内容一致。可先用 read_file 确认最新内容再生成 patch。", e)),
-    };
+    // Apply blocks sequentially (each block sees the result of the previous)
+    for (i, (search_text, replace_text)) in blocks.iter().enumerate() {
+        let block_num = i + 1;
 
-    match tokio::fs::write(&full, &new_content).await {
+        if search_text.is_empty() {
+            // Empty SEARCH: create/replace entire file content with REPLACE
+            content = replace_text.clone();
+            continue;
+        }
+
+        // Count occurrences for unique-match check
+        let count = content.matches(search_text.as_str()).count();
+        if count == 0 {
+            let preview = if search_text.len() > 120 {
+                let cutoff = search_text.floor_char_boundary(120);
+                format!("{}...", &search_text[..cutoff])
+            } else {
+                search_text.clone()
+            };
+            return ToolOutput::error(
+                "apply_patch",
+                path,
+                "search_not_found",
+                &format!(
+                    "第{}个 SEARCH 块未在文件中找到。\n\
+                     查找的文本：\n```\n{}\n```\n\
+                     请用 read_file 确认文件最新内容后再试。也可以只截取要替换的关键几行（确保唯一）。",
+                    block_num, preview
+                ),
+            );
+        }
+        if count > 1 {
+            return ToolOutput::error(
+                "apply_patch",
+                path,
+                "search_ambiguous",
+                &format!(
+                    "第{}个 SEARCH 块在文件中出现 {} 次，不唯一。\
+                     请在 SEARCH 中包含更多上下文行以确保唯一匹配。",
+                    block_num, count
+                ),
+            );
+        }
+
+        // Replace first (and only) occurrence
+        content = content.replacen(search_text.as_str(), replace_text.as_str(), 1);
+    }
+
+    // Write final content
+    match tokio::fs::write(&full, &content).await {
         Ok(_) => ToolOutput::success(
             "apply_patch",
             path,
             &format!(
-                "patch 应用成功（{} 字节 → {} 字节）",
-                old_content.len(),
-                new_content.len()
+                "成功应用 {} 个 SEARCH/REPLACE 块（{} 字节 → {} 字节）",
+                blocks.len(),
+                original_len,
+                content.len()
             ),
         ),
         Err(e) => ToolOutput::error("apply_patch", path, "write_error", &e.to_string()),
     }
+}
+
+/// Parse SEARCH/REPLACE blocks from a string.
+///
+/// Format per block:
+/// ```text
+/// <<<<<<< SEARCH
+/// <search text>
+/// =======
+/// <replace text>
+/// >>>>>>> REPLACE
+/// ```
+///
+/// Returns Vec<(search_text, replace_text)>.
+/// Supports multiple blocks. Skips any text before the first SEARCH marker
+/// (compatible with Claude Code's path + block format).
+fn parse_search_replace_blocks(input: &str) -> Result<Vec<(String, String)>, String> {
+    let mut blocks = Vec::new();
+    let mut remaining = input;
+
+    loop {
+        // Find next "<<<<<<< SEARCH" marker
+        let search_start = match remaining.find("<<<<<<< SEARCH") {
+            Some(idx) => idx,
+            None => break,
+        };
+
+        // Content after the marker
+        let after_marker = &remaining[search_start + 14..];
+        // Strip leading newline (the marker is usually followed by \n)
+        let body = after_marker.strip_prefix('\n').unwrap_or(after_marker);
+
+        // Find the "=======" separator
+        // Normal case: "\n=======\n" within body
+        // Empty SEARCH case: body starts with "=======\n"
+        let (search_text, rest) = if let Some(idx) = body.find("\n=======\n") {
+            (&body[..idx], &body[idx + 10..])
+        } else if body.starts_with("=======\n") {
+            // Empty SEARCH (create file / full replace)
+            ("", &body[9..])
+        } else {
+            return Err(format!(
+                "SEARCH/REPLACE 块缺少 '=======' 分隔符。\n格式：\n<<<<<<< SEARCH\n旧文本\n=======\n新文本\n>>>>>>> REPLACE"
+            ));
+        };
+
+        // Find the ">>>>>>> REPLACE" end marker
+        let end_idx = match rest.find("\n>>>>>>> REPLACE") {
+            Some(idx) => idx,
+            None => {
+                return Err(format!("SEARCH/REPLACE 块缺少 '>>>>>>> REPLACE' 结束标记"));
+            }
+        };
+
+        let replace_text = &rest[..end_idx];
+        blocks.push((search_text.to_string(), replace_text.to_string()));
+
+        // Move past this block
+        remaining = &rest[end_idx + 15..]; // skip "\n>>>>>>> REPLACE"
+    }
+
+    if blocks.is_empty() {
+        return Err("未找到 SEARCH/REPLACE 块。格式：\n\
+             <<<<<<< SEARCH\n\
+             要替换的原文（必须与文件中内容完全一致）\n\
+             =======\n\
+             替换后的新内容\n\
+             >>>>>>> REPLACE\n\n\
+             注意：这是 SEARCH/REPLACE 格式，不是 unified diff。不要使用 ---/+++ 或 @@ 行。"
+            .to_string());
+    }
+
+    Ok(blocks)
 }
 
 /// Generate a ToolDefinition for apply_patch.
@@ -490,17 +616,21 @@ pub fn apply_patch_tool_def() -> crate::api::client::ToolDefinition {
         function: crate::api::client::ToolFunction {
             name: "apply_patch".into(),
             description:
-                "应用 unified diff patch 到文件。适用于任何幅度的修改：大段替换（>5行）、重构、批量修改。patch 格式为 `diff -u` 输出。注意：patch 的 ---/+++ 行指定旧/新文件名，系统会自动映射到工作目录。".into(),
+                "对文件应用 SEARCH/REPLACE 修改。适用于任何幅度的修改：大段替换、重构、批量修改。\
+                 一个调用可包含多个 SEARCH/REPLACE 块，按顺序应用到同一文件。\n\
+                 单块格式：\n<<<<<<< SEARCH\n旧文本\n=======\n新文本\n>>>>>>> REPLACE\n\
+                 多块示例：\n<<<<<<< SEARCH\n第一处原文\n=======\n第一处新内容\n>>>>>>> REPLACE\n<<<<<<< SEARCH\n第二处原文\n=======\n第二处新内容\n>>>>>>> REPLACE\n\
+                 SEARCH 内容必须与文件原文精确一致且唯一。SEARCH 为空则新建文件。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "文件路径，相对于项目根目录。patch 中的 ---/+++ 文件名会被忽略，实际修改此路径指定的文件。"
+                        "description": "文件路径，相对于项目根目录。"
                     },
                     "patch": {
                         "type": "string",
-                        "description": "unified diff 格式的 patch 内容",
+                        "description": "SEARCH/REPLACE 块内容，支持多块。格式：\n<<<<<<< SEARCH\n旧文本\n=======\n新文本\n>>>>>>> REPLACE",
                     }
                 },
                 "required": ["path", "patch"]
@@ -1568,9 +1698,11 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
     if exit_code != 0 {
         // Truncate stderr to avoid context overflow
         let stderr_trimmed = if stderr.len() > 2000 {
+            let cutoff = stderr.floor_char_boundary(2000);
             format!(
-                "{}...\n[截断：显示前 2000 字符，共 {} 字符]",
-                &stderr[..2000],
+                "{}...\n[截断：显示前 {} 字符，共 {} 字符]",
+                &stderr[..cutoff],
+                cutoff,
                 stderr.len()
             )
         } else {
@@ -1617,24 +1749,24 @@ fn scope_suffix(scope: &str) -> &str {
 fn parse_test_output(stdout: &str, stderr: &str) -> (Option<usize>, Option<usize>, Option<usize>) {
     let combined = format!("{}\n{}", stdout, stderr);
 
+    /// Extract count before a keyword like "passed" or "failed" from token windows.
+    /// Handles formats like: `7 passed; 1 failed` and `3 passed, 0 failed`.
+    fn extract_count<'a>(tokens: &[&'a str], keyword: &str) -> Option<usize> {
+        tokens
+            .windows(2)
+            .find(|w| w[1] == keyword)
+            .and_then(|w| w[0].parse().ok())
+    }
+
     // Rust: "test result: FAILED. 7 passed; 1 failed; 0 ignored; ..."
     if let Some(line) = combined.lines().find(|l| l.contains("test result:")) {
-        let passed = line
-            .split(';')
-            .find_map(|s| {
-                let s = s.trim();
-                s.strip_suffix(" passed")
-                    .or_else(|| s.strip_suffix(" passed"))
-            })
-            .and_then(|s| s.trim().parse().ok());
-        let failed = line
-            .split(';')
-            .find_map(|s| {
-                let s = s.trim();
-                s.strip_suffix(" failed")
-                    .or_else(|| s.strip_suffix(" failed"))
-            })
-            .and_then(|s| s.trim().parse().ok());
+        let tokens: Vec<&str> = line
+            .split([' ', ';', '.'])
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let passed = extract_count(&tokens, "passed");
+        let failed = extract_count(&tokens, "failed");
         let total = combined
             .lines()
             .filter(|l| l.starts_with("test ") && l.contains("..."))
@@ -1642,21 +1774,18 @@ fn parse_test_output(stdout: &str, stderr: &str) -> (Option<usize>, Option<usize
         return (passed, failed, Some(total));
     }
 
-    // Python pytest: "= X passed, Y failed in Z.ZZs ="
+    // Python pytest: "= 1 passed, 2 failed in 0.05s ="
     if let Some(line) = combined
         .lines()
         .find(|l| l.contains("passed") || l.contains("failed"))
     {
-        let passed = line
-            .split([' ', ','])
-            .filter_map(|s| s.trim().strip_suffix("passed"))
-            .filter_map(|s| s.trim().parse().ok())
-            .next();
-        let failed = line
-            .split([' ', ','])
-            .filter_map(|s| s.trim().strip_suffix("failed"))
-            .filter_map(|s| s.trim().parse().ok())
-            .next();
+        let tokens: Vec<&str> = line
+            .split([' ', ',', '='])
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let passed = extract_count(&tokens, "passed");
+        let failed = extract_count(&tokens, "failed");
         return (passed, failed, None);
     }
 
@@ -1686,6 +1815,44 @@ pub fn run_tests_tool_def() -> crate::api::client::ToolDefinition {
             }),
         },
     }
+}
+
+/// Tool for 内阁 to request emperor decision with structured options.
+/// Returns formatted option list; the pause mechanism detects this tool call
+/// and saves the session for the emperor to respond.
+pub fn request_decision_tool_def() -> crate::api::client::ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "request_decision".into(),
+            description: "当需要皇帝决策时调用。传入选项列表供皇帝选择。必须在选项前附上上下文说明为什么需要决策。".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "options": {
+                        "type": "array",
+                        "description": "供皇帝选择的选项列表（至少 1 项）",
+                        "items": {"type": "string"},
+                        "minItems": 1
+                    }
+                },
+                "required": ["options"]
+            }),
+        },
+    }
+}
+
+pub async fn tool_request_decision(args: &serde_json::Value) -> String {
+    let options = match args["options"].as_array() {
+        Some(arr) if !arr.is_empty() => arr,
+        _ => return ToolOutput::error("request_decision", "", "empty_options", "options 不能为空"),
+    };
+    let mut msg = "【等待皇帝决策】请选择一项：\n".to_string();
+    for (i, opt) in options.iter().enumerate() {
+        let text = opt.as_str().unwrap_or("(无效选项)");
+        msg.push_str(&format!("{}. {}\n", i + 1, text));
+    }
+    ToolOutput::success_raw("request_decision", &msg.trim())
 }
 
 pub fn execute_command_tool_def(description: &str) -> crate::api::client::ToolDefinition {
@@ -1804,6 +1971,7 @@ pub async fn execute_named_tool(
         "update_checklist_item" => tool_update_checklist_item(args, working_dir).await,
         "add_violation" => tool_add_violation(args, working_dir).await,
         "request_reauth" => tool_request_reauth(args, working_dir).await,
+        "request_decision" => tool_request_decision(args).await,
         _ => ToolOutput::error("unknown_tool", name, "unknown_tool", "未知工具"),
     };
     // P2-2: Invalidate read cache after write operations

@@ -25,6 +25,10 @@ impl ZhongshulingAgent {
 
     fn tools() -> Vec<ToolDefinition> {
         let mut tools = crate::tool::registry::doc_inspect_tools();
+        // read_file for reading source code and .shuji/ files (prompt references it)
+        tools.push(crate::tool::read_file_tool_def(
+            "读取源文件和 .shuji/ 中的普通文件",
+        ));
         tools.extend(crate::tool::registry::document_tools());
         tools.push(crate::tool::registry::route_tool());
         tools

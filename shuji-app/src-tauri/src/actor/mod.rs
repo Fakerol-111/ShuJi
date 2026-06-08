@@ -251,6 +251,11 @@ pub async fn run_actor(mut ctx: ActorContext) {
                 if !paused_for_decision {
                     ctx.agent.reset_plan();
                 }
+                // 清空 fast mailbox 中的残留中断信号，避免上一轮取消的残留影响新任务
+                {
+                    let mut fast_rx = ctx.fast_rx.lock().await;
+                    while let Ok(_) = fast_rx.try_recv() {}
+                }
             }
         }
 

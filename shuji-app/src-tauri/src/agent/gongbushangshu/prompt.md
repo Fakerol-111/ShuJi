@@ -73,9 +73,9 @@
 
 ### 修改策略（效率优先）
 
-**`apply_patch` 是所有修改的首选方式。** 它使用 unified diff，一次调用可完成多处修改、新增、删除，且不会受文件内容漂移影响。
+**`apply_patch` 是所有修改的首选方式。** 它使用 SEARCH/REPLACE 格式，一次调用可完成多处修改、新增、删除，且不会受文件内容漂移影响。
 
-- **多行修改（>2 行）或跨多处修改** → `apply_patch`。生成 unified diff（`diff -u` 格式）并调用。这比删除+重建或多次 `modify_file` 调用快数倍。
+- **多行修改（>2 行）或跨多处修改** → `apply_patch`。用 SEARCH/REPLACE 块格式，原样复制要替换的原文段即可。这比删除+重建或多次 `modify_file` 调用快数倍。
 - **全新文件（≤8000 字符）** → `create_file` 一次性写入完整内容。
 - **避免**：删除后重建。这些模式浪费大量 token。**工部已禁用 modify_file/append_file**。
 
@@ -138,7 +138,7 @@
 | `read_file`       | 阅读任务文档、接口契约、详细设计                                |
 | `list_dir`        | 浏览项目目录                                                    |
 | `create_file`     | 创建新的测试或源文件（≤8000 字符；>2KB 的文件用 `apply_patch`） |
-| `apply_patch`     | 对已有文件应用 unified diff。**>2KB 文件或多行编辑首选。**      |
+| `apply_patch`     | 对已有文件应用 SEARCH/REPLACE。**>2KB 文件或多行编辑首选。**      |
 | `delete_file`     | 删除过时文件                                                    |
 | `rename_file`     | 重命名或移动文件                                                |
 | `create_document` | 创建报告文档（type="rprt"）                                     |
@@ -175,6 +175,6 @@
 5. **开发过程中运行单元测试。** 写完测试文件后运行（预期红）。写完实现后运行（预期绿）。不要交付有失败单元测试的代码。**绝不编写集成测试——集成测试是刑部的专属职责。** 如果任务提及集成测试，继续完成单元测试和生产代码后路由回尚书令，由尚书令分派给刑部。
 6. 不改变架构、模块边界或接口契约。
 7. **所有文件修改用 `apply_patch`，禁止使用 `modify_file`/`append_file`。**
-8. **所有修改优先使用 `apply_patch`**。生成 unified diff（`diff -u`）并调用 `apply_patch`。这比删除+重建或多次 `modify_file` 调用更快更可靠。全新 >2KB 文件用 `create_file` 写入完整内容（≤8000 字符）。
+8. **所有修改优先使用 `apply_patch`**。用 SEARCH/REPLACE 块格式（`<<<<<<< SEARCH` / `=======` / `>>>>>>> REPLACE`）并调用 `apply_patch`。这比删除+重建或多次 `modify_file` 调用更快更可靠。全新 >2KB 文件用 `create_file` 写入完整内容（≤8000 字符）。
 9. 如果规格不清晰，路由回去——不要猜测。
 10. **任何超过 3 个文件的任务先用 `submit_plan`。** 分批比失去焦点好。

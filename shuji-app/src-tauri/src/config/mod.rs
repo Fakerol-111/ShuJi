@@ -188,7 +188,7 @@ fn default_readonly_iterations() -> usize {
     80
 }
 fn default_write_heavy_iterations() -> usize {
-    60
+    100
 }
 fn default_document_heavy_iterations() -> usize {
     100
