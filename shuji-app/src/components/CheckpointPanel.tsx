@@ -48,7 +48,9 @@ export default function CheckpointPanel() {
     }
   }, []);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => {
+    fetch();
+  }, [fetch]);
 
   const handleRestore = async () => {
     if (!confirm) return;
@@ -81,7 +83,10 @@ export default function CheckpointPanel() {
         <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">
           {error}
         </div>
-        <button onClick={fetch} className="mt-2 text-xs text-ink-500 hover:text-ink-700 underline">
+        <button
+          onClick={fetch}
+          className="mt-2 text-xs text-ink-500 hover:text-ink-700 underline"
+        >
           重试
         </button>
       </div>
@@ -113,9 +118,7 @@ export default function CheckpointPanel() {
       <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
         {/* Empty state */}
         {entries.length === 0 && !loading && (
-          <div className="text-xs text-ink-400 text-center py-8">
-            暂无存档
-          </div>
+          <div className="text-xs text-ink-400 text-center py-8">暂无存档</div>
         )}
 
         {/* Checkpoint list */}
@@ -161,7 +164,11 @@ export default function CheckpointPanel() {
               确认恢复
             </h3>
             <p className="text-xs text-ink-600 mb-3 leading-relaxed">
-              将执行 git checkout 到 <code className="bg-ink-100 px-1 rounded">{confirm.commit.slice(0, 7)}</code>（{confirm.desc}）。
+              将执行 git checkout 到{" "}
+              <code className="bg-ink-100 px-1 rounded">
+                {confirm.commit.slice(0, 7)}
+              </code>
+              （{confirm.desc}）。
             </p>
             <ul className="text-xs text-ink-500 space-y-1 mb-4 list-disc list-inside">
               <li>工作区将回到该存档点的状态（detached HEAD）</li>

@@ -32,13 +32,13 @@
 
 # 工具
 
-| 工具 | 用途 |
-|------|------|
-| `read_file` | 阅读任务文档、precepts、源文件、契约、测试文件、设计 |
-| `list_dir` | 浏览目录 |
-| `create_document` | 创建报告（type="rprt"） |
-| `modify_document` | 修改报告（查找替换） |
-| `append_document` | 追加内容 |
+| 工具              | 用途                                                 |
+| ----------------- | ---------------------------------------------------- |
+| `read_file`       | 阅读任务文档、precepts、源文件、契约、测试文件、设计 |
+| `list_dir`        | 浏览目录                                             |
+| `create_document` | 创建报告（type="rprt"）                              |
+| `modify_document` | 修改报告（查找替换）                                 |
+| `append_document` | 追加内容                                             |
 
 # 硬规则
 

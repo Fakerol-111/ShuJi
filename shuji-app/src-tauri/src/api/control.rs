@@ -398,9 +398,15 @@ impl AgentController {
                                 tc.name, same_tool_count + 1,
                             ));
                         }
-                        let is_read =
-                            matches!(tc.name.as_str(), "read_file" | "list_dir" | "list_dir_tree"
-                                | "find_document" | "read_document" | "search_text");
+                        let is_read = matches!(
+                            tc.name.as_str(),
+                            "read_file"
+                                | "list_dir"
+                                | "list_dir_tree"
+                                | "find_document"
+                                | "read_document"
+                                | "search_text"
+                        );
                         if is_read
                             && read_without_write >= config.watchdog.read_without_write_warning
                         {

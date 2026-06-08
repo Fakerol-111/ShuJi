@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { readShujiDoc, setDocumentStatus as apiSetStatus, sendMessage, getDocumentDiff, getDocumentLineage } from "../api";
+import {
+  readShujiDoc,
+  setDocumentStatus as apiSetStatus,
+  sendMessage,
+  getDocumentDiff,
+  getDocumentLineage,
+} from "../api";
 import { formatError } from "../utils/error";
 import type { DocumentDiff } from "../api";
 import type { LineageNode } from "../types";
@@ -23,7 +29,12 @@ const REJECTION_REASONS = [
   { label: "自定义", value: "" },
 ];
 
-export default function DocPreview({ projectDir, docPath, initialTab, onClose }: DocPreviewProps) {
+export default function DocPreview({
+  projectDir,
+  docPath,
+  initialTab,
+  onClose,
+}: DocPreviewProps) {
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -52,7 +63,9 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
     setDiffLoading(true);
     getDocumentDiff(projectDir, docPath)
       .then((d) => setDiffData(d))
-      .catch(() => { /* diff is optional, silently fail */ })
+      .catch(() => {
+        /* diff is optional, silently fail */
+      })
       .finally(() => setDiffLoading(false));
 
     // Fetch lineage for .shuji documents
@@ -66,27 +79,34 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
     }
   }, [projectDir, docPath]);
 
-  const isShujiMarkdown = docPath.startsWith(".shuji/") && docPath.endsWith(".md");
+  const isShujiMarkdown =
+    docPath.startsWith(".shuji/") && docPath.endsWith(".md");
   const isMarkdown = docPath.endsWith(".md");
   const parsed = useMemo(() => parseFrontmatter(content), [content]);
   const parts = docPath.split("/");
-  const docId = isShujiMarkdown && parsed.meta?.id || docPath.split("/").pop()?.replace(/\.md$/, "") || "";
+  const docId =
+    (isShujiMarkdown && parsed.meta?.id) ||
+    docPath.split("/").pop()?.replace(/\.md$/, "") ||
+    "";
   const docStatus = parsed.meta?.status || "";
 
   const handleApproval = async (status: "approved" | "rejected") => {
     setApproving(true);
     setApprovalError("");
     try {
-      const msg = status === "approved"
-        ? `朕已御批。${comment ? " " + comment : ""}`
-        : `驳回。${comment ? " " + comment : ""}`;
+      const msg =
+        status === "approved"
+          ? `朕已御批。${comment ? " " + comment : ""}`
+          : `驳回。${comment ? " " + comment : ""}`;
       // 1. Write judgment to document (must succeed)
       await apiSetStatus(docId, status, comment || undefined);
       // 2. Notify 内阁 (best-effort — judgment is already saved)
       try {
         await sendMessage(msg);
       } catch (e) {
-        setApprovalError(`已朱批但未通知内阁：${formatError(e)}。您可以手动发送消息继续`);
+        setApprovalError(
+          `已朱批但未通知内阁：${formatError(e)}。您可以手动发送消息继续`,
+        );
         // Still refresh the doc to show updated status
         const doc = await readShujiDoc(projectDir, docPath);
         setContent(doc.content);
@@ -108,7 +128,8 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
   };
 
   if (loading) return <div className="p-6 text-body text-ink-400">开卷中…</div>;
-  if (error) return <div className="p-6 text-body text-vermillion">{error}</div>;
+  if (error)
+    return <div className="p-6 text-body text-vermillion">{error}</div>;
 
   return (
     <div className="h-full overflow-y-auto surface-paper">
@@ -117,12 +138,17 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
           <div className="text-caption text-ink-400 font-mono flex flex-wrap gap-1 flex-1 min-w-0">
             {parts.map((p, i) => (
               <span key={`${p}-${i}`}>
-                {i > 0 && <span className="mx-1 text-ink-300">/</span>}{p}
+                {i > 0 && <span className="mx-1 text-ink-300">/</span>}
+                {p}
               </span>
             ))}
           </div>
           {onClose && (
-            <button onClick={onClose} className="shrink-0 w-5 h-5 flex items-center justify-center rounded text-caption text-ink-400 hover:text-ink-900 hover:bg-ink-200/60 transition-colors" title="关闭">
+            <button
+              onClick={onClose}
+              className="shrink-0 w-5 h-5 flex items-center justify-center rounded text-caption text-ink-400 hover:text-ink-900 hover:bg-ink-200/60 transition-colors"
+              title="关闭"
+            >
               ✕
             </button>
           )}
@@ -140,7 +166,7 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
           >
             全文
           </button>
-          {(diffData?.has_previous) && (
+          {diffData?.has_previous && (
             <button
               onClick={() => setViewMode("diff")}
               className={`px-4 py-2 text-ui font-bold rounded-t-lg transition -mb-px border-b-2 ${
@@ -174,8 +200,12 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
           <div className="mb-4 rounded-xl border border-vermillion/30 bg-surface-elevated p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-display text-sm font-bold text-ink-900">待陛下朱批</h3>
-                <p className="text-caption text-ink-600 mt-0.5">此文档需皇帝御批后方可继续执行</p>
+                <h3 className="font-display text-sm font-bold text-ink-900">
+                  待陛下朱批
+                </h3>
+                <p className="text-caption text-ink-600 mt-0.5">
+                  此文档需皇帝御批后方可继续执行
+                </p>
               </div>
               <div className="flex gap-2">
                 <button
@@ -207,13 +237,21 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
                 value=""
                 className="px-2 py-1.5 border border-fold rounded-lg text-caption bg-surface-parchment text-ink-600"
               >
-                <option value="" disabled>驳回模板</option>
+                <option value="" disabled>
+                  驳回模板
+                </option>
                 {REJECTION_REASONS.map((r) => (
-                  <option key={r.value || "__custom"} value={r.value}>{r.label}</option>
+                  <option key={r.value || "__custom"} value={r.value}>
+                    {r.label}
+                  </option>
                 ))}
               </select>
             </div>
-            {approvalError && <p className="text-caption text-vermillion mt-1">{approvalError}</p>}
+            {approvalError && (
+              <p className="text-caption text-vermillion mt-1">
+                {approvalError}
+              </p>
+            )}
           </div>
         )}
 
@@ -223,7 +261,9 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
           ) : lineage ? (
             <LineageTree node={lineage} depth={0} />
           ) : (
-            <div className="p-6 text-body text-ink-400 text-center">无血缘信息</div>
+            <div className="p-6 text-body text-ink-400 text-center">
+              无血缘信息
+            </div>
           )
         ) : viewMode === "diff" && diffData ? (
           <DiffView diff={diffData.diff} />
@@ -231,10 +271,14 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
           <div className="p-6 text-body text-ink-400">加载差异中…</div>
         ) : (
           <>
-            {isShujiMarkdown && parsed.meta && <FrontmatterCard meta={parsed.meta} />}
+            {isShujiMarkdown && parsed.meta && (
+              <FrontmatterCard meta={parsed.meta} />
+            )}
             {isMarkdown ? (
               <article className="prose prose-shuji max-w-none">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{(isShujiMarkdown ? parsed.body : content) || "_文件为空_"}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {(isShujiMarkdown ? parsed.body : content) || "_文件为空_"}
+                </ReactMarkdown>
               </article>
             ) : (
               <CodePreview content={content} path={docPath} />
@@ -248,14 +292,29 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
 
 function DiffView({ diff }: { diff: string }) {
   if (!diff) {
-    return <div className="p-6 text-body text-ink-400 text-center">无差异内容</div>;
+    return (
+      <div className="p-6 text-body text-ink-400 text-center">无差异内容</div>
+    );
   }
 
   const lines = diff.split("\n");
 
   return (
-    <div className="rounded-xl border overflow-hidden shadow-sm" style={{ borderColor: "var(--code-border)", backgroundColor: "var(--code-bg)" }}>
-      <div className="h-9 flex items-center px-3 text-[11px] font-mono" style={{ backgroundColor: "var(--code-tab-bg)", borderBottom: "1px solid var(--code-border)", color: "var(--code-muted)" }}>
+    <div
+      className="rounded-xl border overflow-hidden shadow-sm"
+      style={{
+        borderColor: "var(--code-border)",
+        backgroundColor: "var(--code-bg)",
+      }}
+    >
+      <div
+        className="h-9 flex items-center px-3 text-[11px] font-mono"
+        style={{
+          backgroundColor: "var(--code-tab-bg)",
+          borderBottom: "1px solid var(--code-border)",
+          color: "var(--code-muted)",
+        }}
+      >
         <span>Unified Diff</span>
       </div>
       <div className="overflow-auto max-h-[calc(100vh-190px)] text-[13px] leading-[22px] font-[Cascadia_Code,JetBrains_Mono,Consolas,Menlo,Monaco,monospace]">
@@ -277,7 +336,10 @@ function DiffView({ diff }: { diff: string }) {
               }
               return (
                 <tr key={i} style={{ backgroundColor: bgColor }}>
-                  <td className="pl-4 pr-6 whitespace-pre align-top" style={{ color: textColor }}>
+                  <td
+                    className="pl-4 pr-6 whitespace-pre align-top"
+                    style={{ color: textColor }}
+                  >
                     {line || " "}
                   </td>
                 </tr>
@@ -295,13 +357,37 @@ function CodePreview({ content, path }: { content: string; path: string }) {
   const language = languageName(path);
 
   return (
-    <div className="rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: "var(--code-border)", backgroundColor: "var(--code-bg)" }}>
-      <div className="h-9 flex items-center justify-between text-[11px]" style={{ backgroundColor: "var(--code-tab-bg)", borderBottom: "1px solid var(--code-border)" }}>
-        <div className="h-full px-3 flex items-center gap-2 font-mono" style={{ backgroundColor: "var(--code-bg)", borderRight: "1px solid var(--code-border)", color: "var(--code-text)" }}>
+    <div
+      className="rounded-xl border shadow-sm overflow-hidden"
+      style={{
+        borderColor: "var(--code-border)",
+        backgroundColor: "var(--code-bg)",
+      }}
+    >
+      <div
+        className="h-9 flex items-center justify-between text-[11px]"
+        style={{
+          backgroundColor: "var(--code-tab-bg)",
+          borderBottom: "1px solid var(--code-border)",
+        }}
+      >
+        <div
+          className="h-full px-3 flex items-center gap-2 font-mono"
+          style={{
+            backgroundColor: "var(--code-bg)",
+            borderRight: "1px solid var(--code-border)",
+            color: "var(--code-text)",
+          }}
+        >
           <span style={{ color: "var(--code-muted)" }}>{fileGlyph(path)}</span>
-          <span className="truncate max-w-[520px]">{path.split("/").pop()}</span>
+          <span className="truncate max-w-[520px]">
+            {path.split("/").pop()}
+          </span>
         </div>
-        <div className="px-3 font-mono flex items-center gap-3" style={{ color: "var(--code-muted)" }}>
+        <div
+          className="px-3 font-mono flex items-center gap-3"
+          style={{ color: "var(--code-muted)" }}
+        >
           <span>{language}</span>
           <span>{lines.length.toLocaleString()} lines</span>
           <span>{content.length.toLocaleString()} chars</span>
@@ -312,10 +398,20 @@ function CodePreview({ content, path }: { content: string; path: string }) {
           <tbody>
             {lines.map((line, index) => (
               <tr key={index} className="code-preview-row">
-                <td className="select-none sticky left-0 w-14 min-w-14 pr-3 text-right align-top" style={{ backgroundColor: "var(--code-bg)", color: "var(--code-line-num)", borderRight: "1px solid var(--code-border)" }}>
+                <td
+                  className="select-none sticky left-0 w-14 min-w-14 pr-3 text-right align-top"
+                  style={{
+                    backgroundColor: "var(--code-bg)",
+                    color: "var(--code-line-num)",
+                    borderRight: "1px solid var(--code-border)",
+                  }}
+                >
                   {index + 1}
                 </td>
-                <td className="pl-4 pr-6 whitespace-pre align-top" style={{ color: "var(--code-text)" }}>
+                <td
+                  className="pl-4 pr-6 whitespace-pre align-top"
+                  style={{ color: "var(--code-text)" }}
+                >
                   {line || " "}
                 </td>
               </tr>
@@ -372,19 +468,30 @@ function FrontmatterCard({ meta }: { meta: Record<string, string> }) {
     status: "状态",
   };
   return (
-    <Card variant="parchment" className="mb-5 border-l-vermillion border-l-[3px] p-4">
-      <div className="font-display text-ui text-ink-600 font-semibold mb-2">票拟</div>
+    <Card
+      variant="parchment"
+      className="mb-5 border-l-vermillion border-l-[3px] p-4"
+    >
+      <div className="font-display text-ui text-ink-600 font-semibold mb-2">
+        票拟
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {Object.entries(meta).map(([key, value]) => {
-          const statusColor = key === "status" && value === "in_review" ? "text-vermillion font-bold" :
-            key === "status" && value === "approved" ? "text-jade font-bold" :
-            key === "status" && value === "rejected" ? "text-vermillion/60 font-bold" :
-            "text-ink-700";
+          const statusColor =
+            key === "status" && value === "in_review"
+              ? "text-vermillion font-bold"
+              : key === "status" && value === "approved"
+                ? "text-jade font-bold"
+                : key === "status" && value === "rejected"
+                  ? "text-vermillion/60 font-bold"
+                  : "text-ink-700";
           if (key === "notes" && !value) return null;
           if (key === "status" && !value) return null;
           return (
             <div key={key} className="flex text-ui font-mono">
-              <span className="w-20 shrink-0 text-ink-400">{labels[key] || key}</span>
+              <span className="w-20 shrink-0 text-ink-400">
+                {labels[key] || key}
+              </span>
               <span className={`break-all ${statusColor}`}>{value}</span>
             </div>
           );
@@ -394,7 +501,10 @@ function FrontmatterCard({ meta }: { meta: Record<string, string> }) {
   );
 }
 
-function parseFrontmatter(raw: string): { meta: Record<string, string> | null; body: string } {
+function parseFrontmatter(raw: string): {
+  meta: Record<string, string> | null;
+  body: string;
+} {
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
   if (!match) return { meta: null, body: raw };
   const header = match[1];
@@ -408,22 +518,33 @@ function parseFrontmatter(raw: string): { meta: Record<string, string> | null; b
 }
 
 function LineageTree({ node, depth }: { node: LineageNode; depth: number }) {
-  const statusColor = node.status === "in_review" ? "text-vermillion" :
-    node.status === "approved" ? "text-jade" :
-    node.status === "rejected" ? "text-vermillion/60" :
-    "text-ink-500";
+  const statusColor =
+    node.status === "in_review"
+      ? "text-vermillion"
+      : node.status === "approved"
+        ? "text-jade"
+        : node.status === "rejected"
+          ? "text-vermillion/60"
+          : "text-ink-500";
 
   return (
     <div className="font-mono text-caption">
-      <div className="flex items-center gap-2 py-1" style={{ paddingLeft: `${depth * 20}px` }}>
+      <div
+        className="flex items-center gap-2 py-1"
+        style={{ paddingLeft: `${depth * 20}px` }}
+      >
         {depth > 0 && <span className="text-ink-300 shrink-0">└─</span>}
         <span className="font-bold text-ink-800">{node.id}</span>
         <span className="text-ink-400">({node.doc_type})</span>
         <span className="text-ink-400">— {node.author}</span>
         {node.status && <span className={statusColor}>{node.status}</span>}
       </div>
-      <div className="text-[9px] text-ink-400" style={{ paddingLeft: `${depth * 20 + 16}px` }}>
-        {node.timestamp}{node.refs.length > 0 && ` · 引用: [${node.refs.join(", ")}]`}
+      <div
+        className="text-[9px] text-ink-400"
+        style={{ paddingLeft: `${depth * 20 + 16}px` }}
+      >
+        {node.timestamp}
+        {node.refs.length > 0 && ` · 引用: [${node.refs.join(", ")}]`}
       </div>
       {node.children.map((child) => (
         <LineageTree key={child.id} node={child} depth={depth + 1} />

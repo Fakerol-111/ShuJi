@@ -3,7 +3,9 @@ use std::path::Path;
 use crate::api::session::PersistedContext;
 use crate::commands::friendly_error::friendly_error;
 use crate::commands::project::AppState;
-use crate::storage::checkpoint::{find_checkpoint, git_cmd, load_index, load_snapshot, CheckpointEntry};
+use crate::storage::checkpoint::{
+    find_checkpoint, git_cmd, load_index, load_snapshot, CheckpointEntry,
+};
 
 /// List all checkpoints in the current project.
 /// Optionally filter by role, limit the number of results.

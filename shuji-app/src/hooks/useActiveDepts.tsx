@@ -1,4 +1,10 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { getActiveRoles } from "../api";
 
 const POLL_INTERVAL_MS = 1000;
@@ -7,7 +13,9 @@ interface DeptActiveContextValue {
   active: Set<string>;
 }
 
-const DeptActiveContext = createContext<DeptActiveContextValue>({ active: new Set() });
+const DeptActiveContext = createContext<DeptActiveContextValue>({
+  active: new Set(),
+});
 
 let globalActive = new Set<string>();
 let globalListeners: Array<(s: Set<string>) => void> = [];

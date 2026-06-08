@@ -12,7 +12,9 @@ export default function ContextPanel() {
 
   const load = () => {
     setError("");
-    getContextStats().then(setStats).catch((e) => setError(formatError(e)));
+    getContextStats()
+      .then(setStats)
+      .catch((e) => setError(formatError(e)));
   };
 
   useEffect(load, []);
@@ -25,41 +27,62 @@ export default function ContextPanel() {
     <div className="h-full overflow-y-auto p-3 bg-ink-50">
       <div className="flex items-center justify-between mb-1">
         <h3 className="text-xs font-bold text-ink-800">文脉</h3>
-        <button onClick={load} className="text-[10px] text-ink-400 hover:text-ink-700">刷新</button>
+        <button
+          onClick={load}
+          className="text-[10px] text-ink-400 hover:text-ink-700"
+        >
+          刷新
+        </button>
       </div>
-      <p className="text-[9px] text-ink-400 mb-3">单位：tokens（cl100k，与 OpenAI/DeepSeek 兼容 API 估算一致）</p>
+      <p className="text-[9px] text-ink-400 mb-3">
+        单位：tokens（cl100k，与 OpenAI/DeepSeek 兼容 API 估算一致）
+      </p>
       {error && <p className="text-xs text-vermillion mb-2">{error}</p>}
       {!stats || Object.keys(stats).length === 0 ? (
         <p className="text-xs text-ink-400">暂无数据</p>
       ) : (
         <div className="space-y-3">
-          {Object.entries(stats).sort(([a], [b]) => roleOrder(a) - roleOrder(b)).map(([role, cs]) => {
-            const pct = cs.token_threshold > 0
-              ? Math.min((cs.token_count / cs.token_threshold) * 100, 100)
-              : 0;
-            return (
-              <div key={role}>
-                <div className="flex justify-between text-[11px] mb-1">
-                  <span className="font-medium text-ink-700">{getDeptMeta(role)?.label || role}</span>
-                  <span className={cs.token_count >= cs.token_threshold ? "text-vermillion text-[10px]" : "text-ink-500"}>
-                    {abbr(cs.token_count)} / {abbr(cs.token_threshold)} tokens
-                  </span>
-                </div>
-                <div className="w-full bg-ink-200 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{ width: `${Math.max(pct, 2)}%`, background: barColor(role) }}
-                  />
-                </div>
-                <div className="flex justify-between items-center text-[9px] text-ink-400 mt-0.5">
-                  <span>{cs.message_count} 条消息</span>
-                  {cs.compressed ? (
-                    <span className="text-amber-600">已压缩</span>
-                  ) : (
-                    <span className="text-ink-400">未压缩</span>
-                  )}
-                </div>
-                <div className="mt-1">
+          {Object.entries(stats)
+            .sort(([a], [b]) => roleOrder(a) - roleOrder(b))
+            .map(([role, cs]) => {
+              const pct =
+                cs.token_threshold > 0
+                  ? Math.min((cs.token_count / cs.token_threshold) * 100, 100)
+                  : 0;
+              return (
+                <div key={role}>
+                  <div className="flex justify-between text-[11px] mb-1">
+                    <span className="font-medium text-ink-700">
+                      {getDeptMeta(role)?.label || role}
+                    </span>
+                    <span
+                      className={
+                        cs.token_count >= cs.token_threshold
+                          ? "text-vermillion text-[10px]"
+                          : "text-ink-500"
+                      }
+                    >
+                      {abbr(cs.token_count)} / {abbr(cs.token_threshold)} tokens
+                    </span>
+                  </div>
+                  <div className="w-full bg-ink-200 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${Math.max(pct, 2)}%`,
+                        background: barColor(role),
+                      }}
+                    />
+                  </div>
+                  <div className="flex justify-between items-center text-[9px] text-ink-400 mt-0.5">
+                    <span>{cs.message_count} 条消息</span>
+                    {cs.compressed ? (
+                      <span className="text-amber-600">已压缩</span>
+                    ) : (
+                      <span className="text-ink-400">未压缩</span>
+                    )}
+                  </div>
+                  <div className="mt-1">
                     <button
                       onClick={async () => {
                         setCompactingRole(role);
@@ -86,12 +109,14 @@ export default function ContextPanel() {
                       {compactingRole === role ? "压缩中…" : "立即压缩"}
                     </button>
                     {lastCompactMsg && compactingRole === null && (
-                      <span className="text-[9px] text-jade ml-1.5">{lastCompactMsg}</span>
+                      <span className="text-[9px] text-jade ml-1.5">
+                        {lastCompactMsg}
+                      </span>
                     )}
                   </div>
-              </div>
-            );
-          })}
+                </div>
+              );
+            })}
         </div>
       )}
     </div>

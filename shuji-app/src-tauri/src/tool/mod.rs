@@ -21,7 +21,7 @@ static READ_CACHE: LazyLock<Mutex<HashMap<PathBuf, (SystemTime, String)>>> =
 
 /// Look up a cached read result. Returns `Some(result)` if the file's mtime
 /// hasn't changed since the cache entry was created.
-fn cache_lookup(path: &Path) -> Option<String> {
+pub fn cache_lookup(path: &Path) -> Option<String> {
     let cache = READ_CACHE.lock().ok()?;
     if let Some((cached_mtime, cached_result)) = cache.get(path) {
         if let Ok(current_mtime) = std::fs::metadata(path).and_then(|m| m.modified()) {
@@ -37,7 +37,7 @@ fn cache_lookup(path: &Path) -> Option<String> {
 }
 
 /// Insert a read result into the cache.
-fn cache_insert(path: PathBuf, mtime: SystemTime, result: String) {
+pub fn cache_insert(path: PathBuf, mtime: SystemTime, result: String) {
     if let Ok(mut cache) = READ_CACHE.lock() {
         cache.insert(path, (mtime, result));
     }
@@ -540,11 +540,11 @@ pub async fn tool_modify_file(working_dir: &Path, args: &serde_json::Value) -> S
     // Hard limit: 800 characters per parameter
     if old_text.len() > 800 {
         return ToolOutput::error("modify_file", path, "old_text_too_long",
-            &format!("old_text 长度 {} 超过上限 800 字符。对于大块修改，请使用 read_file → delete_file → create_file 模式。", old_text.len()));
+            &format!("old_text 长度 {} 超过上限 800 字符。对于大块修改，请使用 apply_patch（支持 50000 字符）。", old_text.len()));
     }
     if new_text.len() > 800 {
         return ToolOutput::error("modify_file", path, "new_text_too_long",
-            &format!("new_text 长度 {} 超过上限 800 字符。对于大块修改，请使用 read_file → delete_file → create_file 模式。", new_text.len()));
+            &format!("new_text 长度 {} 超过上限 800 字符。对于大块修改，请使用 apply_patch（支持 50000 字符）。", new_text.len()));
     }
     if !content.contains(old_text) {
         return ToolOutput::error("modify_file", path, "not_found",
@@ -873,7 +873,14 @@ pub async fn tool_list_dir_tree(working_dir: &Path, args: &serde_json::Value) ->
     };
 
     let skip_dirs: &[&str] = &[
-        ".git", ".shuji", "node_modules", "target", ".venv", "__pycache__", "dist", "build",
+        ".git",
+        ".shuji",
+        "node_modules",
+        "target",
+        ".venv",
+        "__pycache__",
+        "dist",
+        "build",
     ];
 
     let mut lines = Vec::new();
@@ -938,11 +945,7 @@ pub async fn tool_list_dir_tree(working_dir: &Path, args: &serde_json::Value) ->
                 format!("{}{}{}", prefix, connector, rel.display())
             };
             // Only add connector for direct children; deeper levels just show path
-            lines.push(if depth == 0 {
-                line
-            } else {
-                line
-            });
+            lines.push(if depth == 0 { line } else { line });
             *total += 1;
 
             if is_dir && depth < max_depth {
@@ -1766,7 +1769,12 @@ pub async fn execute_named_tool(
                 documents::tool_append_document(working_dir, args, dept).await
             }
         }
-        "find_document" => documents::tool_find_document(working_dir, args).await,
+        "find_document" => {
+            // P0-2: find_document is deprecated — redirect to read_document
+            let id = args["id"].as_str().unwrap_or("");
+            ToolOutput::success_raw("find_document",
+                &format!("find_document 已弃用。请改用 read_document(id=\"{}\")——一次调用即可查找+读取。", id))
+        }
         "read_document" => documents::tool_read_document(working_dir, args).await,
         "search_text" => tool_search_text(working_dir, args).await,
         "run_tests" => tool_run_tests(working_dir, args).await,

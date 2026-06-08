@@ -10,7 +10,11 @@ interface DocTreeProps {
   onSelect: (path: string) => void;
 }
 
-export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreeProps) {
+export default function DocTree({
+  projectDir,
+  selectedDoc,
+  onSelect,
+}: DocTreeProps) {
   const [tree, setTree] = useState<ShujiEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -34,7 +38,9 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
     refreshTimer.current = setTimeout(() => loadTree(), 400);
   }, [loadTree]);
 
-  useEffect(() => { loadTree(); }, [loadTree]);
+  useEffect(() => {
+    loadTree();
+  }, [loadTree]);
 
   useEffect(() => {
     const unlisten1 = listen("chat-message", debouncedRefresh);
@@ -48,27 +54,56 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
   }, [debouncedRefresh]);
 
   if (error) return <div className="p-3 text-ui text-vermillion">{error}</div>;
-  if (loading && tree.length === 0) return <div className="p-3 space-y-2"><LoadingSkeleton /><LoadingSkeleton /></div>;
-  if (tree.length === 0 && !loading) return <div className="p-3 text-ui text-ink-400">暂无可预览文件</div>;
+  if (loading && tree.length === 0)
+    return (
+      <div className="p-3 space-y-2">
+        <LoadingSkeleton />
+        <LoadingSkeleton />
+      </div>
+    );
+  if (tree.length === 0 && !loading)
+    return <div className="p-3 text-ui text-ink-400">暂无可预览文件</div>;
 
   return (
     <div className="py-2 text-ui">
       <div className="sticky top-0 z-10 bg-surface-parchment px-2 pb-2 flex justify-end items-center gap-2 border-b border-fold mb-1">
-        {loading && <span className="text-[10px] text-ink-400 animate-pulse">刷新中…</span>}
-        <button onClick={loadTree} className="px-2 py-1 rounded text-ui text-ink-500 hover:bg-ink-100 hover:text-ink-800">
+        {loading && (
+          <span className="text-[10px] text-ink-400 animate-pulse">
+            刷新中…
+          </span>
+        )}
+        <button
+          onClick={loadTree}
+          className="px-2 py-1 rounded text-ui text-ink-500 hover:bg-ink-100 hover:text-ink-800"
+        >
           刷新
         </button>
       </div>
       {tree.map((entry) => (
-        <DocNode key={entry.path} entry={entry} selectedDoc={selectedDoc} onSelect={onSelect} depth={0}
-          expandedRef={expandedRef} />
+        <DocNode
+          key={entry.path}
+          entry={entry}
+          selectedDoc={selectedDoc}
+          onSelect={onSelect}
+          depth={0}
+          expandedRef={expandedRef}
+        />
       ))}
     </div>
   );
 }
 
-function DocNode({ entry, selectedDoc, onSelect, depth, expandedRef }: {
-  entry: ShujiEntry; selectedDoc: string | null; onSelect: (path: string) => void; depth: number;
+function DocNode({
+  entry,
+  selectedDoc,
+  onSelect,
+  depth,
+  expandedRef,
+}: {
+  entry: ShujiEntry;
+  selectedDoc: string | null;
+  onSelect: (path: string) => void;
+  depth: number;
   expandedRef: React.MutableRefObject<Record<string, boolean>>;
 }) {
   const initialState = expandedRef.current[entry.path] ?? true;
@@ -82,7 +117,6 @@ function DocNode({ entry, selectedDoc, onSelect, depth, expandedRef }: {
     setOpen(next);
   };
 
-
   if (entry.is_dir) {
     return (
       <div>
@@ -93,12 +127,21 @@ function DocNode({ entry, selectedDoc, onSelect, depth, expandedRef }: {
         >
           <span className="w-3 text-caption">{open ? "▾" : "▸"}</span>
           <span className="truncate font-medium">{entry.name}</span>
-          <span className="ml-auto text-caption text-ink-400">{entry.children.length}</span>
+          <span className="ml-auto text-caption text-ink-400">
+            {entry.children.length}
+          </span>
         </button>
-        {open && entry.children.map((child) => (
-          <DocNode key={child.path} entry={child} selectedDoc={selectedDoc} onSelect={onSelect} depth={depth + 1}
-            expandedRef={expandedRef} />
-        ))}
+        {open &&
+          entry.children.map((child) => (
+            <DocNode
+              key={child.path}
+              entry={child}
+              selectedDoc={selectedDoc}
+              onSelect={onSelect}
+              depth={depth + 1}
+              expandedRef={expandedRef}
+            />
+          ))}
       </div>
     );
   }
@@ -107,14 +150,18 @@ function DocNode({ entry, selectedDoc, onSelect, depth, expandedRef }: {
     <button
       onClick={() => onSelect(entry.path)}
       className={`w-full flex items-center gap-1 px-2 py-1 text-left transition-colors ${
-        active ? "bg-vermillion/10 text-vermillion border-r-2 border-vermillion" : "text-ink-600 hover:bg-ink-100 hover:text-ink-900"
+        active
+          ? "bg-vermillion/10 text-vermillion border-r-2 border-vermillion"
+          : "text-ink-600 hover:bg-ink-100 hover:text-ink-900"
       }`}
       style={{ paddingLeft: 12 + depth * 12 }}
       title={entry.path}
     >
       <span className="text-caption">{fileIcon(entry.name)}</span>
       <span className="truncate font-mono text-ui">{entry.name}</span>
-      <span className="ml-auto text-caption text-ink-400 shrink-0">{entry.type_label}</span>
+      <span className="ml-auto text-caption text-ink-400 shrink-0">
+        {entry.type_label}
+      </span>
     </button>
   );
 }

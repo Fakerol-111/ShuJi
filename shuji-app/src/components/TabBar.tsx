@@ -11,7 +11,12 @@ interface TabBarProps {
   onClose: (index: number) => void;
 }
 
-export default function TabBar({ tabs, activeIndex, onSelect, onClose }: TabBarProps) {
+export default function TabBar({
+  tabs,
+  activeIndex,
+  onSelect,
+  onClose,
+}: TabBarProps) {
   if (tabs.length === 0) return null;
 
   return (
@@ -30,7 +35,10 @@ export default function TabBar({ tabs, activeIndex, onSelect, onClose }: TabBarP
         >
           <span className="truncate max-w-[160px]">{tab.label}</span>
           <span
-            onClick={(e) => { e.stopPropagation(); onClose(i); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose(i);
+            }}
             className="ml-1 w-3.5 h-3.5 flex items-center justify-center rounded text-[10px] opacity-0 group-hover:opacity-100 hover:bg-ink-200/60 hover:text-ink-900 transition-opacity text-ink-400"
             title="关闭"
             role="button"

@@ -288,7 +288,20 @@ pub async fn tool_modify_document(
         return ToolOutput::error("modify_document", "", "empty_id", "文档 ID 不能为空");
     }
 
-    // Runtime length check (P1-3): new_text ≤ 300 chars
+    // Runtime length checks (P1-3): both old_text and new_text ≤ 300 chars
+    if let Some(old_text) = args["old_text"].as_str() {
+        if old_text.len() > 300 {
+            return ToolOutput::error(
+                "modify_document",
+                id,
+                "content_too_long",
+                &format!(
+                    "old_text 过长（{} 字符），最大 300。请缩小匹配范围。",
+                    old_text.len()
+                ),
+            );
+        }
+    }
     if let Some(new_text) = args["new_text"].as_str() {
         if new_text.len() > 300 {
             return ToolOutput::error(
@@ -358,7 +371,7 @@ pub async fn tool_modify_document(
                 "modify_document",
                 id,
                 "not_found",
-                "未在文档正文中找到匹配的文本。请先 read_file 确认内容。",
+                "未在文档正文中找到匹配的文本。请先 read_document 确认内容。",
             );
         }
         body.replacen(old_text, new_text, 1)
@@ -437,13 +450,20 @@ pub async fn tool_append_document(
                 );
             }
         }
-        parts.iter().filter_map(|p| p.as_str().map(|s| s.to_string())).collect()
+        parts
+            .iter()
+            .filter_map(|p| p.as_str().map(|s| s.to_string()))
+            .collect()
     } else {
         // Single content mode
         let single = args["content"].as_str().unwrap_or("").to_string();
         if single.is_empty() {
-            return ToolOutput::error("append_document", id, "empty_content",
-                "请传入 content（单段）或 contents（批量）参数");
+            return ToolOutput::error(
+                "append_document",
+                id,
+                "empty_content",
+                "请传入 content（单段）或 contents（批量）参数",
+            );
         }
         if single.len() > 2000 {
             return ToolOutput::error(
@@ -896,8 +916,21 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
         );
     }
 
+    // P2-2: Read cache — return cached result if content unchanged
+    if let Some(cached) = crate::tool::cache_lookup(&full) {
+        return cached;
+    }
+
     let content = match tokio::fs::read_to_string(&full).await {
-        Ok(c) => c,
+        Ok(c) => {
+            // Cache raw content with mtime for future reads
+            if let Ok(meta) = tokio::fs::metadata(&full).await {
+                if let Ok(mtime) = meta.modified() {
+                    crate::tool::cache_insert(full.clone(), mtime, c.clone());
+                }
+            }
+            c
+        }
         Err(e) => return ToolOutput::error("read_document", id, "read_error", &e.to_string()),
     };
 
@@ -948,9 +981,7 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
     let result = if let Some(ref section) = target_section {
         format!(
             "{}\n─── 章节 [{}] ───\n{}",
-            meta_line,
-            section,
-            display_body
+            meta_line, section, display_body
         )
     } else {
         format!("{}\n─── 正文 ───\n{}", meta_line, display_body)
@@ -971,11 +1002,10 @@ fn extract_section(body: &str, section_name: &str) -> String {
     for (i, line) in lines.iter().enumerate() {
         if line.trim() == heading || line.trim().starts_with(&heading) {
             start = Some(i);
-        } else if start.is_some()
-            && end.is_none() && line.starts_with("## ") {
-                end = Some(i);
-                break;
-            }
+        } else if start.is_some() && end.is_none() && line.starts_with("## ") {
+            end = Some(i);
+            break;
+        }
     }
 
     if let Some(s) = start {

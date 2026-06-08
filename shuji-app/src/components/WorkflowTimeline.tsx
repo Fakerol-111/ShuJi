@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 import { getWorkflowState } from "../api";
-import type { PlanInfo, PhaseRuntime, PhaseExecutionStatus, WorkflowState as WFState } from "../types";
+import type {
+  PlanInfo,
+  PhaseRuntime,
+  PhaseExecutionStatus,
+  WorkflowState as WFState,
+} from "../types";
 
 interface WorkflowStatusProps {
   phaseCount: number;
@@ -46,9 +51,20 @@ function profileLabel(id: string): string {
 
 function statusDisplay(shortLabel: string): string {
   const icons: Record<string, string> = {
-    未开始: "○", 设计: "●", 审查: "●", 待批: "⚑",
-    驳回: "✗", 批准: "✓", 拆解: "●", 测试: "●", 编码: "●",
-    验证: "●", 规范: "●", 完成: "✓", 记录: "●", 问题: "●",
+    未开始: "○",
+    设计: "●",
+    审查: "●",
+    待批: "⚑",
+    驳回: "✗",
+    批准: "✓",
+    拆解: "●",
+    测试: "●",
+    编码: "●",
+    验证: "●",
+    规范: "●",
+    完成: "✓",
+    记录: "●",
+    问题: "●",
   };
   return `${icons[shortLabel] || "●"} ${shortLabel}`;
 }
@@ -56,23 +72,34 @@ function statusDisplay(shortLabel: string): string {
 function statusColor(status: string): string {
   if (["Approved", "Completed"].includes(status)) return "text-jade";
   if (status === "NotStarted") return "text-ink-300";
-  if (["PendingApproval", "Rejected"].includes(status)) return "text-vermillion";
+  if (["PendingApproval", "Rejected"].includes(status))
+    return "text-vermillion";
   return "text-gold";
 }
 
 function designShortLabel(status: string): string {
   const map: Record<string, string> = {
-    NotStarted: "未开始", Designing: "设计", Reviewing: "审查",
-    PendingApproval: "待批", Rejected: "驳回", Approved: "批准",
+    NotStarted: "未开始",
+    Designing: "设计",
+    Reviewing: "审查",
+    PendingApproval: "待批",
+    Rejected: "驳回",
+    Approved: "批准",
   };
   return map[status] || status;
 }
 
 function execShortLabel(status: string): string {
   const map: Record<string, string> = {
-    NotStarted: "未开始", TaskBreakdown: "拆解", Testing: "测试",
-    Implementing: "编码", Checking: "验证", Standards: "规范",
-    Logging: "记录", MinorIssue: "问题", Completed: "完成",
+    NotStarted: "未开始",
+    TaskBreakdown: "拆解",
+    Testing: "测试",
+    Implementing: "编码",
+    Checking: "验证",
+    Standards: "规范",
+    Logging: "记录",
+    MinorIssue: "问题",
+    Completed: "完成",
   };
   return map[status] || status;
 }
@@ -104,7 +131,9 @@ export default function WorkflowStatus({
   // ── Poll workflow state every 3s (created after first send_message) ──
   useEffect(() => {
     const fetch = () => {
-      getWorkflowState().then(setWfState).catch(() => setWfState(null));
+      getWorkflowState()
+        .then(setWfState)
+        .catch(() => setWfState(null));
     };
     fetch();
     const timer = setInterval(fetch, 3000);
@@ -198,15 +227,19 @@ export default function WorkflowStatus({
                 b.type === "朱批"
                   ? "border-vermillion/30 text-vermillion bg-vermillion/8 hover:bg-vermillion/15"
                   : b.type === "执行"
-                  ? "border-gold/30 text-gold-700 bg-gold/8"
-                  : "border-ink-200 text-ink-500 bg-ink-100/50",
+                    ? "border-gold/30 text-gold-700 bg-gold/8"
+                    : "border-ink-200 text-ink-500 bg-ink-100/50",
                 b.onClick ? "cursor-pointer" : "cursor-default",
               ]
                 .filter(Boolean)
                 .join(" ")}
             >
               {b.type === "朱批" && (
-                <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                <svg
+                  className="w-3 h-3 shrink-0"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
                   <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
                 </svg>
               )}
@@ -214,23 +247,31 @@ export default function WorkflowStatus({
                 <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse inline-block shrink-0" />
               )}
               {b.type === "工部" && (
-                <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                <svg
+                  className="w-3 h-3 shrink-0"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                  />
                 </svg>
               )}
               <span className="truncate max-w-24">{b.text}</span>
             </button>
           ))}
 
-          {blockers.length === 0 && (
-            overall === "Approved" &&
-            phases.every((p) => p.execution === "Completed")
-              ? (
-                <span className="text-caption text-jade">所有阶段已完成</span>
-              )
-              : (
-                <span className="text-caption text-ink-400">流程运行中</span>
-              ))}
+          {blockers.length === 0 &&
+            (overall === "Approved" &&
+            phases.every((p) => p.execution === "Completed") ? (
+              <span className="text-caption text-jade">所有阶段已完成</span>
+            ) : (
+              <span className="text-caption text-ink-400">流程运行中</span>
+            ))}
         </div>
 
         {/* Expand toggle */}
@@ -278,7 +319,9 @@ export default function WorkflowStatus({
                 const dStatus = phase.design as string;
                 const eObj = phase.execution as PhaseExecutionStatus;
                 const eIsBlocked =
-                  typeof eObj === "object" && eObj !== null && "Blocked" in eObj;
+                  typeof eObj === "object" &&
+                  eObj !== null &&
+                  "Blocked" in eObj;
                 const eStr = eIsBlocked ? "Blocked" : (eObj as string);
                 return (
                   <div key={phase.index} className="flex items-center gap-2">

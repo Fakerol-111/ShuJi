@@ -16,8 +16,6 @@ const variantStyles: Record<Variant, string> = {
 
 export function Card({ variant = "paper", children, className = "" }: Props) {
   return (
-    <div className={`${variantStyles[variant]} ${className}`}>
-      {children}
-    </div>
+    <div className={`${variantStyles[variant]} ${className}`}>{children}</div>
   );
 }

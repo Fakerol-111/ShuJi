@@ -140,8 +140,7 @@ async fn start_actor_system(
     milestone_tx: mpsc::UnboundedSender<String>,
 ) -> ActorSystem {
     // Per-agent cancel flags — 内阁 gets access to cancel any agent
-    let cancel_map: crate::CancelMap =
-        Arc::new(std::sync::Mutex::new(HashMap::new()));
+    let cancel_map: crate::CancelMap = Arc::new(std::sync::Mutex::new(HashMap::new()));
 
     // Create fast mailboxes for all roles before building agents,
     // so NeigeAgent can reference fast_txs from its constructor.
@@ -599,7 +598,9 @@ fn recent_dirs_path() -> std::path::PathBuf {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".to_string());
-    std::path::PathBuf::from(home).join(".shuji").join("recent_dirs.json")
+    std::path::PathBuf::from(home)
+        .join(".shuji")
+        .join("recent_dirs.json")
 }
 
 fn load_recent_dirs() -> Vec<String> {
@@ -846,9 +847,7 @@ async fn compact_impl(
         log_console!("[compact:manual] compaction completed for {}", role);
         Ok(format!(
             "压缩完成（角色: {}，原始 {} tokens → 摘要 + {} 条最近消息）",
-            role,
-            total_tokens,
-            thresholds.keep_recent_count,
+            role, total_tokens, thresholds.keep_recent_count,
         ))
     } else {
         // With force_thresholds=0, "not performed" means summarization failed.
@@ -1148,10 +1147,7 @@ pub async fn load_workflow_archive(
         let d = state.current_dir.lock().await;
         d.clone().ok_or("没有打开的项目")?
     };
-    Ok(
-        crate::workflow::WorkflowGraph::load_archive(std::path::Path::new(&dir), &filename)
-            .await,
-    )
+    Ok(crate::workflow::WorkflowGraph::load_archive(std::path::Path::new(&dir), &filename).await)
 }
 
 // ── Traceability commands ───────────────────────────────────

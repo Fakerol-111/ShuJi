@@ -88,36 +88,117 @@ export function setCodeTheme(name: string): void {
 // ── Department metadata (single source of truth) ──────────
 
 export interface DeptMeta {
-  key: string;         // English key matching backend Role enum: "neige", "zhongshuling", ...
-  label: string;       // Chinese full name: "内阁", "中书令", ...
-  shortLabel: string;  // Chinese short name for narrow spaces
+  key: string; // English key matching backend Role enum: "neige", "zhongshuling", ...
+  label: string; // Chinese full name: "内阁", "中书令", ...
+  shortLabel: string; // Chinese short name for narrow spaces
   description: string; // One-line role description
-  color: string;       // Hex accent color for borders & dots
-  bg: string;          // Tailwind bg class
-  text: string;        // Tailwind text class
-  accent: string;      // Tailwind border-l class for left accent bar
+  color: string; // Hex accent color for borders & dots
+  bg: string; // Tailwind bg class
+  text: string; // Tailwind text class
+  accent: string; // Tailwind border-l class for left accent bar
 }
 
 export const DEPT_META_LIST: DeptMeta[] = [
-  { key: "neige",           label: "内阁",     shortLabel: "内阁",   description: "奏折整理", color: "#6B4E9E", bg: "bg-purple-50",  text: "text-purple-700",  accent: "border-l-purple-400" },
-  { key: "zhongshuling",    label: "中书令",   shortLabel: "中书",   description: "方案设计", color: "#3D6B8E", bg: "bg-blue-50",    text: "text-blue-700",    accent: "border-l-blue-400" },
-  { key: "menxiashizhong",  label: "门下侍中", shortLabel: "门下",   description: "审查",     color: "#2E7D8C", bg: "bg-cyan-50",    text: "text-cyan-700",    accent: "border-l-cyan-400" },
-  { key: "shangshuling",    label: "尚书令",   shortLabel: "尚书令", description: "执行管理", color: "#B45309", bg: "bg-orange-50",  text: "text-orange-700",  accent: "border-l-orange-400" },
-  { key: "libushangshu",    label: "吏部尚书", shortLabel: "吏部",   description: "任务拆解", color: "#2F7A4F", bg: "bg-green-50",   text: "text-green-700",   accent: "border-l-green-400" },
-  { key: "bingbushangshu",  label: "兵部尚书", shortLabel: "兵部",   description: "测试",     color: "#B83A3A", bg: "bg-red-50",     text: "text-red-700",     accent: "border-l-red-400" },
-  { key: "gongbushangshu",  label: "工部尚书", shortLabel: "工部",   description: "编码实现", color: "#A16207", bg: "bg-amber-50",   text: "text-amber-700",   accent: "border-l-amber-400" },
-  { key: "xingbushangshu",  label: "刑部尚书", shortLabel: "刑部",   description: "异常检查", color: "#5C6370", bg: "bg-gray-50",    text: "text-gray-600",    accent: "border-l-gray-400" },
-  { key: "liburshangshu",   label: "礼部尚书", shortLabel: "礼部",   description: "规范检查", color: "#5B5FC7", bg: "bg-indigo-50",  text: "text-indigo-700",  accent: "border-l-indigo-400" },
+  {
+    key: "neige",
+    label: "内阁",
+    shortLabel: "内阁",
+    description: "奏折整理",
+    color: "#6B4E9E",
+    bg: "bg-purple-50",
+    text: "text-purple-700",
+    accent: "border-l-purple-400",
+  },
+  {
+    key: "zhongshuling",
+    label: "中书令",
+    shortLabel: "中书",
+    description: "方案设计",
+    color: "#3D6B8E",
+    bg: "bg-blue-50",
+    text: "text-blue-700",
+    accent: "border-l-blue-400",
+  },
+  {
+    key: "menxiashizhong",
+    label: "门下侍中",
+    shortLabel: "门下",
+    description: "审查",
+    color: "#2E7D8C",
+    bg: "bg-cyan-50",
+    text: "text-cyan-700",
+    accent: "border-l-cyan-400",
+  },
+  {
+    key: "shangshuling",
+    label: "尚书令",
+    shortLabel: "尚书令",
+    description: "执行管理",
+    color: "#B45309",
+    bg: "bg-orange-50",
+    text: "text-orange-700",
+    accent: "border-l-orange-400",
+  },
+  {
+    key: "libushangshu",
+    label: "吏部尚书",
+    shortLabel: "吏部",
+    description: "任务拆解",
+    color: "#2F7A4F",
+    bg: "bg-green-50",
+    text: "text-green-700",
+    accent: "border-l-green-400",
+  },
+  {
+    key: "bingbushangshu",
+    label: "兵部尚书",
+    shortLabel: "兵部",
+    description: "测试",
+    color: "#B83A3A",
+    bg: "bg-red-50",
+    text: "text-red-700",
+    accent: "border-l-red-400",
+  },
+  {
+    key: "gongbushangshu",
+    label: "工部尚书",
+    shortLabel: "工部",
+    description: "编码实现",
+    color: "#A16207",
+    bg: "bg-amber-50",
+    text: "text-amber-700",
+    accent: "border-l-amber-400",
+  },
+  {
+    key: "xingbushangshu",
+    label: "刑部尚书",
+    shortLabel: "刑部",
+    description: "异常检查",
+    color: "#5C6370",
+    bg: "bg-gray-50",
+    text: "text-gray-600",
+    accent: "border-l-gray-400",
+  },
+  {
+    key: "liburshangshu",
+    label: "礼部尚书",
+    shortLabel: "礼部",
+    description: "规范检查",
+    color: "#5B5FC7",
+    bg: "bg-indigo-50",
+    text: "text-indigo-700",
+    accent: "border-l-indigo-400",
+  },
 ];
 
 /** Primary lookup by Chinese label (used in ChatMessage.role, activeDepts, etc.) */
 export const DEPT_META: Record<string, DeptMeta> = Object.fromEntries(
-  DEPT_META_LIST.map((d) => [d.label, d])
+  DEPT_META_LIST.map((d) => [d.label, d]),
 );
 
 /** Lookup by English key (used in backend API responses) */
 export const DEPT_META_BY_KEY: Record<string, DeptMeta> = Object.fromEntries(
-  DEPT_META_LIST.map((d) => [d.key, d])
+  DEPT_META_LIST.map((d) => [d.key, d]),
 );
 
 /** Abbreviated English key aliases (used in some legacy API responses like token stats) */
@@ -135,7 +216,7 @@ const DEPT_KEY_ALIASES: Record<string, string> = {
 
 /** Short-label → long-label mapping (backend Role::name() uses short names for 尚书 roles) */
 const DEPT_SHORT_TO_LONG: Record<string, string> = Object.fromEntries(
-  DEPT_META_LIST.map((d) => [d.shortLabel, d.label])
+  DEPT_META_LIST.map((d) => [d.shortLabel, d.label]),
 );
 
 /** Resolve any role key (Chinese long, Chinese short, full English, abbreviated English) to DeptMeta */
@@ -157,7 +238,7 @@ export const DEPT_ORDER = DEPT_META_LIST.map((d) => d.label);
 
 /** Convenience: English key → Chinese label */
 export const DEPT_LABEL_BY_KEY: Record<string, string> = Object.fromEntries(
-  DEPT_META_LIST.map((d) => [d.key, d.label])
+  DEPT_META_LIST.map((d) => [d.key, d.label]),
 );
 
 // ── Legacy RoleInfo (used by SetupPage) ──────────────────
@@ -169,8 +250,16 @@ export interface RoleInfo {
 }
 
 export const ALL_ROLES: RoleInfo[] = [
-  { key: "default", label: "默认（全局）", description: "所有未单独配置的角色使用此回退" },
-  ...DEPT_META_LIST.map((d) => ({ key: d.key, label: d.label, description: d.description })),
+  {
+    key: "default",
+    label: "默认（全局）",
+    description: "所有未单独配置的角色使用此回退",
+  },
+  ...DEPT_META_LIST.map((d) => ({
+    key: d.key,
+    label: d.label,
+    description: d.description,
+  })),
 ];
 
 /** DeepSeek 1M 窗口：接近上限再压缩（cl100k token 计数，各部门统一） */
@@ -183,7 +272,11 @@ const NEAR_WINDOW_CONTEXT = {
 /** 各部门内置上下文压缩默认值（与 Rust `default_compact_thresholds_for_role` 一致） */
 export const ROLE_CONTEXT_DEFAULTS: Record<
   string,
-  { token_threshold: number; keep_recent_count: number; mid_run_compact: boolean }
+  {
+    token_threshold: number;
+    keep_recent_count: number;
+    mid_run_compact: boolean;
+  }
 > = {
   工部: { ...NEAR_WINDOW_CONTEXT },
   刑部: { ...NEAR_WINDOW_CONTEXT },

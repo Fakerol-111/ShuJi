@@ -24,7 +24,7 @@ impl XingbuShangshuAgent {
 
     fn tools() -> Vec<ToolDefinition> {
         let mut tools = crate::tool::registry::code_inspect_tools();
-        tools.push(crate::tool::list_dir_tool_def());
+        // list_dir_tree is already included in code_inspect_tools
         tools.extend(crate::tool::registry::file_write_tools_for_code());
         // Documents for report writing only
         tools.push(crate::tool::documents::create_document_tool_def());

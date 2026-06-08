@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { getConfig, saveConfig, checkApiConnection, setModelPreset } from "../api";
+import {
+  getConfig,
+  saveConfig,
+  checkApiConnection,
+  setModelPreset,
+} from "../api";
 import type { AppConfig, RoleEndpoint } from "../types";
 import { SealLogo } from "../components/SealLogo";
 import { Card } from "../components/ui/Card";
@@ -14,8 +19,14 @@ const API_URL_PRESETS = [
 ];
 
 const MODEL_PRESETS: Record<string, string[]> = {
-  "https://api.deepseek.com/chat/completions": ["deepseek-v4-flash", "deepseek-4-pro"],
-  "https://api.anthropic.com/v1/messages": ["claude-sonnet-4-20250514", "claude-haiku-4-5-20251001"],
+  "https://api.deepseek.com/chat/completions": [
+    "deepseek-v4-flash",
+    "deepseek-4-pro",
+  ],
+  "https://api.anthropic.com/v1/messages": [
+    "claude-sonnet-4-20250514",
+    "claude-haiku-4-5-20251001",
+  ],
   "https://api.openai.com/v1/chat/completions": ["gpt-4o", "gpt-4o-mini"],
 };
 
@@ -24,7 +35,9 @@ export default function SetupPage() {
   const [apiKey, setApiKey] = useState("");
   const [apiUrl, setApiUrl] = useState(API_URL_PRESETS[0].url);
   const [customUrl, setCustomUrl] = useState("");
-  const [model, setModel] = useState(MODEL_PRESETS[API_URL_PRESETS[0].url]?.[0] || "");
+  const [model, setModel] = useState(
+    MODEL_PRESETS[API_URL_PRESETS[0].url]?.[0] || "",
+  );
   const [preset, setPreset] = useState("balanced");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -100,9 +113,15 @@ export default function SetupPage() {
       <div className="w-full max-w-md mx-4">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="flex justify-center mb-3"><SealLogo size={40} /></div>
-          <h1 className="font-display text-display font-bold text-ink-900 tracking-wide mb-2">枢机</h1>
-          <p className="text-body text-ink-600">欢迎使用。请先配置 API 密钥以开始使用。</p>
+          <div className="flex justify-center mb-3">
+            <SealLogo size={40} />
+          </div>
+          <h1 className="font-display text-display font-bold text-ink-900 tracking-wide mb-2">
+            枢机
+          </h1>
+          <p className="text-body text-ink-600">
+            欢迎使用。请先配置 API 密钥以开始使用。
+          </p>
         </div>
 
         {/* Form */}
@@ -115,7 +134,10 @@ export default function SetupPage() {
             <input
               type="password"
               value={apiKey}
-              onChange={(e) => { setApiKey(e.target.value); setError(""); }}
+              onChange={(e) => {
+                setApiKey(e.target.value);
+                setError("");
+              }}
               placeholder="sk-..."
               className="w-full px-3 py-2 text-body border border-fold rounded-lg bg-surface-parchment text-ink-900 placeholder-ink-400 focus:outline-none focus:ring-2 focus:ring-vermillion/30 focus:border-vermillion transition-colors"
             />
@@ -126,7 +148,9 @@ export default function SetupPage() {
 
           {/* API URL */}
           <div>
-            <label className="block text-ui font-medium text-ink-600 mb-1.5">服务商</label>
+            <label className="block text-ui font-medium text-ink-600 mb-1.5">
+              服务商
+            </label>
             <div className="flex gap-1.5 flex-wrap mb-2">
               {API_URL_PRESETS.map((p) => (
                 <button
@@ -155,7 +179,9 @@ export default function SetupPage() {
 
           {/* Model */}
           <div>
-            <label className="block text-ui font-medium text-ink-600 mb-1.5">模型</label>
+            <label className="block text-ui font-medium text-ink-600 mb-1.5">
+              模型
+            </label>
             {MODEL_PRESETS[effectiveUrl] ? (
               <div className="flex gap-1.5 flex-wrap">
                 {MODEL_PRESETS[effectiveUrl].map((m) => (
@@ -185,12 +211,18 @@ export default function SetupPage() {
 
           {/* Model Preset */}
           <div>
-            <label className="block text-ui font-medium text-ink-600 mb-1.5">模型分级预设</label>
+            <label className="block text-ui font-medium text-ink-600 mb-1.5">
+              模型分级预设
+            </label>
             <div className="flex gap-1.5 flex-wrap">
               {[
                 { key: "balanced", label: "均衡", desc: "全部使用同一模型" },
                 { key: "economy", label: "经济", desc: "审查部门用轻量模型" },
-                { key: "quality", label: "质量", desc: "设计/编码部门用强模型" },
+                {
+                  key: "quality",
+                  label: "质量",
+                  desc: "设计/编码部门用强模型",
+                },
               ].map((p) => (
                 <button
                   key={p.key}
@@ -219,7 +251,10 @@ export default function SetupPage() {
             </button>
             {showAdvanced && (
               <div className="mt-2 p-3 bg-surface-parchment rounded-lg text-caption text-ink-500 space-y-1">
-                <p>进入主界面后点击右上角 <strong>设置</strong>，可为各部门分别配置 API。</p>
+                <p>
+                  进入主界面后点击右上角 <strong>设置</strong>
+                  ，可为各部门分别配置 API。
+                </p>
                 <p>当前默认 key 将被所有部门共享，除非在设置中单独覆盖。</p>
                 <p>模型分级预设只影响角色 model 字段，不改 API URL/Key。</p>
               </div>
@@ -235,11 +270,7 @@ export default function SetupPage() {
 
           {/* Actions */}
           <div className="flex gap-3 pt-1">
-            <Button
-              variant="ghost"
-              className="flex-1"
-              onClick={handleSkip}
-            >
+            <Button variant="ghost" className="flex-1" onClick={handleSkip}>
               跳过
             </Button>
             <Button
@@ -257,13 +288,24 @@ export default function SetupPage() {
         {showSkipConfirm && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
             <Card variant="paper" className="max-w-sm mx-4 p-6 shadow-lg">
-              <h2 className="font-display text-sm font-bold text-ink-900 mb-2">跳过配置？</h2>
+              <h2 className="font-display text-sm font-bold text-ink-900 mb-2">
+                跳过配置？
+              </h2>
               <p className="text-body text-ink-600 mb-4">
-                未配置 API 密钥将无法下诏驱动各部门执行。您可以浏览已打开的项目或无密钥测试 Demo。
+                未配置 API
+                密钥将无法下诏驱动各部门执行。您可以浏览已打开的项目或无密钥测试
+                Demo。
               </p>
               <div className="flex gap-2 justify-end">
-                <Button variant="ghost" onClick={() => setShowSkipConfirm(false)}>继续配置</Button>
-                <Button variant="primary" onClick={confirmSkip}>仅浏览</Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => setShowSkipConfirm(false)}
+                >
+                  继续配置
+                </Button>
+                <Button variant="primary" onClick={confirmSkip}>
+                  仅浏览
+                </Button>
               </div>
             </Card>
           </div>

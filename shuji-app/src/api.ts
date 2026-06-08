@@ -1,5 +1,24 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Project, ProjectSummary, ChatMessage, ProjectSnapshot, DeptLogEntry, AppConfig, ContextWindowConfig, TokenUsage, ContextStats, CheckpointEntry, RoundMetrics, LineageNode, TimelineData, DocDiffFile, TraceResult, WorkflowConfig, WorkflowState, WorkflowGraph } from "./types";
+import type {
+  Project,
+  ProjectSummary,
+  ChatMessage,
+  ProjectSnapshot,
+  DeptLogEntry,
+  AppConfig,
+  ContextWindowConfig,
+  TokenUsage,
+  ContextStats,
+  CheckpointEntry,
+  RoundMetrics,
+  LineageNode,
+  TimelineData,
+  DocDiffFile,
+  TraceResult,
+  WorkflowConfig,
+  WorkflowState,
+  WorkflowGraph,
+} from "./types";
 
 export interface ShujiEntry {
   name: string;
@@ -14,7 +33,11 @@ export interface ShujiDoc {
   path: string;
 }
 
-export async function createProject(name: string, goal: string, workingDir: string): Promise<Project> {
+export async function createProject(
+  name: string,
+  goal: string,
+  workingDir: string,
+): Promise<Project> {
   return invoke("create_project", { name, goal, workingDir });
 }
 
@@ -38,16 +61,20 @@ export async function sendMessage(message: string): Promise<string> {
 }
 
 // Independent discussion with Cabinet — does not affect project state
-export async function discussWithCabinet(message: string): Promise<ChatMessage> {
+export async function discussWithCabinet(
+  message: string,
+): Promise<ChatMessage> {
   return invoke("discuss_with_cabinet", { message });
 }
-
 
 export async function getSnapshot(): Promise<ProjectSnapshot> {
   return invoke("get_snapshot");
 }
 
-export async function readDocument(subdir: string, filename: string): Promise<string | null> {
+export async function readDocument(
+  subdir: string,
+  filename: string,
+): Promise<string | null> {
   return invoke("read_document", { subdir, filename });
 }
 
@@ -59,7 +86,10 @@ export async function listShujiTree(projectDir: string): Promise<ShujiEntry[]> {
   return invoke("list_shuji_tree", { projectDir });
 }
 
-export async function readShujiDoc(projectDir: string, path: string): Promise<ShujiDoc> {
+export async function readShujiDoc(
+  projectDir: string,
+  path: string,
+): Promise<ShujiDoc> {
   return invoke("read_shuji_doc", { projectDir, path });
 }
 
@@ -70,7 +100,10 @@ export interface DocumentDiff {
   removed: number;
 }
 
-export async function getDocumentDiff(projectDir: string, docPath: string): Promise<DocumentDiff> {
+export async function getDocumentDiff(
+  projectDir: string,
+  docPath: string,
+): Promise<DocumentDiff> {
   return invoke("get_document_diff", { projectDir, docPath });
 }
 
@@ -87,7 +120,9 @@ export async function getRecentDirs(): Promise<string[]> {
 }
 
 export type { TokenUsage, ContextStats };
-export async function getTokenStats(): Promise<Record<string, Record<string, TokenUsage>>> {
+export async function getTokenStats(): Promise<
+  Record<string, Record<string, TokenUsage>>
+> {
   return invoke("get_token_stats");
 }
 
@@ -135,7 +170,9 @@ export async function getContextConfig(): Promise<ContextWindowConfig> {
   return invoke("get_context_config");
 }
 
-export async function saveContextConfig(config: ContextWindowConfig): Promise<void> {
+export async function saveContextConfig(
+  config: ContextWindowConfig,
+): Promise<void> {
   return invoke("save_context_config", { config });
 }
 
@@ -167,7 +204,11 @@ export async function createDemoProject(): Promise<Project> {
 
 // ── API health check ─────────────────────────────────────────
 
-export async function checkApiConnection(apiKey: string, apiUrl: string, model: string): Promise<string> {
+export async function checkApiConnection(
+  apiKey: string,
+  apiUrl: string,
+  model: string,
+): Promise<string> {
   return invoke("check_api_connection", { apiKey, apiUrl, model });
 }
 
@@ -207,7 +248,9 @@ export async function listWorkflowArchives(): Promise<[string, string][]> {
   return invoke("list_workflow_archives");
 }
 
-export async function loadWorkflowArchive(filename: string): Promise<WorkflowGraph | null> {
+export async function loadWorkflowArchive(
+  filename: string,
+): Promise<WorkflowGraph | null> {
   return invoke("load_workflow_archive", { filename });
 }
 
@@ -216,7 +259,7 @@ export async function loadWorkflowArchive(filename: string): Promise<WorkflowGra
 export async function setDocumentStatus(
   id: string,
   status: "approved" | "rejected",
-  emperorNote?: string
+  emperorNote?: string,
 ): Promise<string> {
   return invoke("set_document_status", { id, status, emperorNote });
 }
@@ -233,7 +276,10 @@ export async function clearSoul(): Promise<void> {
 
 // ── Checkpoint commands ──────────────────────────────────────
 
-export async function listCheckpoints(role?: string, limit?: number): Promise<CheckpointEntry[]> {
+export async function listCheckpoints(
+  role?: string,
+  limit?: number,
+): Promise<CheckpointEntry[]> {
   return invoke("list_checkpoints", { role, limit });
 }
 
@@ -243,7 +289,9 @@ export async function restoreCheckpoint(commitHash: string): Promise<string> {
 
 // ── Audit commands ───────────────────────────────────────────────
 
-export async function getDocumentLineage(docId: string): Promise<LineageNode | null> {
+export async function getDocumentLineage(
+  docId: string,
+): Promise<LineageNode | null> {
   return invoke("get_document_lineage", { docId });
 }
 

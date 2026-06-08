@@ -13,7 +13,13 @@ interface ProjectOverviewProps {
   onDocSelect?: (path: string) => void;
 }
 
-export default function ProjectOverview({ project, activeDepts, planInfo, onOpenProject, onDocSelect }: ProjectOverviewProps) {
+export default function ProjectOverview({
+  project,
+  activeDepts,
+  planInfo,
+  onOpenProject,
+  onDocSelect,
+}: ProjectOverviewProps) {
   const [latestDocs, setLatestDocs] = useState<ShujiEntry[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -36,15 +42,24 @@ export default function ProjectOverview({ project, activeDepts, planInfo, onOpen
     if (!project?.working_dir) return;
     setDocsLoading(true);
     setError("");
-    listShujiTree(project.working_dir).then((tree) => {
-      setLatestDocs(flatten(tree).filter((entry) => entry.path.startsWith(".shuji/") && entry.name.endsWith(".md")).slice(0, 5));
-      setDocsLoading(false);
-    }).catch((e) => {
-      console.error("文档树加载失败:", e);
-      setError("加载失败");
-      setLatestDocs([]);
-      setDocsLoading(false);
-    });
+    listShujiTree(project.working_dir)
+      .then((tree) => {
+        setLatestDocs(
+          flatten(tree)
+            .filter(
+              (entry) =>
+                entry.path.startsWith(".shuji/") && entry.name.endsWith(".md"),
+            )
+            .slice(0, 5),
+        );
+        setDocsLoading(false);
+      })
+      .catch((e) => {
+        console.error("文档树加载失败:", e);
+        setError("加载失败");
+        setLatestDocs([]);
+        setDocsLoading(false);
+      });
   }, [project?.working_dir]);
 
   if (!project) {
@@ -55,7 +70,10 @@ export default function ProjectOverview({ project, activeDepts, planInfo, onOpen
           <p className="text-ui text-ink-500 mb-6 leading-relaxed">
             体验枢机：打开工作目录，拟旨下诏，驱动各部门协同运作。
           </p>
-          <button onClick={onOpenProject} className="px-5 py-2 bg-ink-900 text-ink-50 text-ui rounded-lg hover:bg-ink-800 transition-colors">
+          <button
+            onClick={onOpenProject}
+            className="px-5 py-2 bg-ink-900 text-ink-50 text-ui rounded-lg hover:bg-ink-800 transition-colors"
+          >
             打开项目
           </button>
         </div>
@@ -69,18 +87,33 @@ export default function ProjectOverview({ project, activeDepts, planInfo, onOpen
   return (
     <div className="h-full overflow-y-auto surface-paper p-8">
       <Card variant="paper" className="max-w-3xl mx-auto p-6">
-        <div className="font-display text-display font-bold text-ink-900 mb-1">{project.name}</div>
-        <p className="text-caption text-ink-400 font-mono truncate mb-6">{project.working_dir}</p>
+        <div className="font-display text-display font-bold text-ink-900 mb-1">
+          {project.name}
+        </div>
+        <p className="text-caption text-ink-400 font-mono truncate mb-6">
+          {project.working_dir}
+        </p>
 
         <section className="mb-6">
-          <h3 className="font-display text-ui text-ink-600 font-semibold title-rule-gold mb-3">当值诸司</h3>
+          <h3 className="font-display text-ui text-ink-600 font-semibold title-rule-gold mb-3">
+            当值诸司
+          </h3>
           {activeDepts.length === 0 ? (
             <p className="text-body text-ink-400">暂无活跃部门</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {activeDepts.map((dept) => (
-                <span key={dept} className="px-2 py-1 rounded-full bg-ink-100 text-ui text-ink-700 flex items-center gap-1">
-                  <span className="animate-pulse" style={{ color: getDeptMeta(dept)?.color || "#6b7280" }}>●</span>{dept}
+                <span
+                  key={dept}
+                  className="px-2 py-1 rounded-full bg-ink-100 text-ui text-ink-700 flex items-center gap-1"
+                >
+                  <span
+                    className="animate-pulse"
+                    style={{ color: getDeptMeta(dept)?.color || "#6b7280" }}
+                  >
+                    ●
+                  </span>
+                  {dept}
                 </span>
               ))}
             </div>
@@ -88,7 +121,9 @@ export default function ProjectOverview({ project, activeDepts, planInfo, onOpen
         </section>
 
         <section className="mb-6">
-          <h3 className="font-display text-ui text-ink-600 font-semibold title-rule-gold mb-3">最新牍文</h3>
+          <h3 className="font-display text-ui text-ink-600 font-semibold title-rule-gold mb-3">
+            最新牍文
+          </h3>
           {docsLoading ? (
             <p className="text-body text-ink-400">开卷中…</p>
           ) : error ? (
@@ -103,7 +138,9 @@ export default function ProjectOverview({ project, activeDepts, planInfo, onOpen
                   onClick={() => onDocSelect?.(doc.path)}
                   className="flex items-center gap-2 text-body cursor-pointer hover:bg-ink-100/50 rounded px-1 -mx-1 transition-colors"
                 >
-                  <span className="font-mono text-ink-800">{doc.name.replace(/\.md$/, "")}</span>
+                  <span className="font-mono text-ink-800">
+                    {doc.name.replace(/\.md$/, "")}
+                  </span>
                   <span className="text-ink-300">·</span>
                   <span className="text-ink-500">{doc.type_label}</span>
                 </div>
@@ -114,13 +151,23 @@ export default function ProjectOverview({ project, activeDepts, planInfo, onOpen
 
         {planInfo && total > 0 && (
           <section>
-            <h3 className="font-display text-ui text-ink-600 font-semibold title-rule-gold mb-3">工部计划: {done}/{total}</h3>
+            <h3 className="font-display text-ui text-ink-600 font-semibold title-rule-gold mb-3">
+              工部计划: {done}/{total}
+            </h3>
             <div className="w-full h-2 bg-ink-200 rounded-full overflow-hidden mb-2">
-              <div className="h-full bg-gold" style={{ width: `${Math.round((done / total) * 100)}%` }} />
+              <div
+                className="h-full bg-gold"
+                style={{ width: `${Math.round((done / total) * 100)}%` }}
+              />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
               {planInfo.batches.map((b, i) => (
-                <div key={i} className={`text-ui ${b.status === "current" ? "text-ink-900 font-medium" : "text-ink-500"}`}>· {b.name}</div>
+                <div
+                  key={i}
+                  className={`text-ui ${b.status === "current" ? "text-ink-900 font-medium" : "text-ink-500"}`}
+                >
+                  · {b.name}
+                </div>
               ))}
             </div>
           </section>
@@ -146,5 +193,7 @@ export default function ProjectOverview({ project, activeDepts, planInfo, onOpen
 }
 
 function flatten(entries: ShujiEntry[]): ShujiEntry[] {
-  return entries.flatMap((entry) => entry.is_dir ? flatten(entry.children) : [entry]);
+  return entries.flatMap((entry) =>
+    entry.is_dir ? flatten(entry.children) : [entry],
+  );
 }

@@ -9,7 +9,7 @@
 
 # 工作方式
 
-1. 第一轮直接 `read_file` 读取 task 文档（路径格式 `.shuji/tasks/{task_id}.md`，task_id 已在初始消息中给定）。**不要用 find_document 或 list_dir 去找——路径已知，直接读。**
+1. 第一轮直接 `read_document(id="{task_id}")` 读取 task 文档。task_id 已在初始消息中给定。**不要用 find_document 或 list_dir 去找——路径已知，直接读。**
 2. **仅当需求涉及已有项目时**才读 `.shuji/state.json` 了解项目背景。新项目、窄需求、非功能需求——跳过。
 3. 创建需求文档：`create_document(type="reqs")`
 4. 用 `append_document` 逐段填充。**每次最多 2000 字符，尽量充分利用单次调用容量。**每次调用必须传 `id` 参数（创建文档时返回的 ID）。
@@ -18,13 +18,16 @@
 
 ```markdown
 ## 项目目标
+
 一句话：这个系统要解决什么问题
 
 ## 目标用户
+
 - 用户角色1：做什么的
 - 用户角色2：做什么的
 
 ## 核心场景（用户故事）
+
 1. [场景名] 作为XX角色，我想做XX，以便达到XX目的
    - 前置条件：
    - 主流程：1 → 2 → 3
@@ -32,15 +35,18 @@
    - 优先级：核心 / 增强 / 锦上添花
 
 ## 非功能需求
+
 - 性能：
 - 安全：
 - 可用性：
 - 数据量级：
 
 ## 明确不做
+
 - ...
 
 ## 待澄清
+
 - [ ] ...
 ```
 
@@ -61,6 +67,6 @@
 1. **CRITICAL: 每轮最多 1 次工具调用。无评论。**
 2. **CRITICAL: 每个 `append_document` 最多 2000 字符，尽量充分利用单次调用容量。必须传 `id` 参数。**
 3. **CRITICAL: 最后一轮只输出文档 ID，一个多余的字都不许有。**
-4. 直接 `read_file` 读 task 文档，不用 find_document/list_dir 探索。
+4. 直接 `read_document(id="{task_id}")` 读 task 文档，不用 find_document/list_dir 探索。
 5. 不写生产代码，不讨论技术方案。
 6. 不确定的事情放"待澄清"，不编造。

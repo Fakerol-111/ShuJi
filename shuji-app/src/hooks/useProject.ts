@@ -4,7 +4,13 @@ import { getConfig, loadProject, getRecentDirs, getChatHistory } from "../api";
 import type { Project, ChatMessage } from "../types";
 
 function initialCabinetMessage(content: string): ChatMessage {
-  return { role: "内阁", content, options: [], documents: [], timestamp: new Date().toISOString() };
+  return {
+    role: "内阁",
+    content,
+    options: [],
+    documents: [],
+    timestamp: new Date().toISOString(),
+  };
 }
 
 export function useProject() {
@@ -15,21 +21,42 @@ export function useProject() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    getConfig().then((cfg) => {
-      if (!cfg.roles?.default?.api_key) navigate("/setup", { replace: true });
-    }).catch((e) => setError(`读取配置失败：${e}`));
-    getRecentDirs().then((dirs) => {
-      setRecentDirs(dirs);
-      if (dirs.length > 0) void loadProjectIntoState(dirs[0]).catch((e) => setError(e instanceof Error ? e.message : String(e)));
-    }).catch((e) => setError(`读取最近项目失败：${e}`));
+    getConfig()
+      .then((cfg) => {
+        if (!cfg.roles?.default?.api_key) navigate("/setup", { replace: true });
+      })
+      .catch((e) => setError(`读取配置失败：${e}`));
+    getRecentDirs()
+      .then((dirs) => {
+        setRecentDirs(dirs);
+        if (dirs.length > 0)
+          void loadProjectIntoState(dirs[0]).catch((e) =>
+            setError(e instanceof Error ? e.message : String(e)),
+          );
+      })
+      .catch((e) => setError(`读取最近项目失败：${e}`));
   }, []);
 
   const loadProjectIntoState = async (path: string) => {
     const p = await loadProject(path);
     setProject(p);
     const hist = await getChatHistory();
-    setMessages(hist.length > 0 ? hist : [initialCabinetMessage("有什么需要做的？请告诉我。")]);
+    setMessages(
+      hist.length > 0
+        ? hist
+        : [initialCabinetMessage("有什么需要做的？请告诉我。")],
+    );
   };
 
-  return { project, setProject, messages, setMessages, recentDirs, setRecentDirs, error, setError, loadProjectIntoState };
+  return {
+    project,
+    setProject,
+    messages,
+    setMessages,
+    recentDirs,
+    setRecentDirs,
+    error,
+    setError,
+    loadProjectIntoState,
+  };
 }

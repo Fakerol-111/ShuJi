@@ -1,7 +1,30 @@
 import { useState } from "react";
-import { getConfig, saveConfig, getContextConfig, saveContextConfig, checkApiConnection, getWorkflowPreset as apiGetPreset, setWorkflowPreset as apiSetPreset, getModelPreset, setModelPreset, getWorkflowConfig as apiGetWorkflowConfig, setWorkflowConfig as apiSetWorkflowConfig } from "../api";
-import { ALL_ROLES, CODE_THEMES, ROLE_CONTEXT_DEFAULTS, getCodeTheme, setCodeTheme as persistCodeTheme } from "../constants";
-import type { RoleEndpoint, ContextWindowConfig, RoleContextConfig, WorkflowConfig as WFConfig } from "../types";
+import {
+  getConfig,
+  saveConfig,
+  getContextConfig,
+  saveContextConfig,
+  checkApiConnection,
+  getWorkflowPreset as apiGetPreset,
+  setWorkflowPreset as apiSetPreset,
+  getModelPreset,
+  setModelPreset,
+  getWorkflowConfig as apiGetWorkflowConfig,
+  setWorkflowConfig as apiSetWorkflowConfig,
+} from "../api";
+import {
+  ALL_ROLES,
+  CODE_THEMES,
+  ROLE_CONTEXT_DEFAULTS,
+  getCodeTheme,
+  setCodeTheme as persistCodeTheme,
+} from "../constants";
+import type {
+  RoleEndpoint,
+  ContextWindowConfig,
+  RoleContextConfig,
+  WorkflowConfig as WFConfig,
+} from "../types";
 
 // ── Provider presets (shared with SetupPage) ───────────────
 
@@ -13,8 +36,14 @@ const API_URL_PRESETS = [
 ];
 
 const MODEL_PRESETS: Record<string, string[]> = {
-  "https://api.deepseek.com/chat/completions": ["deepseek-v4-flash", "deepseek-4-pro"],
-  "https://api.anthropic.com/v1/messages": ["claude-sonnet-4-20250514", "claude-haiku-4-5-20251001"],
+  "https://api.deepseek.com/chat/completions": [
+    "deepseek-v4-flash",
+    "deepseek-4-pro",
+  ],
+  "https://api.anthropic.com/v1/messages": [
+    "claude-sonnet-4-20250514",
+    "claude-haiku-4-5-20251001",
+  ],
   "https://api.openai.com/v1/chat/completions": ["gpt-4o", "gpt-4o-mini"],
 };
 
@@ -79,7 +108,9 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
   const [useDefault, setUseDefault] = useState<Record<string, boolean>>({});
   const [expandedRole, setExpandedRole] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState("");
-  const [healthStatus, setHealthStatus] = useState<"idle" | "checking" | "ok" | "fail">("idle");
+  const [healthStatus, setHealthStatus] = useState<
+    "idle" | "checking" | "ok" | "fail"
+  >("idle");
   const [healthMsg, setHealthMsg] = useState("");
   const [workflowPreset, setWorkflowPresetLocal] = useState("standard");
   const [workflowIntent, setWorkflowIntent] = useState<string>("auto");
@@ -87,71 +118,104 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
   const [codeTheme, setCodeThemeLocal] = useState(getCodeTheme);
 
   // Context window config state
-  const [contextOverrides, setContextOverrides] = useState<Record<string, ContextRoleForm>>({});
-  const [contextUseDefault, setContextUseDefault] = useState<Record<string, boolean>>({});
+  const [contextOverrides, setContextOverrides] = useState<
+    Record<string, ContextRoleForm>
+  >({});
+  const [contextUseDefault, setContextUseDefault] = useState<
+    Record<string, boolean>
+  >({});
 
   const loadConfig = () => {
-    getConfig().then((cfg) => {
-      const { defaultCfg: d, overrides: o, useDefault: u } = initRoleConfigs(cfg.roles ?? {});
-      setDefaultCfg(d);
-      setOverrides(o);
-      setUseDefault(u);
-    }).catch((e) => console.error("读取配置失败:", e));
+    getConfig()
+      .then((cfg) => {
+        const {
+          defaultCfg: d,
+          overrides: o,
+          useDefault: u,
+        } = initRoleConfigs(cfg.roles ?? {});
+        setDefaultCfg(d);
+        setOverrides(o);
+        setUseDefault(u);
+      })
+      .catch((e) => console.error("读取配置失败:", e));
   };
 
   const loadContextConfig = () => {
-    getContextConfig().then((ctxCfg: ContextWindowConfig) => {
-      const overrides: Record<string, ContextRoleForm> = {};
-      const useDefault: Record<string, boolean> = {};
-      const roles = ctxCfg.roles ?? {};
-      for (const role of ALL_ROLES) {
-        if (role.key === "default") continue;
-        // 运行时 lookup 使用中文部门名（role.label）
-        if (roles[role.label]) {
-          const raw = roles[role.label] as RoleContextConfig & {
-            char_threshold?: number;
-          };
-          overrides[role.key] = {
-            token_threshold:
-              raw.token_threshold ?? raw.char_threshold ?? DEFAULT_CONTEXT_VALUES.token_threshold,
-            keep_recent_count:
-              raw.keep_recent_count ?? DEFAULT_CONTEXT_VALUES.keep_recent_count,
-            mid_run_compact:
-              raw.mid_run_compact ?? DEFAULT_CONTEXT_VALUES.mid_run_compact,
-          };
-          useDefault[role.key] = false;
-        } else {
-          useDefault[role.key] = true;
+    getContextConfig()
+      .then((ctxCfg: ContextWindowConfig) => {
+        const overrides: Record<string, ContextRoleForm> = {};
+        const useDefault: Record<string, boolean> = {};
+        const roles = ctxCfg.roles ?? {};
+        for (const role of ALL_ROLES) {
+          if (role.key === "default") continue;
+          // 运行时 lookup 使用中文部门名（role.label）
+          if (roles[role.label]) {
+            const raw = roles[role.label] as RoleContextConfig & {
+              char_threshold?: number;
+            };
+            overrides[role.key] = {
+              token_threshold:
+                raw.token_threshold ??
+                raw.char_threshold ??
+                DEFAULT_CONTEXT_VALUES.token_threshold,
+              keep_recent_count:
+                raw.keep_recent_count ??
+                DEFAULT_CONTEXT_VALUES.keep_recent_count,
+              mid_run_compact:
+                raw.mid_run_compact ?? DEFAULT_CONTEXT_VALUES.mid_run_compact,
+            };
+            useDefault[role.key] = false;
+          } else {
+            useDefault[role.key] = true;
+          }
         }
-      }
-      setContextOverrides(overrides);
-      setContextUseDefault(useDefault);
-    }).catch((e) => console.error("读取上下文配置失败:", e));
+        setContextOverrides(overrides);
+        setContextUseDefault(useDefault);
+      })
+      .catch((e) => console.error("读取上下文配置失败:", e));
   };
 
   const loadWorkflowConfig = () => {
-    apiGetWorkflowConfig().then((cfg: WFConfig) => {
-      setWorkflowIntent(cfg.intent);
-      // Governance 也来自 workflow_config.json（单一来源）
-      setWorkflowPresetLocal(cfg.governance);
-    }).catch(() => {
-      setWorkflowIntent("auto");
-      // 回退到旧 preset 路径
-      apiGetPreset().then(setWorkflowPresetLocal).catch(() => setWorkflowPresetLocal("standard"));
-    });
+    apiGetWorkflowConfig()
+      .then((cfg: WFConfig) => {
+        setWorkflowIntent(cfg.intent);
+        // Governance 也来自 workflow_config.json（单一来源）
+        setWorkflowPresetLocal(cfg.governance);
+      })
+      .catch(() => {
+        setWorkflowIntent("auto");
+        // 回退到旧 preset 路径
+        apiGetPreset()
+          .then(setWorkflowPresetLocal)
+          .catch(() => setWorkflowPresetLocal("standard"));
+      });
   };
 
   const loadModelPreset = () => {
-    getModelPreset().then(setModelPresetLocal).catch(() => setModelPresetLocal("balanced"));
+    getModelPreset()
+      .then(setModelPresetLocal)
+      .catch(() => setModelPresetLocal("balanced"));
   };
 
   const toggle = () => {
-    if (!open) { loadConfig(); loadContextConfig(); loadWorkflowConfig(); loadModelPreset(); }
+    if (!open) {
+      loadConfig();
+      loadContextConfig();
+      loadWorkflowConfig();
+      loadModelPreset();
+    }
     setOpen(!open);
   };
 
-  const setOverride = (role: string, field: keyof RoleFormState, value: string) => {
-    setOverrides((prev) => ({ ...prev, [role]: { ...(prev[role] ?? defaultCfg), [field]: value } }));
+  const setOverride = (
+    role: string,
+    field: keyof RoleFormState,
+    value: string,
+  ) => {
+    setOverrides((prev) => ({
+      ...prev,
+      [role]: { ...(prev[role] ?? defaultCfg), [field]: value },
+    }));
     // Manual override → mark preset as custom
     setModelPresetLocal("custom");
   };
@@ -188,7 +252,11 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
     });
   };
 
-  const setContextOverride = (role: string, field: string, value: number | boolean) => {
+  const setContextOverride = (
+    role: string,
+    field: string,
+    value: number | boolean,
+  ) => {
     setContextOverrides((prev) => ({
       ...prev,
       [role]: { ...(prev[role] ?? DEFAULT_CONTEXT_VALUES), [field]: value },
@@ -230,7 +298,8 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
       for (const role of ALL_ROLES) {
         if (role.key === "default") continue;
         if (!(contextUseDefault[role.key] ?? true)) {
-          ctxRoles[role.label] = contextOverrides[role.key] ?? effectiveContext(role.key);
+          ctxRoles[role.label] =
+            contextOverrides[role.key] ?? effectiveContext(role.key);
         }
       }
       await saveContextConfig({ roles: ctxRoles });
@@ -279,7 +348,10 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
 
   return (
     <div className="relative">
-      <button onClick={toggle} className="text-xs px-2 py-1 text-ink-400 hover:text-ink-100 hover:bg-ink-800 rounded">
+      <button
+        onClick={toggle}
+        className="text-xs px-2 py-1 text-ink-400 hover:text-ink-100 hover:bg-ink-800 rounded"
+      >
         ⚙ 设置
       </button>
 
@@ -287,15 +359,36 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
         <div className="absolute right-0 top-full mt-1 w-[360px] bg-ink-900 border border-ink-700 rounded-lg shadow-xl z-50 p-3 space-y-3 max-h-[80vh] overflow-y-auto">
           {/* ── Default role ── */}
           <div className="space-y-1.5 pb-2 border-b border-ink-700">
-            <span className="text-[11px] font-semibold text-ink-300">默认（全局）</span>
-            <ConfigInput label="API 密钥" type="password" value={defaultCfg.api_key} onChange={(v) => setDefaultCfg({ ...defaultCfg, api_key: v })} />
-            <ConfigInput label="API URL" value={defaultCfg.api_url} onChange={(v) => setDefaultCfg({ ...defaultCfg, api_url: v })} />
-            <ModelSuggestions url={defaultCfg.api_url} model={defaultCfg.model} onSelect={(m) => setDefaultCfg({ ...defaultCfg, model: m })} />
+            <span className="text-[11px] font-semibold text-ink-300">
+              默认（全局）
+            </span>
+            <ConfigInput
+              label="API 密钥"
+              type="password"
+              value={defaultCfg.api_key}
+              onChange={(v) => setDefaultCfg({ ...defaultCfg, api_key: v })}
+            />
+            <ConfigInput
+              label="API URL"
+              value={defaultCfg.api_url}
+              onChange={(v) => setDefaultCfg({ ...defaultCfg, api_url: v })}
+            />
+            <ModelSuggestions
+              url={defaultCfg.api_url}
+              model={defaultCfg.model}
+              onSelect={(m) => setDefaultCfg({ ...defaultCfg, model: m })}
+            />
             <div className="flex gap-1 flex-wrap mt-1">
               {API_URL_PRESETS.map((p) => (
                 <button
                   key={p.label}
-                  onClick={() => setDefaultCfg({ ...defaultCfg, api_url: p.url, model: MODEL_PRESETS[p.url]?.[0] ?? defaultCfg.model })}
+                  onClick={() =>
+                    setDefaultCfg({
+                      ...defaultCfg,
+                      api_url: p.url,
+                      model: MODEL_PRESETS[p.url]?.[0] ?? defaultCfg.model,
+                    })
+                  }
                   className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
                     defaultCfg.api_url === p.url
                       ? "bg-ink-700 text-ink-100 border-ink-600"
@@ -310,7 +403,9 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
 
           {/* ── Per-role overrides ── */}
           <div className="space-y-0.5">
-            <span className="text-[11px] font-semibold text-ink-300">各角色覆盖</span>
+            <span className="text-[11px] font-semibold text-ink-300">
+              各角色覆盖
+            </span>
             {roleList.map((r) => {
               const isExpanded = expandedRole === r.key;
               const usingDefault = useDefault[r.key] ?? true;
@@ -323,18 +418,27 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
                     onClick={() => setExpandedRole(isExpanded ? null : r.key)}
                     className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-ink-300 hover:bg-ink-800 transition-colors"
                   >
-                    <span className="text-ink-500 shrink-0">{isExpanded ? "▾" : "▸"}</span>
-                    <label className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <span className="text-ink-500 shrink-0">
+                      {isExpanded ? "▾" : "▸"}
+                    </span>
+                    <label
+                      className="flex items-center gap-1.5 shrink-0"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <input
                         type="checkbox"
                         checked={usingDefault}
                         onChange={() => toggleDefault(r.key)}
                         className="accent-ink-500"
                       />
-                      <span className="text-[10px] text-ink-500 whitespace-nowrap">使用默认</span>
+                      <span className="text-[10px] text-ink-500 whitespace-nowrap">
+                        使用默认
+                      </span>
                     </label>
                     <span className="flex-1 text-left">{r.label}</span>
-                    <span className="text-[10px] text-ink-500 italic">{provider}</span>
+                    <span className="text-[10px] text-ink-500 italic">
+                      {provider}
+                    </span>
                   </button>
 
                   {/* Expanded fields */}
@@ -348,9 +452,22 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
                         </div>
                       ) : (
                         <>
-                          <ConfigInput label="API 密钥" type="password" value={overrides[r.key]?.api_key ?? ""} onChange={(v) => setOverride(r.key, "api_key", v)} />
-                          <ConfigInput label="API URL" value={overrides[r.key]?.api_url ?? ""} onChange={(v) => setOverride(r.key, "api_url", v)} />
-                          <ModelSuggestions url={overrides[r.key]?.api_url ?? ""} model={overrides[r.key]?.model ?? ""} onSelect={(m) => setOverride(r.key, "model", m)} />
+                          <ConfigInput
+                            label="API 密钥"
+                            type="password"
+                            value={overrides[r.key]?.api_key ?? ""}
+                            onChange={(v) => setOverride(r.key, "api_key", v)}
+                          />
+                          <ConfigInput
+                            label="API URL"
+                            value={overrides[r.key]?.api_url ?? ""}
+                            onChange={(v) => setOverride(r.key, "api_url", v)}
+                          />
+                          <ModelSuggestions
+                            url={overrides[r.key]?.api_url ?? ""}
+                            model={overrides[r.key]?.model ?? ""}
+                            onSelect={(m) => setOverride(r.key, "model", m)}
+                          />
                         </>
                       )}
                     </div>
@@ -362,9 +479,13 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
 
           {/* ── Context window config ── */}
           <div className="space-y-0.5 pt-2 border-t border-ink-700">
-            <span className="text-[11px] font-semibold text-ink-300">上下文窗口配置</span>
+            <span className="text-[11px] font-semibold text-ink-300">
+              上下文窗口配置
+            </span>
             <div className="text-[10px] text-ink-500 px-1 pb-1">
-              全局回退: {DEFAULT_CONTEXT_VALUES.token_threshold.toLocaleString()} tokens · cl100k · DeepSeek 1M 接近上限再压缩
+              全局回退:{" "}
+              {DEFAULT_CONTEXT_VALUES.token_threshold.toLocaleString()} tokens ·
+              cl100k · DeepSeek 1M 接近上限再压缩
             </div>
             {roleList.map((r) => {
               const isExpanded = expandedRole === r.key;
@@ -375,47 +496,100 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
                     onClick={() => setExpandedRole(isExpanded ? null : r.key)}
                     className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-ink-300 hover:bg-ink-800 transition-colors"
                   >
-                    <span className="text-ink-500 shrink-0">{isExpanded ? "▾" : "▸"}</span>
-                    <label className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <span className="text-ink-500 shrink-0">
+                      {isExpanded ? "▾" : "▸"}
+                    </span>
+                    <label
+                      className="flex items-center gap-1.5 shrink-0"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <input
                         type="checkbox"
                         checked={usingDefault}
                         onChange={() => toggleContextDefault(r.key)}
                         className="accent-ink-500"
                       />
-                      <span className="text-[10px] text-ink-500 whitespace-nowrap">使用默认</span>
+                      <span className="text-[10px] text-ink-500 whitespace-nowrap">
+                        使用默认
+                      </span>
                     </label>
                     <span className="flex-1 text-left">{r.label}</span>
                     <span className="text-[10px] text-ink-500 italic">
-                      {effectiveContext(r.key).token_threshold.toLocaleString()} tokens
+                      {effectiveContext(r.key).token_threshold.toLocaleString()}{" "}
+                      tokens
                     </span>
                   </button>
                   {isExpanded && (
                     <div className="px-2 pb-2 space-y-1">
                       {usingDefault ? (
                         <div className="text-[10px] text-ink-500 italic px-1 py-2">
-                          使用部门内置推荐值（{effectiveContext(r.key).token_threshold.toLocaleString()} tokens，保留 {effectiveContext(r.key).keep_recent_count} 条）
+                          使用部门内置推荐值（
+                          {effectiveContext(
+                            r.key,
+                          ).token_threshold.toLocaleString()}{" "}
+                          tokens，保留{" "}
+                          {effectiveContext(r.key).keep_recent_count} 条）
                           <br />
                           取消勾选"使用默认"可单独覆盖
                         </div>
                       ) : (
                         <>
-                          <ContextInput label="压缩阈值（tokens）" value={contextOverrides[r.key]?.token_threshold ?? effectiveContext(r.key).token_threshold} onChange={(v) => setContextOverride(r.key, "token_threshold", v)} />
-                          <ContextInput label="保留最近消息数" value={contextOverrides[r.key]?.keep_recent_count ?? effectiveContext(r.key).keep_recent_count} onChange={(v) => setContextOverride(r.key, "keep_recent_count", v)} />
+                          <ContextInput
+                            label="压缩阈值（tokens）"
+                            value={
+                              contextOverrides[r.key]?.token_threshold ??
+                              effectiveContext(r.key).token_threshold
+                            }
+                            onChange={(v) =>
+                              setContextOverride(r.key, "token_threshold", v)
+                            }
+                          />
+                          <ContextInput
+                            label="保留最近消息数"
+                            value={
+                              contextOverrides[r.key]?.keep_recent_count ??
+                              effectiveContext(r.key).keep_recent_count
+                            }
+                            onChange={(v) =>
+                              setContextOverride(r.key, "keep_recent_count", v)
+                            }
+                          />
                           <label className="flex items-center gap-2 py-1">
-                            <span className="text-[10px] text-ink-500">mid-run compact</span>
+                            <span className="text-[10px] text-ink-500">
+                              mid-run compact
+                            </span>
                             <button
-                              onClick={() => setContextOverride(r.key, "mid_run_compact", !(contextOverrides[r.key]?.mid_run_compact ?? effectiveContext(r.key).mid_run_compact))}
+                              onClick={() =>
+                                setContextOverride(
+                                  r.key,
+                                  "mid_run_compact",
+                                  !(
+                                    contextOverrides[r.key]?.mid_run_compact ??
+                                    effectiveContext(r.key).mid_run_compact
+                                  ),
+                                )
+                              }
                               className={`relative w-8 h-4 rounded-full transition-colors ${
-                                (contextOverrides[r.key]?.mid_run_compact ?? effectiveContext(r.key).mid_run_compact) ? "bg-ink-500" : "bg-ink-700"
+                                (contextOverrides[r.key]?.mid_run_compact ??
+                                effectiveContext(r.key).mid_run_compact)
+                                  ? "bg-ink-500"
+                                  : "bg-ink-700"
                               }`}
                             >
-                              <span className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
-                                (contextOverrides[r.key]?.mid_run_compact ?? effectiveContext(r.key).mid_run_compact) ? "translate-x-4" : ""
-                              }`} />
+                              <span
+                                className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
+                                  (contextOverrides[r.key]?.mid_run_compact ??
+                                  effectiveContext(r.key).mid_run_compact)
+                                    ? "translate-x-4"
+                                    : ""
+                                }`}
+                              />
                             </button>
                             <span className="text-[10px] text-ink-400">
-                              {(contextOverrides[r.key]?.mid_run_compact ?? effectiveContext(r.key).mid_run_compact) ? "开启" : "关闭"}
+                              {(contextOverrides[r.key]?.mid_run_compact ??
+                              effectiveContext(r.key).mid_run_compact)
+                                ? "开启"
+                                : "关闭"}
                             </span>
                           </label>
                         </>
@@ -447,7 +621,9 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
 
           {/* ── Soul 管理 ── */}
           <div className="space-y-1 pt-2 border-t border-ink-700">
-            <span className="text-[11px] font-semibold text-ink-300">Soul 管理</span>
+            <span className="text-[11px] font-semibold text-ink-300">
+              Soul 管理
+            </span>
             <div className="flex gap-2 flex-wrap pt-1">
               <button
                 onClick={async () => {
@@ -493,7 +669,9 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
 
           {/* ── Workflow Intent ── */}
           <div className="space-y-1 pt-2 border-t border-ink-700">
-            <span className="text-[11px] font-semibold text-ink-300">任务意图 (Intent)</span>
+            <span className="text-[11px] font-semibold text-ink-300">
+              任务意图 (Intent)
+            </span>
             <div className="flex gap-1 flex-wrap">
               {[
                 { key: "auto", label: "自动" },
@@ -519,7 +697,8 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
               {{
                 auto: "根据任务描述自动推断意图。（默认）",
                 greenfield_standard: "全新功能开发，走完整设计→审查→执行流程。",
-                brownfield_optimize: "对现有代码进行优化，跳过需求展开和门下审查。",
+                brownfield_optimize:
+                  "对现有代码进行优化，跳过需求展开和门下审查。",
                 bugfix: "修复缺陷，直接路由到工部编码修复。",
                 demo: "快速原型/演示，最轻量流程。",
               }[workflowIntent] || ""}
@@ -528,7 +707,9 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
 
           {/* ── Workflow preset ── */}
           <div className="space-y-1 pt-2 border-t border-ink-700">
-            <span className="text-[11px] font-semibold text-ink-300">流程预设</span>
+            <span className="text-[11px] font-semibold text-ink-300">
+              流程预设
+            </span>
             <div className="flex gap-1 flex-wrap">
               {(["full", "standard", "fast", "audit"] as const).map((p) => (
                 <button
@@ -540,23 +721,34 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
                       : "bg-ink-800 text-ink-400 border-ink-700 hover:border-ink-500"
                   }`}
                 >
-                  {{ full: "完整治理", standard: "标准", fast: "极速", audit: "审计" }[p]}
+                  {
+                    {
+                      full: "完整治理",
+                      standard: "标准",
+                      fast: "极速",
+                      audit: "审计",
+                    }[p]
+                  }
                 </button>
               ))}
             </div>
             <div className="text-[10px] text-ink-500 px-1">
-              {{
-                full: "所有流程必经审查。适合高复杂度任务。",
-                standard: "跳过门下审查。适合中等复杂度任务。（默认）",
-                fast: "跳过设计/审查，直达执行。适合小改动。",
-                audit: "强制审查和规范检查。适合合规场景。",
-              }[workflowPreset]}
+              {
+                {
+                  full: "所有流程必经审查。适合高复杂度任务。",
+                  standard: "跳过门下审查。适合中等复杂度任务。（默认）",
+                  fast: "跳过设计/审查，直达执行。适合小改动。",
+                  audit: "强制审查和规范检查。适合合规场景。",
+                }[workflowPreset]
+              }
             </div>
           </div>
 
           {/* ── Model preset ── */}
           <div className="space-y-1 pt-2 border-t border-ink-700">
-            <span className="text-[11px] font-semibold text-ink-300">模型分级预设</span>
+            <span className="text-[11px] font-semibold text-ink-300">
+              模型分级预设
+            </span>
             <div className="flex gap-1 flex-wrap items-center">
               {[
                 { key: "balanced", label: "均衡" },
@@ -565,7 +757,9 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
               ].map((p) => (
                 <button
                   key={p.key}
-                  onClick={() => { setModelPresetLocal(p.key); }}
+                  onClick={() => {
+                    setModelPresetLocal(p.key);
+                  }}
                   className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${
                     modelPreset === p.key
                       ? "bg-ink-700 text-ink-100 border-ink-600"
@@ -576,7 +770,9 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
                 </button>
               ))}
               {modelPreset === "custom" && (
-                <span className="text-[10px] text-ink-400 italic px-1">自定义</span>
+                <span className="text-[10px] text-ink-400 italic px-1">
+                  自定义
+                </span>
               )}
             </div>
             <div className="text-[10px] text-ink-500 px-1">
@@ -594,7 +790,9 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
 
           {/* ── 代码主题 ── */}
           <div className="space-y-1 pt-2 border-t border-ink-700">
-            <span className="text-[11px] font-semibold text-ink-300">代码主题</span>
+            <span className="text-[11px] font-semibold text-ink-300">
+              代码主题
+            </span>
             <div className="flex gap-1 flex-wrap">
               {Object.entries(CODE_THEMES).map(([key, theme]) => (
                 <button
@@ -618,11 +816,16 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
 
           {/* ── Save ── */}
           <div className="flex items-center gap-2 pt-1">
-            <button onClick={handleSave} className="text-xs px-3 py-1.5 bg-ink-700 text-ink-200 rounded hover:bg-ink-600 transition-colors">
+            <button
+              onClick={handleSave}
+              className="text-xs px-3 py-1.5 bg-ink-700 text-ink-200 rounded hover:bg-ink-600 transition-colors"
+            >
               保存所有更改
             </button>
             {savedMsg && (
-              <span className={`text-[10px] ${savedMsg === "已保存" ? "text-green-400" : "text-red-400"}`}>
+              <span
+                className={`text-[10px] ${savedMsg === "已保存" ? "text-green-400" : "text-red-400"}`}
+              >
                 {savedMsg}
               </span>
             )}
@@ -630,11 +833,15 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
 
           {/* ── Health check indicator ── */}
           {healthStatus !== "idle" && (
-            <div className={`text-[10px] px-2 py-1 rounded ${
-              healthStatus === "checking" ? "text-ink-400 bg-ink-800" :
-              healthStatus === "ok" ? "text-green-400 bg-green-900/20" :
-              "text-red-400 bg-red-900/20"
-            }`}>
+            <div
+              className={`text-[10px] px-2 py-1 rounded ${
+                healthStatus === "checking"
+                  ? "text-ink-400 bg-ink-800"
+                  : healthStatus === "ok"
+                    ? "text-green-400 bg-green-900/20"
+                    : "text-red-400 bg-red-900/20"
+              }`}
+            >
               {healthStatus === "checking" && "⏳ 探测 API 连接中..."}
               {healthStatus === "ok" && "✔ 连接成功"}
               {healthStatus === "fail" && `✘ 连接失败: ${healthMsg}`}
@@ -648,7 +855,17 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
 
 // ── Sub-components ─────────────────────────────────────────
 
-function ConfigInput({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
+function ConfigInput({
+  label,
+  value,
+  onChange,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+}) {
   return (
     <label className="block">
       <span className="text-[10px] text-ink-500">{label}</span>
@@ -663,7 +880,15 @@ function ConfigInput({ label, value, onChange, type = "text" }: { label: string;
 }
 
 /** Shows model preset buttons when url matches a known provider, else a free-text input. */
-function ModelSuggestions({ url, model, onSelect }: { url: string; model: string; onSelect: (m: string) => void }) {
+function ModelSuggestions({
+  url,
+  model,
+  onSelect,
+}: {
+  url: string;
+  model: string;
+  onSelect: (m: string) => void;
+}) {
   const presets = MODEL_PRESETS[url];
   if (presets) {
     return (
@@ -691,7 +916,15 @@ function ModelSuggestions({ url, model, onSelect }: { url: string; model: string
 }
 
 /** Numeric input for context window config values. */
-function ContextInput({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+function ContextInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
   return (
     <label className="block">
       <span className="text-[10px] text-ink-500">{label}</span>

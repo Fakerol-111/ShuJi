@@ -2,7 +2,6 @@ use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
-
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput};
 use crate::agent::util::{extract_skill, strip_skill_tag};
 use crate::api::client::{AnthropicClient, ToolDefinition};
@@ -409,10 +408,7 @@ impl Agent for NeigeAgent {
                 }
                 String::new()
             } else {
-                resolve_result
-                    .hint
-                    .clone()
-                    .unwrap_or_default()
+                resolve_result.hint.clone().unwrap_or_default()
             };
             if !resolve_note.is_empty() {
                 session.inject(&resolve_note);
@@ -485,8 +481,7 @@ impl Agent for NeigeAgent {
         }));
 
         let cancel_map = self.cancel_map.clone();
-        let fast_txs: Option<crate::FastTxMap> =
-            self.fast_txs.clone();
+        let fast_txs: Option<crate::FastTxMap> = self.fast_txs.clone();
         let config = input.runtime_config.clone();
         let wd = working_dir.clone();
 

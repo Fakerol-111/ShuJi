@@ -53,25 +53,41 @@ mod tests {
     #[test]
     fn test_api_401() {
         let msg = friendly_error("API error (401): invalid key");
-        assert!(msg.contains("密钥"), "expected key-related msg, got: {}", msg);
+        assert!(
+            msg.contains("密钥"),
+            "expected key-related msg, got: {}",
+            msg
+        );
     }
 
     #[test]
     fn test_api_429() {
         let msg = friendly_error("API error (429): rate limit exceeded");
-        assert!(msg.contains("频繁"), "expected rate-limit msg, got: {}", msg);
+        assert!(
+            msg.contains("频繁"),
+            "expected rate-limit msg, got: {}",
+            msg
+        );
     }
 
     #[test]
     fn test_api_500() {
         let msg = friendly_error("API error (500): internal error");
-        assert!(msg.contains("内部错误"), "expected internal error msg, got: {}", msg);
+        assert!(
+            msg.contains("内部错误"),
+            "expected internal error msg, got: {}",
+            msg
+        );
     }
 
     #[test]
     fn test_connection_refused() {
         let msg = friendly_error("connection refused: tcp connect error");
-        assert!(msg.contains("无法连接"), "expected connection msg, got: {}", msg);
+        assert!(
+            msg.contains("无法连接"),
+            "expected connection msg, got: {}",
+            msg
+        );
     }
 
     #[test]
@@ -83,18 +99,30 @@ mod tests {
     #[test]
     fn test_unknown_error() {
         let msg = friendly_error("some weird error occurred");
-        assert!(msg.contains("系统错误"), "expected system error fallback, got: {}", msg);
+        assert!(
+            msg.contains("系统错误"),
+            "expected system error fallback, got: {}",
+            msg
+        );
     }
 
     #[test]
     fn test_unauthorized_without_code() {
         let msg = friendly_error("401 Unauthorized");
-        assert!(msg.contains("密钥"), "expected key-related msg, got: {}", msg);
+        assert!(
+            msg.contains("密钥"),
+            "expected key-related msg, got: {}",
+            msg
+        );
     }
 
     #[test]
     fn test_service_unavailable() {
         let msg = friendly_error("503 Service Unavailable");
-        assert!(msg.contains("暂时不可用"), "expected unavailable msg, got: {}", msg);
+        assert!(
+            msg.contains("暂时不可用"),
+            "expected unavailable msg, got: {}",
+            msg
+        );
     }
 }

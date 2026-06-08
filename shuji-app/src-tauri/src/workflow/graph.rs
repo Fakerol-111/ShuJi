@@ -158,9 +158,16 @@ impl WorkflowGraph {
         log_console!(
             "[graph] {}#{:?} → {}#{} (task: {})",
             from_role,
-            self.nodes.iter().find(|n| n.id == from_id).map(|n| n.instance),
+            self.nodes
+                .iter()
+                .find(|n| n.id == from_id)
+                .map(|n| n.instance),
             to_role,
-            self.nodes.iter().find(|n| n.id == target_id).map(|n| n.instance).unwrap_or(0),
+            self.nodes
+                .iter()
+                .find(|n| n.id == target_id)
+                .map(|n| n.instance)
+                .unwrap_or(0),
             task_id,
         );
     }
@@ -331,13 +338,11 @@ impl WorkflowGraph {
 
     /// 尝试加载，若无文件则新建
     pub async fn load_or_new(working_dir: &Path) -> Self {
-        Self::load_from(working_dir)
-            .await
-            .unwrap_or_else(|| {
-                let g = Self::new();
-                log_console!("[graph] 新建文移图（无持久化文件）");
-                g
-            })
+        Self::load_from(working_dir).await.unwrap_or_else(|| {
+            let g = Self::new();
+            log_console!("[graph] 新建文移图（无持久化文件）");
+            g
+        })
     }
 }
 

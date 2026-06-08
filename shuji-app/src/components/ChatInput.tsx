@@ -14,9 +14,9 @@ const SLASH_COMMANDS: Record<string, { level: string; label: string }> = {
   "/level-1": { level: "1", label: "全自动" },
   "/level-2": { level: "2", label: "关键节点确认" },
   "/level-3": { level: "3", label: "逐步审核" },
-  "/auto":    { level: "1", label: "全自动" },
-  "/step":    { level: "2", label: "关键节点确认" },
-  "/detail":  { level: "3", label: "逐步审核" },
+  "/auto": { level: "1", label: "全自动" },
+  "/step": { level: "2", label: "关键节点确认" },
+  "/detail": { level: "3", label: "逐步审核" },
 };
 
 export default function ChatInput({ onSend, disabled, placeholder }: Props) {

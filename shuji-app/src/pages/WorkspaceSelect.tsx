@@ -1,7 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { open } from "@tauri-apps/plugin-dialog";
-import { loadProject, getRecentDirs, getConfig, createDemoProject } from "../api";
+import {
+  loadProject,
+  getRecentDirs,
+  getConfig,
+  createDemoProject,
+} from "../api";
 import { SealLogo } from "../components/SealLogo";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
@@ -25,7 +30,9 @@ export default function WorkspaceSelect() {
         }
       })
       .catch((e) => console.error("读取配置失败:", e));
-    getRecentDirs().then(setRecentDirs).catch((e) => console.error("读取最近目录失败:", e));
+    getRecentDirs()
+      .then(setRecentDirs)
+      .catch((e) => console.error("读取最近目录失败:", e));
   }, []);
 
   const handleBrowse = async () => {
@@ -36,12 +43,17 @@ export default function WorkspaceSelect() {
         title: "选择工作目录",
       });
       if (selected) setDirPath(selected);
-    } catch { /* cancelled */ }
+    } catch {
+      /* cancelled */
+    }
   };
 
   const handleOpen = async (dir?: string) => {
     const path = dir || dirPath.trim();
-    if (!path) { setError("请选择工作目录"); return; }
+    if (!path) {
+      setError("请选择工作目录");
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -58,8 +70,12 @@ export default function WorkspaceSelect() {
     <div className="min-h-screen bg-surface-paper flex items-center justify-center">
       <Card variant="paper" className="w-full max-w-md p-8">
         <div className="text-center mb-6">
-          <div className="flex justify-center mb-3"><SealLogo size={40} /></div>
-          <h1 className="font-display text-display font-bold text-ink-900 mb-2">枢机</h1>
+          <div className="flex justify-center mb-3">
+            <SealLogo size={40} />
+          </div>
+          <h1 className="font-display text-display font-bold text-ink-900 mb-2">
+            枢机
+          </h1>
           <p className="text-body text-ink-600">三省六部制自动化软件开发系统</p>
         </div>
 
@@ -86,8 +102,14 @@ export default function WorkspaceSelect() {
         </Button>
 
         <div className="relative mb-4">
-          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-fold" /></div>
-          <div className="relative flex justify-center text-ui"><span className="bg-surface-elevated px-2 text-ink-400">或打开已有项目</span></div>
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-fold" />
+          </div>
+          <div className="relative flex justify-center text-ui">
+            <span className="bg-surface-elevated px-2 text-ink-400">
+              或打开已有项目
+            </span>
+          </div>
         </div>
 
         <div className="mb-4">
@@ -139,7 +161,9 @@ export default function WorkspaceSelect() {
         )}
 
         {error && (
-          <div className="mt-3 text-ui text-vermillion-dark bg-vermillion-light border border-vermillion/20 p-2 rounded">{error}</div>
+          <div className="mt-3 text-ui text-vermillion-dark bg-vermillion-light border border-vermillion/20 p-2 rounded">
+            {error}
+          </div>
         )}
       </Card>
     </div>

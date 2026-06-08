@@ -83,7 +83,7 @@ export interface ChatMessage {
   documents: Document[];
   timestamp: string;
   /** Optional status for emperor messages: 'failed' on send error, undefined = sent OK */
-  status?: 'failed';
+  status?: "failed";
 }
 
 export interface ChatOption {
@@ -183,7 +183,12 @@ export interface RoundMetrics {
 
 // ── Workflow Config (Intent × Governance) ───────────────────
 
-export type Intent = "auto" | "greenfield_standard" | "brownfield_optimize" | "bugfix" | "demo";
+export type Intent =
+  | "auto"
+  | "greenfield_standard"
+  | "brownfield_optimize"
+  | "bugfix"
+  | "demo";
 export type Governance = "full" | "standard" | "fast" | "audit";
 
 export interface WorkflowConfig {

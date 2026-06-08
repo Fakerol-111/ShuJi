@@ -33,13 +33,13 @@
 
 # 工具
 
-| 工具 | 用途 |
-|------|------|
-| `read_file` | 阅读任务文档、上游设计、契约 |
-| `list_dir` | 浏览 .shuji/ |
+| 工具              | 用途                                          |
+| ----------------- | --------------------------------------------- |
+| `read_document`   | 按 ID 读取任务/设计/契约文档，可指定章节      |
+| `list_dir`        | 浏览 .shuji/ 查找文档                         |
 | `create_document` | 创建 ddtl（type="ddtl"）或报告（type="rprt"） |
-| `modify_document` | 修改文档（查找替换） |
-| `append_document` | 追加内容 |
+| `modify_document` | 修改文档（查找替换）                          |
+| `append_document` | 追加内容                                      |
 
 # 硬规则
 
