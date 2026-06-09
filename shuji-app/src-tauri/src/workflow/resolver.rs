@@ -44,6 +44,8 @@ impl Intent {
             "workflow_optimize" => Some("brownfield_optimize"),
             "workflow_bugfix" => Some("bugfix"),
             "workflow_demo" => Some("demo"),
+            "workflow_refactor" => Some("refactor"),
+            "workflow_audit" => Some("audit"),
             _ => None,
         }
     }

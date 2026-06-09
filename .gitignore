@@ -11,6 +11,9 @@ shuji-app/dist/
 # Claude
 .claude/
 
+# Reasonix
+.reasonix/
+
 # OS
 .DS_Store
 Thumbs.db

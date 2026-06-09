@@ -158,6 +158,11 @@ const EMBEDDED_PROFILES: &[(&str, &str)] = &[
     ),
     ("bugfix", include_str!("profiles/bugfix.yaml")),
     ("demo", include_str!("profiles/demo.yaml")),
+    (
+        "refactor",
+        include_str!("profiles/refactor.yaml"),
+    ),
+    ("audit", include_str!("profiles/audit.yaml")),
 ];
 
 /// Load a profile from embedded YAML. Returns `None` on parse error.
