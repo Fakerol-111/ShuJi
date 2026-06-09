@@ -145,6 +145,42 @@ async fn test_resolver_default_no_config_file() {
     assert!(!result.locked);
 }
 
+#[tokio::test]
+async fn test_resolver_auto_refactor_match() {
+    // "重构" keyword should resolve to refactor profile at Medium confidence
+    let cfg = WorkflowConfig::load_from(tempfile::TempDir::new().unwrap().path()).await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let result = WorkflowResolver::resolve(&cfg, tmp.path(), "重构用户模块架构，拆分 monolith").await;
+    assert_eq!(result.profile.profile_id, "refactor");
+    assert!(!result.locked);
+    assert!(result.hint.is_some());
+}
+
+#[tokio::test]
+async fn test_resolver_auto_audit_match() {
+    // "审计" keyword should resolve to audit profile at Medium confidence
+    let cfg = WorkflowConfig::load_from(tempfile::TempDir::new().unwrap().path()).await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let result = WorkflowResolver::resolve(&cfg, tmp.path(), "对支付模块做安全审计").await;
+    assert_eq!(result.profile.profile_id, "audit");
+    assert!(!result.locked);
+    assert!(result.hint.is_some());
+}
+
+#[tokio::test]
+async fn test_build_active_refactor() {
+    let p = build_active("refactor", Governance::Standard);
+    assert!(p.is_some(), "refactor profile should build");
+    assert_eq!(p.unwrap().profile_id, "refactor");
+}
+
+#[tokio::test]
+async fn test_build_active_audit() {
+    let p = build_active("audit", Governance::Standard);
+    assert!(p.is_some(), "audit profile should build");
+    assert_eq!(p.unwrap().profile_id, "audit");
+}
+
 // ── GateEngine 测试 ──────────────────────────────────────
 
 #[tokio::test]
