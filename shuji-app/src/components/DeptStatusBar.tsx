@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getTokenStats, getRoundMetrics } from "../api";
 import { useActiveDepts } from "../hooks/useActiveDepts";
+import { useLatestDeptLogs } from "../hooks/useLatestDeptLogs";
 import { getDeptMeta, DEPT_META_LIST } from "../constants";
 import type { RoundMetrics } from "../types";
 
@@ -20,6 +21,7 @@ const SKILL_LABELS: Record<string, string> = {
 
 export default function DeptStatusBar() {
   const activeSet = useActiveDepts();
+  const latestLogs = useLatestDeptLogs();
   const [tokenPrompt, setTokenPrompt] = useState(0);
   const [tokenCached, setTokenCached] = useState(0);
   const [tokenCompletion, setTokenCompletion] = useState(0);
@@ -104,19 +106,30 @@ export default function DeptStatusBar() {
           activeDepts.map((dept) => {
             const meta = getDeptMeta(dept);
             const color = meta?.color || "#8B7355";
+            const label = meta?.shortLabel || dept;
+            const latestEntry = latestLogs.get(dept);
+            const action = latestEntry
+              ? latestEntry.action.replace(/^[❌→]\s*/, "")
+              : "";
             return (
               <span
                 key={dept}
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-serif"
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-serif max-w-[200px]"
                 style={{ backgroundColor: `${color}18` }}
+                title={action || label}
               >
                 <span
                   className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0"
                   style={{ backgroundColor: color }}
                 />
-                <span className="text-ink-200 font-medium">
-                  {meta?.shortLabel || dept}
+                <span className="text-ink-200 font-medium shrink-0">
+                  {label}
                 </span>
+                {action && (
+                  <span className="text-ink-400 truncate ml-0.5 max-w-[120px]">
+                    {action}
+                  </span>
+                )}
               </span>
             );
           })

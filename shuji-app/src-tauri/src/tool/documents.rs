@@ -945,7 +945,12 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
     // Optional section extraction
     let target_section = args["section"].as_str().filter(|s| !s.is_empty());
     let extracted = if let Some(section_name) = target_section {
-        extract_section(body, section_name)
+        match extract_section(body, section_name) {
+            Ok(content) => content,
+            Err(msg) => {
+                return ToolOutput::error("read_document", id, "section_not_found", &msg);
+            }
+        }
     } else {
         body.to_string()
     };
@@ -995,19 +1000,29 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
     ToolOutput::read_file("read_document", &rel_path, &result)
 }
 
-/// Extract a section (## heading) from markdown body text.
+/// Extract a section (## or ### heading) from markdown body text.
 /// Returns the section content (including the heading line) if found,
-/// or the entire body with a note if not found.
-fn extract_section(body: &str, section_name: &str) -> String {
+/// or an error listing available sections if not found.
+fn extract_section(body: &str, section_name: &str) -> Result<String, String> {
     let heading = format!("## {}", section_name);
+    let heading3 = format!("### {}", section_name);
     let lines: Vec<&str> = body.lines().collect();
     let mut start: Option<usize> = None;
     let mut end: Option<usize> = None;
 
     for (i, line) in lines.iter().enumerate() {
-        if line.trim() == heading || line.trim().starts_with(&heading) {
+        let trimmed = line.trim();
+        // Match both ## and ### headings
+        if trimmed == heading
+            || trimmed.starts_with(&heading)
+            || trimmed == heading3
+            || trimmed.starts_with(&heading3)
+        {
             start = Some(i);
-        } else if start.is_some() && end.is_none() && line.starts_with("## ") {
+        } else if start.is_some()
+            && end.is_none()
+            && (line.starts_with("## ") || line.starts_with("### "))
+        {
             end = Some(i);
             break;
         }
@@ -1015,9 +1030,20 @@ fn extract_section(body: &str, section_name: &str) -> String {
 
     if let Some(s) = start {
         let e = end.unwrap_or(lines.len());
-        lines[s..e].join("\n")
+        Ok(lines[s..e].join("\n"))
     } else {
-        format!("[未找到章节「{}」，返回全文]\n{}", section_name, body)
+        // Collect available headings for the error message
+        let available: Vec<&str> = lines
+            .iter()
+            .filter(|l| l.starts_with("## ") || l.starts_with("### "))
+            .map(|l| l.trim())
+            .collect();
+        Err(format!(
+            "文档中未找到章节「{}」。\n可用章节（共 {} 个）：\n{}",
+            section_name,
+            available.len(),
+            available.join("\n")
+        ))
     }
 }
 

@@ -48,6 +48,7 @@ pub fn inspect_tools() -> Vec<ToolDefinition> {
 pub fn file_write_tools_for_code() -> Vec<ToolDefinition> {
     vec![
         crate::tool::create_file_tool_def("写入新文件"),
+        crate::tool::edit_file_tool_def(),
         crate::tool::apply_patch_tool_def(),
         crate::tool::delete_file_tool_def(),
         crate::tool::rename_file_tool_def(),
@@ -58,6 +59,7 @@ pub fn file_write_tools_for_code() -> Vec<ToolDefinition> {
 pub fn file_write_tools() -> Vec<ToolDefinition> {
     vec![
         crate::tool::create_file_tool_def("写入新文件"),
+        crate::tool::edit_file_tool_def(),
         crate::tool::apply_patch_tool_def(),
         crate::tool::modify_file_tool_def(),
         crate::tool::append_file_tool_def(),

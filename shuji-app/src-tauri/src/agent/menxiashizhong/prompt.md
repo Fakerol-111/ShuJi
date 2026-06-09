@@ -47,9 +47,11 @@
 | ----------------- | --------------------------------------------- |
 | `read_document`   | 按 ID 读取设计/任务/precepts 文档，可指定章节 |
 | `list_dir`        | 浏览 .shuji/ 查找文档                         |
+| `search_text`     | 在文档库中搜索关键词                          |
 | `create_document` | 创建审查报告（type="revw"）                   |
 | `modify_document` | 更新审查（查找替换）                          |
 | `append_document` | 追加内容                                      |
+| `set_document_status` | 更新文档状态（审批/驳回等）               |
 | `route_to`        | 审查完成后路由到对应部门。通过→内阁，修改→中书令，上报→内阁 |
 
 # 路由

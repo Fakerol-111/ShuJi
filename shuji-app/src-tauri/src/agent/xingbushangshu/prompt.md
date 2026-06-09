@@ -136,12 +136,17 @@
 | 工具              | 使用时机                                                                      |
 | ----------------- | ----------------------------------------------------------------------------- |
 | `read_file`       | 阅读任务文档、契约、设计和源代码以诊断失败                                    |
-| `list_dir`        | 浏览项目目录                                                                  |
+| `list_dir_tree`   | 递归浏览项目目录树结构                                                        |
+| `search_text`     | 在代码库中搜索文本/函数调用/模式                                              |
 | `create_file`     | 在 `tests/integration/` 中创建集成测试文件                                    |
+| `edit_file`       | 对已有集成测试做局部 search/replace 修改。建议先 read_file                    |
+| `apply_patch`     | 对已有文件应用 SEARCH/REPLACE 多处修改                                        |
+| `delete_file`     | 删除已存在的测试文件。**避免 delete→create 循环——用 edit_file 或 apply_patch**  |
+| `rename_file`     | 重命名或移动文件                                                              |
 | `create_document` | 创建质量报告（type="rprt"）                                                   |
 | `append_document` | 分块追加报告章节                                                              |
-| `modify_document` | 修正报告中的错误                                                              |
 | `run_tests`       | 运行测试（自动检测 Rust/Node/Python）。刑部首选测试工具，替代 execute_command |
+| `route_to`        | 路由到尚书令，附带报告文档 ID                                                 |
 
 # 硬规则
 

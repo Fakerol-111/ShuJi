@@ -225,6 +225,12 @@ impl AgentController {
         let mut write_count: u32 = 0;
         let mut read_without_write: u32 = 0;
 
+        // Delete-create cycle tracking
+        // Maps path → cycle count. Incremented when create_file follows delete_file on same path.
+        use std::collections::HashMap as HashMapColl;
+        let mut delete_seen: HashMapColl<String, u32> = HashMapColl::new();
+        let mut delete_create_cycles: HashMapColl<String, u32> = HashMapColl::new();
+
         for iter in 0..max_iter {
             // ── Interrupt / force-stop / fast-cancel check ──
             if cancel.load(Ordering::SeqCst) {
@@ -520,6 +526,36 @@ impl AgentController {
                             }
                         }
 
+                        // ── Delete-create cycle detection ─────
+                        // Track when delete_file(path) → create_file(path) repeats on the same path.
+                        let key_path = tc.args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+                        if tc.name == "delete_file" && !key_path.is_empty() {
+                            *delete_seen.entry(key_path.to_string()).or_insert(0) += 1;
+                        }
+                        let mut delete_cycle_hint = String::new();
+                        if tc.name == "create_file" && !key_path.is_empty() {
+                            if let Some(del_count) = delete_seen.get(key_path) {
+                                if *del_count > 0 {
+                                    let cycle_count = delete_create_cycles
+                                        .entry(key_path.to_string())
+                                        .or_insert(0);
+                                    *cycle_count += 1;
+                                    if *cycle_count >= config.watchdog.delete_create_warning_count {
+                                        delete_cycle_hint = format!(
+                                            "\n\n[干预] ⚠️ 你已对同一文件（{}）执行了 {} 次 delete → create 循环。\
+                                            对已有文件做局部修改请用 edit_file（search/replace），\
+                                            批量修改请用 apply_patch。delete+create 模式浪费 token 且易丢失文件历史。",
+                                            key_path, *cycle_count,
+                                        );
+                                        log_console!(
+                                            "[control] WATCHDOG: delete-create cycle detected ({}x) on {}",
+                                            cycle_count, key_path
+                                        );
+                                    }
+                                }
+                            }
+                        }
+
                         // ── Progress note ─────────────────
                         let mut notes = Vec::new();
                         if same_tool_count >= config.watchdog.same_tool_warning_count {
@@ -555,6 +591,13 @@ impl AgentController {
                             tool_content.push_str(&intervention_note);
                             log_console!(
                                 "[control] WATCHDOG: intervention hint injected for {}",
+                                tc.name
+                            );
+                        }
+                        if !delete_cycle_hint.is_empty() {
+                            tool_content.push_str(&delete_cycle_hint);
+                            log_console!(
+                                "[control] WATCHDOG: delete-cycle hint injected for {}",
                                 tc.name
                             );
                         }
@@ -623,19 +666,76 @@ impl AgentController {
         } else {
             format!("调用{}次达上限，无特殊异常", max_iter)
         };
-        let limit_notice = format!(
-            "\n\n---\n[系统] {}。{}\n\n<route to=\"内阁\" priority=\"fast\" subject=\"工具调用达上限：{}\" />",
-            reason,
-            "如需继续，请路由回本部门重新执行",
-            reason,
+        // ── Graceful wrap-up: inject summary request, do one extra step ──
+        // Instead of silently cutting off, give the LLM a chance to produce
+        // a coherent wrap-up and route to its superior for authorization.
+        session.set_reasoning(true);
+        let wrap_up = format!(
+            "\n\n---\n[系统] 工具调用次数已达上限（{}次）。{}。\
+             \n请立即总结已完成的工作和遇到的困难。如果需要继续执行，请调用 route_to 路由到尚书令说明原因并请求继续授权。\
+             \n如果没有路由需要，直接输出工作总结即可。\n---",
+            max_iter, reason,
         );
+        session.inject(&wrap_up);
+
+        let final_text = match session.step().await? {
+            crate::api::session::StepResult::Text(t) => t,
+            crate::api::session::StepResult::ToolCalls { calls, text } => {
+                let combined = text;
+                // Execute first tool call — check if it's a route_to
+                if let Some(tc) = calls.first() {
+                    let result = tool_exec(&tc.name, &tc.args).await;
+                    // Route detection (same logic as main loop)
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&result) {
+                        if v["operation"].as_str() == Some("route_to") {
+                            let to_name = tc.args["to"].as_str().unwrap_or("");
+                            if let Some(target) = role_from_name(to_name) {
+                                let msg_type = route_msg_type_from_str(
+                                    tc.args["type"].as_str().unwrap_or("task"),
+                                )
+                                .unwrap_or(RouteMsgType::Task);
+                                let subject = tc.args["subject"].as_str().unwrap_or("").to_string();
+                                let payload = tc
+                                    .args
+                                    .get("inline")
+                                    .and_then(|v| v.as_str())
+                                    .filter(|s| !s.is_empty())
+                                    .map(|s| s.to_string());
+                                let route = RouteTo {
+                                    target,
+                                    msg_type,
+                                    subject,
+                                    payload,
+                                };
+                                log_console!(
+                                    "[control] max-iter wrap-up: routed to {} ({})",
+                                    target.name(),
+                                    route.subject,
+                                );
+                                return Ok(RunResult::Routed {
+                                    text: combined,
+                                    route,
+                                });
+                            }
+                        }
+                    }
+                    // Not a route — feed result for context
+                    session.feed_tool_result(&tc.id, &tc.name, &result);
+                }
+                combined
+            }
+        };
+
         let result = if last_text.is_empty() {
             format!(
-                "工具调用已达上限（{}次），未返回有效内容。{}",
-                max_iter, limit_notice
+                "工具调用已达上限（{}次）。最后响应：\n{}",
+                max_iter, final_text
             )
         } else {
-            format!("{}{}", last_text, limit_notice)
+            format!(
+                "{}\n\n---\n工具调用已达上限（{}次）。工作总结：\n{}",
+                last_text, max_iter, final_text
+            )
         };
         Ok(RunResult::Done(result))
     }

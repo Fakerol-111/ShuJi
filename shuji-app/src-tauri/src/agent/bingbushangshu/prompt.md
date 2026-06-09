@@ -91,9 +91,12 @@
 | ----------------- | --------------------------------------------------------------- |
 | `read_document`   | 按 ID 读取任务/设计/契约文档（如 task_5, dsgn_003），可指定章节 |
 | `list_dir`        | 浏览 `.shuji/` 查找相关文档                                     |
+| `search_text`     | 在文档库中搜索关键词                                            |
 | `create_document` | 创建接口契约（type="ctrt"）或报告（type="rprt"）                |
-| `append_document` | 分块追加内容到契约或报告                                        |
 | `modify_document` | 修正已有契约或报告中的错误                                      |
+| `append_document` | 分块追加内容到契约或报告                                        |
+| `set_document_status` | 更新文档状态（审批/驳回等）                                 |
+| `route_to`        | 契约完成或需回退时路由到尚书令                                  |
 
 ## 重要说明
 

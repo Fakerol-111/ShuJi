@@ -114,6 +114,11 @@ pub struct WatchdogConfig {
     /// 触发警告的连续读取次数（无写入）
     #[serde(default = "default_read_without_write_warning")]
     pub read_without_write_warning: u32,
+
+    /// 触发警告的 delete-create 循环次数
+    /// 当同一路径被 delete_file 后紧接着 create_file 的次数达到此值，注入干预提示
+    #[serde(default = "default_delete_create_warning_count")]
+    pub delete_create_warning_count: u32,
 }
 
 /// 每个角色可选的上下文窗口覆盖配置
@@ -229,6 +234,9 @@ fn default_same_tool_warning_count() -> u32 {
 fn default_read_without_write_warning() -> u32 {
     5
 }
+fn default_delete_create_warning_count() -> u32 {
+    2
+}
 
 impl Default for CheckpointConfig {
     fn default() -> Self {
@@ -305,6 +313,7 @@ impl Default for WatchdogConfig {
             max_consecutive_errors: default_max_consecutive_errors(),
             same_tool_warning_count: default_same_tool_warning_count(),
             read_without_write_warning: default_read_without_write_warning(),
+            delete_create_warning_count: default_delete_create_warning_count(),
         }
     }
 }
@@ -435,6 +444,9 @@ impl RuntimeConfig {
         }
         if other.watchdog.read_without_write_warning != default_read_without_write_warning() {
             self.watchdog.read_without_write_warning = other.watchdog.read_without_write_warning;
+        }
+        if other.watchdog.delete_create_warning_count != default_delete_create_warning_count() {
+            self.watchdog.delete_create_warning_count = other.watchdog.delete_create_warning_count;
         }
 
         // Checkpoint

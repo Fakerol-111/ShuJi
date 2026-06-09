@@ -54,10 +54,14 @@
 | ----------------- | ------------------------------------------------------------------------- |
 | `read_file`       | 阅读 .shuji/ 文档（报告/设计/契约）。仅在报告不足以决策时才读源代码文件。 |
 | `list_dir`        | 浏览 .shuji/ 查找文档                                                     |
+| `read_document`   | 按 ID 读取文档（附元信息+正文），默认截断 4000 字符。直接读，无需先 find  |
+| `search_text`     | 在文档库中搜索关键词                                                      |
 | `create_document` | 创建任务（type="task"）或报告（type="rprt"）                              |
 | `modify_document` | 修改文档（查找替换）                                                      |
 | `append_document` | 追加内容                                                                  |
-| `read_document`   | 按 ID 读取文档（附元信息+正文），默认截断 4000 字符。直接读，无需先 find  |
+| `set_document_status` | 更新文档状态（审批/驳回等）                                           |
+| `request_reauth`  | 请求重新认证（令牌过期/权限不足时）                                      |
+| `route_to`        | 分派任务到目标部门或回退路由                                              |
 
 # 硬规则
 

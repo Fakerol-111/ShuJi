@@ -899,7 +899,7 @@ pub async fn tool_read_file(working_dir: &Path, args: &serde_json::Value) -> Str
     let is_chunked = offset > 0 || limit < u64::MAX;
     if !is_chunked && total > 200 {
         return ToolOutput::error("read_file", path, "too_large",
-            &format!("文件过大（共 {} 行）。请用 offset 和 limit 参数分段读取，如 offset=0&limit=50。或用 edit_file 做局部修改。", total));
+            &format!("文件过大（共 {} 行）。请用 offset 和 limit 参数分段读取，如 offset=0&limit=50。或用 edit_file / apply_patch 做局部修改。", total));
     }
 
     let start = (offset as usize).min(total);
@@ -1214,6 +1214,111 @@ pub fn create_file_tool_def(description: &str) -> crate::api::client::ToolDefini
                 "required": ["path", "content"]
             }),
         },
+    }
+}
+
+pub fn edit_file_tool_def() -> crate::api::client::ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "edit_file".into(),
+            description: "对已有文件进行 SEARCH/REPLACE 局部修改。一次只做一个替换块。建议先用 read_file 读取目标文件，确保 search 文本精确且唯一。对多处修改或大篇幅改动请用 apply_patch。".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "文件路径，相对于项目根目录"
+                    },
+                    "search": {
+                        "type": "string",
+                        "description": "要替换的精确原文段。必须在文件中唯一出现（只替换第一处匹配）。建议包含周围几行上下文以确保唯一性。"
+                    },
+                    "replace": {
+                        "type": "string",
+                        "description": "替换后的新内容"
+                    }
+                },
+                "required": ["path", "search", "replace"]
+            }),
+        },
+    }
+}
+
+// ── edit_file helper ────────────────────────────────────────────────
+
+/// Apply a single SEARCH/REPLACE edit to an existing file.
+/// Reads the file, verifies `search` text is unique, replaces with `replace`.
+pub async fn tool_edit_file(working_dir: &Path, args: &serde_json::Value) -> String {
+    let path = args["path"].as_str().unwrap_or("");
+    let search_text = args["search"].as_str().unwrap_or("");
+    let replace_text = args["replace"].as_str().unwrap_or("");
+    if path.is_empty() {
+        return ToolOutput::error("edit_file", "", "empty_path", "文件路径为空");
+    }
+    if search_text.is_empty() {
+        return ToolOutput::error("edit_file", path, "empty_search", "search 内容为空");
+    }
+    let full = match resolve_scoped_path(working_dir, path).await {
+        Ok(p) => p,
+        Err(e) => return ToolOutput::error("edit_file", path, "path_error", &e),
+    };
+    if !full.exists() {
+        return ToolOutput::error(
+            "edit_file",
+            path,
+            "not_found",
+            "文件不存在。新文件请用 create_file，全量覆盖请用 apply_patch（空 SEARCH）。",
+        );
+    }
+    let content = match tokio::fs::read_to_string(&full).await {
+        Ok(c) => c,
+        Err(e) => return ToolOutput::error("edit_file", path, "read_error", &e.to_string()),
+    };
+
+    // Count occurrences
+    let count = content.matches(search_text).count();
+    if count == 0 {
+        let preview = if search_text.len() > 120 {
+            let cutoff = search_text.floor_char_boundary(120);
+            format!("{}...", &search_text[..cutoff])
+        } else {
+            search_text.to_string()
+        };
+        return ToolOutput::error(
+            "edit_file",
+            path,
+            "search_not_found",
+            &format!(
+                "SEARCH 文本未在文件中找到。\n查找的文本：\n```\n{}\n```\n请用 read_file 确认文件最新内容后再试。",
+                preview
+            ),
+        );
+    }
+    if count > 1 {
+        return ToolOutput::error(
+            "edit_file",
+            path,
+            "search_ambiguous",
+            &format!(
+                "SEARCH 文本在文件中出现 {} 次，不唯一。请在 search 中包含更多上下文行以确保唯一匹配。",
+                count
+            ),
+        );
+    }
+
+    let new_content = content.replacen(search_text, replace_text, 1);
+    match tokio::fs::write(&full, &new_content).await {
+        Ok(_) => ToolOutput::success(
+            "edit_file",
+            path,
+            &format!(
+                "成功替换 1 处文本（{} 字节 → {} 字节）",
+                content.len(),
+                new_content.len()
+            ),
+        ),
+        Err(e) => ToolOutput::error("edit_file", path, "write_error", &e.to_string()),
     }
 }
 
@@ -1918,6 +2023,7 @@ pub async fn execute_named_tool(
         "rename_file" => tool_rename_file(working_dir, args).await,
         "modify_file" => tool_modify_file(working_dir, args).await,
         "apply_patch" => tool_apply_patch(working_dir, args).await,
+        "edit_file" => tool_edit_file(working_dir, args).await,
         "create_document" => documents::tool_create_document(working_dir, args, dept).await,
         "modify_document" => documents::tool_modify_document(working_dir, args, dept).await,
         "set_document_status" => documents::tool_set_document_status(working_dir, args).await,
@@ -1977,7 +2083,7 @@ pub async fn execute_named_tool(
     // P2-2: Invalidate read cache after write operations
     match name {
         "create_file" | "modify_file" | "append_file" | "delete_file" | "rename_file"
-        | "apply_patch" => {
+        | "apply_patch" | "edit_file" => {
             if let Some(path) = args.get("path").and_then(|v| v.as_str()) {
                 if let Ok(full) = resolve_scoped_path(working_dir, path).await {
                     cache_invalidate(&full);
