@@ -1,0 +1,888 @@
+$ type shuji-app\src-tauri\src\tool\mod.rs
+[exit 0]
+use std::collections::HashMap;
+use std::sync::LazyLock;
+use std::sync::Mutex;
+use std::time::SystemTime;
+
+use crate::actor::FastMessage;
+use crate::api::client::AnthropicClient;
+use crate::models::role::Role;
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use tokio::io::AsyncReadExt;
+
+pub mod output;
+pub use output::*;
+
+pub mod documents;
+pub mod registry;
+mod tool_log;
+
+// ── P2-2: In-memory read cache ─────────────────────────────
+/// Session-level read cache: maps resolved path → (mtime, cached result string).
+/// After any write/delete/rename/patch, the affected path(s) are invalidated.
+static READ_CACHE: LazyLock<Mutex<HashMap<PathBuf, (SystemTime, String)>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Look up a cached read result. Returns `Some(result)` if the file's mtime
+/// hasn't changed since the cache entry was created.
+pub fn cache_lookup(path: &Path) -> Option<String> {
+    let cache = READ_CACHE.lock().ok()?;
+    if let Some((cached_mtime, cached_result)) = cache.get(path) {
+        if let Ok(current_mtime) = std::fs::metadata(path).and_then(|m| m.modified()) {
+            if current_mtime == *cached_mtime {
+                return Some(format!(
+                    "{}[缓存命中: 内容未变 (cached: true)]",
+                    cached_result
+                ));
+            }
+        }
+    }
+    None
+}
+
+/// Insert a read result into the cache.
+pub fn cache_insert(path: PathBuf, mtime: SystemTime, result: String) {
+    if let Ok(mut cache) = READ_CACHE.lock() {
+        cache.insert(path, (mtime, result));
+    }
+}
+
+/// Invalidate cache entries whose key starts with or equals `path`.
+/// Call after any write/delete/rename/patch operation.
+fn cache_invalidate(path: &Path) {
+    if let Ok(mut cache) = READ_CACHE.lock() {
+        cache.retain(|k, _| !k.starts_with(path));
+    }
+}
+
+// ── Tool context for special tools ─────────────────────────────────
+
+/// Optional context passed to special tools that need access to system
+/// resources beyond the filesystem (API client, cancel map, etc.).
+/// Currently used by 内阁's special tools (cancel_agent, update_soul,
+/// expand_requirements, create_skill).
+pub struct ToolContext {
+    pub working_dir: PathBuf,
+    pub cancel_map: Option<crate::CancelMap>,
+    pub client: Option<Arc<AnthropicClient>>,
+    pub model: Option<String>,
+    /// Fast mailbox senders for interrupting departments immediately.
+    pub fast_txs: Option<crate::FastTxMap>,
+}
+
+/// Resolve a project-relative path against root with safety checks.
+///
+/// - Canonicalizes root for reliable comparison (handles Windows `\\?\` prefix)
+/// - Rejects absolute paths and `..` traversal
+/// - Canonicalizes existing paths to detect symlink escapes
+/// - Returns error if resolved path is not within `root`
+///
+/// For files that don't exist yet (write operations), canonicalizes
+/// the parent directory and then appends the filename.
+pub async fn resolve_scoped_path(root: &Path, rel: &str) -> Result<PathBuf, String> {
+    // Canonicalize root once for reliable comparison across all code paths.
+    // This handles Windows `\\?\` prefix, symlinks, and path normalization.
+    let canon_root = tokio::fs::canonicalize(root)
+        .await
+        .map_err(|e| format!("项目根目录解析失败: {}", e))?;
+
+    let rel_path = Path::new(rel);
+
+    // Block absolute paths
+    if rel_path.is_absolute() {
+        return Err(format!("禁止使用绝对路径: {}", rel));
+    }
+
+    // Block .. traversal (use path components, not string match)
+    if rel_path
+        .components()
+        .any(|c| c == std::path::Component::ParentDir)
+    {
+        return Err(format!("禁止使用父目录跳转: {}", rel));
+    }
+
+    // Block Windows drive-letter / UNC prefix paths (C:, \\server, etc.)
+    for comp in rel_path.components() {
+        if matches!(comp, std::path::Component::Prefix(_)) {
+            return Err(format!("禁止使用盘符或 UNC 路径: {}", rel));
+        }
+    }
+
+    let candidate = root.join(rel_path);
+
+    // For existing paths, canonicalize to detect escapes
+    if candidate.exists() {
+        let canon = tokio::fs::canonicalize(&candidate)
+            .await
+            .map_err(|e| format!("路径解析失败 {}: {}", rel, e))?;
+
+        if !canon.starts_with(&canon_root) {
+            return Err(format!(
+                "路径越界: {} 解析到 {}，不在项目目录内",
+                rel,
+                canon.display()
+            ));
+        }
+        return Ok(canon);
+    }
+
+    // For non-existing paths, canonicalize parent directory
+    if let Some(parent) = candidate.parent() {
+        if parent.exists() {
+            let canon_parent = tokio::fs::canonicalize(parent)
+                .await
+                .map_err(|e| format!("父目录解析失败 {}: {}", rel, e))?;
+
+            if !canon_parent.starts_with(&canon_root) {
+                return Err(format!("路径越界: {} 的父目录不在项目目录内", rel,));
+            }
+
+            let filename = candidate
+                .file_name()
+                .ok_or_else(|| format!("无效文件名: {}", rel))?;
+
+            return Ok(canon_parent.join(filename));
+        }
+    }
+
+    // Parent doesn't exist yet — can't canonicalize the full path.
+    // Walk up to find the longest existing ancestor, canonicalize it,
+    // verify it's within the project root, then reconstruct the path.
+    for ancestor in candidate.ancestors() {
+        if ancestor.exists() {
+            let canon_ancestor = tokio::fs::canonicalize(ancestor)
+                .await
+                .map_err(|e| format!("父目录解析失败 {}: {}", rel, e))?;
+            if !canon_ancestor.starts_with(&canon_root) {
+                return Err(format!("路径越界: {}", rel));
+            }
+            let suffix = candidate
+                .strip_prefix(ancestor)
+                .map_err(|_| format!("路径解析内部错误: {}", rel))?;
+            return Ok(canon_ancestor.join(suffix));
+        }
+    }
+
+    // Nothing in the path exists. Since rel is already sanitized
+    // (no .., no absolute, no prefix components), root.join(rel) is
+    // guaranteed to be within root. Use canon_root as anchor so
+    // Windows normalization (\\?\ prefix, casing) is applied.
+    Ok(canon_root.join(rel))
+}
+
+// ── ToolOutput moved to output.rs ─────────────────────────────
+
+// ── append_file helper ─────────────────────────────────────────────
+
+/// Append content to an existing file. Creates the file if it doesn't exist.
+pub async fn tool_append_file(working_dir: &Path, args: &serde_json::Value) -> String {
+    let path = args["path"].as_str().unwrap_or("");
+    let content = args["content"].as_str().unwrap_or("");
+    if path.is_empty() {
+        return ToolOutput::error("append_file", "", "empty_path", "文件路径为空");
+    }
+    if content.is_empty() {
+        return ToolOutput::error("append_file", path, "empty_content", "追加内容为空");
+    }
+    // Hard limit: 2000 characters per call
+    if content.len() > 2000 {
+        return ToolOutput::error("append_file", path, "content_too_long",
+            &format!("content 长度 {} 超过上限 2000 字符。请拆分成多次 append_file 调用，每次 ≤2000 字符。", content.len()));
+    }
+    let full = match resolve_scoped_path(working_dir, path).await {
+        Ok(p) => p,
+        Err(e) => return ToolOutput::error("append_file", path, "path_error", &e),
+    };
+    // Create parent directories if needed
+    if let Some(parent) = full.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+    match tokio::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&full)
+        .await
+    {
+        Ok(mut file) => {
+            use tokio::io::AsyncWriteExt;
+            if let Err(e) = file.write_all(format!("{}\n", content).as_bytes()).await {
+                return ToolOutput::error("append_file", path, "write_error", &e.to_string());
+            }
+            ToolOutput::success("append_file", path, "追加成功")
+        }
+        Err(e) => ToolOutput::error("append_file", path, "open_error", &e.to_string()),
+    }
+}
+
+/// Helper: generate a ToolDefinition for append_file.
+pub fn append_file_tool_def() -> crate::api::client::ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "append_file".into(),
+            description: "追加内容到文件末尾。content ≤2000 字符，大文件分批写入。".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "文件路径，相对于项目根目录"
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "要追加的内容（每次最多 2000 字符）",
+                        "maxLength": 2000
+                    }
+                },
+                "required": ["path", "content"]
+            }),
+        },
+    }
+}
+
+// ── delete_file helper ────────────────────────────────────────────
+
+/// Delete a file. Returns an error if the path doesn't exist or is a directory.
+pub async fn tool_delete_file(working_dir: &Path, args: &serde_json::Value) -> String {
+    let path = args["path"].as_str().unwrap_or("");
+    if path.is_empty() {
+        return ToolOutput::error("delete_file", "", "empty_path", "文件路径为空");
+    }
+    let full = match resolve_scoped_path(working_dir, path).await {
+        Ok(p) => p,
+        Err(e) => return ToolOutput::error("delete_file", path, "path_error", &e),
+    };
+    if !full.exists() {
+        return ToolOutput::error("delete_file", path, "not_found", "文件不存在");
+    }
+    if full.is_dir() {
+        return ToolOutput::error(
+            "delete_file",
+            path,
+            "is_directory",
+            "不能删除目录，请使用文件路径",
+        );
+    }
+    match tokio::fs::remove_file(&full).await {
+        Ok(_) => ToolOutput::success("delete_file", path, "删除成功"),
+        Err(e) => ToolOutput::error("delete_file", path, "delete_error", &e.to_string()),
+    }
+}
+
+/// Generate a ToolDefinition for delete_file.
+pub fn delete_file_tool_def() -> crate::api::client::ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "delete_file".into(),
+            description: "删除项目目录下的文件".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "文件路径，相对于项目根目录"
+                    }
+                },
+                "required": ["path"]
+            }),
+        },
+    }
+}
+
+// ── rename_file helper ────────────────────────────────────────────
+
+/// Rename or move a file. Takes source path and destination path.
+pub async fn tool_rename_file(working_dir: &Path, args: &serde_json::Value) -> String {
+    let from = args["from"].as_str().unwrap_or("");
+    let to = args["to"].as_str().unwrap_or("");
+    if from.is_empty() || to.is_empty() {
+        return ToolOutput::error("rename_file", "", "empty_path", "from 和 to 都不能为空");
+    }
+    let full_from = match resolve_scoped_path(working_dir, from).await {
+        Ok(p) => p,
+        Err(e) => return ToolOutput::error("rename_file", from, "path_error", &e),
+    };
+    if !full_from.exists() {
+        return ToolOutput::error("rename_file", from, "not_found", "源文件不存在");
+    }
+    let full_to = match resolve_scoped_path(working_dir, to).await {
+        Ok(p) => p,
+        Err(e) => return ToolOutput::error("rename_file", to, "path_error", &e),
+    };
+    if let Some(parent) = full_to.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+    match tokio::fs::rename(&full_from, &full_to).await {
+        Ok(_) => ToolOutput::success("rename_file", to, &format!("从 {} 重命名成功", from)),
+        Err(e) => ToolOutput::error("rename_file", to, "rename_error", &e.to_string()),
+    }
+}
+
+/// Generate a ToolDefinition for rename_file.
+pub fn rename_file_tool_def() -> crate::api::client::ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "rename_file".into(),
+            description: "重命名或移动文件。提供 from（源路径）和 to（目标路径）".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "from": {
+                        "type": "string",
+                        "description": "原文件路径，相对于项目根目录"
+                    },
+                    "to": {
+                        "type": "string",
+                        "description": "新文件路径，相对于项目根目录"
+                    }
+                },
+                "required": ["from", "to"]
+            }),
+        },
+    }
+}
+
+// ── apply_patch helper ────────────────────────────────────────
+
+/// Apply SEARCH/REPLACE blocks to a file (Claude Code style).
+///
+/// The `patch` parameter contains one or more blocks of the form:
+/// ```text
+/// <<<<<<< SEARCH
+/// exact text to find in the file (must be unique)
+/// =======
+/// replacement text
+/// >>>>>>> REPLACE
+/// ```
+///
+/// Multiple blocks are applied sequentially to the same file.
+/// Empty SEARCH text creates the file with the REPLACE content.
+pub async fn tool_apply_patch(working_dir: &Path, args: &serde_json::Value) -> String {
+    let path = args["path"].as_str().unwrap_or("");
+    let patch_str = args["patch"].as_str().unwrap_or("");
+    if path.is_empty() {
+        return ToolOutput::error("apply_patch", "", "empty_path", "文件路径为空");
+    }
+    if patch_str.is_empty() {
+        return ToolOutput::error("apply_patch", path, "empty_patch", "patch 内容为空");
+    }
+    // Hard limit: 50KB per patch
+    if patch_str.len() > 50_000 {
+        return ToolOutput::error(
+            "apply_patch",
+            path,
+            "patch_too_large",
+            &format!(
+                "patch 长度 {} 超过上限 50000 字符。请拆分成多次 apply_patch 调用。",
+                patch_str.len()
+            ),
+        );
+    }
+
+    let full = match resolve_scoped_path(working_dir, path).await {
+        Ok(p) => p,
+        Err(e) => return ToolOutput::error("apply_patch", path, "path_error", &e),
+    };
+
+    // Ensure parent dir exists
+    if let Some(parent) = full.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+
+    // Read current content (empty string if file doesn't exist — allows creation)
+    let mut content = tokio::fs::read_to_string(&full).await.unwrap_or_default();
+    let original_len = content.len();
+
+    // Parse SEARCH/REPLACE blocks
+    let blocks = match parse_search_replace_blocks(patch_str) {
+        Ok(b) => b,
+        Err(e) => return ToolOutput::error("apply_patch", path, "parse_error", &e),
+    };
+
+    // Apply blocks sequentially (each block sees the result of the previous)
+    for (i, (search_text, replace_text)) in blocks.iter().enumerate() {
+        let block_num = i + 1;
+
+        if search_text.is_empty() {
+            // Empty SEARCH: create/replace entire file content with REPLACE
+            content = replace_text.clone();
+            continue;
+        }
+
+        // Count occurrences for unique-match check
+        let count = content.matches(search_text.as_str()).count();
+        if count == 0 {
+            let preview = if search_text.len() > 120 {
+                let cutoff = search_text.floor_char_boundary(120);
+                format!("{}...", &search_text[..cutoff])
+            } else {
+                search_text.clone()
+            };
+            return ToolOutput::error(
+                "apply_patch",
+                path,
+                "search_not_found",
+                &format!(
+                    "第{}个 SEARCH 块未在文件中找到。\n\
+                     查找的文本：\n```\n{}\n```\n\
+                     请用 read_file 确认文件最新内容后再试。也可以只截取要替换的关键几行（确保唯一）。",
+                    block_num, preview
+                ),
+            );
+        }
+        if count > 1 {
+            return ToolOutput::error(
+                "apply_patch",
+                path,
+                "search_ambiguous",
+                &format!(
+                    "第{}个 SEARCH 块在文件中出现 {} 次，不唯一。\
+                     请在 SEARCH 中包含更多上下文行以确保唯一匹配。",
+                    block_num, count
+                ),
+            );
+        }
+
+        // Replace first (and only) occurrence
+        content = content.replacen(search_text.as_str(), replace_text.as_str(), 1);
+    }
+
+    // Write final content
+    match tokio::fs::write(&full, &content).await {
+        Ok(_) => ToolOutput::success(
+            "apply_patch",
+            path,
+            &format!(
+                "成功应用 {} 个 SEARCH/REPLACE 块（{} 字节 → {} 字节）",
+                blocks.len(),
+                original_len,
+                content.len()
+            ),
+        ),
+        Err(e) => ToolOutput::error("apply_patch", path, "write_error", &e.to_string()),
+    }
+}
+
+/// Parse SEARCH/REPLACE blocks from a string.
+///
+/// Format per block:
+/// ```text
+/// <<<<<<< SEARCH
+/// <search text>
+/// =======
+/// <replace text>
+/// >>>>>>> REPLACE
+/// ```
+///
+/// Returns Vec<(search_text, replace_text)>.
+/// Supports multiple blocks. Skips any text before the first SEARCH marker
+/// (compatible with Claude Code's path + block format).
+fn parse_search_replace_blocks(input: &str) -> Result<Vec<(String, String)>, String> {
+    let mut blocks = Vec::new();
+    let mut remaining = input;
+
+    loop {
+        // Find next "<<<<<<< SEARCH" marker
+        let search_start = match remaining.find("<<<<<<< SEARCH") {
+            Some(idx) => idx,
+            None => break,
+        };
+
+        // Content after the marker
+        let after_marker = &remaining[search_start + 14..];
+        // Strip leading newline (the marker is usually followed by \n)
+        let body = after_marker.strip_prefix('\n').unwrap_or(after_marker);
+
+        // Find the "=======" separator
+        // Normal case: "\n=======\n" within body
+        // Empty SEARCH case: body starts with "=======\n"
+        let (search_text, rest) = if let Some(idx) = body.find("\n=======\n") {
+            (&body[..idx], &body[idx + 10..])
+        } else if body.starts_with("=======\n") {
+            // Empty SEARCH (create file / full replace)
+            ("", &body[9..])
+        } else {
+            return Err(format!(
+                "SEARCH/REPLACE 块缺少 '=======' 分隔符。\n格式：\n<<<<<<< SEARCH\n旧文本\n=======\n新文本\n>>>>>>> REPLACE"
+            ));
+        };
+
+        // Find the ">>>>>>> REPLACE" end marker
+        let end_idx = match rest.find("\n>>>>>>> REPLACE") {
+            Some(idx) => idx,
+            None => {
+                return Err(format!("SEARCH/REPLACE 块缺少 '>>>>>>> REPLACE' 结束标记"));
+            }
+        };
+
+        let replace_text = &rest[..end_idx];
+        blocks.push((search_text.to_string(), replace_text.to_string()));
+
+        // Move past this block
+        remaining = &rest[end_idx + 15..]; // skip "\n>>>>>>> REPLACE"
+    }
+
+    if blocks.is_empty() {
+        return Err("未找到 SEARCH/REPLACE 块。格式：\n\
+             <<<<<<< SEARCH\n\
+             要替换的原文（必须与文件中内容完全一致）\n\
+             =======\n\
+             替换后的新内容\n\
+             >>>>>>> REPLACE\n\n\
+             注意：这是 SEARCH/REPLACE 格式，不是 unified diff。不要使用 ---/+++ 或 @@ 行。"
+            .to_string());
+    }
+
+    Ok(blocks)
+}
+
+/// Generate a ToolDefinition for apply_patch.
+pub fn apply_patch_tool_def() -> crate::api::client::ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "apply_patch".into(),
+            description:
+                "对文件应用 SEARCH/REPLACE 修改。适用于任何幅度的修改：大段替换、重构、批量修改。\
+                 一个调用可包含多个 SEARCH/REPLACE 块，按顺序应用到同一文件。\n\
+                 单块格式：\n<<<<<<< SEARCH\n旧文本\n=======\n新文本\n>>>>>>> REPLACE\n\
+                 多块示例：\n<<<<<<< SEARCH\n第一处原文\n=======\n第一处新内容\n>>>>>>> REPLACE\n<<<<<<< SEARCH\n第二处原文\n=======\n第二处新内容\n>>>>>>> REPLACE\n\
+                 SEARCH 内容必须与文件原文精确一致且唯一。SEARCH 为空则新建文件。".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "文件路径，相对于项目根目录。"
+                    },
+                    "patch": {
+                        "type": "string",
+                        "description": "SEARCH/REPLACE 块内容，支持多块。格式：\n<<<<<<< SEARCH\n旧文本\n=======\n新文本\n>>>>>>> REPLACE",
+                    }
+                },
+                "required": ["path", "patch"]
+            }),
+        },
+    }
+}
+
+// ── modify_file helper ─────────────────────────────────────────
+
+/// Modify an existing file by replacing matching text (find+replace).
+/// Reads the file, finds `old_text`, replaces it with `new_text` (first
+/// occurrence only).  The LLM should use read_file first to locate the
+/// exact text to replace.
+pub async fn tool_modify_file(working_dir: &Path, args: &serde_json::Value) -> String {
+    let path = args["path"].as_str().unwrap_or("");
+    if path.is_empty() {
+        return ToolOutput::error("modify_file", "", "empty_path", "文件路径为空");
+    }
+    let full = match resolve_scoped_path(working_dir, path).await {
+        Ok(p) => p,
+        Err(e) => return ToolOutput::error("modify_file", path, "path_error", &e),
+    };
+    if !full.exists() {
+        return ToolOutput::error("modify_file", path, "not_found", "文件不存在");
+    }
+    let content = match tokio::fs::read_to_string(&full).await {
+        Ok(c) => c,
+        Err(e) => return ToolOutput::error("modify_file", path, "read_error", &e.to_string()),
+    };
+
+    let old_text = args["old_text"].as_str().unwrap_or("");
+    let new_text = args["new_text"].as_str().unwrap_or("");
+    if old_text.is_empty() {
+        return ToolOutput::error("modify_file", path, "empty_old_text", "old_text 不能为空");
+    }
+    // Hard limit: 800 characters per parameter
+    if old_text.len() > 800 {
+        return ToolOutput::error("modify_file", path, "old_text_too_long",
+            &format!("old_text 长度 {} 超过上限 800 字符。对于大块修改，请使用 apply_patch（支持 50000 字符）。", old_text.len()));
+    }
+    if new_text.len() > 800 {
+        return ToolOutput::error("modify_file", path, "new_text_too_long",
+            &format!("new_text 长度 {} 超过上限 800 字符。对于大块修改，请使用 apply_patch（支持 50000 字符）。", new_text.len()));
+    }
+    if !content.contains(old_text) {
+        return ToolOutput::error("modify_file", path, "not_found",
+            "未在文件中找到匹配的文本。请先用 read_file 确认文件内容，并确保 old_text 与原文件完全一致（包括空格和缩进）。");
+    }
+
+    let new_content = content.replacen(old_text, new_text, 1);
+    match tokio::fs::write(&full, &new_content).await {
+        Ok(_) => ToolOutput::success(
+            "modify_file",
+            path,
+            &format!("替换成功（替换 {} 字节）", old_text.len()),
+        ),
+        Err(e) => ToolOutput::error("modify_file", path, "write_error", &e.to_string()),
+    }
+}
+
+/// Generate a ToolDefinition for modify_file.
+pub fn modify_file_tool_def() -> crate::api::client::ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "modify_file".into(),
+            description:
+                "替换文件中的文本 (find+replace)。≤800字符。大块修改请用 apply_patch（支持 50000 字符）。工部/刑部已禁用此工具——使用 apply_patch。".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "文件路径，相对于项目根目录"
+                    },
+                    "old_text": {
+                        "type": "string",
+                        "description": "待替换文本（≤800字符）",
+                        "maxLength": 800
+                    },
+                    "new_text": {
+                        "type": "string",
+                        "description": "新文本（≤800字符）",
+                        "maxLength": 800
+                    }
+                },
+                "required": ["path", "old_text", "new_text"]
+            }),
+        },
+    }
+}
+
+// ── execute_command helper ─────────────────────────────────────────
+
+/// Execute a command with safety checks and timeout.
+/// Used by 兵部 and 刑部 for running test commands.
+pub async fn tool_execute_command(
+    working_dir: &Path,
+    args: &serde_json::Value,
+    dept: &str,
+) -> String {
+    let cmd = args["command"].as_str().unwrap_or("");
+    if cmd.is_empty() {
+        return ToolOutput::error("execute_command", "", "empty_command", "命令为空");
+    }
+    log_console!("[{}] executing: {}", dept, cmd);
+
+    if let Err(blocked) = check_safe_command(cmd) {
+        log_console!("[{}] BLOCKED command: {} — reason: {}", dept, cmd, blocked);
+        return format!("[安全拦截] 命令被禁止执行: {}\n原因: {}", cmd, blocked);
+    }
+
+    let timeout = std::time::Duration::from_secs(120);
+    let (shell, shell_args) = if cfg!(windows) {
+        ("powershell", vec!["-Command"])
+    } else {
+        ("bash", vec!["-l", "-c"])
+    };
+    match execute_with_timeout(shell, &shell_args, cmd, working_dir, timeout).await {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let exit_code = output.status.code().unwrap_or(-1);
+            if exit_code == 0 {
+                format!("命令执行成功 (exit={}):\n{}", exit_code, stdout)
+            } else {
+                format!(
+                    "命令执行失败 (exit={}):\nstdout:\n{}\nstderr:\n{}",
+                    exit_code, stdout, stderr
+                )
+            }
+        }
+        Err(timeout_msg) => timeout_msg,
+    }
+}
+
+async fn execute_with_timeout(
+    shell: &str,
+    args: &[&str],
+    cmd: &str,
+    working_dir: &Path,
+    timeout: std::time::Duration,
+) -> Result<std::process::Output, String> {
+    let mut child = tokio::process::Command::new(shell);
+    for a in args {
+        child.arg(a);
+    }
+    child.arg(cmd);
+    let mut child = child
+        .current_dir(working_dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("无法启动命令: {}", e))?;
+
+    let start = tokio::time::Instant::now();
+    let poll_interval = tokio::time::Duration::from_millis(500);
+
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let mut stdout = Vec::new();
+                let mut stderr = Vec::new();
+                if let Some(ref mut out) = child.stdout {
+                    let _ = out.read_to_end(&mut stdout).await;
+                }
+                if let Some(ref mut err) = child.stderr {
+                    let _ = err.read_to_end(&mut stderr).await;
+                }
+                return Ok(std::process::Output {
+                    status,
+                    stdout,
+                    stderr,
+                });
+            }
+            Ok(None) => {
+                if start.elapsed() >= timeout {
+                    let _ = child.kill().await;
+                    let _ = child.wait().await;
+                    return Err(format!(
+                        "命令执行超时（超过 {} 秒），进程已终止。",
+                        timeout.as_secs()
+                    ));
+                }
+                tokio::time::sleep(poll_interval).await;
+            }
+            Err(e) => return Err(format!("命令执行出错: {}", e)),
+        }
+    }
+}
+
+fn check_safe_command(cmd: &str) -> Result<(), &'static str> {
+    let c = cmd.trim();
+    let tokens: Vec<&str> = c.split_whitespace().collect();
+    if tokens.is_empty() {
+        return Ok(());
+    }
+
+    for &(keyword, reason) in SYSTEM_BLOCKS {
+        let kw_tokens: Vec<&str> = keyword.split_whitespace().collect();
+
+        let matched = if kw_tokens.len() == 1 {
+            // Single-token: match first command token (exact, or prefix for mkfs).
+            if keyword == "mkfs" {
+                tokens[0].starts_with("mkfs")
+            } else {
+                tokens[0] == keyword
+            }
+        } else {
+            // Multi-token: match prefix of command tokens.
+            tokens.len() >= kw_tokens.len() && tokens[..kw_tokens.len()] == kw_tokens[..]
+        };
+
+        if matched {
+            return Err(reason);
+        }
+    }
+
+    for &pattern in PATH_ESCAPE {
+        if c.to_lowercase().contains(pattern) {
+            return Err("禁止操作项目目录之外的文件");
+        }
+    }
+    Ok(())
+}
+
+// ── Unified tool implementations (used by all agents) ─────────────
+
+/// Read a file with optional line range (`offset`, `limit`).
+/// Files over 200 lines require offset/limit to prevent token overflow.
+pub async fn tool_read_file(working_dir: &Path, args: &serde_json::Value) -> String {
+    let path = args["path"].as_str().unwrap_or("");
+    let offset = args["offset"].as_u64().unwrap_or(0);
+    let limit = args["limit"].as_u64().unwrap_or(u64::MAX);
+    let full = match resolve_scoped_path(working_dir, path).await {
+        Ok(p) => p,
+        Err(e) => return ToolOutput::error("read_file", path, "path_error", &e),
+    };
+
+    // P2-2: Read cache — return cached result for full-file reads
+    let is_full_read = offset == 0 && limit == u64::MAX;
+    if is_full_read {
+        if let Some(cached) = cache_lookup(&full) {
+            return cached;
+        }
+    }
+
+    let content = match tokio::fs::read_to_string(&full).await {
+        Ok(c) => {
+            // Cache raw content with mtime for future reads
+            if let Ok(meta) = tokio::fs::metadata(&full).await {
+                if let Ok(mtime) = meta.modified() {
+                    cache_insert(full.clone(), mtime, c.clone());
+                }
+            }
+            c
+        }
+        Err(e) => return ToolOutput::error("read_file", path, "read_error", &e.to_string()),
+    };
+
+    let lines: Vec<&str> = content.lines().collect();
+    let total = lines.len();
+
+    // Reject full read for large files unless offset/limit are specified
+    let is_chunked = offset > 0 || limit < u64::MAX;
+    if !is_chunked && total > 200 {
+        return ToolOutput::error("read_file", path, "too_large",
+            &format!("文件过大（共 {} 行）。请用 offset 和 limit 参数分段读取，如 offset=0&limit=50。或用 edit_file / apply_patch 做局部修改。", total));
+    }
+
+    let start = (offset as usize).min(total);
+    let end = (start + (limit as usize).min(total - start)).min(total);
+    let excerpt: Vec<String> = lines[start..end]
+        .iter()
+        .enumerate()
+        .map(|(i, line)| format!("{:>4}| {}", start + i + 1, line))
+        .collect();
+    let meta = format!("{}（共 {} 行，显示 {}-{}）", path, total, start + 1, end);
+    let result = format!("{}\n{}", meta, excerpt.join("\n"));
+
+    ToolOutput::read_file("read_file", path, &result)
+}
+
+/// Create a new file with initial content. Rejects if the file already exists
+/// (use modify_file or delete+create instead).
+pub async fn tool_create_file(working_dir: &Path, args: &serde_json::Value) -> String {
+    let path = args["path"].as_str().unwrap_or("");
+    let content = args["content"].as_str().unwrap_or("");
+    if path.is_empty() {
+        return ToolOutput::error("create_file", "", "empty_path", "文件路径为空");
+    }
+    // Hard limit: 8000 characters per call
+    if content.len() > 8000 {
+        return ToolOutput::error(
+            "create_file",
+            path,
+            "content_too_long",
+            &format!(
+                "content 长度 {} 超过上限 8000 字符。请使用 create_file + append_file 分块写入。",
+                content.len()
+            ),
+        );
+    }
+
+    let full = match resolve_scoped_path(working_dir, path).await {
+        Ok(p) => p,
+        Err(e) => return ToolOutput::error("create_file", path, "path_error", &e),
+    };
+
+    if full.exists() {
+        return ToolOutput::error("create_file", path, "already_exists",
+            "文件已存在，不允许覆盖。请使用 modify_file 修改内容，或先 delete_file 再 create_file。");
+    }
+
+    if let Some(parent) = full.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+    match tokio::fs::write(&full, content).await {
+        Ok(_) => ToolOutput::succes
+
+[… truncated 57217 chars …]
