@@ -1,8 +1,8 @@
-import type { InputHTMLAttributes } from "react";
+import type { InputHTMLAttributes } from 'react';
 
 interface Props extends InputHTMLAttributes<HTMLInputElement> {}
 
-export function Input({ className = "", ...rest }: Props) {
+export function Input({ className = '', ...rest }: Props) {
   return (
     <input
       className={`text-body bg-surface-parchment border border-fold rounded-lg px-3 py-2

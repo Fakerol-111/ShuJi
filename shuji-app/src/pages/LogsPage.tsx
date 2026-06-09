@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { listLogFiles, readLogFile } from "../api";
-import { formatError } from "../utils/error";
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { listLogFiles, readLogFile } from '../api';
+import { formatError } from '../utils/error';
 
 interface Props {
   onClose?: () => void;
@@ -12,11 +12,11 @@ export default function LogsPage({ onClose }: Props) {
   const [logFiles, setLogFiles] = useState<string[]>([]);
   const [selectedLog, setSelectedLog] = useState<string | null>(null);
   const [logContent, setLogContent] = useState<string[]>([]);
-  const [logError, setLogError] = useState("");
+  const [logError, setLogError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const refresh = async () => {
-    setLogError("");
+    setLogError('');
     setLoading(true);
     try {
       const files = await listLogFiles();
@@ -37,7 +37,7 @@ export default function LogsPage({ onClose }: Props) {
 
   const selectFile = async (f: string) => {
     setSelectedLog(f);
-    setLogError("");
+    setLogError('');
     try {
       setLogContent(await readLogFile(f));
     } catch (e) {
@@ -46,22 +46,20 @@ export default function LogsPage({ onClose }: Props) {
     }
   };
 
-  const close = onClose || (() => navigate("/"));
+  const close = onClose || (() => navigate('/'));
 
   const inner = (
     <div className="h-screen bg-ink-50 flex flex-col">
       <header className="bg-ink-900 border-b border-ink-800 shrink-0">
         <div className="px-5 py-2.5 flex items-center justify-between">
-          <h1 className="text-base font-bold text-ink-50 tracking-wide">
-            日志
-          </h1>
+          <h1 className="text-base font-bold text-ink-50 tracking-wide">日志</h1>
           <div className="flex items-center gap-1.5">
             <button
               onClick={refresh}
               disabled={loading}
               className="text-xs px-2.5 py-1.5 text-ink-400 hover:text-ink-200 hover:bg-ink-800 rounded transition-colors disabled:opacity-50"
             >
-              {loading ? "加载中…" : "刷新"}
+              {loading ? '加载中…' : '刷新'}
             </button>
             <button
               onClick={close}
@@ -80,29 +78,22 @@ export default function LogsPage({ onClose }: Props) {
               onClick={() => selectFile(f)}
               className={`block w-full text-left text-xs px-3 py-1.5 rounded transition-colors ${
                 selectedLog === f
-                  ? "bg-ink-900 text-ink-50"
-                  : "bg-white text-ink-700 hover:bg-ink-100 border border-ink-200"
+                  ? 'bg-ink-900 text-ink-50'
+                  : 'bg-white text-ink-700 hover:bg-ink-100 border border-ink-200'
               }`}
             >
-              {f.replace(".jsonl", "")}
+              {f.replace('.jsonl', '')}
             </button>
           ))}
         </div>
         <div className="flex-1 bg-ink-900 text-ink-200 rounded-lg p-4 overflow-y-auto font-mono">
-          {logError && (
-            <p className="text-xs text-vermillion mb-2">{logError}</p>
-          )}
-          {loading && (
-            <p className="text-xs text-ink-500 animate-pulse">加载中…</p>
-          )}
+          {logError && <p className="text-xs text-vermillion mb-2">{logError}</p>}
+          {loading && <p className="text-xs text-ink-500 animate-pulse">加载中…</p>}
           {!selectedLog && !loading && !logError && (
             <p className="text-xs text-ink-600">选择左侧日志文件查看</p>
           )}
           {logContent.map((line, i) => (
-            <pre
-              key={i}
-              className="text-xs leading-relaxed whitespace-pre-wrap"
-            >
+            <pre key={i} className="text-xs leading-relaxed whitespace-pre-wrap">
               {(() => {
                 try {
                   return JSON.stringify(JSON.parse(line), null, 1);

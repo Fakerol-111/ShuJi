@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { setDotenvKey } from "../api";
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { setDotenvKey } from '../api';
 
 interface Props {
   onSend: (msg: string) => void;
@@ -11,17 +11,17 @@ const LINE_HEIGHT = 20;
 const MAX_LINES = 4;
 
 const SLASH_COMMANDS: Record<string, { level: string; label: string }> = {
-  "/level-1": { level: "1", label: "全自动" },
-  "/level-2": { level: "2", label: "关键节点确认" },
-  "/level-3": { level: "3", label: "逐步审核" },
-  "/auto": { level: "1", label: "全自动" },
-  "/step": { level: "2", label: "关键节点确认" },
-  "/detail": { level: "3", label: "逐步审核" },
+  '/level-1': { level: '1', label: '全自动' },
+  '/level-2': { level: '2', label: '关键节点确认' },
+  '/level-3': { level: '3', label: '逐步审核' },
+  '/auto': { level: '1', label: '全自动' },
+  '/step': { level: '2', label: '关键节点确认' },
+  '/detail': { level: '3', label: '逐步审核' },
 };
 
 export default function ChatInput({ onSend, disabled, placeholder }: Props) {
-  const [text, setText] = useState("");
-  const [toast, setToast] = useState("");
+  const [text, setText] = useState('');
+  const [toast, setToast] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -31,7 +31,7 @@ export default function ChatInput({ onSend, disabled, placeholder }: Props) {
   const adjustHeight = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
-    el.style.height = "auto";
+    el.style.height = 'auto';
     const maxH = LINE_HEIGHT * MAX_LINES;
     el.style.height = `${Math.min(el.scrollHeight, maxH)}px`;
   }, []);
@@ -42,7 +42,7 @@ export default function ChatInput({ onSend, disabled, placeholder }: Props) {
 
   const showToast = (msg: string) => {
     setToast(msg);
-    setTimeout(() => setToast(""), 2000);
+    setTimeout(() => setToast(''), 2000);
   };
 
   const handleSend = async () => {
@@ -55,26 +55,26 @@ export default function ChatInput({ onSend, disabled, placeholder }: Props) {
     if (SLASH_COMMANDS[cmd]) {
       const { level, label } = SLASH_COMMANDS[cmd];
       try {
-        await setDotenvKey("PARTICIPATION_LEVEL", level);
+        await setDotenvKey('PARTICIPATION_LEVEL', level);
         showToast(`已切换至: ${label} (级别 ${level})`);
       } catch {
-        showToast("切换失败");
+        showToast('切换失败');
       }
       // If there's more text after the command, send it
-      const rest = words.slice(1).join(" ");
+      const rest = words.slice(1).join(' ');
       if (rest) {
         onSend(rest);
       }
-      setText("");
+      setText('');
       return;
     }
 
     onSend(trimmed);
-    setText("");
+    setText('');
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
@@ -93,7 +93,7 @@ export default function ChatInput({ onSend, disabled, placeholder }: Props) {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder || "/level-1 /level-2 /level-3 切换参与度"}
+          placeholder={placeholder || '/level-1 /level-2 /level-3 切换参与度'}
           disabled={disabled}
           rows={1}
           className="flex-1 px-3 py-2 border border-fold bg-surface-parchment rounded-lg text-body text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-vermillion focus:ring-1 focus:ring-vermillion/30 disabled:opacity-50 resize-none leading-5"

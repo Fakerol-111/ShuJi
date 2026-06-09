@@ -1,7 +1,7 @@
 export interface TabInfo {
   path: string;
   label: string;
-  initialView?: "content" | "diff" | "lineage";
+  initialView?: 'content' | 'diff' | 'lineage';
 }
 
 interface TabBarProps {
@@ -11,12 +11,7 @@ interface TabBarProps {
   onClose: (index: number) => void;
 }
 
-export default function TabBar({
-  tabs,
-  activeIndex,
-  onSelect,
-  onClose,
-}: TabBarProps) {
+export default function TabBar({ tabs, activeIndex, onSelect, onClose }: TabBarProps) {
   if (tabs.length === 0) return null;
 
   return (
@@ -29,8 +24,8 @@ export default function TabBar({
           aria-selected={i === activeIndex}
           className={`group flex items-center gap-1 px-3 py-1.5 text-caption font-mono cursor-pointer border-r border-fold whitespace-nowrap shrink-0 transition-colors ${
             i === activeIndex
-              ? "bg-surface-paper text-ink-900 border-b-2 border-b-vermillion mb-[-1px]"
-              : "bg-surface-parchment text-ink-500 hover:text-ink-700 hover:bg-ink-100/50"
+              ? 'bg-surface-paper text-ink-900 border-b-2 border-b-vermillion mb-[-1px]'
+              : 'bg-surface-parchment text-ink-500 hover:text-ink-700 hover:bg-ink-100/50'
           }`}
         >
           <span className="truncate max-w-[160px]">{tab.label}</span>

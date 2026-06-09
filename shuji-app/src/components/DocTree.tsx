@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback, useRef } from "react";
-import { listen } from "@tauri-apps/api/event";
-import { listShujiTree } from "../api";
-import { formatError } from "../utils/error";
-import type { ShujiEntry } from "../api";
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { listen } from '@tauri-apps/api/event';
+import { listShujiTree } from '../api';
+import { formatError } from '../utils/error';
+import type { ShujiEntry } from '../api';
 
 interface DocTreeProps {
   projectDir: string;
@@ -10,14 +10,10 @@ interface DocTreeProps {
   onSelect: (path: string) => void;
 }
 
-export default function DocTree({
-  projectDir,
-  selectedDoc,
-  onSelect,
-}: DocTreeProps) {
+export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreeProps) {
   const [tree, setTree] = useState<ShujiEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Persist expanded state across tree refreshes so user-closed folders stay closed
   const expandedRef = useRef<Record<string, boolean>>({});
@@ -25,7 +21,7 @@ export default function DocTree({
   const loadTree = useCallback(() => {
     if (!projectDir) return;
     setLoading(true);
-    setError("");
+    setError('');
     listShujiTree(projectDir)
       .then(setTree)
       .catch((e) => setError(formatError(e)))
@@ -43,9 +39,9 @@ export default function DocTree({
   }, [loadTree]);
 
   useEffect(() => {
-    const unlisten1 = listen("chat-message", debouncedRefresh);
-    const unlisten2 = listen("dept-log", debouncedRefresh);
-    const unlisten3 = listen("plan-update", debouncedRefresh);
+    const unlisten1 = listen('chat-message', debouncedRefresh);
+    const unlisten2 = listen('dept-log', debouncedRefresh);
+    const unlisten3 = listen('plan-update', debouncedRefresh);
     return () => {
       unlisten1.then((f) => f());
       unlisten2.then((f) => f());
@@ -67,11 +63,7 @@ export default function DocTree({
   return (
     <div className="py-2 text-ui">
       <div className="sticky top-0 z-10 bg-surface-parchment px-2 pb-2 flex justify-end items-center gap-2 border-b border-fold mb-1">
-        {loading && (
-          <span className="text-[10px] text-ink-400 animate-pulse">
-            刷新中…
-          </span>
-        )}
+        {loading && <span className="text-[10px] text-ink-400 animate-pulse">刷新中…</span>}
         <button
           onClick={loadTree}
           className="px-2 py-1 rounded text-ui text-ink-500 hover:bg-ink-100 hover:text-ink-800"
@@ -125,11 +117,9 @@ function DocNode({
           className="w-full flex items-center gap-1 px-2 py-1 text-left text-ink-500 hover:text-ink-800 hover:bg-ink-100"
           style={{ paddingLeft: 8 + depth * 12 }}
         >
-          <span className="w-3 text-caption">{open ? "▾" : "▸"}</span>
+          <span className="w-3 text-caption">{open ? '▾' : '▸'}</span>
           <span className="truncate font-medium">{entry.name}</span>
-          <span className="ml-auto text-caption text-ink-400">
-            {entry.children.length}
-          </span>
+          <span className="ml-auto text-caption text-ink-400">{entry.children.length}</span>
         </button>
         {open &&
           entry.children.map((child) => (
@@ -151,26 +141,24 @@ function DocNode({
       onClick={() => onSelect(entry.path)}
       className={`w-full flex items-center gap-1 px-2 py-1 text-left transition-colors ${
         active
-          ? "bg-vermillion/10 text-vermillion border-r-2 border-vermillion"
-          : "text-ink-600 hover:bg-ink-100 hover:text-ink-900"
+          ? 'bg-vermillion/10 text-vermillion border-r-2 border-vermillion'
+          : 'text-ink-600 hover:bg-ink-100 hover:text-ink-900'
       }`}
       style={{ paddingLeft: 12 + depth * 12 }}
       title={entry.path}
     >
       <span className="text-caption">{fileIcon(entry.name)}</span>
       <span className="truncate font-mono text-ui">{entry.name}</span>
-      <span className="ml-auto text-caption text-ink-400 shrink-0">
-        {entry.type_label}
-      </span>
+      <span className="ml-auto text-caption text-ink-400 shrink-0">{entry.type_label}</span>
     </button>
   );
 }
 
 function fileIcon(name: string) {
-  if (name.endsWith(".md")) return "◇";
-  if (/\.(ts|tsx|js|jsx|rs|py|css|html)$/.test(name)) return "<>";
-  if (/\.(json|toml|ya?ml)$/.test(name)) return "{}";
-  return "·";
+  if (name.endsWith('.md')) return '◇';
+  if (/\.(ts|tsx|js|jsx|rs|py|css|html)$/.test(name)) return '<>';
+  if (/\.(json|toml|ya?ml)$/.test(name)) return '{}';
+  return '·';
 }
 
 /** Skeleton placeholder for loading state */

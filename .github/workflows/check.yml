@@ -61,6 +61,8 @@ jobs:
           node-version: 20
       - name: Install dependencies
         run: cd shuji-app && npm install
+      - name: Prettier format check
+        run: cd shuji-app && npm run format:check
       - name: TypeScript lint (noEmit)
         run: cd shuji-app && npm run lint
       - name: Vite build

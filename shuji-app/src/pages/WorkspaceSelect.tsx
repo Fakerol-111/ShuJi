@@ -1,22 +1,17 @@
-import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import { open } from "@tauri-apps/plugin-dialog";
-import {
-  loadProject,
-  getRecentDirs,
-  getConfig,
-  createDemoProject,
-} from "../api";
-import { SealLogo } from "../components/SealLogo";
-import { Card } from "../components/ui/Card";
-import { Button } from "../components/ui/Button";
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { open } from '@tauri-apps/plugin-dialog';
+import { loadProject, getRecentDirs, getConfig, createDemoProject } from '../api';
+import { SealLogo } from '../components/SealLogo';
+import { Card } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
 
 export default function WorkspaceSelect() {
   const navigate = useNavigate();
   const [recentDirs, setRecentDirs] = useState<string[]>([]);
-  const [dirPath, setDirPath] = useState("");
+  const [dirPath, setDirPath] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
   const dirInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -25,14 +20,14 @@ export default function WorkspaceSelect() {
       .then((cfg) => {
         const def = cfg.roles?.default;
         if (!def?.api_key) {
-          navigate("/setup", { replace: true });
+          navigate('/setup', { replace: true });
           return;
         }
       })
-      .catch((e) => console.error("读取配置失败:", e));
+      .catch((e) => console.error('读取配置失败:', e));
     getRecentDirs()
       .then(setRecentDirs)
-      .catch((e) => console.error("读取最近目录失败:", e));
+      .catch((e) => console.error('读取最近目录失败:', e));
   }, []);
 
   const handleBrowse = async () => {
@@ -40,7 +35,7 @@ export default function WorkspaceSelect() {
       const selected = await open({
         directory: true,
         multiple: false,
-        title: "选择工作目录",
+        title: '选择工作目录',
       });
       if (selected) setDirPath(selected);
     } catch {
@@ -51,14 +46,14 @@ export default function WorkspaceSelect() {
   const handleOpen = async (dir?: string) => {
     const path = dir || dirPath.trim();
     if (!path) {
-      setError("请选择工作目录");
+      setError('请选择工作目录');
       return;
     }
     setLoading(true);
-    setError("");
+    setError('');
     try {
       await loadProject(path);
-      navigate("/project");
+      navigate('/project');
     } catch (e) {
       setError(String(e));
     } finally {
@@ -73,9 +68,7 @@ export default function WorkspaceSelect() {
           <div className="flex justify-center mb-3">
             <SealLogo size={40} />
           </div>
-          <h1 className="font-display text-display font-bold text-ink-900 mb-2">
-            枢机
-          </h1>
+          <h1 className="font-display text-display font-bold text-ink-900 mb-2">枢机</h1>
           <p className="text-body text-ink-600">三省六部制自动化软件开发系统</p>
         </div>
 
@@ -86,19 +79,19 @@ export default function WorkspaceSelect() {
           disabled={loading}
           onClick={async () => {
             setLoading(true);
-            setError("");
+            setError('');
             try {
               const project = await createDemoProject();
               await loadProject(project.working_dir);
-              sessionStorage.setItem("shuji_demo", "true");
-              navigate("/project");
+              sessionStorage.setItem('shuji_demo', 'true');
+              navigate('/project');
             } catch (e) {
               setError(String(e));
               setLoading(false);
             }
           }}
         >
-          {loading ? "创建中..." : "体验枢机 — 5 分钟上手"}
+          {loading ? '创建中...' : '体验枢机 — 5 分钟上手'}
         </Button>
 
         <div className="relative mb-4">
@@ -106,9 +99,7 @@ export default function WorkspaceSelect() {
             <div className="w-full border-t border-fold" />
           </div>
           <div className="relative flex justify-center text-ui">
-            <span className="bg-surface-elevated px-2 text-ink-400">
-              或打开已有项目
-            </span>
+            <span className="bg-surface-elevated px-2 text-ink-400">或打开已有项目</span>
           </div>
         </div>
 
@@ -136,7 +127,7 @@ export default function WorkspaceSelect() {
               disabled={loading}
               className="px-4 py-2 bg-ink-900 text-ink-50 rounded-lg hover:bg-ink-800 disabled:opacity-40 text-ui transition-colors"
             >
-              {loading ? "打开中..." : "打开"}
+              {loading ? '打开中...' : '打开'}
             </button>
           </div>
         </div>

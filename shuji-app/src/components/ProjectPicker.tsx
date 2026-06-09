@@ -30,15 +30,13 @@ export default function ProjectPicker(props: ProjectPickerProps) {
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-lg font-bold text-ink-900 mb-4">加载项目</h2>
-        <label className="block text-xs font-medium text-ink-500 mb-1">
-          工作目录
-        </label>
+        <label className="block text-xs font-medium text-ink-500 mb-1">工作目录</label>
         <div className="flex gap-2 mb-3">
           <input
             value={pickerPath}
             onChange={(e) => setPickerPath(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") onLoad();
+              if (e.key === 'Enter') onLoad();
             }}
             placeholder="选择一个文件夹..."
             className="flex-1 px-3 py-2 border border-ink-200 bg-ink-50 rounded-lg text-sm font-mono text-ink-800 focus:outline-none focus:border-ink-500"
@@ -83,7 +81,7 @@ export default function ProjectPicker(props: ProjectPickerProps) {
             disabled={pickerLoading}
             className="px-4 py-2 text-sm bg-ink-900 text-white rounded-lg hover:bg-ink-800 disabled:opacity-40"
           >
-            {pickerLoading ? "加载中..." : "打开"}
+            {pickerLoading ? '加载中...' : '打开'}
           </button>
         </div>
       </div>

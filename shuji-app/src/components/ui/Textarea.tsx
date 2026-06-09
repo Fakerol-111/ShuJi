@@ -1,8 +1,8 @@
-import type { TextareaHTMLAttributes } from "react";
+import type { TextareaHTMLAttributes } from 'react';
 
 interface Props extends TextareaHTMLAttributes<HTMLTextAreaElement> {}
 
-export function Textarea({ className = "", ...rest }: Props) {
+export function Textarea({ className = '', ...rest }: Props) {
   return (
     <textarea
       className={`text-body bg-surface-parchment border border-fold rounded-lg px-3 py-2

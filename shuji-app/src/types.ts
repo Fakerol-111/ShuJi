@@ -21,13 +21,13 @@ export interface ProjectSummary {
 }
 
 export type OverallStatus =
-  | "NotStarted"
-  | "Designing"
-  | "Reviewing"
-  | "PendingApproval"
+  | 'NotStarted'
+  | 'Designing'
+  | 'Reviewing'
+  | 'PendingApproval'
   | { Rejected: number }
-  | "Escalated"
-  | "Approved";
+  | 'Escalated'
+  | 'Approved';
 
 export interface PhaseRuntime {
   index: number;
@@ -36,25 +36,25 @@ export interface PhaseRuntime {
 }
 
 export type PhaseDesignStatus =
-  | "NotStarted"
-  | "Designing"
-  | "Reviewing"
-  | "PendingApproval"
+  | 'NotStarted'
+  | 'Designing'
+  | 'Reviewing'
+  | 'PendingApproval'
   | { Rejected: number }
-  | "Escalated"
-  | "Approved";
+  | 'Escalated'
+  | 'Approved';
 
 export type PhaseExecutionStatus =
-  | "NotStarted"
-  | "TaskBreakdown"
-  | "Testing"
-  | "Implementing"
-  | "Checking"
-  | "Standards"
-  | "Logging"
+  | 'NotStarted'
+  | 'TaskBreakdown'
+  | 'Testing'
+  | 'Implementing'
+  | 'Checking'
+  | 'Standards'
+  | 'Logging'
   | { Blocked: { reason: string } }
-  | "MinorIssue"
-  | "Completed";
+  | 'MinorIssue'
+  | 'Completed';
 
 export interface ProjectSnapshot {
   overall: OverallStatus;
@@ -83,7 +83,7 @@ export interface ChatMessage {
   documents: Document[];
   timestamp: string;
   /** Optional status for emperor messages: 'failed' on send error, undefined = sent OK */
-  status?: "failed";
+  status?: 'failed';
 }
 
 export interface ChatOption {
@@ -159,7 +159,7 @@ export interface CheckpointEntry {
 export interface PlanBatch {
   name: string;
   goal: string;
-  status: "done" | "current" | "pending";
+  status: 'done' | 'current' | 'pending';
 }
 
 export interface PlanInfo {
@@ -183,13 +183,8 @@ export interface RoundMetrics {
 
 // ── Workflow Config (Intent × Governance) ───────────────────
 
-export type Intent =
-  | "auto"
-  | "greenfield_standard"
-  | "brownfield_optimize"
-  | "bugfix"
-  | "demo";
-export type Governance = "full" | "standard" | "fast" | "audit";
+export type Intent = 'auto' | 'greenfield_standard' | 'brownfield_optimize' | 'bugfix' | 'demo';
+export type Governance = 'full' | 'standard' | 'fast' | 'audit';
 
 export interface WorkflowConfig {
   intent: Intent;
@@ -260,7 +255,7 @@ export interface TraceResult {
 
 // ── 文移图 DAG ───────────────────────────────────────
 
-export type GraphNodeStatus = "active" | "completed" | "failed";
+export type GraphNodeStatus = 'active' | 'completed' | 'failed';
 
 export interface GraphNode {
   id: number;

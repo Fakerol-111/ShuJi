@@ -1,28 +1,28 @@
-import { useState } from "react";
-import { Button } from "./ui/Button";
+import { useState } from 'react';
+import { Button } from './ui/Button';
 
-const STORAGE_KEY = "shuji_demo_tour_done";
+const STORAGE_KEY = 'shuji_demo_tour_done';
 
 const STEPS = [
   {
-    title: "部门状态栏",
+    title: '部门状态栏',
     description:
-      "底部状态栏（整个界面最底行）展示所有部门的实时活动状态。点亮的部门表示正在执行任务，您可以随时了解当前进度。",
+      '底部状态栏（整个界面最底行）展示所有部门的实时活动状态。点亮的部门表示正在执行任务，您可以随时了解当前进度。',
   },
   {
-    title: "文档架阁",
+    title: '文档架阁',
     description:
-      "左侧边栏（活动栏右侧）列出了所有产出文档——设计、审查、报告，归档有序。点击即可预览详情。",
+      '左侧边栏（活动栏右侧）列出了所有产出文档——设计、审查、报告，归档有序。点击即可预览详情。',
   },
   {
-    title: "工部修 bug",
+    title: '工部修 bug',
     description:
-      "工部尚书正在修复 calc.py 中的 bug。您可以在底部「值事」区域看到工部尚书活跃，左侧文档树也会陆续出现新文档。",
+      '工部尚书正在修复 calc.py 中的 bug。您可以在底部「值事」区域看到工部尚书活跃，左侧文档树也会陆续出现新文档。',
   },
   {
-    title: "测试验证",
+    title: '测试验证',
     description:
-      "刑部尚书将对修复结果进行测试验证。全部通过后底部状态栏显示「诸司无事」，一条完整的 Demo 流程就完成了。",
+      '刑部尚书将对修复结果进行测试验证。全部通过后底部状态栏显示「诸司无事」，一条完整的 Demo 流程就完成了。',
   },
 ];
 
@@ -36,7 +36,7 @@ export default function DemoTour({ onClose }: DemoTourProps) {
 
   const handleDone = () => {
     try {
-      localStorage.setItem(STORAGE_KEY, "true");
+      localStorage.setItem(STORAGE_KEY, 'true');
     } catch {
       /* localStorage unavailable */
     }
@@ -60,7 +60,7 @@ export default function DemoTour({ onClose }: DemoTourProps) {
             <div
               key={i}
               className={`w-2 h-2 rounded-full transition-colors ${
-                i === step ? "bg-vermillion" : "bg-ink-300"
+                i === step ? 'bg-vermillion' : 'bg-ink-300'
               }`}
             />
           ))}

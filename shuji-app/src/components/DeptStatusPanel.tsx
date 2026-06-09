@@ -1,16 +1,16 @@
-import { useEffect, useState, useRef } from "react";
-import { listen } from "@tauri-apps/api/event";
-import { getDeptLogs } from "../api";
-import { getDeptMeta } from "../constants";
-import type { DeptLogEntry } from "../types";
+import { useEffect, useState, useRef } from 'react';
+import { listen } from '@tauri-apps/api/event';
+import { getDeptLogs } from '../api';
+import { getDeptMeta } from '../constants';
+import type { DeptLogEntry } from '../types';
 
 const MAX_ENTRIES = 300;
 
 function isRouteEntry(a: string) {
-  return a.startsWith("→ ");
+  return a.startsWith('→ ');
 }
 function isErrorEntry(a: string) {
-  return a.startsWith("❌");
+  return a.startsWith('❌');
 }
 
 export default function DeptStatusPanel() {
@@ -24,11 +24,11 @@ export default function DeptStatusPanel() {
       .then((hist) => {
         if (hist.length > 0) setEntries(hist.slice(-MAX_ENTRIES));
       })
-      .catch((e) => console.error("部门日志加载失败:", e));
+      .catch((e) => console.error('部门日志加载失败:', e));
   }, []);
 
   useEffect(() => {
-    const unlisten = listen<DeptLogEntry>("dept-log", (event) => {
+    const unlisten = listen<DeptLogEntry>('dept-log', (event) => {
       setEntries((prev) => {
         const next = [...prev, event.payload];
         return next.length > MAX_ENTRIES ? next.slice(-MAX_ENTRIES) : next;
@@ -59,7 +59,7 @@ export default function DeptStatusPanel() {
       <div className="text-[10px] text-ink-400 px-3 py-1.5 bg-ink-200/40 shrink-0 font-medium tracking-wide flex items-center justify-between">
         <span>六部日志 · {entries.length}</span>
         <span className="text-ink-400/60">
-          {entries.filter((e) => isRouteEntry(e.action)).length} 路由 ·{" "}
+          {entries.filter((e) => isRouteEntry(e.action)).length} 路由 ·{' '}
           {entries.filter((e) => isErrorEntry(e.action)).length} 错误
         </span>
       </div>
@@ -71,9 +71,7 @@ export default function DeptStatusPanel() {
         className="flex-1 overflow-y-auto min-h-0 px-2 py-1.5 space-y-1"
       >
         {entries.length === 0 && (
-          <div className="text-[10px] text-ink-400 text-center py-8">
-            暂无日志
-          </div>
+          <div className="text-[10px] text-ink-400 text-center py-8">暂无日志</div>
         )}
         {entries.map((e, i) => {
           const route = isRouteEntry(e.action);
@@ -83,23 +81,18 @@ export default function DeptStatusPanel() {
 
           if (route) {
             const routeAccent =
-              getDeptMeta(e.dept)?.accent?.replace("border-l-", "bg-") ||
-              "bg-gray-300";
+              getDeptMeta(e.dept)?.accent?.replace('border-l-', 'bg-') || 'bg-gray-300';
             return (
               <div
                 key={i}
                 className="flex items-center gap-1.5 text-[10px] font-mono py-0.5 px-1 opacity-60 hover:opacity-100 transition-opacity"
               >
                 <span
-                  className={`w-1 h-1 rounded-full shrink-0 ${e.dept ? routeAccent : "bg-gray-300"}`}
+                  className={`w-1 h-1 rounded-full shrink-0 ${e.dept ? routeAccent : 'bg-gray-300'}`}
                 />
-                <span className="font-medium text-ink-500 shrink-0">
-                  {e.dept}
-                </span>
+                <span className="font-medium text-ink-500 shrink-0">{e.dept}</span>
                 <span className="text-vermillion/70 shrink-0">→</span>
-                <span className="text-ink-500 truncate">
-                  {e.action.replace("→ ", "")}
-                </span>
+                <span className="text-ink-500 truncate">{e.action.replace('→ ', '')}</span>
                 <span className="text-ink-400 ml-auto shrink-0">{e.ts}</span>
               </div>
             );
@@ -113,12 +106,8 @@ export default function DeptStatusPanel() {
               >
                 <div className="flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
-                  <span className="font-medium text-red-600 shrink-0">
-                    {e.dept}
-                  </span>
-                  <span className="text-red-700 truncate flex-1">
-                    {e.action}
-                  </span>
+                  <span className="font-medium text-red-600 shrink-0">{e.dept}</span>
+                  <span className="text-red-700 truncate flex-1">{e.action}</span>
                   <span className="text-ink-400 shrink-0">{e.ts}</span>
                 </div>
                 {hasDetail && (
@@ -132,11 +121,9 @@ export default function DeptStatusPanel() {
 
           // Execution bubble
           const meta = getDeptMeta(e.dept);
-          const accent = meta?.accent || "border-l-gray-300";
-          const bg = meta?.bg
-            ? `${meta.bg} border-current/10`
-            : "bg-gray-50 border-gray-200";
-          const txt = meta?.text || "text-gray-600";
+          const accent = meta?.accent || 'border-l-gray-300';
+          const bg = meta?.bg ? `${meta.bg} border-current/10` : 'bg-gray-50 border-gray-200';
+          const txt = meta?.text || 'text-gray-600';
 
           return (
             <div key={i}>
@@ -150,23 +137,13 @@ export default function DeptStatusPanel() {
                   });
                 }}
                 className={`w-full text-left rounded-lg border-l-2 ${accent} ${bg} px-2 py-1 text-[10px] transition-colors ${
-                  hasDetail
-                    ? "cursor-pointer hover:brightness-95"
-                    : "cursor-default"
+                  hasDetail ? 'cursor-pointer hover:brightness-95' : 'cursor-default'
                 }`}
               >
                 <div className="flex items-center gap-1.5">
-                  <span className={`font-medium ${txt} shrink-0`}>
-                    {e.dept}
-                  </span>
-                  <span className="text-ink-600 truncate flex-1">
-                    {e.action}
-                  </span>
-                  {hasDetail && (
-                    <span className="text-ink-400 shrink-0">
-                      {open ? "▾" : "▸"}
-                    </span>
-                  )}
+                  <span className={`font-medium ${txt} shrink-0`}>{e.dept}</span>
+                  <span className="text-ink-600 truncate flex-1">{e.action}</span>
+                  {hasDetail && <span className="text-ink-400 shrink-0">{open ? '▾' : '▸'}</span>}
                   <span className="text-ink-400 shrink-0">{e.ts}</span>
                 </div>
               </button>

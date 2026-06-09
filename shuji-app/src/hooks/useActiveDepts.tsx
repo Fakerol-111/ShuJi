@@ -1,11 +1,5 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
-import { getActiveRoles } from "../api";
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { getActiveRoles } from '../api';
 
 const POLL_INTERVAL_MS = 1000;
 
@@ -54,11 +48,7 @@ export function DeptActiveProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  return (
-    <DeptActiveContext.Provider value={{ active }}>
-      {children}
-    </DeptActiveContext.Provider>
-  );
+  return <DeptActiveContext.Provider value={{ active }}>{children}</DeptActiveContext.Provider>;
 }
 
 export function useActiveDepts(): Set<string> {

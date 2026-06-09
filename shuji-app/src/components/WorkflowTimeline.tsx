@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
-import { getWorkflowState } from "../api";
+import { useState, useEffect } from 'react';
+import { getWorkflowState } from '../api';
 import type {
   PlanInfo,
   PhaseRuntime,
   PhaseExecutionStatus,
   WorkflowState as WFState,
-} from "../types";
+} from '../types';
 
 interface WorkflowStatusProps {
   phaseCount: number;
@@ -20,23 +20,23 @@ interface WorkflowStatusProps {
 // ── Profile display names ──────────────────────────────────────
 
 const PROFILE_LABELS: Record<string, string> = {
-  greenfield_standard: "新功能",
-  brownfield_optimize: "存量优化",
-  bugfix: "缺陷修复",
-  demo: "快速原型",
+  greenfield_standard: '新功能',
+  brownfield_optimize: '存量优化',
+  bugfix: '缺陷修复',
+  demo: '快速原型',
 };
 
 const STAGE_LABELS: Record<string, string> = {
-  init: "初始化",
-  expand: "需求展开",
-  design: "方案设计",
-  analysis: "代码分析",
-  plan: "方案规划",
-  review: "审查",
-  approval: "批复",
-  execution: "执行",
-  summary: "汇总",
-  done: "完成",
+  init: '初始化',
+  expand: '需求展开',
+  design: '方案设计',
+  analysis: '代码分析',
+  plan: '方案规划',
+  review: '审查',
+  approval: '批复',
+  execution: '执行',
+  summary: '汇总',
+  done: '完成',
 };
 
 function stageLabel(id: string): string {
@@ -51,69 +51,66 @@ function profileLabel(id: string): string {
 
 function statusDisplay(shortLabel: string): string {
   const icons: Record<string, string> = {
-    未开始: "○",
-    设计: "●",
-    审查: "●",
-    待批: "⚑",
-    驳回: "✗",
-    批准: "✓",
-    拆解: "●",
-    测试: "●",
-    编码: "●",
-    验证: "●",
-    规范: "●",
-    完成: "✓",
-    记录: "●",
-    问题: "●",
+    未开始: '○',
+    设计: '●',
+    审查: '●',
+    待批: '⚑',
+    驳回: '✗',
+    批准: '✓',
+    拆解: '●',
+    测试: '●',
+    编码: '●',
+    验证: '●',
+    规范: '●',
+    完成: '✓',
+    记录: '●',
+    问题: '●',
   };
-  return `${icons[shortLabel] || "●"} ${shortLabel}`;
+  return `${icons[shortLabel] || '●'} ${shortLabel}`;
 }
 
 function statusColor(status: string): string {
-  if (["Approved", "Completed"].includes(status)) return "text-jade";
-  if (status === "NotStarted") return "text-ink-300";
-  if (["PendingApproval", "Rejected"].includes(status))
-    return "text-vermillion";
-  return "text-gold";
+  if (['Approved', 'Completed'].includes(status)) return 'text-jade';
+  if (status === 'NotStarted') return 'text-ink-300';
+  if (['PendingApproval', 'Rejected'].includes(status)) return 'text-vermillion';
+  return 'text-gold';
 }
 
 function designShortLabel(status: string): string {
   const map: Record<string, string> = {
-    NotStarted: "未开始",
-    Designing: "设计",
-    Reviewing: "审查",
-    PendingApproval: "待批",
-    Rejected: "驳回",
-    Approved: "批准",
+    NotStarted: '未开始',
+    Designing: '设计',
+    Reviewing: '审查',
+    PendingApproval: '待批',
+    Rejected: '驳回',
+    Approved: '批准',
   };
   return map[status] || status;
 }
 
 function execShortLabel(status: string): string {
   const map: Record<string, string> = {
-    NotStarted: "未开始",
-    TaskBreakdown: "拆解",
-    Testing: "测试",
-    Implementing: "编码",
-    Checking: "验证",
-    Standards: "规范",
-    Logging: "记录",
-    MinorIssue: "问题",
-    Completed: "完成",
+    NotStarted: '未开始',
+    TaskBreakdown: '拆解',
+    Testing: '测试',
+    Implementing: '编码',
+    Checking: '验证',
+    Standards: '规范',
+    Logging: '记录',
+    MinorIssue: '问题',
+    Completed: '完成',
   };
   return map[status] || status;
 }
 
 function isBlocked(status: string): boolean {
-  return status === "PendingApproval" || status === "Rejected";
+  return status === 'PendingApproval' || status === 'Rejected';
 }
 
 // Resolve doc ID to full .shuji path
 function docIdToPath(id: string): string {
-  const prefix = id.split("_")[0];
-  return prefix === "revw"
-    ? `.shuji/reviews/${id}.md`
-    : `.shuji/designs/${id}.md`;
+  const prefix = id.split('_')[0];
+  return prefix === 'revw' ? `.shuji/reviews/${id}.md` : `.shuji/designs/${id}.md`;
 }
 
 export default function WorkflowStatus({
@@ -143,10 +140,10 @@ export default function WorkflowStatus({
   // ── Calculate overall progress ──
   const total = (phaseCount || phases.length) * 2 + 1;
   let done = 0;
-  if (overall === "Approved") done += 1;
+  if (overall === 'Approved') done += 1;
   for (const phase of phases) {
-    if (phase.design === "Approved") done += 1;
-    if (phase.execution === "Completed") done += 1;
+    if (phase.design === 'Approved') done += 1;
+    if (phase.execution === 'Completed') done += 1;
   }
   const progress = total > 0 ? Math.round((done / total) * 100) : 0;
 
@@ -156,7 +153,7 @@ export default function WorkflowStatus({
   if (pendingApprovals.length > 0) {
     for (const docId of pendingApprovals.slice(0, 2)) {
       blockers.push({
-        type: "朱批",
+        type: '朱批',
         text: docId,
         onClick: () => onSelectDoc(docIdToPath(docId)),
       });
@@ -165,15 +162,15 @@ export default function WorkflowStatus({
 
   if (activeDepts.length > 0) {
     blockers.push({
-      type: "执行",
-      text: activeDepts.join("、"),
+      type: '执行',
+      text: activeDepts.join('、'),
     });
   }
 
   if (planInfo && !planInfo.complete && planInfo.batches.length > 0) {
-    const ndone = planInfo.batches.filter((b) => b.status === "done").length;
+    const ndone = planInfo.batches.filter((b) => b.status === 'done').length;
     blockers.push({
-      type: "工部",
+      type: '工部',
       text: `计划 ${ndone}/${planInfo.batches.length}`,
     });
   }
@@ -210,7 +207,7 @@ export default function WorkflowStatus({
         )}
 
         {/* Current stage badge */}
-        {wfState && wfState.current_stage !== "init" && (
+        {wfState && wfState.current_stage !== 'init' && (
           <span className="text-caption px-1.5 py-[1px] rounded-full border border-gold/30 text-gold-700 bg-gold/8 whitespace-nowrap">
             {stageLabel(wfState.current_stage)}
           </span>
@@ -223,30 +220,26 @@ export default function WorkflowStatus({
               key={i}
               onClick={b.onClick}
               className={[
-                "text-caption px-1.5 py-[1px] rounded-full border flex items-center gap-1 whitespace-nowrap",
-                b.type === "朱批"
-                  ? "border-vermillion/30 text-vermillion bg-vermillion/8 hover:bg-vermillion/15"
-                  : b.type === "执行"
-                    ? "border-gold/30 text-gold-700 bg-gold/8"
-                    : "border-ink-200 text-ink-500 bg-ink-100/50",
-                b.onClick ? "cursor-pointer" : "cursor-default",
+                'text-caption px-1.5 py-[1px] rounded-full border flex items-center gap-1 whitespace-nowrap',
+                b.type === '朱批'
+                  ? 'border-vermillion/30 text-vermillion bg-vermillion/8 hover:bg-vermillion/15'
+                  : b.type === '执行'
+                    ? 'border-gold/30 text-gold-700 bg-gold/8'
+                    : 'border-ink-200 text-ink-500 bg-ink-100/50',
+                b.onClick ? 'cursor-pointer' : 'cursor-default',
               ]
                 .filter(Boolean)
-                .join(" ")}
+                .join(' ')}
             >
-              {b.type === "朱批" && (
-                <svg
-                  className="w-3 h-3 shrink-0"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
+              {b.type === '朱批' && (
+                <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
                 </svg>
               )}
-              {b.type === "执行" && (
+              {b.type === '执行' && (
                 <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse inline-block shrink-0" />
               )}
-              {b.type === "工部" && (
+              {b.type === '工部' && (
                 <svg
                   className="w-3 h-3 shrink-0"
                   viewBox="0 0 24 24"
@@ -266,8 +259,7 @@ export default function WorkflowStatus({
           ))}
 
           {blockers.length === 0 &&
-            (overall === "Approved" &&
-            phases.every((p) => p.execution === "Completed") ? (
+            (overall === 'Approved' && phases.every((p) => p.execution === 'Completed') ? (
               <span className="text-caption text-jade">所有阶段已完成</span>
             ) : (
               <span className="text-caption text-ink-400">流程运行中</span>
@@ -280,7 +272,7 @@ export default function WorkflowStatus({
             onClick={() => setExpanded(!expanded)}
             className="text-caption text-ink-400 hover:text-ink-600 shrink-0"
           >
-            {expanded ? "收起" : "详情"}
+            {expanded ? '收起' : '详情'}
           </button>
         )}
       </div>
@@ -293,9 +285,7 @@ export default function WorkflowStatus({
             <div className="pt-1.5 pb-1">
               <div className="flex items-center gap-2 mb-1 text-ink-500 font-medium">
                 <span>工作流</span>
-                <span className="text-[10px] px-1 rounded bg-ink-100/50">
-                  {wfState.governance}
-                </span>
+                <span className="text-[10px] px-1 rounded bg-ink-100/50">{wfState.governance}</span>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="px-2 py-0.5 rounded-full border border-ink-200 text-ink-500">
@@ -318,32 +308,21 @@ export default function WorkflowStatus({
               {phases.map((phase) => {
                 const dStatus = phase.design as string;
                 const eObj = phase.execution as PhaseExecutionStatus;
-                const eIsBlocked =
-                  typeof eObj === "object" &&
-                  eObj !== null &&
-                  "Blocked" in eObj;
-                const eStr = eIsBlocked ? "Blocked" : (eObj as string);
+                const eIsBlocked = typeof eObj === 'object' && eObj !== null && 'Blocked' in eObj;
+                const eStr = eIsBlocked ? 'Blocked' : (eObj as string);
                 return (
                   <div key={phase.index} className="flex items-center gap-2">
-                    <span className="font-mono text-ink-400 w-14 shrink-0">
-                      阶段{phase.index}
-                    </span>
+                    <span className="font-mono text-ink-400 w-14 shrink-0">阶段{phase.index}</span>
                     <span
-                      className={`${statusColor(dStatus)} ${isBlocked(dStatus) ? "font-medium" : ""}`}
+                      className={`${statusColor(dStatus)} ${isBlocked(dStatus) ? 'font-medium' : ''}`}
                     >
                       {statusDisplay(designShortLabel(dStatus))}
                     </span>
                     <span className="text-ink-300 mx-0.5">|</span>
                     <span
-                      className={
-                        eIsBlocked
-                          ? "text-vermillion font-medium"
-                          : statusColor(eStr)
-                      }
+                      className={eIsBlocked ? 'text-vermillion font-medium' : statusColor(eStr)}
                     >
-                      {eIsBlocked
-                        ? `⚑ 阻塞`
-                        : statusDisplay(execShortLabel(eStr))}
+                      {eIsBlocked ? `⚑ 阻塞` : statusDisplay(execShortLabel(eStr))}
                     </span>
                   </div>
                 );

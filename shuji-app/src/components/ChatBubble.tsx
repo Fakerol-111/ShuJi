@@ -1,9 +1,9 @@
-import { useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeHighlight from "rehype-highlight";
-import type { ChatMessage, ChatOption } from "../types";
-import { getDeptMeta } from "../constants";
+import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+import type { ChatMessage, ChatOption } from '../types';
+import { getDeptMeta } from '../constants';
 
 export default function ChatBubble({
   msg,
@@ -14,18 +14,18 @@ export default function ChatBubble({
   onOption: (key: string, supplement?: string) => void;
   onRetry?: (text: string, ts: string) => void;
 }) {
-  const isEmperor = msg.role === "皇帝";
-  const isFailed = msg.status === "failed";
+  const isEmperor = msg.role === '皇帝';
+  const isFailed = msg.status === 'failed';
   const deptColor = getDeptMeta(msg.role)?.color;
 
   return (
-    <div className={`flex ${isEmperor ? "justify-end" : "justify-start"}`}>
-      <div className={`${isEmperor ? "max-w-[70%]" : "max-w-[85%]"}`}>
+    <div className={`flex ${isEmperor ? 'justify-end' : 'justify-start'}`}>
+      <div className={`${isEmperor ? 'max-w-[70%]' : 'max-w-[85%]'}`}>
         {/* Header */}
         <div
-          className={`text-caption mb-1 ${isEmperor ? "text-right text-ink-500" : "text-ink-600"}`}
+          className={`text-caption mb-1 ${isEmperor ? 'text-right text-ink-500' : 'text-ink-600'}`}
         >
-          {isEmperor ? "御" : `${msg.role} 回奏`}
+          {isEmperor ? '御' : `${msg.role} 回奏`}
         </div>
 
         {/* Emperor bubble */}
@@ -33,13 +33,11 @@ export default function ChatBubble({
           <div
             className={`rounded-xl rounded-tr-sm px-4 py-2.5 text-body leading-relaxed ${
               isFailed
-                ? "bg-vermillion/10 border border-vermillion/30 text-ink-800"
-                : "bg-ink-900 text-ink-50"
+                ? 'bg-vermillion/10 border border-vermillion/30 text-ink-800'
+                : 'bg-ink-900 text-ink-50'
             }`}
           >
-            <p className="whitespace-pre-wrap break-words overflow-hidden">
-              {msg.content}
-            </p>
+            <p className="whitespace-pre-wrap break-words overflow-hidden">{msg.content}</p>
             {isFailed && onRetry && (
               <div className="flex items-center gap-2 mt-2 pt-2 border-t border-vermillion/20">
                 <span className="text-caption text-vermillion">发送失败</span>
@@ -56,9 +54,7 @@ export default function ChatBubble({
           /* Department bubble: 3px left color bar */
           <div
             className="bg-surface-elevated border border-fold rounded-xl rounded-tl-sm px-4 py-2.5 text-body leading-relaxed"
-            style={
-              deptColor ? { borderLeft: `3px solid ${deptColor}` } : undefined
-            }
+            style={deptColor ? { borderLeft: `3px solid ${deptColor}` } : undefined}
           >
             <div className="prose prose-shuji max-w-none break-words">
               <ReactMarkdown
@@ -72,7 +68,7 @@ export default function ChatBubble({
                       rel="noopener noreferrer"
                       onClick={(e) => {
                         e.preventDefault();
-                        if (href) window.open(href, "_blank");
+                        if (href) window.open(href, '_blank');
                       }}
                     >
                       {children}
@@ -86,9 +82,7 @@ export default function ChatBubble({
           </div>
         )}
 
-        {msg.options.length > 0 && (
-          <OptionGroup options={msg.options} onOption={onOption} />
-        )}
+        {msg.options.length > 0 && <OptionGroup options={msg.options} onOption={onOption} />}
       </div>
     </div>
   );
@@ -102,7 +96,7 @@ function OptionGroup({
   onOption: (key: string, supplement?: string) => void;
 }) {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [supplement, setSupplement] = useState("");
+  const [supplement, setSupplement] = useState('');
 
   if (selectedKey) {
     const opt = options.find((o) => o.key === selectedKey);
@@ -130,7 +124,7 @@ function OptionGroup({
           <button
             onClick={() => {
               setSelectedKey(null);
-              setSupplement("");
+              setSupplement('');
             }}
             className="text-ui text-ink-500 px-3 py-1.5 hover:text-ink-700"
           >
@@ -147,19 +141,19 @@ function OptionGroup({
         <button
           key={opt.key}
           onClick={() => {
-            if (opt.label.includes("补充") || opt.key === "C") {
+            if (opt.label.includes('补充') || opt.key === 'C') {
               setSelectedKey(opt.key);
             } else {
               onOption(opt.key);
             }
           }}
           className={`text-ui font-bold px-3 py-1.5 rounded-lg transition-colors ${
-            opt.key === "A"
-              ? "bg-jade text-white hover:bg-jade/80"
-              : opt.key === "B"
-                ? "bg-vermillion text-white hover:bg-vermillion-dark"
-                : opt.key === "C"
-                  ? "bg-ink-700 text-white hover:bg-ink-800"
+            opt.key === 'A'
+              ? 'bg-jade text-white hover:bg-jade/80'
+              : opt.key === 'B'
+                ? 'bg-vermillion text-white hover:bg-vermillion-dark'
+                : opt.key === 'C'
+                  ? 'bg-ink-700 text-white hover:bg-ink-800'
                   : `bg-ink-600 text-white hover:bg-ink-700`
           }`}
           title={opt.description}
