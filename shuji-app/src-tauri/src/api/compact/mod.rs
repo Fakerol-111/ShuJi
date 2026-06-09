@@ -202,3 +202,139 @@ pub async fn compact_and_save(
         false
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_messages_to_text_user_and_assistant() {
+        let msgs = vec![
+            serde_json::json!({"role": "user", "content": "hello"}),
+            serde_json::json!({"role": "assistant", "content": "world"}),
+        ];
+        let text = messages_to_text(&msgs);
+        assert!(text.contains("[user]: hello"));
+        assert!(text.contains("[assistant]: world"));
+    }
+
+    #[test]
+    fn test_messages_to_text_with_tool_calls() {
+        let msgs = vec![serde_json::json!({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{"id": "c1", "type": "function", "function": {"name": "read_file", "arguments": "{}"}}]
+        })];
+        let text = messages_to_text(&msgs);
+        assert!(text.contains("[assistant → read_file]"));
+    }
+
+    #[test]
+    fn test_messages_to_text_tool_result() {
+        let msgs = vec![
+            serde_json::json!({"role": "tool", "tool_call_id": "c1", "content": "file content"}),
+        ];
+        let text = messages_to_text(&msgs);
+        assert!(text.contains("[tool_result]"));
+    }
+
+    #[test]
+    fn test_messages_to_text_empty_content_omitted() {
+        let msgs = vec![
+            serde_json::json!({"role": "user", "content": ""}),
+            serde_json::json!({"role": "assistant", "content": "real content"}),
+        ];
+        let text = messages_to_text(&msgs);
+        assert!(!text.contains("[user]:"));
+        assert!(text.contains("[assistant]: real content"));
+    }
+
+    #[test]
+    fn test_messages_to_text_mixed() {
+        let msgs = vec![
+            serde_json::json!({"role": "user", "content": "first"}),
+            serde_json::json!({"role": "assistant", "content": "thinking", "tool_calls": [
+                {"id": "c1", "type": "function", "function": {"name": "search", "arguments": "{}"}}
+            ]}),
+            serde_json::json!({"role": "tool", "tool_call_id": "c1", "content": "results"}),
+        ];
+        let text = messages_to_text(&msgs);
+        assert!(text.contains("[user]: first"));
+        assert!(text.contains("[assistant → search]"));
+        assert!(text.contains("[tool_result]"));
+    }
+
+    #[test]
+    fn test_keep_recent_count_splitting_non_skill_only() {
+        // Simulate the split logic inside maybe_compact_with_prompt:
+        // 5 non-skill messages, keep_recent_count = 2 → split at index 3
+        let msgs: Vec<serde_json::Value> = (0..5)
+            .map(|i| serde_json::json!({"role": "user", "content": format!("msg {}", i)}))
+            .collect();
+        let keep = 2;
+        let split = msgs.len().saturating_sub(keep);
+        assert_eq!(split, 3);
+
+        let old = &msgs[..split];
+        let kept = &msgs[split..];
+        assert_eq!(old.len(), 3);
+        assert_eq!(kept.len(), 2);
+        assert_eq!(kept[0]["content"], "msg 3");
+        assert_eq!(kept[1]["content"], "msg 4");
+    }
+
+    #[test]
+    fn test_keep_recent_count_splitting_with_skill_msgs() {
+        // Simulate: 2 skill msgs + 5 non-skill msgs, keep_recent_count = 3
+        // After stripping skills: 5 non-skill → split at 5-3=2, so 2 old + 3 kept + 2 re-appended skills
+        let skill_msgs: Vec<serde_json::Value> = (0..2)
+            .map(|i| serde_json::json!({"role": "system", "content": format!("[skill: test] skill {}", i)}))
+            .collect();
+        let non_skill: Vec<serde_json::Value> = (0..5)
+            .map(|i| serde_json::json!({"role": "user", "content": format!("msg {}", i)}))
+            .collect();
+
+        let keep = 3;
+        let split = non_skill.len().saturating_sub(keep);
+        assert_eq!(split, 2);
+
+        let old = &non_skill[..split];
+        let kept = &non_skill[split..];
+        assert_eq!(old.len(), 2);
+        assert_eq!(kept.len(), 3);
+
+        // Re-construct: summary + kept + skills
+        let mut new_ctx: Vec<serde_json::Value> = vec![];
+        new_ctx.push(serde_json::json!({"role": "system", "content": "[对话摘要] summary"}));
+        new_ctx.extend_from_slice(kept);
+        new_ctx.extend(skill_msgs);
+
+        assert_eq!(new_ctx.len(), 1 + 3 + 2);
+        assert!(new_ctx[0]["content"].as_str().unwrap().contains("[对话摘要]"));
+        // Skill messages should be at the end
+        assert!(new_ctx[5]["content"].as_str().unwrap().contains("[skill:"));
+        assert_eq!(new_ctx[3]["content"], "msg 4"); // last kept msg at index 3
+    }
+
+    #[test]
+    fn test_keep_recent_count_zero_split_no_compression() {
+        // If keep_recent_count >= total messages, split_at = 0 → no compression
+        let msgs: Vec<serde_json::Value> = (0..3)
+            .map(|i| serde_json::json!({"role": "user", "content": format!("msg {}", i)}))
+            .collect();
+        let keep = 5; // more than total
+        let split = msgs.len().saturating_sub(keep);
+        assert_eq!(split, 0, "should be 0 when keep > total");
+    }
+
+    #[test]
+    fn test_messages_to_text_non_empty_msg_after_skill_strip() {
+        let msgs = vec![
+            serde_json::json!({"role": "system", "content": "[skill: demo] active"}),
+            serde_json::json!({"role": "user", "content": "run demo"}),
+        ];
+        let text = messages_to_text(&msgs);
+        assert!(text.contains("[system]: [skill: demo]"));
+        assert!(text.contains("[user]: run demo"));
+    }
+}

@@ -103,3 +103,31 @@ fn test_legacy_char_threshold_alias_in_role_config() {
     let cfg: RoleContextConfig = serde_json::from_str(json).unwrap();
     assert_eq!(cfg.token_threshold, Some(99_999));
 }
+
+// ── Watchdog default tests ─────────────────────────────────────────────
+
+#[test]
+fn test_watchdog_default_max_consecutive_errors() {
+    let config = RuntimeConfig::default();
+    assert_eq!(config.watchdog.max_consecutive_errors, 5);
+}
+
+#[test]
+fn test_watchdog_default_same_tool_warning() {
+    let config = RuntimeConfig::default();
+    assert_eq!(config.watchdog.same_tool_warning_count, 3);
+}
+
+#[test]
+fn test_watchdog_default_read_without_write_warning() {
+    let config = RuntimeConfig::default();
+    assert_eq!(config.watchdog.read_without_write_warning, 5);
+}
+
+#[test]
+fn test_watchdog_default_delete_create_warning() {
+    let config = RuntimeConfig::default();
+    assert_eq!(config.watchdog.delete_create_warning_count, 2);
+}
+
+
