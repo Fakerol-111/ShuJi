@@ -1,0 +1,437 @@
+$ npm --prefix shuji-app test -- src/components/DocPreview.test.tsx 2>&1
+[exit 1]
+
+> shuji-app@0.1.0 test
+> vitest run src/components/DocPreview.test.tsx
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.8 [39m[90mD:/ProgrammeProject/ShuJi/shuji-app[39m
+
+[90mstderr[2m | src/components/DocPreview.test.tsx[2m > [22m[2mDocPreview[2m > [22m[2mrenders loading state initially
+[22m[39mAn update to DocPreview inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to DocPreview inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+[90mstderr[2m | src/components/DocPreview.test.tsx[2m > [22m[2mDocPreview[2m > [22m[2mrenders loading state initially
+[22m[39mAn update to DocPreview inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to DocPreview inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ [31m❯[39m src/components/DocPreview.test.tsx [2m([22m[2m12 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[33m 2475[2mms[22m[39m
+     [32m✓[39m renders loading state initially[32m 19[2mms[22m[39m
+[31m     [31m×[31m renders error state on API failure[39m[33m 1011[2mms[22m[39m
+[31m     [31m×[31m renders document content after loading[39m[33m 1016[2mms[22m[39m
+     [32m✓[39m shows 待陛下朱批 banner for in_review documents[32m 11[2mms[22m[39m
+     [32m✓[39m hides 朱批 banner for non-review documents[32m 3[2mms[22m[39m
+     [32m✓[39m calls setDocumentStatus with approved when 准奏 clicked[32m 108[2mms[22m[39m
+     [32m✓[39m calls setDocumentStatus with rejected when 封还 clicked[32m 48[2mms[22m[39m
+     [32m✓[39m sends 御批 message after approval[32m 187[2mms[22m[39m
+     [32m✓[39m renders diff tab when has_previous is true[32m 15[2mms[22m[39m
+     [32m✓[39m renders lineage tab for .shuji markdown files[32m 16[2mms[22m[39m
+     [32m✓[39m does not render lineage tab for non-shuji files[32m 29[2mms[22m[39m
+     [32m✓[39m shows rejection reason dropdown options[32m 9[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m src/components/DocPreview.test.tsx[2m > [22mDocPreview[2m > [22mrenders error state on API failure
+[31m[1mTestingLibraryElementError[22m: Unable to find an element with the text: 文件不存在. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"p-6 text-body text-vermillion"[31m
+    [36m>[31m
+      [0m系统错误: 文件不存在[0m
+    [36m</div>[31m
+  [36m</div>[31m
+[36m</body>[31m
+
+Ignored nodes: comments, script, style
+[36m<html>[31m
+  [36m<head />[31m
+  [36m<body>[31m
+    [36m<div>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"p-6 text-body text-vermillion"[31m
+      [36m>[31m
+        [0m系统错误: 文件不存在[0m
+      [36m</div>[31m
+    [36m</div>[31m
+  [36m</body>[31m
+[36m</html>[31m[39m
+[90m [2m❯[22m Proxy.waitForWrapper node_modules/@testing-library/dom/dist/wait-for.js:[2m163:27[22m[39m
+[36m [2m❯[22m src/components/DocPreview.test.tsx:[2m65:11[22m[39m
+    [90m 63|[39m     mockedApi[33m.[39mreadShujiDoc[33m.[39m[34mmockRejectedValue[39m([35mnew[39m [33mError[39m([32m"文件不存在"[39m))[33m;[39m
+    [90m 64|[39m     [34mrender[39m([33m<[39m[33mDocPreview[39m [33mprojectDir[39m[33m=[39m[32m"/test"[39m [33mdocPath[39m[33m=[39m[32m"nonexistent.md"[39m [33m/[39m[33m>[39m)[33m;[39m
+    [90m 65|[39m     [35mawait[39m [34mwaitFor[39m(() [33m=>[39m {
+    [90m   |[39m           [31m^[39m
+    [90m 66|[39m       [34mexpect[39m(screen[33m.[39m[34mgetByText[39m([32m"文件不存在"[39m))[33m.[39m[34mtoBeTruthy[39m()[33m;[39m
+    [90m 67|[39m     })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/components/DocPreview.test.tsx[2m > [22mDocPreview[2m > [22mrenders document content after loading
+[31m[1mTestingLibraryElementError[22m[39m: Unable to find an element with the text: 实施计划. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"h-full overflow-y-auto surface-paper"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"px-6 py-6 lg:px-8 lg:py-8"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex items-center gap-2 mb-4"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"text-caption text-ink-400 font-mono flex flex-wrap gap-1 flex-1 min-w-0"[39m
+          [36m>[39m
+            [36m<span>[39m
+              [0m.shuji[0m
+            [36m</span>[39m
+            [36m<span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"mx-1 text-ink-300"[39m
+              [36m>[39m
+                [0m/[0m
+              [36m</span>[39m
+              [0mdoc-001.md[0m
+            [36m</span>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"mb-4 flex gap-1 border-b border-fold"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"px-4 py-2 text-ui font-bold rounded-t-lg transition -mb-px border-b-2 border-vermillion text-ink-900"[39m
+          [36m>[39m
+            [0m全文[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"px-4 py-2 text-ui font-bold rounded-t-lg transition -mb-px border-b-2 border-transparent text-ink-400 hover:text-ink-600"[39m
+          [36m>[39m
+            [0m差异[0m
+            [36m<span[39m
+              [33mclass[39m=[32m"ml-1.5 text-caption text-ink-400"[39m
+            [36m>[39m
+              [0m+[0m
+              [0m1[0m
+              [0m/-[0m
+              [0m1[0m
+            [36m</span>[39m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"px-4 py-2 text-ui font-bold rounded-t-lg transition -mb-px border-b-2 border-transparent text-ink-400 hover:text-ink-600"[39m
+          [36m>[39m
+            [0m血缘[0m
+          [36m</button>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"bg-surface-parchment border border-fold rounded-xl mb-5 border-l-vermillion border-l-[3px] p-4"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"font-display text-ui text-ink-600 font-semibold mb-2"[39m
+          [36m>[39m
+            [0m票拟[0m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid grid-cols-1 sm:grid-cols-2 gap-2"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex text-ui font-mono"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"w-20 shrink-0 text-ink-400"[39m
+              [36m>[39m
+                [0mID[0m
+              [36m</span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"break-all text-ink-700"[39m
+              [36m>[39m
+                [0mdoc-001[0m
+              [36m</span>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex text-ui font-mono"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"w-20 shrink-0 text-ink-400"[39m
+              [36m>[39m
+                [0m类型[0m
+              [36m</span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"break-all text-ink-700"[39m
+              [36m>[39m
+                [0mplan[0m
+              [36m</span>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex text-ui font-mono"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"w-20 shrink-0 text-ink-400"[39m
+              [36m>[39m
+                [0m作者[0m
+              [36m</span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"break-all text-ink-700"[39m
+              [36m>[39m
+                [0m工部尚书[0m
+              [36m</span>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex text-ui font-mono"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"w-20 shrink-0 text-ink-400"[39m
+              [36m>[39m
+                [0m时间[0m
+              [36m</span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"break-all text-ink-700"[39m
+              [36m>[39m
+                [0m2026-01-01[0m
+              [36m</span>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex text-ui font-mono"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"w-20 shrink-0 text-ink-400"[39m
+              [36m>[39m
+                [0m状态[0m
+              [36m</span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"break-all text-ink-700"[39m
+              [36m>[39m
+                [0mdraft[0m
+              [36m</span>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+        [36m<article[39m
+          [33mclass[39m=[32m"prose prose-shuji max-w-none"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mdata-testid[39m=[32m"markdown"[39m
+          [36m>[39m
+            [0m## 实施计划
+
+第一阶段完成。[0m
+          [36m</div>[39m
+        [36m</article>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+[36m</body>[39m
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"h-full overflow-y-auto surface-paper"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"px-6 py-6 lg:px-8 lg:py-8"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex items-center gap-2 mb-4"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"text-caption text-ink-400 font-mono flex flex-wrap gap-1 flex-1 min-w-0"[39m
+            [36m>[39m
+              [36m<span>[39m
+                [0m.shuji[0m
+              [36m</span>[39m
+              [36m<span>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"mx-1 text-ink-300"[39m
+                [36m>[39m
+                  [0m/[0m
+                [36m</span>[39m
+                [0mdoc-001.md[0m
+              [36m</span>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"mb-4 flex gap-1 border-b border-fold"[39m
+          [36m>[39m
+            [36m<button[39m
+              [33mclass[39m=[32m"px-4 py-2 text-ui font-bold rounded-t-lg transition -mb-px border-b-2 border-vermillion text-ink-900"[39m
+            [36m>[39m
+              [0m全文[0m
+            [36m</button>[39m
+            [36m<button[39m
+              [33mclass[39m=[32m"px-4 py-2 text-ui font-bold rounded-t-lg transition -mb-px border-b-2 border-transparent text-ink-400 hover:text-ink-600"[39m
+            [36m>[39m
+              [0m差异[0m
+              [36m<span[39m
+                [33mclass[39m=[32m"ml-1.5 text-caption text-ink-400"[39m
+              [36m>[39m
+                [0m+[0m
+                [0m1[0m
+                [0m/-[0m
+                [0m1[0m
+              [36m</span>[39m
+            [36m</button>[39m
+            [36m<button[39m
+              [33mclass[39m=[32m"px-4 py-2 text-ui font-bold rounded-t-lg transition -mb-px border-b-2 border-transparent text-ink-400 hover:text-ink-600"[39m
+            [36m>[39m
+              [0m血缘[0m
+            [36m</button>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"bg-surface-parchment border border-fold rounded-xl mb-5 border-l-vermillion border-l-[3px] p-4"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"font-display text-ui text-ink-600 font-semibold mb-2"[39m
+            [36m>[39m
+              [0m票拟[0m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"grid grid-cols-1 sm:grid-cols-2 gap-2"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex text-ui font-mono"[39m
+              [36m>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"w-20 shrink-0 text-ink-400"[39m
+                [36m>[39m
+                  [0mID[0m
+                [36m</span>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"break-all text-ink-700"[39m
+                [36m>[39m
+                  [0mdoc-001[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex text-ui font-mono"[39m
+              [36m>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"w-20 shrink-0 text-ink-400"[39m
+                [36m>[39m
+                  [0m类型[0m
+                [36m</span>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"break-all text-ink-700"[39m
+                [36m>[39m
+                  [0mplan[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex text-ui font-mono"[39m
+              [36m>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"w-20 shrink-0 text-ink-400"[39m
+                [36m>[39m
+                  [0m作者[0m
+                [36m</span>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"break-all text-ink-700"[39m
+                [36m>[39m
+                  [0m工部尚书[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex text-ui font-mono"[39m
+              [36m>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"w-20 shrink-0 text-ink-400"[39m
+                [36m>[39m
+                  [0m时间[0m
+                [36m</span>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"break-all text-ink-700"[39m
+                [36m>[39m
+                  [0m2026-01-01[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex text-ui font-mono"[39m
+              [36m>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"w-20 shrink-0 text-ink-400"[39m
+                [36m>[39m
+                  [0m状态[0m
+                [36m</span>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"break-all text-ink-700"[39m
+                [36m>[39m
+                  [0mdraft[0m
+                [36m</span>[39m
+              [36m</div>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+          [36m<article[39m
+            [33mclass[39m=[32m"prose prose-shuji max-w-none"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mdata-testid[39m=[32m"markdown"[39m
+            [36m>[39m
+              [0m## 实施计划
+
+第一阶段完成。[0m
+            [36m</div>[39m
+          [36m</article>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</body>[39m
+[36m</html>[39m
+[90m [2m❯[22m Proxy.waitForWrapper node_modules/@testing-library/dom/dist/wait-for.js:[2m163:27[22m[39m
+[36m [2m❯[22m src/components/DocPreview.test.tsx:[2m72:11[22m[39m
+    [90m 70|[39m   [34mit[39m([32m"renders document content after loading"[39m[33m,[39m [35masync[39m () [33m=>[39m {
+    [90m 71|[39m     render(<DocPreview projectDir="/test" docPath=".shuji/doc-001.md" …
+    [90m 72|[39m     [35mawait[39m [34mwaitFor[39m(() [33m=>[39m {
+    [90m   |[39m           [31m^[39m
+    [90m 73|[39m       [34mexpect[39m(screen[33m.[39m[34mgetByText[39m([32m"实施计划"[39m))[33m.[39m[34mtoBeTruthy[39m()[33m;[39m
+    [90m 74|[39m     })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m10 passed[39m[22m[90m (12)[39m
+[2m   Start at [22m 21:38:59
+[2m   Duration [22m 3.38s[2m (transform 80ms, setup 63ms, import 197ms, tests 2.47s, environment 538ms)[22m
+
