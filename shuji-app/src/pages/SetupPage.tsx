@@ -1,31 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getConfig, saveConfig, checkApiConnection, setModelPreset } from '../api';
+import { API_URL_PRESETS, MODEL_PRESETS } from '../constants/presets';
 import type { AppConfig, RoleEndpoint } from '../types';
 import { SealLogo } from '../components/SealLogo';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 
-const API_URL_PRESETS = [
-  { label: 'DeepSeek', url: 'https://api.deepseek.com/chat/completions' },
-  { label: 'Anthropic', url: 'https://api.anthropic.com/v1/messages' },
-  { label: 'OpenAI', url: 'https://api.openai.com/v1/chat/completions' },
-  { label: '自定义', url: '' },
-];
-
-const MODEL_PRESETS: Record<string, string[]> = {
-  'https://api.deepseek.com/chat/completions': ['deepseek-v4-flash', 'deepseek-4-pro'],
-  'https://api.anthropic.com/v1/messages': [
-    'claude-sonnet-4-20250514',
-    'claude-haiku-4-5-20251001',
-  ],
-  'https://api.openai.com/v1/chat/completions': ['gpt-4o', 'gpt-4o-mini'],
-};
-
 export default function SetupPage() {
   const navigate = useNavigate();
   const [apiKey, setApiKey] = useState('');
-  const [apiUrl, setApiUrl] = useState(API_URL_PRESETS[0].url);
+  const [apiUrl, setApiUrl] = useState<string>(API_URL_PRESETS[0].url);
   const [customUrl, setCustomUrl] = useState('');
   const [model, setModel] = useState(MODEL_PRESETS[API_URL_PRESETS[0].url]?.[0] || '');
   const [preset, setPreset] = useState('balanced');
