@@ -1,17 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getConfig, loadProject, getRecentDirs, getChatHistory } from '../api';
+import { initialCabinetMessage } from '../utils/chat';
 import type { Project, ChatMessage } from '../types';
-
-function initialCabinetMessage(content: string): ChatMessage {
-  return {
-    role: '内阁',
-    content,
-    options: [],
-    documents: [],
-    timestamp: new Date().toISOString(),
-  };
-}
 
 export function useProject() {
   const navigate = useNavigate();

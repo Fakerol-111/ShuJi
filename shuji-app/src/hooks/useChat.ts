@@ -2,25 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { sendMessage, discussWithCabinet, getChatHistory } from '../api';
 import { formatError } from '../utils/error';
+import { initialCabinetMessage, mergeMessages } from '../utils/chat';
 import type { ChatMessage, PlanInfo } from '../types';
-
-function initialCabinetMessage(content: string): ChatMessage {
-  return {
-    role: '内阁',
-    content,
-    options: [],
-    documents: [],
-    timestamp: new Date().toISOString(),
-  };
-}
-
-function mergeMessages(prev: ChatMessage[], hist: ChatMessage[]) {
-  const existing = new Set(prev.map((m) => `${m.timestamp}|${m.role}|${m.content.slice(0, 40)}`));
-  const newMsgs = hist.filter(
-    (m) => !existing.has(`${m.timestamp}|${m.role}|${m.content.slice(0, 40)}`)
-  );
-  return newMsgs.length > 0 ? [...prev, ...newMsgs] : prev;
-}
 
 export type Tab = 'decision' | 'discuss';
 

@@ -55,14 +55,12 @@ export default function ProjectDashboard() {
   const {
     project,
     setProject,
-    messages: initialMsgs,
     recentDirs,
     setRecentDirs,
     error: projError,
     setError: setProjError,
     loadProjectIntoState,
   } = useProject();
-  if (initialMsgs.length > 0 && session) session.msgs = initialMsgs;
 
   // Chat state
   const {
