@@ -1,6 +1,6 @@
-import { Component, type ReactNode } from "react";
-import { Button } from "./ui/Button";
-import { SealLogo } from "./SealLogo";
+import { Component, type ReactNode } from 'react';
+import { Button } from './ui/Button';
+import { SealLogo } from './SealLogo';
 
 interface Props {
   children: ReactNode;
@@ -31,9 +31,7 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="h-screen bg-surface-paper flex items-center justify-center">
           <div className="max-w-md mx-auto p-8 text-center">
             <SealLogo size={40} />
-            <h1 className="font-display text-display font-bold text-ink-900 mt-4">
-              出了点问题
-            </h1>
+            <h1 className="font-display text-display font-bold text-ink-900 mt-4">出了点问题</h1>
             <p className="text-body text-ink-600 mt-2 mb-4">
               枢机遇到了一个意外错误。请尝试重新加载。
             </p>
@@ -42,14 +40,11 @@ export class ErrorBoundary extends Component<Props, State> {
                 查看错误详情
               </summary>
               <pre className="mt-2 p-3 bg-ink-100 rounded-lg text-caption text-ink-700 overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto">
-                {this.state.error?.message || "未知错误"}
+                {this.state.error?.message || '未知错误'}
               </pre>
             </details>
             <div className="flex justify-center gap-3">
-              <Button
-                variant="secondary"
-                onClick={() => window.location.reload()}
-              >
+              <Button variant="secondary" onClick={() => window.location.reload()}>
                 重新加载
               </Button>
               <Button variant="seal" onClick={this.handleReload}>

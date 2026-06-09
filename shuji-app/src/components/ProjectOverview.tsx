@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
-import { listShujiTree, generateDeliveryReport } from "../api";
-import type { ShujiEntry } from "../api";
-import type { PlanInfo, Project } from "../types";
-import { getDeptMeta } from "../constants";
-import { Card } from "./ui/Card";
+import { useEffect, useState } from 'react';
+import { listShujiTree, generateDeliveryReport } from '../api';
+import type { ShujiEntry } from '../api';
+import type { PlanInfo, Project } from '../types';
+import { getDeptMeta } from '../constants';
+import { Card } from './ui/Card';
 
 interface ProjectOverviewProps {
   project: Project | null;
@@ -22,7 +22,7 @@ export default function ProjectOverview({
 }: ProjectOverviewProps) {
   const [latestDocs, setLatestDocs] = useState<ShujiEntry[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
   const [report, setReport] = useState<string | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
 
@@ -41,22 +41,19 @@ export default function ProjectOverview({
   useEffect(() => {
     if (!project?.working_dir) return;
     setDocsLoading(true);
-    setError("");
+    setError('');
     listShujiTree(project.working_dir)
       .then((tree) => {
         setLatestDocs(
           flatten(tree)
-            .filter(
-              (entry) =>
-                entry.path.startsWith(".shuji/") && entry.name.endsWith(".md"),
-            )
-            .slice(0, 5),
+            .filter((entry) => entry.path.startsWith('.shuji/') && entry.name.endsWith('.md'))
+            .slice(0, 5)
         );
         setDocsLoading(false);
       })
       .catch((e) => {
-        console.error("文档树加载失败:", e);
-        setError("加载失败");
+        console.error('文档树加载失败:', e);
+        setError('加载失败');
         setLatestDocs([]);
         setDocsLoading(false);
       });
@@ -81,18 +78,14 @@ export default function ProjectOverview({
     );
   }
 
-  const done = planInfo?.batches.filter((b) => b.status === "done").length || 0;
+  const done = planInfo?.batches.filter((b) => b.status === 'done').length || 0;
   const total = planInfo?.batches.length || 0;
 
   return (
     <div className="h-full overflow-y-auto surface-paper p-8">
       <Card variant="paper" className="max-w-3xl mx-auto p-6">
-        <div className="font-display text-display font-bold text-ink-900 mb-1">
-          {project.name}
-        </div>
-        <p className="text-caption text-ink-400 font-mono truncate mb-6">
-          {project.working_dir}
-        </p>
+        <div className="font-display text-display font-bold text-ink-900 mb-1">{project.name}</div>
+        <p className="text-caption text-ink-400 font-mono truncate mb-6">{project.working_dir}</p>
 
         <section className="mb-6">
           <h3 className="font-display text-ui text-ink-600 font-semibold title-rule-gold mb-3">
@@ -109,7 +102,7 @@ export default function ProjectOverview({
                 >
                   <span
                     className="animate-pulse"
-                    style={{ color: getDeptMeta(dept)?.color || "#6b7280" }}
+                    style={{ color: getDeptMeta(dept)?.color || '#6b7280' }}
                   >
                     ●
                   </span>
@@ -138,9 +131,7 @@ export default function ProjectOverview({
                   onClick={() => onDocSelect?.(doc.path)}
                   className="flex items-center gap-2 text-body cursor-pointer hover:bg-ink-100/50 rounded px-1 -mx-1 transition-colors"
                 >
-                  <span className="font-mono text-ink-800">
-                    {doc.name.replace(/\.md$/, "")}
-                  </span>
+                  <span className="font-mono text-ink-800">{doc.name.replace(/\.md$/, '')}</span>
                   <span className="text-ink-300">·</span>
                   <span className="text-ink-500">{doc.type_label}</span>
                 </div>
@@ -164,7 +155,7 @@ export default function ProjectOverview({
               {planInfo.batches.map((b, i) => (
                 <div
                   key={i}
-                  className={`text-ui ${b.status === "current" ? "text-ink-900 font-medium" : "text-ink-500"}`}
+                  className={`text-ui ${b.status === 'current' ? 'text-ink-900 font-medium' : 'text-ink-500'}`}
                 >
                   · {b.name}
                 </div>
@@ -179,7 +170,7 @@ export default function ProjectOverview({
             disabled={reportLoading}
             className="px-4 py-2 bg-ink-900 text-ink-50 text-ui rounded-lg hover:bg-ink-800 transition-colors disabled:opacity-50"
           >
-            {reportLoading ? "生成中…" : "生成交付报告"}
+            {reportLoading ? '生成中…' : '生成交付报告'}
           </button>
           {report && (
             <div className="mt-3 p-3 rounded-lg bg-ink-100/50 border border-fold text-caption font-mono whitespace-pre-wrap text-ink-700 max-h-64 overflow-y-auto">
@@ -193,7 +184,5 @@ export default function ProjectOverview({
 }
 
 function flatten(entries: ShujiEntry[]): ShujiEntry[] {
-  return entries.flatMap((entry) =>
-    entry.is_dir ? flatten(entry.children) : [entry],
-  );
+  return entries.flatMap((entry) => (entry.is_dir ? flatten(entry.children) : [entry]));
 }

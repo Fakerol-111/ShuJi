@@ -1,22 +1,22 @@
-import { useEffect, useState } from "react";
-import { getTokenStats, getRoundMetrics } from "../api";
-import { useActiveDepts } from "../hooks/useActiveDepts";
-import { useLatestDeptLogs } from "../hooks/useLatestDeptLogs";
-import { getDeptMeta, DEPT_META_LIST } from "../constants";
-import type { RoundMetrics } from "../types";
+import { useEffect, useState } from 'react';
+import { getTokenStats, getRoundMetrics } from '../api';
+import { useActiveDepts } from '../hooks/useActiveDepts';
+import { useLatestDeptLogs } from '../hooks/useLatestDeptLogs';
+import { getDeptMeta, DEPT_META_LIST } from '../constants';
+import type { RoundMetrics } from '../types';
 
 const SKILL_LABELS: Record<string, string> = {
-  workflow_standard: "标准",
-  workflow_demo: "演示",
-  workflow_simple: "简单",
-  workflow_complex: "复杂",
-  workflow_optimize: "优化",
-  workflow_bugfix: "修复",
-  workflow_refactor: "重构",
-  workflow_audit: "审计",
-  discuss: "廷议",
-  summary: "奏报",
-  clarify: "问对",
+  workflow_standard: '标准',
+  workflow_demo: '演示',
+  workflow_simple: '简单',
+  workflow_complex: '复杂',
+  workflow_optimize: '优化',
+  workflow_bugfix: '修复',
+  workflow_refactor: '重构',
+  workflow_audit: '审计',
+  discuss: '廷议',
+  summary: '奏报',
+  clarify: '问对',
 };
 
 export default function DeptStatusBar() {
@@ -26,25 +26,18 @@ export default function DeptStatusBar() {
   const [tokenCached, setTokenCached] = useState(0);
   const [tokenCompletion, setTokenCompletion] = useState(0);
   const [round, setRound] = useState<RoundMetrics | null>(null);
-  const [elapsed, setElapsed] = useState("");
+  const [elapsed, setElapsed] = useState('');
 
   useEffect(() => {
     const load = () => {
       getTokenStats()
         .then((stats) => {
-          const roles = Object.values(stats["汇总"] || {});
-          setTokenPrompt(
-            roles.reduce((sum: number, u: any) => sum + u.prompt_tokens, 0),
-          );
+          const roles = Object.values(stats['汇总'] || {});
+          setTokenPrompt(roles.reduce((sum: number, u: any) => sum + u.prompt_tokens, 0));
           setTokenCached(
-            roles.reduce(
-              (sum: number, u: any) => sum + (u.cached_prompt_tokens ?? 0),
-              0,
-            ),
+            roles.reduce((sum: number, u: any) => sum + (u.cached_prompt_tokens ?? 0), 0)
           );
-          setTokenCompletion(
-            roles.reduce((sum: number, u: any) => sum + u.completion_tokens, 0),
-          );
+          setTokenCompletion(roles.reduce((sum: number, u: any) => sum + u.completion_tokens, 0));
         })
         .catch(() => {});
     };
@@ -66,23 +59,19 @@ export default function DeptStatusBar() {
 
   useEffect(() => {
     if (!round) {
-      setElapsed("");
+      setElapsed('');
       return;
     }
     const tick = () => {
       // 停止计时：诸司无事时冻结时间
       const hasActive = DEPT_META_LIST.some(
-        (d) => activeSet.has(d.label) || activeSet.has(d.shortLabel),
+        (d) => activeSet.has(d.label) || activeSet.has(d.shortLabel)
       );
       if (!hasActive) return;
       const secs = Math.floor((Date.now() - round.started_at) / 1000);
       if (secs < 60) setElapsed(`${secs}s`);
-      else if (secs < 3600)
-        setElapsed(`${Math.floor(secs / 60)}m${secs % 60}s`);
-      else
-        setElapsed(
-          `${Math.floor(secs / 3600)}h${Math.floor((secs % 3600) / 60)}m`,
-        );
+      else if (secs < 3600) setElapsed(`${Math.floor(secs / 60)}m${secs % 60}s`);
+      else setElapsed(`${Math.floor(secs / 3600)}h${Math.floor((secs % 3600) / 60)}m`);
     };
     tick();
     const timer = window.setInterval(tick, 1000);
@@ -90,7 +79,7 @@ export default function DeptStatusBar() {
   }, [round, activeSet]);
 
   const activeDepts = DEPT_META_LIST.filter(
-    (d) => activeSet.has(d.label) || activeSet.has(d.shortLabel),
+    (d) => activeSet.has(d.label) || activeSet.has(d.shortLabel)
   ).map((d) => d.label);
 
   return (
@@ -105,12 +94,10 @@ export default function DeptStatusBar() {
         ) : (
           activeDepts.map((dept) => {
             const meta = getDeptMeta(dept);
-            const color = meta?.color || "#8B7355";
+            const color = meta?.color || '#8B7355';
             const label = meta?.shortLabel || dept;
             const latestEntry = latestLogs.get(dept);
-            const action = latestEntry
-              ? latestEntry.action.replace(/^[❌→]\s*/, "")
-              : "";
+            const action = latestEntry ? latestEntry.action.replace(/^[❌→]\s*/, '') : '';
             return (
               <span
                 key={dept}
@@ -122,13 +109,9 @@ export default function DeptStatusBar() {
                   className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0"
                   style={{ backgroundColor: color }}
                 />
-                <span className="text-ink-200 font-medium shrink-0">
-                  {label}
-                </span>
+                <span className="text-ink-200 font-medium shrink-0">{label}</span>
                 {action && (
-                  <span className="text-ink-400 truncate ml-0.5 max-w-[120px]">
-                    {action}
-                  </span>
+                  <span className="text-ink-400 truncate ml-0.5 max-w-[120px]">{action}</span>
                 )}
               </span>
             );
@@ -140,14 +123,10 @@ export default function DeptStatusBar() {
       {round && round.started_at > 0 && (
         <div className="flex items-center gap-2 ml-2 pl-2 border-l border-ink-800 text-[10px] text-ink-400 font-mono shrink-0">
           {round.current_role && (
-            <span className="text-gold/80 font-semibold">
-              {round.current_role}
-            </span>
+            <span className="text-gold/80 font-semibold">{round.current_role}</span>
           )}
           {round.skill && (
-            <span className="text-ink-500">
-              · {SKILL_LABELS[round.skill] || round.skill}
-            </span>
+            <span className="text-ink-500">· {SKILL_LABELS[round.skill] || round.skill}</span>
           )}
           {elapsed && <span className="text-ink-500">· {elapsed}</span>}
         </div>
@@ -159,9 +138,7 @@ export default function DeptStatusBar() {
         <span className="text-ink-300">{formatToken(tokenCached)}</span>
         <span className="text-ink-700">|</span>
         <span className="text-ink-400">输入缓存未命中</span>
-        <span className="text-ink-300">
-          {formatToken(tokenPrompt - tokenCached)}
-        </span>
+        <span className="text-ink-300">{formatToken(tokenPrompt - tokenCached)}</span>
         <span className="text-ink-700">|</span>
         <span className="text-gold/60">输出</span>
         <span className="text-ink-300">{formatToken(tokenCompletion)}</span>

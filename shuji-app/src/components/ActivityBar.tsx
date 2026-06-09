@@ -1,10 +1,10 @@
 export type ActivitySelection =
-  | "files"
-  | "stats"
-  | "context"
-  | "archives"
-  | "audit"
-  | "graph"
+  | 'files'
+  | 'stats'
+  | 'context'
+  | 'archives'
+  | 'audit'
+  | 'graph'
   | null;
 
 interface ActivityBarProps {
@@ -25,7 +25,7 @@ function FolderIcon({ active }: { active: boolean }) {
       strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={active ? "text-ink-50" : ""}
+      className={active ? 'text-ink-50' : ''}
     >
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
     </svg>
@@ -43,7 +43,7 @@ function ChartIcon({ active }: { active: boolean }) {
       strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={active ? "text-ink-50" : ""}
+      className={active ? 'text-ink-50' : ''}
     >
       <line x1="18" y1="20" x2="18" y2="10" />
       <line x1="12" y1="20" x2="12" y2="4" />
@@ -63,7 +63,7 @@ function ScrollIcon({ active }: { active: boolean }) {
       strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={active ? "text-ink-50" : ""}
+      className={active ? 'text-ink-50' : ''}
     >
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <polyline points="14 2 14 8 20 8" />
@@ -84,7 +84,7 @@ function ArchiveIcon({ active }: { active: boolean }) {
       strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={active ? "text-ink-50" : ""}
+      className={active ? 'text-ink-50' : ''}
     >
       <rect x="2" y="3" width="20" height="5" rx="1" />
       <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
@@ -104,7 +104,7 @@ function GraphIcon({ active }: { active: boolean }) {
       strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={active ? "text-ink-50" : ""}
+      className={active ? 'text-ink-50' : ''}
     >
       <circle cx="5" cy="12" r="2" />
       <circle cx="19" cy="5" r="2" />
@@ -127,7 +127,7 @@ function NewspaperIcon({ active }: { active: boolean }) {
       strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={active ? "text-ink-50" : ""}
+      className={active ? 'text-ink-50' : ''}
     >
       <path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-4 0V6" />
       <line x1="10" y1="8" x2="18" y2="8" />
@@ -164,12 +164,12 @@ const ITEMS: Array<{
   icon: (active: boolean) => React.ReactNode;
   label: string;
 }> = [
-  { id: "files", icon: (a) => <FolderIcon active={a} />, label: "文件" },
-  { id: "stats", icon: (a) => <ChartIcon active={a} />, label: "度支" },
-  { id: "context", icon: (a) => <ScrollIcon active={a} />, label: "文脉" },
-  { id: "archives", icon: (a) => <ArchiveIcon active={a} />, label: "存档" },
-  { id: "audit", icon: (a) => <NewspaperIcon active={a} />, label: "朝报" },
-  { id: "graph", icon: (a) => <GraphIcon active={a} />, label: "文移图" },
+  { id: 'files', icon: (a) => <FolderIcon active={a} />, label: '文件' },
+  { id: 'stats', icon: (a) => <ChartIcon active={a} />, label: '度支' },
+  { id: 'context', icon: (a) => <ScrollIcon active={a} />, label: '文脉' },
+  { id: 'archives', icon: (a) => <ArchiveIcon active={a} />, label: '存档' },
+  { id: 'audit', icon: (a) => <NewspaperIcon active={a} />, label: '朝报' },
+  { id: 'graph', icon: (a) => <GraphIcon active={a} />, label: '文移图' },
 ];
 
 export default function ActivityBar({
@@ -182,17 +182,14 @@ export default function ActivityBar({
     <div className="w-12 bg-ink-900 border-r border-ink-800 flex flex-col items-center py-2 shrink-0">
       {ITEMS.map((item) => {
         const active = selected === item.id;
-        const hasBadge =
-          item.id === "files" && (pendingApprovalsCount ?? 0) > 0;
+        const hasBadge = item.id === 'files' && (pendingApprovalsCount ?? 0) > 0;
         return (
           <button
             key={item.id}
             onClick={() => onSelect(active ? null : item.id)}
             aria-label={item.label}
             className={`group relative w-full h-11 flex items-center justify-center transition-colors ${
-              active
-                ? "bg-ink-800"
-                : "text-ink-500 hover:text-ink-200 hover:bg-ink-800/60"
+              active ? 'bg-ink-800' : 'text-ink-500 hover:text-ink-200 hover:bg-ink-800/60'
             }`}
           >
             {active && (

@@ -1,16 +1,16 @@
-import DocTree from "./DocTree";
-import TokenPanel from "./TokenPanel";
-import ContextPanel from "./ContextPanel";
-import CheckpointPanel from "./CheckpointPanel";
-import AuditPanel from "./AuditPanel";
-import type { ActivitySelection } from "./ActivityBar";
+import DocTree from './DocTree';
+import TokenPanel from './TokenPanel';
+import ContextPanel from './ContextPanel';
+import CheckpointPanel from './CheckpointPanel';
+import AuditPanel from './AuditPanel';
+import type { ActivitySelection } from './ActivityBar';
 
 const headerLabel: Record<string, string> = {
-  files: "架阁目录",
-  stats: "度支",
-  context: "文脉",
-  archives: "存档",
-  audit: "朝报",
+  files: '架阁目录',
+  stats: '度支',
+  context: '文脉',
+  archives: '存档',
+  audit: '朝报',
 };
 
 function getHeader(mode: Exclude<ActivitySelection, null>): string {
@@ -22,30 +22,20 @@ function panel(
   projectDir: string,
   selectedDoc: string | null,
   onDocSelect: (path: string) => void,
-  onShowDiff?: (path: string) => void,
+  onShowDiff?: (path: string) => void
 ) {
   switch (mode) {
-    case "files":
-      return (
-        <DocTree
-          projectDir={projectDir}
-          selectedDoc={selectedDoc}
-          onSelect={onDocSelect}
-        />
-      );
-    case "stats":
+    case 'files':
+      return <DocTree projectDir={projectDir} selectedDoc={selectedDoc} onSelect={onDocSelect} />;
+    case 'stats':
       return <TokenPanel />;
-    case "context":
+    case 'context':
       return <ContextPanel />;
-    case "archives":
+    case 'archives':
       return <CheckpointPanel />;
-    case "audit":
+    case 'audit':
       return (
-        <AuditPanel
-          projectDir={projectDir}
-          onDocSelect={onDocSelect}
-          onShowDiff={onShowDiff}
-        />
+        <AuditPanel projectDir={projectDir} onDocSelect={onDocSelect} onShowDiff={onShowDiff} />
       );
   }
 }

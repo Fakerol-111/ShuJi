@@ -1,11 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import {
-  getWorkflowGraph,
-  listWorkflowArchives,
-  loadWorkflowArchive,
-} from "../api";
-import type { WorkflowGraph, GraphNode, GraphEdge } from "../types";
-import { getDeptMeta } from "../constants";
+import { useEffect, useRef, useState } from 'react';
+import { getWorkflowGraph, listWorkflowArchives, loadWorkflowArchive } from '../api';
+import type { WorkflowGraph, GraphNode, GraphEdge } from '../types';
+import { getDeptMeta } from '../constants';
 
 const NODE_W = 180;
 const NODE_H = 64;
@@ -37,7 +33,7 @@ export default function WorkflowGraphView() {
   const [currentSession, setCurrentSession] = useState<string | null>(null);
   const [activeArchive, setActiveArchive] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
   const svgRef = useRef<SVGSVGElement>(null);
   const liveInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -48,9 +44,9 @@ export default function WorkflowGraphView() {
         setArchives(
           entries.map(([filename, label]) => {
             // Parse timestamp from filename: {ts}_{label}.json
-            const ts = filename.split("_").slice(0, 2).join("_");
-            return { filename, label: label || "未命名", ts };
-          }),
+            const ts = filename.split('_').slice(0, 2).join('_');
+            return { filename, label: label || '未命名', ts };
+          })
         );
       })
       .catch(() => {});
@@ -62,7 +58,7 @@ export default function WorkflowGraphView() {
       .then((g) => {
         if (g) {
           setGraph(g);
-          setCurrentSession(g.session_label || "当前");
+          setCurrentSession(g.session_label || '当前');
         }
         setLoading(false);
       })
@@ -107,9 +103,7 @@ export default function WorkflowGraphView() {
   // ── SVG layout computation ──
   if (loading && !graph) {
     return (
-      <div className="h-full flex items-center justify-center text-ink-400">
-        加载文移图中…
-      </div>
+      <div className="h-full flex items-center justify-center text-ink-400">加载文移图中…</div>
     );
   }
 
@@ -131,16 +125,12 @@ export default function WorkflowGraphView() {
     <div className="h-full flex flex-col bg-surface-paper">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-2 border-b border-fold shrink-0">
-        <h2 className="font-display text-ui font-semibold text-ink-800">
-          文移图
-        </h2>
+        <h2 className="font-display text-ui font-semibold text-ink-800">文移图</h2>
         {graph && (
           <span className="text-caption text-ink-500">
             {graph.nodes.length} 节点 · {graph.edges.length} 边
-            {layoutResult && layoutResult.totalDuration !== "" && (
-              <span className="ml-2 text-ink-400">
-                · 总耗时 {layoutResult.totalDuration}
-              </span>
+            {layoutResult && layoutResult.totalDuration !== '' && (
+              <span className="ml-2 text-ink-400">· 总耗时 {layoutResult.totalDuration}</span>
             )}
           </span>
         )}
@@ -154,42 +144,32 @@ export default function WorkflowGraphView() {
               onClick={switchToLive}
               className={`w-full text-left px-2 py-1.5 rounded text-ui transition-colors ${
                 !activeArchive
-                  ? "bg-gold-light text-ink-800 font-medium border-l-2 border-gold"
-                  : "text-ink-600 hover:bg-ink-100"
+                  ? 'bg-gold-light text-ink-800 font-medium border-l-2 border-gold'
+                  : 'text-ink-600 hover:bg-ink-100'
               }`}
             >
               <div className="text-xs font-semibold">当前</div>
-              <div className="text-caption text-ink-500 truncate">
-                {currentSession || "实时"}
-              </div>
+              <div className="text-caption text-ink-500 truncate">{currentSession || '实时'}</div>
               {!activeArchive && (
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-jade animate-pulse ml-1" />
               )}
             </button>
           </div>
           <div className="px-3 py-2">
-            <div className="text-caption font-semibold text-ink-500 mb-1">
-              历史命令
-            </div>
-            {archives.length === 0 && (
-              <p className="text-caption text-ink-400 italic">暂无归档</p>
-            )}
+            <div className="text-caption font-semibold text-ink-500 mb-1">历史命令</div>
+            {archives.length === 0 && <p className="text-caption text-ink-400 italic">暂无归档</p>}
             {archives.map((a) => (
               <button
                 key={a.filename}
                 onClick={() => loadArchivedGraph(a.filename)}
                 className={`w-full text-left px-2 py-1.5 rounded text-ui transition-colors mb-0.5 ${
                   activeArchive === a.filename
-                    ? "bg-ink-100 text-ink-800 font-medium border-l-2 border-vermillion"
-                    : "text-ink-600 hover:bg-ink-100"
+                    ? 'bg-ink-100 text-ink-800 font-medium border-l-2 border-vermillion'
+                    : 'text-ink-600 hover:bg-ink-100'
                 }`}
               >
-                <div className="text-caption truncate">
-                  {a.label || "未命名"}
-                </div>
-                <div className="text-caption text-ink-400 font-mono text-[10px]">
-                  {a.ts}
-                </div>
+                <div className="text-caption truncate">{a.label || '未命名'}</div>
+                <div className="text-caption text-ink-400 font-mono text-[10px]">{a.ts}</div>
               </button>
             ))}
           </div>
@@ -239,9 +219,7 @@ export default function WorkflowGraphView() {
                       fill="#8B7355"
                       fontSize="11"
                     >
-                      {e.task_id.length > 24
-                        ? e.task_id.slice(0, 22) + "…"
-                        : e.task_id}
+                      {e.task_id.length > 24 ? e.task_id.slice(0, 22) + '…' : e.task_id}
                     </text>
                   </g>
                 );
@@ -249,25 +227,25 @@ export default function WorkflowGraphView() {
               {/* Nodes */}
               {layoutResult.layoutNodes.map((n) => {
                 const meta = getDeptMeta(n.role) || {
-                  color: "#6b7280",
+                  color: '#6b7280',
                   label: n.role,
                 };
                 const isMulti = n.instance > 1;
                 const color =
-                  n.status === "failed"
-                    ? "#C41E3A"
-                    : n.status === "completed"
-                      ? "#2D5A3F"
+                  n.status === 'failed'
+                    ? '#C41E3A'
+                    : n.status === 'completed'
+                      ? '#2D5A3F'
                       : meta.color;
                 const durStr = layoutResult.nodeDurations.get(n.id);
                 return (
                   <g key={`node-${n.id}`} className="group">
                     <title>
                       {n.role}
-                      {isMulti ? `#${n.instance}` : ""}
-                      {durStr ? `\n处理耗时: ${durStr}` : ""}
-                      {n.task_summary ? `\n任务: ${n.task_summary}` : ""}
-                      {n.created_at ? `\n开始: ${n.created_at}` : ""}
+                      {isMulti ? `#${n.instance}` : ''}
+                      {durStr ? `\n处理耗时: ${durStr}` : ''}
+                      {n.task_summary ? `\n任务: ${n.task_summary}` : ''}
+                      {n.created_at ? `\n开始: ${n.created_at}` : ''}
                     </title>
                     <rect
                       x={n.x}
@@ -276,10 +254,10 @@ export default function WorkflowGraphView() {
                       height={NODE_H}
                       rx="8"
                       ry="8"
-                      fill={n.status === "failed" ? "#FDE8EC" : "#F5F0E8"}
+                      fill={n.status === 'failed' ? '#FDE8EC' : '#F5F0E8'}
                       stroke={color}
-                      strokeWidth={n.status === "active" ? 2 : 1}
-                      opacity={n.status === "completed" ? 0.7 : 1}
+                      strokeWidth={n.status === 'active' ? 2 : 1}
+                      opacity={n.status === 'completed' ? 0.7 : 1}
                     />
                     <text
                       x={n.x + NODE_W / 2}
@@ -290,7 +268,7 @@ export default function WorkflowGraphView() {
                       fontWeight="600"
                     >
                       {n.role}
-                      {isMulti ? `#${n.instance}` : ""}
+                      {isMulti ? `#${n.instance}` : ''}
                     </text>
                     <text
                       x={n.x + NODE_W / 2}
@@ -300,7 +278,7 @@ export default function WorkflowGraphView() {
                       fontSize="10"
                     >
                       {n.task_summary.length > 18
-                        ? n.task_summary.slice(0, 16) + "…"
+                        ? n.task_summary.slice(0, 16) + '…'
                         : n.task_summary}
                     </text>
                     {/* Status dot */}
@@ -314,16 +292,14 @@ export default function WorkflowGraphView() {
                       fontSize="9"
                     >
                       {n.created_at}
-                      {durStr ? ` · ${durStr}` : ""}
+                      {durStr ? ` · ${durStr}` : ''}
                     </text>
                   </g>
                 );
               })}
             </svg>
           ) : (
-            <div className="h-full flex items-center justify-center text-ink-400">
-              暂无文移记录
-            </div>
+            <div className="h-full flex items-center justify-center text-ink-400">暂无文移记录</div>
           )}
         </div>
       </div>
@@ -332,11 +308,9 @@ export default function WorkflowGraphView() {
 }
 
 function timeToSecs(t: string): number {
-  const parts = t.split(":");
+  const parts = t.split(':');
   if (parts.length === 3) {
-    return (
-      parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2])
-    );
+    return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
   }
   if (parts.length === 2) {
     return parseInt(parts[0]) * 60 + parseInt(parts[1]);
@@ -373,9 +347,7 @@ function computeLayout(graph: WorkflowGraph): {
   const layers: number[][] = [];
   const nodeLayer = new Map<number, number>();
 
-  let currentLayer = graph.nodes
-    .filter((n) => (indegree.get(n.id) || 0) === 0)
-    .map((n) => n.id);
+  let currentLayer = graph.nodes.filter((n) => (indegree.get(n.id) || 0) === 0).map((n) => n.id);
 
   while (currentLayer.length > 0) {
     layers.push([...currentLayer]);
@@ -448,11 +420,9 @@ function computeLayout(graph: WorkflowGraph): {
   }
 
   // 总耗时：最新边 - 最早边
-  let totalDuration = "";
+  let totalDuration = '';
   if (graph.edges.length > 0) {
-    const allTimes = graph.edges
-      .map((e) => timeToSecs(e.timestamp))
-      .sort((a, b) => a - b);
+    const allTimes = graph.edges.map((e) => timeToSecs(e.timestamp)).sort((a, b) => a - b);
     const diff = allTimes[allTimes.length - 1] - allTimes[0];
     if (diff > 0) totalDuration = fmtDuration(diff);
   }

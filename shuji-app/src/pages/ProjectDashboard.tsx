@@ -1,35 +1,35 @@
-import { useState, useEffect, useRef } from "react";
-import { listen } from "@tauri-apps/api/event";
-import { formatError, classifyError } from "../utils/error";
-import { open } from "@tauri-apps/plugin-dialog";
-import { getRecentDirs, getRoundMetrics } from "../api";
-import { useActiveDepts, DeptActiveProvider } from "../hooks/useActiveDepts";
-import { useProject } from "../hooks/useProject";
-import { useChat, type Tab } from "../hooks/useChat";
-import ActivityBar from "../components/ActivityBar";
-import Sidebar from "../components/Sidebar";
-import DocPreview from "../components/DocPreview";
-import DeptStatusBar from "../components/DeptStatusBar";
-import LogBar from "../components/LogBar";
-import ProjectOverview from "../components/ProjectOverview";
-import SettingsMenu from "../components/SettingsMenu";
-import HelpDrawer from "../components/HelpDrawer";
-import ProjectPicker from "../components/ProjectPicker";
-import ChatPanel from "../components/ChatPanel";
-import { SealLogo } from "../components/SealLogo";
-import { Tabs } from "../components/ui/Tabs";
-import { Button } from "../components/ui/Button";
-import DemoTour from "../components/DemoTour";
-import WorkflowStatus from "../components/WorkflowTimeline";
-import WorkflowGraphView from "../components/WorkflowGraph";
-import { Card } from "../components/ui/Card";
-import type { Project } from "../types";
-import { createDemoProject, getPendingApprovals } from "../api";
-import type { ActivitySelection } from "../components/ActivityBar";
-import TabBar, { type TabInfo } from "../components/TabBar";
-import { getDeptMeta } from "../constants";
+import { useState, useEffect, useRef } from 'react';
+import { listen } from '@tauri-apps/api/event';
+import { formatError, classifyError } from '../utils/error';
+import { open } from '@tauri-apps/plugin-dialog';
+import { getRecentDirs, getRoundMetrics } from '../api';
+import { useActiveDepts, DeptActiveProvider } from '../hooks/useActiveDepts';
+import { useProject } from '../hooks/useProject';
+import { useChat, type Tab } from '../hooks/useChat';
+import ActivityBar from '../components/ActivityBar';
+import Sidebar from '../components/Sidebar';
+import DocPreview from '../components/DocPreview';
+import DeptStatusBar from '../components/DeptStatusBar';
+import LogBar from '../components/LogBar';
+import ProjectOverview from '../components/ProjectOverview';
+import SettingsMenu from '../components/SettingsMenu';
+import HelpDrawer from '../components/HelpDrawer';
+import ProjectPicker from '../components/ProjectPicker';
+import ChatPanel from '../components/ChatPanel';
+import { SealLogo } from '../components/SealLogo';
+import { Tabs } from '../components/ui/Tabs';
+import { Button } from '../components/ui/Button';
+import DemoTour from '../components/DemoTour';
+import WorkflowStatus from '../components/WorkflowTimeline';
+import WorkflowGraphView from '../components/WorkflowGraph';
+import { Card } from '../components/ui/Card';
+import type { Project } from '../types';
+import { createDemoProject, getPendingApprovals } from '../api';
+import type { ActivitySelection } from '../components/ActivityBar';
+import TabBar, { type TabInfo } from '../components/TabBar';
+import { getDeptMeta } from '../constants';
 
-const STORAGE_KEY = "shuji_chat";
+const STORAGE_KEY = 'shuji_chat';
 const CHAT_PANEL_MIN = 300;
 const CHAT_PANEL_MAX = 600;
 
@@ -43,8 +43,8 @@ function loadSession() {
 }
 
 function tabLabelFromPath(path: string): string {
-  const name = path.split("/").pop() || path;
-  return name.replace(/\.md$/, "");
+  const name = path.split('/').pop() || path;
+  return name.replace(/\.md$/, '');
 }
 
 export default function ProjectDashboard() {
@@ -85,16 +85,13 @@ export default function ProjectDashboard() {
   // Save session on message changes
   useEffect(() => {
     try {
-      sessionStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ msgs: messages, discuss: discussMsgs }),
-      );
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ msgs: messages, discuss: discussMsgs }));
     } catch {}
   }, [messages, discussMsgs]);
 
   // Listen for project-update events (milestone changes)
   useEffect(() => {
-    const unlisten = listen("project-update", (event: { payload: Project }) => {
+    const unlisten = listen('project-update', (event: { payload: Project }) => {
       setProject(event.payload);
     });
     return () => {
@@ -135,26 +132,24 @@ export default function ProjectDashboard() {
   // ── Demo flow: auto-send from WorkspaceSelect ──────────────
   useEffect(() => {
     if (!project) return;
-    const isDemo = sessionStorage.getItem("shuji_demo");
-    if (isDemo !== "true") return;
-    sessionStorage.removeItem("shuji_demo");
+    const isDemo = sessionStorage.getItem('shuji_demo');
+    if (isDemo !== 'true') return;
+    sessionStorage.removeItem('shuji_demo');
     setDemoStartTime(Date.now());
-    handleSend(
-      "修复 calc.py 中的 power 和 factorial 函数中的 bug，确保所有测试通过",
-    );
+    handleSend('修复 calc.py 中的 power 和 factorial 函数中的 bug，确保所有测试通过');
   }, [project, handleSend]);
 
   // ── Demo flow: show guided tour after auto-send ────────────
   useEffect(() => {
     if (!demoStartTime) return;
-    const tourDone = localStorage.getItem("shuji_demo_tour_done");
+    const tourDone = localStorage.getItem('shuji_demo_tour_done');
     if (!tourDone) setShowDemoTour(true);
   }, [demoStartTime]);
 
   // ── Demo flow: detect completion and show summary ──────────
   useEffect(() => {
     if (!demoStartTime || summaryShownRef.current) return;
-    if (!project?.working_dir?.includes("calc_demo")) return;
+    if (!project?.working_dir?.includes('calc_demo')) return;
 
     const isIdle = activeDepts.length === 0 && !planInfo;
     if (!isIdle) return;
@@ -187,13 +182,13 @@ export default function ProjectDashboard() {
 
   const error = projError || chatError;
   const clearError = () => {
-    setProjError("");
-    setChatError("");
+    setProjError('');
+    setChatError('');
   };
 
   // Auto-dismiss error after 8 seconds (critical errors: manual close only)
   useEffect(() => {
-    if (!error || classifyError(error) === "critical") return;
+    if (!error || classifyError(error) === 'critical') return;
     const timer = setTimeout(clearError, 8000);
     return () => clearTimeout(timer);
   }, [error]);
@@ -202,7 +197,7 @@ export default function ProjectDashboard() {
   const [tabs, setTabs] = useState<TabInfo[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
 
-  const openTab = (path: string, initialView?: TabInfo["initialView"]) => {
+  const openTab = (path: string, initialView?: TabInfo['initialView']) => {
     setTabs((prev) => {
       const idx = prev.findIndex((t) => t.path === path);
       if (idx >= 0) {
@@ -240,18 +235,18 @@ export default function ProjectDashboard() {
   const handleDocSelect = (path: string) => openTab(path);
 
   // ── UI-only state ────────────────────────────────────────
-  const [activity, setActivity] = useState<ActivitySelection>("files");
+  const [activity, setActivity] = useState<ActivitySelection>('files');
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [chatWidth, setChatWidth] = useState(400);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
-  const [pickerPath, setPickerPath] = useState("");
+  const [pickerPath, setPickerPath] = useState('');
   const [pickerLoading, setPickerLoading] = useState(false);
-  const [pickerError, setPickerError] = useState("");
+  const [pickerError, setPickerError] = useState('');
 
   const openProjectPicker = () => {
-    setPickerPath("");
-    setPickerError("");
+    setPickerPath('');
+    setPickerError('');
     getRecentDirs()
       .then(setRecentDirs)
       .catch((e) => setPickerError(String(e)));
@@ -263,7 +258,7 @@ export default function ProjectDashboard() {
       const selected = await open({
         directory: true,
         multiple: false,
-        title: "选择工作目录",
+        title: '选择工作目录',
       });
       if (selected) setPickerPath(selected);
     } catch (e) {
@@ -274,11 +269,11 @@ export default function ProjectDashboard() {
   const handleLoadProject = async (dir?: string) => {
     const path = dir || pickerPath.trim();
     if (!path) {
-      setPickerError("请选择工作目录");
+      setPickerError('请选择工作目录');
       return;
     }
     setPickerLoading(true);
-    setPickerError("");
+    setPickerError('');
     try {
       await loadProjectIntoState(path);
       setTabs([]);
@@ -299,28 +294,25 @@ export default function ProjectDashboard() {
     const startWidth = chatWidth;
     const move = (ev: MouseEvent) =>
       setChatWidth(
-        Math.max(
-          CHAT_PANEL_MIN,
-          Math.min(CHAT_PANEL_MAX, startWidth - (ev.clientX - startX)),
-        ),
+        Math.max(CHAT_PANEL_MIN, Math.min(CHAT_PANEL_MAX, startWidth - (ev.clientX - startX)))
       );
     const up = () => {
-      document.removeEventListener("mousemove", move);
-      document.removeEventListener("mouseup", up);
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
     };
-    document.addEventListener("mousemove", move);
-    document.addEventListener("mouseup", up);
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
   };
 
-  const tabLabels: Record<Tab, string> = { decision: "决策", discuss: "廷议" };
+  const tabLabels: Record<Tab, string> = { decision: '决策', discuss: '廷议' };
   const tabSubtitles: Record<Tab, string> = {
-    decision: "下达敕令，驱动各部门执行",
-    discuss: "仅与内阁议政，不改代码、不写文档",
+    decision: '下达敕令，驱动各部门执行',
+    discuss: '仅与内阁议政，不改代码、不写文档',
   };
 
   const handleConvertToCommand = (text: string) => {
     handleSend(text);
-    setTab("decision");
+    setTab('decision');
   };
 
   const handleDemoProject = async () => {
@@ -332,10 +324,8 @@ export default function ProjectDashboard() {
       setActiveIndex(-1);
       resetDiscuss();
       sessionStorage.removeItem(STORAGE_KEY);
-      setTab("decision");
-      handleSend(
-        "修复 calc.py 中的 power 和 factorial 函数中的 bug，确保所有测试通过",
-      );
+      setTab('decision');
+      handleSend('修复 calc.py 中的 power 和 factorial 函数中的 bug，确保所有测试通过');
     } catch (e) {
       setChatError(formatError(e));
     } finally {
@@ -344,8 +334,7 @@ export default function ProjectDashboard() {
   };
 
   // Derived: which doc is currently active
-  const activeDoc =
-    activeIndex >= 0 && activeIndex < tabs.length ? tabs[activeIndex] : null;
+  const activeDoc = activeIndex >= 0 && activeIndex < tabs.length ? tabs[activeIndex] : null;
   const hasTabs = tabs.length > 0 && activeDoc !== null;
 
   return (
@@ -355,7 +344,7 @@ export default function ProjectDashboard() {
           <div className="flex items-center gap-3 min-w-0">
             <SealLogo size={20} />
             <h1 className="font-display text-base font-semibold text-ink-50 truncate">
-              {project?.name || "枢机"}
+              {project?.name || '枢机'}
             </h1>
             <span className="text-caption text-ink-500 font-mono truncate max-w-[520px]">
               {project?.working_dir}
@@ -368,7 +357,7 @@ export default function ProjectDashboard() {
               onClick={handleDemoProject}
               disabled={demoCreating}
             >
-              {demoCreating ? "创建中…" : "体验枢机"}
+              {demoCreating ? '创建中…' : '体验枢机'}
             </Button>
             <Button
               variant="ghost"
@@ -398,13 +387,13 @@ export default function ProjectDashboard() {
             onLogsClick={() => setLogsExpanded(true)}
             pendingApprovalsCount={pendingApprovals.length}
           />
-          {activity && activity !== "graph" && project && (
+          {activity && activity !== 'graph' && project && (
             <Sidebar
               mode={activity}
               projectDir={project.working_dir}
               selectedDoc={activeDoc?.path || null}
               onDocSelect={handleDocSelect}
-              onShowDiff={(path) => openTab(path, "diff")}
+              onShowDiff={(path) => openTab(path, 'diff')}
             />
           )}
           <main className="flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col">
@@ -416,7 +405,7 @@ export default function ProjectDashboard() {
                 </span>
                 {activeDepts.map((dept) => {
                   const meta = getDeptMeta(dept);
-                  const color = meta?.color || "#6b7280";
+                  const color = meta?.color || '#6b7280';
                   return (
                     <span
                       key={dept}
@@ -430,9 +419,7 @@ export default function ProjectDashboard() {
                         className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0"
                         style={{ backgroundColor: color }}
                       />
-                      <span className="text-ink-700 font-medium">
-                        {meta?.shortLabel || dept}
-                      </span>
+                      <span className="text-ink-700 font-medium">{meta?.shortLabel || dept}</span>
                     </span>
                   );
                 })}
@@ -443,21 +430,14 @@ export default function ProjectDashboard() {
                     {planInfo.batches.map((b, i) => (
                       <span
                         key={i}
-                        className={`text-[10px] ${b.status === "done" ? "text-jade" : b.status === "current" ? "text-gold font-medium" : "text-ink-400"}`}
+                        className={`text-[10px] ${b.status === 'done' ? 'text-jade' : b.status === 'current' ? 'text-gold font-medium' : 'text-ink-400'}`}
                       >
-                        {b.status === "done"
-                          ? "✓"
-                          : b.status === "current"
-                            ? "◉"
-                            : "○"}
+                        {b.status === 'done' ? '✓' : b.status === 'current' ? '◉' : '○'}
                       </span>
                     ))}
                     <span className="text-ink-400 text-[10px]">
-                      {
-                        planInfo.batches.filter((b) => b.status === "done")
-                          .length
-                      }
-                      /{planInfo.batches.length}
+                      {planInfo.batches.filter((b) => b.status === 'done').length}/
+                      {planInfo.batches.length}
                     </span>
                   </span>
                 )}
@@ -468,9 +448,7 @@ export default function ProjectDashboard() {
                 phaseCount={project.phase_count}
                 phases={project.phases}
                 overall={
-                  typeof project.overall === "string"
-                    ? project.overall
-                    : String(project.overall)
+                  typeof project.overall === 'string' ? project.overall : String(project.overall)
                 }
                 activeDepts={activeDepts}
                 planInfo={planInfo}
@@ -479,7 +457,7 @@ export default function ProjectDashboard() {
               />
             )}
             <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-              {activity === "graph" ? (
+              {activity === 'graph' ? (
                 <WorkflowGraphView />
               ) : (
                 <>
@@ -492,10 +470,7 @@ export default function ProjectDashboard() {
                     />
                   )}
                   {demoSummary ? (
-                    <DemoSummaryCard
-                      summary={demoSummary}
-                      onOpenProject={openProjectPicker}
-                    />
+                    <DemoSummaryCard summary={demoSummary} onOpenProject={openProjectPicker} />
                   ) : hasTabs ? (
                     <DocPreview
                       key={activeDoc!.path}
@@ -528,15 +503,13 @@ export default function ProjectDashboard() {
             <div className="border-b border-fold bg-surface-elevated shrink-0 px-3 py-2">
               <Tabs
                 tabs={[
-                  { key: "decision", label: tabLabels.decision },
-                  { key: "discuss", label: tabLabels.discuss },
+                  { key: 'decision', label: tabLabels.decision },
+                  { key: 'discuss', label: tabLabels.discuss },
                 ]}
                 activeKey={tab}
                 onChange={(k) => setTab(k as Tab)}
               />
-              <div className="text-ui text-ink-600 mt-1">
-                {tabSubtitles[tab]}
-              </div>
+              <div className="text-ui text-ink-600 mt-1">{tabSubtitles[tab]}</div>
             </div>
             {!project ? (
               <div className="flex-1 flex items-center justify-center text-body text-ink-400">
@@ -614,19 +587,11 @@ function DemoSummaryCard({
               stroke="currentColor"
               strokeWidth={2.5}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M4.5 12.75l6 6 9-13.5"
-              />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
             </svg>
           </div>
-          <h2 className="font-display text-display font-bold text-ink-900">
-            Demo 完成
-          </h2>
-          <p className="text-body text-ink-600 mt-1">
-            体验流程已结束，以下是本次 Demo 的概览。
-          </p>
+          <h2 className="font-display text-display font-bold text-ink-900">Demo 完成</h2>
+          <p className="text-body text-ink-600 mt-1">体验流程已结束，以下是本次 Demo 的概览。</p>
         </div>
 
         <section className="mb-6">
@@ -636,9 +601,7 @@ function DemoSummaryCard({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="bg-surface-parchment border border-fold rounded-lg p-3 text-center">
               <p className="text-caption text-ink-500 mb-1">耗时</p>
-              <p className="font-display text-xl text-ink-900 font-bold">
-                {summary.elapsed}
-              </p>
+              <p className="font-display text-xl text-ink-900 font-bold">{summary.elapsed}</p>
             </div>
             <div className="bg-surface-parchment border border-fold rounded-lg p-3 text-center">
               <p className="text-caption text-ink-500 mb-1">Token 消耗</p>
@@ -646,14 +609,13 @@ function DemoSummaryCard({
                 {summary.tokens.toLocaleString()}
               </p>
               <p className="text-caption text-ink-500 mt-1">
-                缓存 {summary.cached.toLocaleString()} / 未缓存{" "}
-                {summary.uncached.toLocaleString()}
+                缓存 {summary.cached.toLocaleString()} / 未缓存 {summary.uncached.toLocaleString()}
               </p>
             </div>
             <div className="bg-surface-parchment border border-fold rounded-lg p-3 text-center">
               <p className="text-caption text-ink-500 mb-1">缓存命中率</p>
               <p className="font-display text-xl text-ink-900 font-bold">
-                {cacheRate !== null ? `${cacheRate}%` : "N/A"}
+                {cacheRate !== null ? `${cacheRate}%` : 'N/A'}
               </p>
             </div>
           </div>
@@ -665,14 +627,13 @@ function DemoSummaryCard({
           </h3>
           <ul className="space-y-2 text-body text-ink-700">
             <li className="leading-relaxed">
-              <strong>打开真实项目</strong> —
-              选择您的项目目录，枢机将根据需求自动规划并执行任务。
+              <strong>打开真实项目</strong> — 选择您的项目目录，枢机将根据需求自动规划并执行任务。
             </li>
             <li className="leading-relaxed">
-              <strong>调整参与模式</strong> — 使用{" "}
+              <strong>调整参与模式</strong> — 使用{' '}
               <code className="text-vermillion bg-vermillion-light px-1 rounded text-ui">
                 /level-2
-              </code>{" "}
+              </code>{' '}
               切换审批模式，让系统在关键节点等待您的确认。
             </li>
           </ul>

@@ -15,7 +15,7 @@ export const TOKEN_REFRESH_INTERVAL_MS = 30000;
 
 export interface CodeTheme {
   label: string;
-  type: "dark" | "light";
+  type: 'dark' | 'light';
   bg: string;
   tabBg: string;
   border: string;
@@ -26,61 +26,61 @@ export interface CodeTheme {
 }
 
 export const CODE_THEMES: Record<string, CodeTheme> = {
-  "tokyo-night": {
-    label: "Tokyo Night",
-    type: "dark",
-    bg: "#1a1b26",
-    tabBg: "#16161e",
-    border: "#2f3b54",
-    text: "#c0caf5",
-    lineNum: "#4c4f6b",
-    muted: "#565f89",
-    lineHover: "rgba(255,255,255,0.03)",
+  'tokyo-night': {
+    label: 'Tokyo Night',
+    type: 'dark',
+    bg: '#1a1b26',
+    tabBg: '#16161e',
+    border: '#2f3b54',
+    text: '#c0caf5',
+    lineNum: '#4c4f6b',
+    muted: '#565f89',
+    lineHover: 'rgba(255,255,255,0.03)',
   },
-  "github-dark": {
-    label: "GitHub Dark",
-    type: "dark",
-    bg: "#0d1117",
-    tabBg: "#161b22",
-    border: "#30363d",
-    text: "#e6edf3",
-    lineNum: "#6e7681",
-    muted: "#8b949e",
-    lineHover: "rgba(255,255,255,0.03)",
+  'github-dark': {
+    label: 'GitHub Dark',
+    type: 'dark',
+    bg: '#0d1117',
+    tabBg: '#161b22',
+    border: '#30363d',
+    text: '#e6edf3',
+    lineNum: '#6e7681',
+    muted: '#8b949e',
+    lineHover: 'rgba(255,255,255,0.03)',
   },
-  "one-light": {
-    label: "One Light",
-    type: "light",
-    bg: "#fafafa",
-    tabBg: "#f0f0f0",
-    border: "#e0e0e0",
-    text: "#383a42",
-    lineNum: "#9d9d9f",
-    muted: "#a0a1a7",
-    lineHover: "rgba(0,0,0,0.03)",
+  'one-light': {
+    label: 'One Light',
+    type: 'light',
+    bg: '#fafafa',
+    tabBg: '#f0f0f0',
+    border: '#e0e0e0',
+    text: '#383a42',
+    lineNum: '#9d9d9f',
+    muted: '#a0a1a7',
+    lineHover: 'rgba(0,0,0,0.03)',
   },
-  "github-light": {
-    label: "GitHub Light",
-    type: "light",
-    bg: "#ffffff",
-    tabBg: "#f6f8fa",
-    border: "#d0d7de",
-    text: "#1f2328",
-    lineNum: "#6e7781",
-    muted: "#656d76",
-    lineHover: "rgba(0,0,0,0.03)",
+  'github-light': {
+    label: 'GitHub Light',
+    type: 'light',
+    bg: '#ffffff',
+    tabBg: '#f6f8fa',
+    border: '#d0d7de',
+    text: '#1f2328',
+    lineNum: '#6e7781',
+    muted: '#656d76',
+    lineHover: 'rgba(0,0,0,0.03)',
   },
 };
 
-export const DEFAULT_CODE_THEME = "tokyo-night";
+export const DEFAULT_CODE_THEME = 'tokyo-night';
 
 export function getCodeTheme(): string {
-  if (typeof window === "undefined") return DEFAULT_CODE_THEME;
-  return localStorage.getItem("shuji_code_theme") || DEFAULT_CODE_THEME;
+  if (typeof window === 'undefined') return DEFAULT_CODE_THEME;
+  return localStorage.getItem('shuji_code_theme') || DEFAULT_CODE_THEME;
 }
 
 export function setCodeTheme(name: string): void {
-  localStorage.setItem("shuji_code_theme", name);
+  localStorage.setItem('shuji_code_theme', name);
 }
 
 // ── 代码主题 end ────────────────────────────────────────
@@ -100,123 +100,123 @@ export interface DeptMeta {
 
 export const DEPT_META_LIST: DeptMeta[] = [
   {
-    key: "neige",
-    label: "内阁",
-    shortLabel: "内阁",
-    description: "奏折整理",
-    color: "#6B4E9E",
-    bg: "bg-purple-50",
-    text: "text-purple-700",
-    accent: "border-l-purple-400",
+    key: 'neige',
+    label: '内阁',
+    shortLabel: '内阁',
+    description: '奏折整理',
+    color: '#6B4E9E',
+    bg: 'bg-purple-50',
+    text: 'text-purple-700',
+    accent: 'border-l-purple-400',
   },
   {
-    key: "zhongshuling",
-    label: "中书令",
-    shortLabel: "中书",
-    description: "方案设计",
-    color: "#3D6B8E",
-    bg: "bg-blue-50",
-    text: "text-blue-700",
-    accent: "border-l-blue-400",
+    key: 'zhongshuling',
+    label: '中书令',
+    shortLabel: '中书',
+    description: '方案设计',
+    color: '#3D6B8E',
+    bg: 'bg-blue-50',
+    text: 'text-blue-700',
+    accent: 'border-l-blue-400',
   },
   {
-    key: "menxiashizhong",
-    label: "门下侍中",
-    shortLabel: "门下",
-    description: "审查",
-    color: "#2E7D8C",
-    bg: "bg-cyan-50",
-    text: "text-cyan-700",
-    accent: "border-l-cyan-400",
+    key: 'menxiashizhong',
+    label: '门下侍中',
+    shortLabel: '门下',
+    description: '审查',
+    color: '#2E7D8C',
+    bg: 'bg-cyan-50',
+    text: 'text-cyan-700',
+    accent: 'border-l-cyan-400',
   },
   {
-    key: "shangshuling",
-    label: "尚书令",
-    shortLabel: "尚书令",
-    description: "执行管理",
-    color: "#B45309",
-    bg: "bg-orange-50",
-    text: "text-orange-700",
-    accent: "border-l-orange-400",
+    key: 'shangshuling',
+    label: '尚书令',
+    shortLabel: '尚书令',
+    description: '执行管理',
+    color: '#B45309',
+    bg: 'bg-orange-50',
+    text: 'text-orange-700',
+    accent: 'border-l-orange-400',
   },
   {
-    key: "libushangshu",
-    label: "吏部尚书",
-    shortLabel: "吏部",
-    description: "任务拆解",
-    color: "#2F7A4F",
-    bg: "bg-green-50",
-    text: "text-green-700",
-    accent: "border-l-green-400",
+    key: 'libushangshu',
+    label: '吏部尚书',
+    shortLabel: '吏部',
+    description: '任务拆解',
+    color: '#2F7A4F',
+    bg: 'bg-green-50',
+    text: 'text-green-700',
+    accent: 'border-l-green-400',
   },
   {
-    key: "bingbushangshu",
-    label: "兵部尚书",
-    shortLabel: "兵部",
-    description: "测试",
-    color: "#B83A3A",
-    bg: "bg-red-50",
-    text: "text-red-700",
-    accent: "border-l-red-400",
+    key: 'bingbushangshu',
+    label: '兵部尚书',
+    shortLabel: '兵部',
+    description: '测试',
+    color: '#B83A3A',
+    bg: 'bg-red-50',
+    text: 'text-red-700',
+    accent: 'border-l-red-400',
   },
   {
-    key: "gongbushangshu",
-    label: "工部尚书",
-    shortLabel: "工部",
-    description: "编码实现",
-    color: "#A16207",
-    bg: "bg-amber-50",
-    text: "text-amber-700",
-    accent: "border-l-amber-400",
+    key: 'gongbushangshu',
+    label: '工部尚书',
+    shortLabel: '工部',
+    description: '编码实现',
+    color: '#A16207',
+    bg: 'bg-amber-50',
+    text: 'text-amber-700',
+    accent: 'border-l-amber-400',
   },
   {
-    key: "xingbushangshu",
-    label: "刑部尚书",
-    shortLabel: "刑部",
-    description: "异常检查",
-    color: "#5C6370",
-    bg: "bg-gray-50",
-    text: "text-gray-600",
-    accent: "border-l-gray-400",
+    key: 'xingbushangshu',
+    label: '刑部尚书',
+    shortLabel: '刑部',
+    description: '异常检查',
+    color: '#5C6370',
+    bg: 'bg-gray-50',
+    text: 'text-gray-600',
+    accent: 'border-l-gray-400',
   },
   {
-    key: "liburshangshu",
-    label: "礼部尚书",
-    shortLabel: "礼部",
-    description: "规范检查",
-    color: "#5B5FC7",
-    bg: "bg-indigo-50",
-    text: "text-indigo-700",
-    accent: "border-l-indigo-400",
+    key: 'liburshangshu',
+    label: '礼部尚书',
+    shortLabel: '礼部',
+    description: '规范检查',
+    color: '#5B5FC7',
+    bg: 'bg-indigo-50',
+    text: 'text-indigo-700',
+    accent: 'border-l-indigo-400',
   },
 ];
 
 /** Primary lookup by Chinese label (used in ChatMessage.role, activeDepts, etc.) */
 export const DEPT_META: Record<string, DeptMeta> = Object.fromEntries(
-  DEPT_META_LIST.map((d) => [d.label, d]),
+  DEPT_META_LIST.map((d) => [d.label, d])
 );
 
 /** Lookup by English key (used in backend API responses) */
 export const DEPT_META_BY_KEY: Record<string, DeptMeta> = Object.fromEntries(
-  DEPT_META_LIST.map((d) => [d.key, d]),
+  DEPT_META_LIST.map((d) => [d.key, d])
 );
 
 /** Abbreviated English key aliases (used in some legacy API responses like token stats) */
 const DEPT_KEY_ALIASES: Record<string, string> = {
-  zhongshu: "zhongshuling",
-  menxia: "menxiashizhong",
-  shangshu: "shangshuling",
-  libup: "libushangshu",
-  bingbu: "bingbushangshu",
-  gongbu: "gongbushangshu",
-  xingbu: "xingbushangshu",
-  libur: "liburshangshu",
-  hubu: "hubu",
+  zhongshu: 'zhongshuling',
+  menxia: 'menxiashizhong',
+  shangshu: 'shangshuling',
+  libup: 'libushangshu',
+  bingbu: 'bingbushangshu',
+  gongbu: 'gongbushangshu',
+  xingbu: 'xingbushangshu',
+  libur: 'liburshangshu',
+  hubu: 'hubu',
 };
 
 /** Short-label → long-label mapping (backend Role::name() uses short names for 尚书 roles) */
 const DEPT_SHORT_TO_LONG: Record<string, string> = Object.fromEntries(
-  DEPT_META_LIST.map((d) => [d.shortLabel, d.label]),
+  DEPT_META_LIST.map((d) => [d.shortLabel, d.label])
 );
 
 /** Resolve any role key (Chinese long, Chinese short, full English, abbreviated English) to DeptMeta */
@@ -238,7 +238,7 @@ export const DEPT_ORDER = DEPT_META_LIST.map((d) => d.label);
 
 /** Convenience: English key → Chinese label */
 export const DEPT_LABEL_BY_KEY: Record<string, string> = Object.fromEntries(
-  DEPT_META_LIST.map((d) => [d.key, d.label]),
+  DEPT_META_LIST.map((d) => [d.key, d.label])
 );
 
 // ── Legacy RoleInfo (used by SetupPage) ──────────────────
@@ -251,9 +251,9 @@ export interface RoleInfo {
 
 export const ALL_ROLES: RoleInfo[] = [
   {
-    key: "default",
-    label: "默认（全局）",
-    description: "所有未单独配置的角色使用此回退",
+    key: 'default',
+    label: '默认（全局）',
+    description: '所有未单独配置的角色使用此回退',
   },
   ...DEPT_META_LIST.map((d) => ({
     key: d.key,

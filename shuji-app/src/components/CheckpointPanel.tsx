@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
-import { listCheckpoints, restoreCheckpoint } from "../api";
-import { DEPT_META_BY_KEY } from "../constants";
-import { formatError } from "../utils/error";
-import type { CheckpointEntry } from "../types";
+import { useState, useEffect, useCallback } from 'react';
+import { listCheckpoints, restoreCheckpoint } from '../api';
+import { DEPT_META_BY_KEY } from '../constants';
+import { formatError } from '../utils/error';
+import type { CheckpointEntry } from '../types';
 
 interface RestoreConfirm {
   commit: string;
@@ -16,11 +16,11 @@ function roleLabel(role: string): string {
 function formatTime(ts: string): string {
   try {
     const d = new Date(ts);
-    return d.toLocaleString("zh-CN", {
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
+    return d.toLocaleString('zh-CN', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   } catch {
     return ts;
@@ -70,9 +70,7 @@ export default function CheckpointPanel() {
   // ── Loading state ──
   if (loading && entries.length === 0) {
     return (
-      <div className="flex items-center justify-center h-32 text-xs text-ink-400">
-        加载中...
-      </div>
+      <div className="flex items-center justify-center h-32 text-xs text-ink-400">加载中...</div>
     );
   }
 
@@ -83,10 +81,7 @@ export default function CheckpointPanel() {
         <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">
           {error}
         </div>
-        <button
-          onClick={fetch}
-          className="mt-2 text-xs text-ink-500 hover:text-ink-700 underline"
-        >
+        <button onClick={fetch} className="mt-2 text-xs text-ink-500 hover:text-ink-700 underline">
           重试
         </button>
       </div>
@@ -128,24 +123,16 @@ export default function CheckpointPanel() {
             className="border border-ink-200 rounded p-2.5 text-xs space-y-1 hover:border-ink-300 transition-colors"
           >
             <div className="flex items-center justify-between">
-              <span className="font-medium text-ink-700">
-                {roleLabel(entry.role)}
-              </span>
-              <span className="text-[10px] text-ink-400">
-                {formatTime(entry.ts)}
-              </span>
+              <span className="font-medium text-ink-700">{roleLabel(entry.role)}</span>
+              <span className="text-[10px] text-ink-400">{formatTime(entry.ts)}</span>
             </div>
             <div className="text-ink-600 truncate" title={entry.description}>
               {entry.description}
             </div>
             <div className="flex items-center justify-between">
-              <code className="text-[10px] text-ink-400 font-mono">
-                {entry.commit.slice(0, 7)}
-              </code>
+              <code className="text-[10px] text-ink-400 font-mono">{entry.commit.slice(0, 7)}</code>
               <button
-                onClick={() =>
-                  setConfirm({ commit: entry.commit, desc: entry.description })
-                }
+                onClick={() => setConfirm({ commit: entry.commit, desc: entry.description })}
                 disabled={restoring}
                 className="text-[10px] px-2 py-0.5 rounded border border-ink-300 text-ink-600 hover:bg-ink-100 hover:border-ink-400 disabled:opacity-40 transition-colors"
               >
@@ -160,15 +147,11 @@ export default function CheckpointPanel() {
       {confirm && (
         <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl mx-4 p-4 max-w-sm w-full">
-            <h3 className="text-sm font-semibold text-ink-800 mb-2">
-              确认恢复
-            </h3>
+            <h3 className="text-sm font-semibold text-ink-800 mb-2">确认恢复</h3>
             <p className="text-xs text-ink-600 mb-3 leading-relaxed">
-              将执行 git checkout 到{" "}
-              <code className="bg-ink-100 px-1 rounded">
-                {confirm.commit.slice(0, 7)}
-              </code>
-              （{confirm.desc}）。
+              将执行 git checkout 到{' '}
+              <code className="bg-ink-100 px-1 rounded">{confirm.commit.slice(0, 7)}</code>（
+              {confirm.desc}）。
             </p>
             <ul className="text-xs text-ink-500 space-y-1 mb-4 list-disc list-inside">
               <li>工作区将回到该存档点的状态（detached HEAD）</li>
@@ -188,7 +171,7 @@ export default function CheckpointPanel() {
                 disabled={restoring}
                 className="px-3 py-1.5 text-xs rounded bg-vermillion text-white hover:bg-vermillion-dark disabled:opacity-40"
               >
-                {restoring ? "恢复中..." : "确认恢复"}
+                {restoring ? '恢复中...' : '确认恢复'}
               </button>
             </div>
           </div>

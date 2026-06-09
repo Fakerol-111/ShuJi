@@ -1,13 +1,13 @@
-import { useState } from "react";
-import { cancelProcessing } from "../api";
-import { useLatestDeptLogs } from "../hooks/useLatestDeptLogs";
-import { getDeptMeta } from "../constants";
-import ChatBubble from "./ChatBubble";
-import ChatInput from "./ChatInput";
-import type { ChatMessage, DeptLogEntry, PlanInfo } from "../types";
+import { useState } from 'react';
+import { cancelProcessing } from '../api';
+import { useLatestDeptLogs } from '../hooks/useLatestDeptLogs';
+import { getDeptMeta } from '../constants';
+import ChatBubble from './ChatBubble';
+import ChatInput from './ChatInput';
+import type { ChatMessage, DeptLogEntry, PlanInfo } from '../types';
 
 interface ChatPanelProps {
-  tab: "decision" | "discuss";
+  tab: 'decision' | 'discuss';
   messages: ChatMessage[];
   discussMsgs: ChatMessage[];
   discussing: boolean;
@@ -39,24 +39,24 @@ export default function ChatPanel(props: ChatPanelProps) {
     endRef,
   } = props;
   const latestLogs = useLatestDeptLogs();
-  const [toast, setToast] = useState("");
+  const [toast, setToast] = useState('');
   const isProcessing = activeDeptsCount > 0;
 
   const showToast = (msg: string) => {
     setToast(msg);
-    setTimeout(() => setToast(""), 2500);
+    setTimeout(() => setToast(''), 2500);
   };
 
   const handleCancel = async () => {
     try {
       await cancelProcessing();
-      showToast("已叫停诸司");
+      showToast('已叫停诸司');
     } catch {
-      showToast("叫停失败");
+      showToast('叫停失败');
     }
   };
 
-  if (tab === "decision") {
+  if (tab === 'decision') {
     return (
       <>
         {toast && (
@@ -85,7 +85,7 @@ export default function ChatPanel(props: ChatPanelProps) {
         <ChatInput
           onSend={onSend}
           disabled={isProcessing}
-          placeholder={isProcessing ? "诸司处理中…" : "拟旨…"}
+          placeholder={isProcessing ? '诸司处理中…' : '拟旨…'}
         />
       </>
     );
@@ -114,7 +114,7 @@ export default function ChatPanel(props: ChatPanelProps) {
             onClick={() => {
               const lastUserMsg = [...discussMsgs]
                 .reverse()
-                .find((m) => m.role === "user" || m.role === "皇帝");
+                .find((m) => m.role === 'user' || m.role === '皇帝');
               if (lastUserMsg) onConvertToCommand(lastUserMsg.content);
             }}
             className="w-full px-3 py-2 text-ui font-medium text-gold bg-gold-light hover:bg-gold-light/80 border border-vermillion/20 rounded-lg transition-colors"
@@ -148,19 +148,14 @@ function MessageList({
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
       {messages.map((msg, i) => (
-        <ChatBubble
-          key={messageKey(msg, i)}
-          msg={msg}
-          onOption={onOption}
-          onRetry={onRetry}
-        />
+        <ChatBubble key={messageKey(msg, i)} msg={msg} onOption={onOption} onRetry={onRetry} />
       ))}
       {thinking && (
         <div className="flex flex-col items-center gap-1.5 py-3">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-gold animate-pulse" />
             <span className="text-xs text-ink-500 font-medium">
-              {thinkingLabel || "内阁思考中…"}
+              {thinkingLabel || '内阁思考中…'}
             </span>
           </div>
           {latestLogs && latestLogs.size > 0 && (
@@ -184,12 +179,10 @@ function messageKey(msg: ChatMessage, index: number) {
 /** Live per-department action indicator shown in the thinking area */
 function LiveAction({ dept, entry }: { dept: string; entry: DeptLogEntry }) {
   const meta = getDeptMeta(dept);
-  const color = meta?.color || "#8B7355";
+  const color = meta?.color || '#8B7355';
   const label = meta?.shortLabel || dept;
-  const action = entry.action.replace(/^[❌→]\s*/, "").replace(/:.*/, "");
-  const target = entry.action.includes(": ")
-    ? entry.action.split(": ").pop()
-    : "";
+  const action = entry.action.replace(/^[❌→]\s*/, '').replace(/:.*/, '');
+  const target = entry.action.includes(': ') ? entry.action.split(': ').pop() : '';
   return (
     <div
       className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono"
@@ -202,9 +195,7 @@ function LiveAction({ dept, entry }: { dept: string; entry: DeptLogEntry }) {
       <span className="font-semibold text-ink-600">{label}</span>
       <span className="text-ink-400 truncate max-w-[140px]">{action}</span>
       {target && (
-        <span className="text-ink-300 truncate max-w-[100px] hidden sm:inline">
-          {target}
-        </span>
+        <span className="text-ink-300 truncate max-w-[100px] hidden sm:inline">{target}</span>
       )}
     </div>
   );
@@ -213,33 +204,26 @@ function LiveAction({ dept, entry }: { dept: string; entry: DeptLogEntry }) {
 function PlanCard({ info }: { info: PlanInfo }) {
   return (
     <div className="shrink-0 mx-4 mt-3 bg-surface-parchment border border-fold rounded-lg px-3 py-2">
-      <div className="font-display text-caption text-ink-600 font-semibold mb-1">
-        工部计划
-      </div>
+      <div className="font-display text-caption text-ink-600 font-semibold mb-1">工部计划</div>
       <div className="space-y-0.5">
         {info.batches.map((b, i) => (
-          <div
-            key={i}
-            className="flex items-center gap-1.5 text-caption font-mono"
-          >
+          <div key={i} className="flex items-center gap-1.5 text-caption font-mono">
             <span
-              className={`w-1.5 h-1.5 rounded-full shrink-0 ${b.status === "done" ? "bg-jade" : b.status === "current" ? "bg-gold animate-pulse" : "bg-ink-300"}`}
+              className={`w-1.5 h-1.5 rounded-full shrink-0 ${b.status === 'done' ? 'bg-jade' : b.status === 'current' ? 'bg-gold animate-pulse' : 'bg-ink-300'}`}
             />
             <span
               className={
-                b.status === "done"
-                  ? "text-ink-400 line-through"
-                  : b.status === "current"
-                    ? "text-ink-800 font-medium"
-                    : "text-ink-500"
+                b.status === 'done'
+                  ? 'text-ink-400 line-through'
+                  : b.status === 'current'
+                    ? 'text-ink-800 font-medium'
+                    : 'text-ink-500'
               }
             >
               {b.name}
             </span>
-            {b.status === "current" && (
-              <span className="text-ink-400 text-caption ml-auto truncate">
-                {b.goal}
-              </span>
+            {b.status === 'current' && (
+              <span className="text-ink-400 text-caption ml-auto truncate">{b.goal}</span>
             )}
           </div>
         ))}
