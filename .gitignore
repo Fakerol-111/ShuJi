@@ -40,7 +40,7 @@ config.local.toml
 
 # Project test data
 projects/
-test/
+/test/
 shuji-app/src-tauri/gen/
 
 # Agent-generated working documents
