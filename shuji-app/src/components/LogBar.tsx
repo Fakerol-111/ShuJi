@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { listen } from '@tauri-apps/api/event';
-import { formatError } from '../utils/error';
-import { getDeptLogs } from '../api';
+import { useDeptEvents } from '../hooks/useDeptEvents';
 import type { DeptLogEntry } from '../types';
 import DeptStatusPanel from './DeptStatusPanel';
 import { getDeptMeta } from '../constants';
@@ -15,18 +13,11 @@ export default function LogBar({ expanded, onExpandedChange }: LogBarProps) {
   const [latest, setLatest] = useState<DeptLogEntry | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Read most recent entry from centralized provider
+  const { logEntries } = useDeptEvents();
   useEffect(() => {
-    getDeptLogs()
-      .then((logs) => setLatest(logs.length > 0 ? logs[logs.length - 1] : null))
-      .catch((e) => console.error(formatError(e)));
-  }, []);
-
-  useEffect(() => {
-    const unlisten = listen<DeptLogEntry>('dept-log', (event) => setLatest(event.payload));
-    return () => {
-      unlisten.then((f) => f());
-    };
-  }, []);
+    setLatest(logEntries.length > 0 ? logEntries[logEntries.length - 1] : null);
+  }, [logEntries]);
 
   useEffect(() => {
     if (expanded && containerRef.current) {

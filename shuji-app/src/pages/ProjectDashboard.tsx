@@ -1,35 +1,31 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { formatError, classifyError } from '../utils/error';
 import { open } from '@tauri-apps/plugin-dialog';
 import { getRecentDirs } from '../api';
-import { useActiveDepts, DeptActiveProvider } from '../hooks/useActiveDepts';
+import { useActiveDepts } from '../hooks/useActiveDepts';
 import { useProject } from '../hooks/useProject';
 import { useChat, type Tab } from '../hooks/useChat';
 import { useDocumentTabs } from '../hooks/useDocumentTabs';
 import { useDemoFlow } from '../hooks/useDemoFlow';
 import { usePendingApprovals } from '../hooks/usePendingApprovals';
-import ActivityBar from '../components/ActivityBar';
-import Sidebar from '../components/Sidebar';
+import DashboardLayout from '../components/DashboardLayout';
+import ActiveDeptStrip from '../components/ActiveDeptStrip';
+import DemoSummaryCard from '../components/DemoSummaryCard';
 import DocPreview from '../components/DocPreview';
-import DeptStatusBar from '../components/DeptStatusBar';
-import LogBar from '../components/LogBar';
 import ProjectOverview from '../components/ProjectOverview';
 import SettingsMenu from '../components/SettingsMenu';
 import HelpDrawer from '../components/HelpDrawer';
 import ProjectPicker from '../components/ProjectPicker';
 import ChatPanel from '../components/ChatPanel';
-import { SealLogo } from '../components/SealLogo';
+import DemoTour from '../components/DemoTour';
 import { Tabs } from '../components/ui/Tabs';
 import { Button } from '../components/ui/Button';
-import DemoTour from '../components/DemoTour';
+import TabBar from '../components/TabBar';
 import WorkflowStatus from '../components/WorkflowTimeline';
 import WorkflowGraphView from '../components/WorkflowGraph';
-import { Card } from '../components/ui/Card';
 import type { Project } from '../types';
 import type { ActivitySelection } from '../components/ActivityBar';
-import TabBar from '../components/TabBar';
-import { getDeptMeta } from '../constants';
 
 const STORAGE_KEY = 'shuji_chat';
 const CHAT_PANEL_MIN = 300;
@@ -48,7 +44,7 @@ export default function ProjectDashboard() {
   const session = loadSession();
   const activeDepts = Array.from(useActiveDepts());
 
-  // ── Project state ─────────────────────────────────────────
+  // ── Project state ──
   const {
     project,
     setProject,
@@ -59,7 +55,7 @@ export default function ProjectDashboard() {
     loadProjectIntoState,
   } = useProject();
 
-  // ── Chat state ────────────────────────────────────────────
+  // ── Chat state ──
   const {
     messages,
     discussMsgs,
@@ -77,7 +73,7 @@ export default function ProjectDashboard() {
     chatEndRef,
   } = useChat(session?.msgs || []);
 
-  // ── Document tabs ─────────────────────────────────────────
+  // ── Document tabs ──
   const {
     tabs,
     activeIndex,
@@ -89,10 +85,10 @@ export default function ProjectDashboard() {
     setActiveIndex,
   } = useDocumentTabs();
 
-  // ── Pending approvals ─────────────────────────────────────
+  // ── Pending approvals ──
   const { pendingApprovals } = usePendingApprovals(project);
 
-  // ── Demo flow ─────────────────────────────────────────────
+  // ── Demo flow ──
   const { showDemoTour, setShowDemoTour, demoCreating, demoSummary, handleDemoProject } =
     useDemoFlow(
       project,
@@ -104,14 +100,14 @@ export default function ProjectDashboard() {
       setTab
     );
 
-  // ── Session persistence ───────────────────────────────────
+  // ── Session persistence ──
   useEffect(() => {
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ msgs: messages, discuss: discussMsgs }));
     } catch {}
   }, [messages, discussMsgs]);
 
-  // ── Project-update events ─────────────────────────────────
+  // ── Project-update events ──
   useEffect(() => {
     const unlisten = listen('project-update', (event: { payload: Project }) => {
       setProject(event.payload);
@@ -121,20 +117,19 @@ export default function ProjectDashboard() {
     };
   }, [setProject]);
 
-  // ── Error handling ────────────────────────────────────────
+  // ── Error handling ──
   const error = projError || chatError;
-  const clearError = () => {
+  const clearError = useCallback(() => {
     setProjError('');
     setChatError('');
-  };
-
+  }, [setProjError, setChatError]);
   useEffect(() => {
     if (!error || classifyError(error) === 'critical') return;
     const timer = setTimeout(clearError, 8000);
     return () => clearTimeout(timer);
-  }, [error]);
+  }, [error, clearError]);
 
-  // ── UI-only state ─────────────────────────────────────────
+  // ── UI state ──
   const [activity, setActivity] = useState<ActivitySelection>('files');
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [chatWidth, setChatWidth] = useState(400);
@@ -202,174 +197,143 @@ export default function ProjectDashboard() {
     setTab('decision');
   };
 
-  return (
-    <DeptActiveProvider>
-      <div className="h-screen bg-surface-paper flex flex-col overflow-hidden">
-        {/* ── Header ────────────────────────────────────────── */}
-        <header className="bg-ink-900 border-b border-gold/30 shrink-0 h-12 px-4 flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            <SealLogo size={20} />
-            <h1 className="font-display text-base font-semibold text-ink-50 truncate">
-              {project?.name || '枢机'}
-            </h1>
-            <span className="text-caption text-ink-500 font-mono truncate max-w-[520px]">
-              {project?.working_dir}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="seal"
-              className="text-xs !px-2 !py-1"
-              onClick={handleDemoProject}
-              disabled={demoCreating}
-            >
-              {demoCreating ? '创建中…' : '体验枢机'}
-            </Button>
-            <Button
-              variant="ghost"
-              className="text-xs !px-2 !py-1 text-ink-400"
-              onClick={openProjectPicker}
-            >
-              打开项目
-            </Button>
-            <HelpDrawer />
-            <SettingsMenu open={settingsOpen} setOpen={setSettingsOpen} />
-          </div>
-        </header>
-
-        {/* ── Error banner ──────────────────────────────────── */}
-        {error && (
-          <div className="px-4 py-2 bg-vermillion-light border-b border-vermillion/20 text-vermillion-dark text-ui shrink-0">
-            {error}
-            <button onClick={clearError} className="ml-2 font-bold">
-              &times;
-            </button>
-          </div>
-        )}
-
-        {/* ── Main content ──────────────────────────────────── */}
-        <div className="flex-1 flex min-h-0 overflow-hidden">
-          <ActivityBar
-            selected={activity}
-            onSelect={setActivity}
-            onLogsClick={() => setLogsExpanded(true)}
-            pendingApprovalsCount={pendingApprovals.length}
-          />
-          {activity && activity !== 'graph' && project && (
-            <Sidebar
-              mode={activity}
-              projectDir={project.working_dir}
-              selectedDoc={activeDoc?.path || null}
-              onDocSelect={handleDocSelect}
-              onShowDiff={(path) => openTab(path, 'diff')}
-            />
-          )}
-          <main className="flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col">
-            <ActiveDeptStrip activeDepts={activeDepts} planInfo={planInfo} />
-            {project && (
-              <WorkflowStatus
-                phaseCount={project.phase_count}
-                phases={project.phases}
-                overall={
-                  typeof project.overall === 'string' ? project.overall : String(project.overall)
-                }
+  // ── Main content ──
+  const mainContent = (
+    <>
+      <ActiveDeptStrip activeDepts={activeDepts} planInfo={planInfo} />
+      {project && (
+        <WorkflowStatus
+          phaseCount={project.phase_count}
+          phases={project.phases}
+          overall={typeof project.overall === 'string' ? project.overall : String(project.overall)}
+          activeDepts={activeDepts}
+          planInfo={planInfo}
+          pendingApprovals={pendingApprovals}
+          onSelectDoc={(path) => openTab(path)}
+        />
+      )}
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+        {activity === 'graph' ? (
+          <WorkflowGraphView />
+        ) : demoSummary ? (
+          <DemoSummaryCard summary={demoSummary} onOpenProject={openProjectPicker} />
+        ) : (
+          <>
+            {hasTabs && (
+              <TabBar
+                tabs={tabs}
+                activeIndex={activeIndex}
+                onSelect={setActiveIndex}
+                onClose={closeTab}
+              />
+            )}
+            {hasTabs ? (
+              <DocPreview
+                key={activeDoc!.path}
+                projectDir={project!.working_dir}
+                docPath={activeDoc!.path}
+                initialTab={activeDoc!.initialView}
+                onClose={() => closeTab(activeIndex)}
+              />
+            ) : (
+              <ProjectOverview
+                project={project}
                 activeDepts={activeDepts}
                 planInfo={planInfo}
-                pendingApprovals={pendingApprovals}
-                onSelectDoc={(path) => openTab(path)}
+                onOpenProject={openProjectPicker}
+                onDocSelect={(path) => openTab(path)}
               />
             )}
-            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-              {activity === 'graph' ? (
-                <WorkflowGraphView />
-              ) : demoSummary ? (
-                <DemoSummaryCard summary={demoSummary} onOpenProject={openProjectPicker} />
-              ) : (
-                <>
-                  {hasTabs && (
-                    <TabBar
-                      tabs={tabs}
-                      activeIndex={activeIndex}
-                      onSelect={setActiveIndex}
-                      onClose={closeTab}
-                    />
-                  )}
-                  {hasTabs ? (
-                    <DocPreview
-                      key={activeDoc!.path}
-                      projectDir={project!.working_dir}
-                      docPath={activeDoc!.path}
-                      initialTab={activeDoc!.initialView}
-                      onClose={() => closeTab(activeIndex)}
-                    />
-                  ) : (
-                    <ProjectOverview
-                      project={project}
-                      activeDepts={activeDepts}
-                      planInfo={planInfo}
-                      onOpenProject={openProjectPicker}
-                      onDocSelect={(path) => openTab(path)}
-                    />
-                  )}
-                </>
-              )}
-            </div>
-          </main>
+          </>
+        )}
+      </div>
+    </>
+  );
 
-          {/* ── Chat panel ──────────────────────────────────── */}
-          <section
-            className="relative bg-surface-paper border-l border-fold flex flex-col min-h-0 shrink-0"
-            style={{ width: chatWidth }}
-          >
-            <div
-              onMouseDown={startResize}
-              className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-vermillion/40 transition-colors"
-            />
-            <div className="border-b border-fold bg-surface-elevated shrink-0 px-3 py-2">
-              <Tabs
-                tabs={[
-                  { key: 'decision', label: '决策' },
-                  { key: 'discuss', label: '廷议' },
-                ]}
-                activeKey={tab}
-                onChange={(k) => setTab(k as Tab)}
-              />
-              <div className="text-ui text-ink-600 mt-1">
-                {tab === 'decision'
-                  ? '下达敕令，驱动各部门执行'
-                  : '仅与内阁议政，不改代码、不写文档'}
-              </div>
-            </div>
-            {!project ? (
-              <div className="flex-1 flex items-center justify-center text-body text-ink-400">
-                请先开卷
-              </div>
-            ) : (
-              <ChatPanel
-                tab={tab}
-                messages={messages}
-                discussMsgs={discussMsgs}
-                discussing={discussing}
-                planInfo={planInfo}
-                activeDeptsCount={activeDepts.length}
-                onOption={(key, supplement) =>
-                  handleSend(supplement ? `${key}\n${supplement}` : key)
-                }
-                onSend={handleSend}
-                onRetrySend={retrySend}
-                onDiscuss={handleDiscuss}
-                onCancelDiscuss={cancelDiscuss}
-                onConvertToCommand={handleConvertToCommand}
-                endRef={chatEndRef}
-              />
-            )}
-          </section>
+  const chatPanel = (
+    <section
+      className="relative bg-surface-paper border-l border-fold flex flex-col min-h-0 shrink-0"
+      style={{ width: chatWidth }}
+    >
+      <div
+        onMouseDown={startResize}
+        className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-vermillion/40 transition-colors"
+      />
+      <div className="border-b border-fold bg-surface-elevated shrink-0 px-3 py-2">
+        <Tabs
+          tabs={[
+            { key: 'decision', label: '决策' },
+            { key: 'discuss', label: '廷议' },
+          ]}
+          activeKey={tab}
+          onChange={(k) => setTab(k as Tab)}
+        />
+        <div className="text-ui text-ink-600 mt-1">
+          {tab === 'decision' ? '下达敕令，驱动各部门执行' : '仅与内阁议政，不改代码、不写文档'}
         </div>
+      </div>
+      {!project ? (
+        <div className="flex-1 flex items-center justify-center text-body text-ink-400">
+          请先开卷
+        </div>
+      ) : (
+        <ChatPanel
+          tab={tab}
+          messages={messages}
+          discussMsgs={discussMsgs}
+          discussing={discussing}
+          planInfo={planInfo}
+          activeDeptsCount={activeDepts.length}
+          onOption={(key, supplement) => handleSend(supplement ? `${key}\n${supplement}` : key)}
+          onSend={handleSend}
+          onRetrySend={retrySend}
+          onDiscuss={handleDiscuss}
+          onCancelDiscuss={cancelDiscuss}
+          onConvertToCommand={handleConvertToCommand}
+          endRef={chatEndRef}
+        />
+      )}
+    </section>
+  );
 
-        {/* ── Footer bars ──────────────────────────────────── */}
-        <DeptStatusBar />
-        <LogBar expanded={logsExpanded} onExpandedChange={setLogsExpanded} />
-        {showPicker && (
+  return (
+    <DashboardLayout
+      project={project}
+      error={error}
+      clearError={clearError}
+      activity={activity}
+      onActivity={setActivity}
+      activeDocPath={activeDoc?.path || null}
+      onDocSelect={handleDocSelect}
+      onShowDiff={(path) => openTab(path, 'diff')}
+      logsExpanded={logsExpanded}
+      onLogsExpanded={setLogsExpanded}
+      pendingApprovalsCount={pendingApprovals.length}
+      headerRight={
+        <>
+          <Button
+            variant="seal"
+            className="text-xs !px-2 !py-1"
+            onClick={handleDemoProject}
+            disabled={demoCreating}
+          >
+            {demoCreating ? '创建中…' : '体验枢机'}
+          </Button>
+          <Button
+            variant="ghost"
+            className="text-xs !px-2 !py-1 text-ink-400"
+            onClick={openProjectPicker}
+          >
+            打开项目
+          </Button>
+          <HelpDrawer />
+          <SettingsMenu open={settingsOpen} setOpen={setSettingsOpen} />
+        </>
+      }
+      mainContent={mainContent}
+      chatPanel={chatPanel}
+      picker={
+        showPicker ? (
           <ProjectPicker
             recentDirs={recentDirs}
             pickerPath={pickerPath}
@@ -380,143 +344,9 @@ export default function ProjectDashboard() {
             onLoad={handleLoadProject}
             onClose={() => setShowPicker(false)}
           />
-        )}
-        {showDemoTour && <DemoTour onClose={() => setShowDemoTour(false)} />}
-      </div>
-    </DeptActiveProvider>
-  );
-}
-
-// ── ActiveDeptStrip (extracted from inline) ─────────────
-function ActiveDeptStrip({
-  activeDepts,
-  planInfo,
-}: {
-  activeDepts: string[];
-  planInfo: { batches: { status: string }[] } | null;
-}) {
-  if (activeDepts.length === 0) return null;
-  return (
-    <div className="shrink-0 flex items-center gap-1 px-3 py-1 bg-gold/[0.03] border-b border-gold/15 text-caption overflow-x-auto">
-      <span className="text-gold/60 font-semibold tracking-wider mr-1 whitespace-nowrap font-serif text-[10px]">
-        值事
-      </span>
-      {activeDepts.map((dept) => {
-        const meta = getDeptMeta(dept);
-        const color = meta?.color || '#6b7280';
-        return (
-          <span
-            key={dept}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-caption font-serif shadow-sm whitespace-nowrap"
-            style={{ backgroundColor: `${color}18`, borderLeft: `2px solid ${color}` }}
-          >
-            <span
-              className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0"
-              style={{ backgroundColor: color }}
-            />
-            <span className="text-ink-700 font-medium">{meta?.shortLabel || dept}</span>
-          </span>
-        );
-      })}
-      {planInfo && planInfo.batches.length > 0 && (
-        <span className="ml-2 flex items-center gap-1 text-caption text-ink-500">
-          <span className="text-ink-400">·</span>
-          {planInfo.batches.map((b, i) => (
-            <span
-              key={i}
-              className={`text-[10px] ${b.status === 'done' ? 'text-jade' : b.status === 'current' ? 'text-gold font-medium' : 'text-ink-400'}`}
-            >
-              {b.status === 'done' ? '✓' : b.status === 'current' ? '◉' : '○'}
-            </span>
-          ))}
-          <span className="text-ink-400 text-[10px]">
-            {planInfo.batches.filter((b) => b.status === 'done').length}/{planInfo.batches.length}
-          </span>
-        </span>
-      )}
-    </div>
-  );
-}
-
-// ── Demo Summary Card ───────────────────────────────────
-function DemoSummaryCard({
-  summary,
-  onOpenProject,
-}: {
-  summary: { elapsed: string; tokens: number; cached: number; uncached: number };
-  onOpenProject: () => void;
-}) {
-  const cacheRate =
-    summary.tokens > 0
-      ? Math.round((summary.cached / (summary.cached + summary.uncached)) * 100)
-      : null;
-  return (
-    <div className="h-full overflow-y-auto surface-paper p-8">
-      <Card variant="paper" className="max-w-3xl mx-auto p-6">
-        <div className="text-center mb-2">
-          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-jade-light flex items-center justify-center">
-            <svg
-              className="w-6 h-6 text-jade"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2.5}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-            </svg>
-          </div>
-          <h2 className="font-display text-display font-bold text-ink-900">Demo 完成</h2>
-          <p className="text-body text-ink-600 mt-1">体验流程已结束，以下是本次 Demo 的概览。</p>
-        </div>
-        <section className="mb-6">
-          <h3 className="font-display text-ui text-ink-600 font-semibold title-rule-gold mb-3">
-            汇总
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="bg-surface-parchment border border-fold rounded-lg p-3 text-center">
-              <p className="text-caption text-ink-500 mb-1">耗时</p>
-              <p className="font-display text-xl text-ink-900 font-bold">{summary.elapsed}</p>
-            </div>
-            <div className="bg-surface-parchment border border-fold rounded-lg p-3 text-center">
-              <p className="text-caption text-ink-500 mb-1">Token 消耗</p>
-              <p className="font-display text-xl text-ink-900 font-bold">
-                {summary.tokens.toLocaleString()}
-              </p>
-              <p className="text-caption text-ink-500 mt-1">
-                缓存 {summary.cached.toLocaleString()} / 未缓存 {summary.uncached.toLocaleString()}
-              </p>
-            </div>
-            <div className="bg-surface-parchment border border-fold rounded-lg p-3 text-center">
-              <p className="text-caption text-ink-500 mb-1">缓存命中率</p>
-              <p className="font-display text-xl text-ink-900 font-bold">
-                {cacheRate !== null ? `${cacheRate}%` : 'N/A'}
-              </p>
-            </div>
-          </div>
-        </section>
-        <section className="mb-6">
-          <h3 className="font-display text-ui text-ink-600 font-semibold title-rule-gold mb-3">
-            下一步
-          </h3>
-          <ul className="space-y-2 text-body text-ink-700">
-            <li className="leading-relaxed">
-              <strong>打开真实项目</strong> — 选择您的项目目录，枢机将根据需求自动规划并执行任务。
-            </li>
-            <li className="leading-relaxed">
-              <strong>调整参与模式</strong> — 使用{' '}
-              <code className="text-vermillion bg-vermillion-light px-1 rounded text-ui">
-                /level-2
-              </code>{' '}
-              切换审批模式，让系统在关键节点等待您的确认。
-            </li>
-          </ul>
-        </section>
-        <div className="flex justify-center gap-3">
-          <Button variant="secondary" onClick={onOpenProject}>
-            打开真实项目
-          </Button>
-        </div>
-      </Card>
-    </div>
+        ) : undefined
+      }
+      demoTour={showDemoTour ? <DemoTour onClose={() => setShowDemoTour(false)} /> : undefined}
+    />
   );
 }

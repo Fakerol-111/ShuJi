@@ -13,6 +13,7 @@ vi.mock('rehype-highlight', () => ({ default: () => {} }));
 
 function emperorMsg(overrides: Partial<ChatMessage> = {}): ChatMessage {
   return {
+    id: crypto.randomUUID(),
     role: '皇帝',
     content: '准奏，按此执行。',
     options: [],
@@ -24,6 +25,7 @@ function emperorMsg(overrides: Partial<ChatMessage> = {}): ChatMessage {
 
 function deptMsg(overrides: Partial<ChatMessage> = {}): ChatMessage {
   return {
+    id: crypto.randomUUID(),
     role: '工部尚书',
     content: '已完成第一阶段编码。',
     options: [],

@@ -336,10 +336,12 @@ pub async fn run_actor(mut ctx: ActorContext) {
             }
             if fast_cancel.load(Ordering::SeqCst) {
                 log_console!("[actor] {}: breaking exec loop (fast interrupt)", role_name);
-                let _ = ctx.emperor_tx.try_send(ChatMessage::new(
+                if let Err(e) = ctx.emperor_tx.try_send(ChatMessage::new(
                     "系统",
                     &format!("{} 已被皇帝中断", role_name),
-                ));
+                )) {
+                    log_console!("[actor] emperor_tx full (interrupt): {}", e);
+                }
                 break 'exec;
             }
 
@@ -361,13 +363,15 @@ pub async fn run_actor(mut ctx: ActorContext) {
             if exec_iterations > max_exec_iterations {
                 log_console!("[actor] {}: plan loop exceeded {} iterations without batch progress, forcing exit",
                     role_name, max_exec_iterations);
-                let _ = ctx.emperor_tx.try_send(ChatMessage::new(
+                if let Err(e) = ctx.emperor_tx.try_send(ChatMessage::new(
                     "系统",
                     &format!(
                         "{} 计划循环超过次数限制（同一批次内 {} 轮未推进），请重新路由",
                         role_name, max_exec_iterations
                     ),
-                ));
+                )) {
+                    log_console!("[actor] emperor_tx full (plan-loop): {}", e);
+                }
                 break 'exec;
             }
             let current_skill = ctx.current_skill.lock().ok().and_then(|s| s.clone());

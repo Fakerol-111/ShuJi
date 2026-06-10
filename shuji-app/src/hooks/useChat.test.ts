@@ -30,7 +30,14 @@ vi.mock('../api', () => ({
 }));
 
 function createMsg(text: string, ts: string, role: RoleName = '内阁'): ChatMessage {
-  return { role, content: text, options: [], documents: [], timestamp: ts };
+  return {
+    id: crypto.randomUUID(),
+    role,
+    content: text,
+    options: [],
+    documents: [],
+    timestamp: ts,
+  };
 }
 
 describe('useChat', () => {

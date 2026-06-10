@@ -61,6 +61,7 @@ export function useChat(initialMessages: ChatMessage[]) {
     const ts = new Date().toISOString();
     setError('');
     const msg: ChatMessage = {
+      id: crypto.randomUUID(),
       role: '皇帝',
       content: text,
       options: [],
@@ -94,6 +95,7 @@ export function useChat(initialMessages: ChatMessage[]) {
     setDiscussMsgs((prev) => [
       ...prev,
       {
+        id: crypto.randomUUID(),
         role: '皇帝',
         content: text,
         options: [],

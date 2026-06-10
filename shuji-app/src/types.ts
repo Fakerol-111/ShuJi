@@ -92,6 +92,7 @@ export type RoleName =
 
 // Chat types
 export interface ChatMessage {
+  id: string;
   role: RoleName;
   content: string;
   options: ChatOption[];

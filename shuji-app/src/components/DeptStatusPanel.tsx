@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
-import { listen } from '@tauri-apps/api/event';
 import { formatError } from '../utils/error';
 import { getDeptLogs } from '../api';
 import { getDeptMeta } from '../constants';
+import { useDeptEvents } from '../hooks/useDeptEvents';
 import type { DeptLogEntry } from '../types';
 
 const MAX_ENTRIES = 300;
@@ -28,17 +28,13 @@ export default function DeptStatusPanel() {
       .catch((e) => console.error(formatError(e)));
   }, []);
 
+  // Consume from centralized DeptEventsProvider instead of subscribing independently
+  const { logEntries: contextEntries } = useDeptEvents();
   useEffect(() => {
-    const unlisten = listen<DeptLogEntry>('dept-log', (event) => {
-      setEntries((prev) => {
-        const next = [...prev, event.payload];
-        return next.length > MAX_ENTRIES ? next.slice(-MAX_ENTRIES) : next;
-      });
-    });
-    return () => {
-      unlisten.then((f) => f());
-    };
-  }, []);
+    if (contextEntries.length > 0) {
+      setEntries(contextEntries.slice(-MAX_ENTRIES));
+    }
+  }, [contextEntries]);
 
   // Auto-scroll to bottom when new entries arrive (if user hasn't scrolled up)
   const handleScroll = () => {

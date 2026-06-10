@@ -339,7 +339,7 @@ pub async fn tool_read_file(working_dir: &Path, args: &serde_json::Value) -> Str
     };
     let is_full_read = offset == 0 && limit == u64::MAX;
     if is_full_read {
-        if let Some(cached) = cache_lookup(&full) {
+        if let Some(cached) = cache_lookup(working_dir, &full) {
             return cached;
         }
     }
@@ -347,7 +347,7 @@ pub async fn tool_read_file(working_dir: &Path, args: &serde_json::Value) -> Str
         Ok(c) => {
             if let Ok(meta) = tokio::fs::metadata(&full).await {
                 if let Ok(mtime) = meta.modified() {
-                    cache_insert(full.clone(), mtime, c.clone());
+                    cache_insert(working_dir, full.clone(), mtime, c.clone());
                 }
             }
             c

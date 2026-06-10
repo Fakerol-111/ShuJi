@@ -121,10 +121,10 @@ pub async fn execute_named_tool(
         | "apply_patch" | "edit_file" => {
             if let Some(path) = args.get("path").and_then(|v| v.as_str()) {
                 if let Ok(full) = resolve_scoped_path(working_dir, path).await {
-                    cache_invalidate(&full);
+                    cache_invalidate(working_dir, &full);
                     // Also invalidate parent directory (list_dir results change)
                     if let Some(parent) = full.parent() {
-                        cache_invalidate(parent);
+                        cache_invalidate(working_dir, parent);
                     }
                 }
             }
@@ -132,7 +132,7 @@ pub async fn execute_named_tool(
         "create_document" | "modify_document" | "append_document" | "set_document_status" => {
             // Invalidate .shuji/ dir since document listings and reads may change
             let shuji_dir = working_dir.join(".shuji");
-            cache_invalidate(&shuji_dir);
+            cache_invalidate(working_dir, &shuji_dir);
         }
         _ => {}
     }

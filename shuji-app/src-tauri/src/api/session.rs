@@ -279,6 +279,11 @@ impl SessionSnapshot {
     pub fn from_messages(messages: Vec<serde_json::Value>) -> Self {
         Self { messages }
     }
+
+    /// Access the messages for inspection (testing, debugging).
+    pub fn messages(&self) -> &[serde_json::Value] {
+        &self.messages
+    }
 }
 
 // ── Session ──────────────────────────────────────────────────

@@ -920,7 +920,7 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
     }
 
     // P2-2: Read cache — return cached result if content unchanged
-    if let Some(cached) = crate::tool::cache_lookup(&full) {
+    if let Some(cached) = crate::tool::cache_lookup(working_dir, &full) {
         return cached;
     }
 
@@ -929,7 +929,7 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
             // Cache raw content with mtime for future reads
             if let Ok(meta) = tokio::fs::metadata(&full).await {
                 if let Ok(mtime) = meta.modified() {
-                    crate::tool::cache_insert(full.clone(), mtime, c.clone());
+                    crate::tool::cache_insert(working_dir, full.clone(), mtime, c.clone());
                 }
             }
             c
