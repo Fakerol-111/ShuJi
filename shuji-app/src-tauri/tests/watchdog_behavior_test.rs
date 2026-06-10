@@ -21,11 +21,7 @@ use shuji_app_lib::config::RuntimeConfig;
 use common::{mock_api_text, mock_api_tool, MockQueue};
 
 /// 构建一个指向 mock HTTP server 的 Session。
-fn make_session(
-    api_url: &str,
-    tools: &[ToolDefinition],
-    config: &Arc<RuntimeConfig>,
-) -> Session {
+fn make_session(api_url: &str, tools: &[ToolDefinition], config: &Arc<RuntimeConfig>) -> Session {
     let client = Arc::new(AnthropicClient::new(
         "test-key".to_string(),
         format!("{}/chat/completions", api_url),
@@ -172,11 +168,7 @@ async fn test_watchdog_same_tool_triggers_intervention() {
 
     // 验证最终文本
     let output = result.into_text();
-    assert!(
-        output.contains("完成"),
-        "应返回文本响应: {}",
-        output
-    );
+    assert!(output.contains("完成"), "应返回文本响应: {}", output);
 
     // 验证 session 的 tool result 中包含 watchdog [干预] 提示
     let tool_text = extract_tool_results_text(&session);
@@ -264,9 +256,15 @@ async fn test_watchdog_delete_create_cycle_triggers_intervention() {
     // delete → create → delete → create → 文本
     let responses = vec![
         mock_api_tool("delete_file", serde_json::json!({"path": "test.txt"})),
-        mock_api_tool("create_file", serde_json::json!({"path": "test.txt", "content": "v1"})),
+        mock_api_tool(
+            "create_file",
+            serde_json::json!({"path": "test.txt", "content": "v1"}),
+        ),
         mock_api_tool("delete_file", serde_json::json!({"path": "test.txt"})),
-        mock_api_tool("create_file", serde_json::json!({"path": "test.txt", "content": "v2"})),
+        mock_api_tool(
+            "create_file",
+            serde_json::json!({"path": "test.txt", "content": "v2"}),
+        ),
         mock_api_text("完成"),
     ];
 

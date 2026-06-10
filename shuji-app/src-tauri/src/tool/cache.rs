@@ -11,9 +11,10 @@ use std::time::SystemTime;
 static READ_CACHE: LazyLock<Mutex<HashMap<PathBuf, HashMap<PathBuf, (SystemTime, String)>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-fn bucket<'a>(cache: &'a mut HashMap<PathBuf, HashMap<PathBuf, (SystemTime, String)>>, working_dir: &Path)
-    -> &'a mut HashMap<PathBuf, (SystemTime, String)>
-{
+fn bucket<'a>(
+    cache: &'a mut HashMap<PathBuf, HashMap<PathBuf, (SystemTime, String)>>,
+    working_dir: &Path,
+) -> &'a mut HashMap<PathBuf, (SystemTime, String)> {
     cache.entry(working_dir.to_path_buf()).or_default()
 }
 
