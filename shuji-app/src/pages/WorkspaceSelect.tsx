@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { open } from '@tauri-apps/plugin-dialog';
+import { formatError } from '../utils/error';
 import { loadProject, getRecentDirs, getConfig, createDemoProject } from '../api';
 import { SealLogo } from '../components/SealLogo';
 import { Card } from '../components/ui/Card';
@@ -55,7 +56,7 @@ export default function WorkspaceSelect() {
       await loadProject(path);
       navigate('/project');
     } catch (e) {
-      setError(String(e));
+      setError(formatError(e));
     } finally {
       setLoading(false);
     }
@@ -86,7 +87,7 @@ export default function WorkspaceSelect() {
               sessionStorage.setItem('shuji_demo', 'true');
               navigate('/project');
             } catch (e) {
-              setError(String(e));
+              setError(formatError(e));
               setLoading(false);
             }
           }}

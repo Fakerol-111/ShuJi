@@ -3,7 +3,7 @@ import { getTokenStats, getRoundMetrics } from '../api';
 import { useActiveDepts } from '../hooks/useActiveDepts';
 import { useLatestDeptLogs } from '../hooks/useLatestDeptLogs';
 import { getDeptMeta, DEPT_META_LIST } from '../constants';
-import type { RoundMetrics } from '../types';
+import type { RoundMetrics, TokenUsage } from '../types';
 
 const SKILL_LABELS: Record<string, string> = {
   workflow_standard: '标准',
@@ -32,12 +32,12 @@ export default function DeptStatusBar() {
     const load = () => {
       getTokenStats()
         .then((stats) => {
-          const roles = Object.values(stats['汇总'] || {});
-          setTokenPrompt(roles.reduce((sum: number, u: any) => sum + u.prompt_tokens, 0));
+          const roles: TokenUsage[] = Object.values(stats['汇总'] || {});
+          setTokenPrompt(roles.reduce((sum, u) => sum + u.prompt_tokens, 0));
           setTokenCached(
-            roles.reduce((sum: number, u: any) => sum + (u.cached_prompt_tokens ?? 0), 0)
+            roles.reduce((sum, u) => sum + (u.cached_prompt_tokens ?? 0), 0)
           );
-          setTokenCompletion(roles.reduce((sum: number, u: any) => sum + u.completion_tokens, 0));
+          setTokenCompletion(roles.reduce((sum, u) => sum + u.completion_tokens, 0));
         })
         .catch(() => {});
     };

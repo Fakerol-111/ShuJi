@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
+import { formatError } from '../utils/error';
 import { getDeptLogs } from '../api';
 import type { DeptLogEntry } from '../types';
 import DeptStatusPanel from './DeptStatusPanel';
@@ -17,7 +18,7 @@ export default function LogBar({ expanded, onExpandedChange }: LogBarProps) {
   useEffect(() => {
     getDeptLogs()
       .then((logs) => setLatest(logs.length > 0 ? logs[logs.length - 1] : null))
-      .catch((e) => console.error('日志加载失败:', e));
+      .catch((e) => console.error(formatError(e)));
   }, []);
 
   useEffect(() => {

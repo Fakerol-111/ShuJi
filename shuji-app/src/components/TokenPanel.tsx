@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getTokenStats } from '../api';
 import type { TokenUsage } from '../api';
+import { formatError } from '../utils/error';
 import { getDeptMeta, DEPT_ORDER } from '../constants';
 
 export default function TokenPanel() {
@@ -12,7 +13,7 @@ export default function TokenPanel() {
     setError('');
     getTokenStats()
       .then(setStats)
-      .catch((e) => setError(String(e)));
+      .catch((e) => setError(formatError(e)));
   };
 
   useEffect(load, []);

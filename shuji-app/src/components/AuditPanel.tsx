@@ -6,6 +6,7 @@ import {
   traceDocument,
 } from '../api';
 import type { TimelineData, LineageNode, TraceResult } from '../types';
+import { formatError } from '../utils/error';
 import { DocCard, LineageTree, docIdToPath } from './audit/shared';
 
 const EVENT_LABELS: Record<string, string> = {
@@ -67,7 +68,7 @@ export default function AuditPanel({
     setError('');
     getAuditTimeline()
       .then(setData)
-      .catch((e) => setError(String(e)))
+      .catch((e) => setError(formatError(e)))
       .finally(() => setLoading(false));
   }, [projectDir]);
 

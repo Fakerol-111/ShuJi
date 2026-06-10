@@ -52,6 +52,17 @@ jobs:
       - name: Run integration tests
         run: cd shuji-app/src-tauri && RUST_BACKTRACE=1 cargo test --tests -- --skip expand_requirements --test-threads=1
 
+  # Windows 轻量 job：避免重复安装 Tauri 系统依赖，只跑 cargo check + 单元测试
+  windows-check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cargo check
+        run: cd shuji-app/src-tauri && cargo check
+      - name: Run unit tests
+        run: cd shuji-app/src-tauri && cargo test --lib
+
   frontend:
     runs-on: ubuntu-latest
     steps:
@@ -65,5 +76,7 @@ jobs:
         run: cd shuji-app && npm run format:check
       - name: TypeScript lint (noEmit)
         run: cd shuji-app && npm run lint
+      - name: Vitest
+        run: cd shuji-app && npm test
       - name: Vite build
         run: cd shuji-app && npm run build

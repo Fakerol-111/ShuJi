@@ -65,6 +65,10 @@ export async function discussWithCabinet(message: string): Promise<ChatMessage> 
   return invoke('discuss_with_cabinet', { message });
 }
 
+export async function cancelDiscuss(): Promise<void> {
+  return invoke('cancel_discuss');
+}
+
 export async function getSnapshot(): Promise<ProjectSnapshot> {
   return invoke('get_snapshot');
 }

@@ -25,18 +25,29 @@ pub async fn append(working_dir: &Path, event: &str, role: &str, doc_id: &str, d
     };
     let path = working_dir.join(".shuji").join("audit.jsonl");
     if let Some(parent) = path.parent() {
-        let _ = tokio::fs::create_dir_all(parent).await;
+        if let Err(e) = tokio::fs::create_dir_all(parent).await {
+            log_console!("[audit] 创建目录失败: {}", e);
+        }
     }
     if let Ok(json) = serde_json::to_string(&entry) {
         use tokio::io::AsyncWriteExt;
-        if let Ok(mut f) = tokio::fs::OpenOptions::new()
+        match tokio::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(&path)
             .await
         {
-            let _ = f.write_all(format!("{}\n", json).as_bytes()).await;
+            Ok(mut f) => {
+                if let Err(e) = f.write_all(format!("{}\n", json).as_bytes()).await {
+                    log_console!("[audit] 写入 audit.jsonl 失败: {}", e);
+                }
+            }
+            Err(e) => {
+                log_console!("[audit] 打开 audit.jsonl 失败: {}", e);
+            }
         }
+    } else {
+        log_console!("[audit] 序列化审计条目失败");
     }
 }
 

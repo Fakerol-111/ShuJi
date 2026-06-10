@@ -39,13 +39,10 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
   }, [loadTree]);
 
   useEffect(() => {
-    const unlisten1 = listen('chat-message', debouncedRefresh);
-    const unlisten2 = listen('dept-log', debouncedRefresh);
-    const unlisten3 = listen('plan-update', debouncedRefresh);
+    const events = ['chat-message', 'dept-log', 'plan-update'];
+    const unlistens = events.map((evt) => listen(evt, debouncedRefresh));
     return () => {
-      unlisten1.then((f) => f());
-      unlisten2.then((f) => f());
-      unlisten3.then((f) => f());
+      unlistens.forEach((p) => p.then((f) => f()));
     };
   }, [debouncedRefresh]);
 

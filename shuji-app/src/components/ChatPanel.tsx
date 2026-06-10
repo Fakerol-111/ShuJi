@@ -114,7 +114,7 @@ export default function ChatPanel(props: ChatPanelProps) {
             onClick={() => {
               const lastUserMsg = [...discussMsgs]
                 .reverse()
-                .find((m) => m.role === 'user' || m.role === '皇帝');
+                .find((m) => m.role === '皇帝');
               if (lastUserMsg) onConvertToCommand(lastUserMsg.content);
             }}
             className="w-full px-3 py-2 text-ui font-medium text-gold bg-gold-light hover:bg-gold-light/80 border border-vermillion/20 rounded-lg transition-colors"

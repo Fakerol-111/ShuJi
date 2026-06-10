@@ -22,6 +22,9 @@ pub struct AppState {
     pub dept_log_history: Arc<Mutex<Vec<DeptLogEntry>>>,
     pub runtime_config: Arc<RuntimeConfig>,
     pub compacting_roles: Arc<Mutex<HashSet<String>>>,
+    /// Cancel flag for `discuss_with_cabinet` — checked by AgentController
+    /// on every tool-call iteration. Set by `cancel_discuss` command.
+    pub discuss_cancel: Arc<AtomicBool>,
 }
 
 #[tauri::command]
@@ -78,6 +81,12 @@ pub async fn load_project(
         let mut sys_lock = state.actor_system.lock().await;
         *sys_lock = None; // Drop triggers ActorSystem::drop() → cancel all actors
     }
+
+    // ── Clear project-scoped caches ──
+    // READ_CACHE holds resolved-path → content entries keyed by absolute path.
+    // Without clearing, switching from project A to project B could return stale
+    // cache hits if both projects have files at the same absolute path.
+    crate::tool::cache_clear_all();
 
     let shuji_dir = ShujiDir::new(&working_dir);
     let storage_path = Path::new(&working_dir)

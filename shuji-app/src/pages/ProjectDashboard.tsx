@@ -133,7 +133,7 @@ export default function ProjectDashboard() {
     setPickerError('');
     getRecentDirs()
       .then(setRecentDirs)
-      .catch((e) => setPickerError(String(e)));
+      .catch((e) => setPickerError(formatError(e)));
     setShowPicker(true);
   };
 

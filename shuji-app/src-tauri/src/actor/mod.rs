@@ -94,12 +94,12 @@ pub struct ActorContext {
     pub agent: Box<dyn Agent>,
     pub rx: mpsc::UnboundedReceiver<ActorMessage>,
     /// Fast mailbox receiver for high-priority interrupt signals.
-    pub fast_rx: tokio::sync::Mutex<mpsc::UnboundedReceiver<FastMessage>>,
+    pub fast_rx: tokio::sync::Mutex<mpsc::Receiver<FastMessage>>,
     pub peers: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
-    pub emperor_tx: mpsc::UnboundedSender<ChatMessage>,
-    pub dept_log_tx: mpsc::UnboundedSender<DeptLogEntry>,
-    pub plan_tx: mpsc::UnboundedSender<serde_json::Value>,
-    pub milestone_tx: mpsc::UnboundedSender<String>,
+    pub emperor_tx: mpsc::Sender<ChatMessage>,
+    pub dept_log_tx: mpsc::Sender<DeptLogEntry>,
+    pub plan_tx: mpsc::Sender<serde_json::Value>,
+    pub milestone_tx: mpsc::Sender<String>,
     pub project_dir: PathBuf,
     pub working_dir: PathBuf,
     pub cancel: Arc<AtomicBool>,
@@ -129,11 +129,11 @@ pub struct ActorSystem {
     /// Senders for all department actors, keyed by Role.
     pub senders: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
     /// Fast mailbox senders for high-priority interrupt signals.
-    pub fast_txs: HashMap<Role, mpsc::UnboundedSender<FastMessage>>,
+    pub fast_txs: HashMap<Role, mpsc::Sender<FastMessage>>,
     /// Sender for emperor-facing chat messages.
-    pub emperor_tx: mpsc::UnboundedSender<ChatMessage>,
+    pub emperor_tx: mpsc::Sender<ChatMessage>,
     /// Sender for department log entries (→ frontend DeptStatusPanel).
-    pub dept_log_tx: mpsc::UnboundedSender<DeptLogEntry>,
+    pub dept_log_tx: mpsc::Sender<DeptLogEntry>,
     /// Per-agent cancel flags, indexed by Role.
     pub cancel_map: crate::CancelMap,
     /// Global cancel flag for the frontend cancel button.
@@ -145,9 +145,9 @@ pub struct ActorSystem {
 impl ActorSystem {
     pub fn new(
         senders: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
-        fast_txs: HashMap<Role, mpsc::UnboundedSender<FastMessage>>,
-        emperor_tx: mpsc::UnboundedSender<ChatMessage>,
-        dept_log_tx: mpsc::UnboundedSender<DeptLogEntry>,
+        fast_txs: HashMap<Role, mpsc::Sender<FastMessage>>,
+        emperor_tx: mpsc::Sender<ChatMessage>,
+        dept_log_tx: mpsc::Sender<DeptLogEntry>,
         cancel_map: crate::CancelMap,
         cancel: Arc<AtomicBool>,
         workflow_graph: Arc<tokio::sync::Mutex<crate::workflow::WorkflowGraph>>,
@@ -185,7 +185,7 @@ impl Drop for ActorSystem {
 
         // 2. Send Interrupt via fast mailboxes to all actors
         for tx in self.fast_txs.values() {
-            let _ = tx.send(FastMessage::Interrupt);
+            let _ = tx.try_send(FastMessage::Interrupt);
         }
 
         // 3. Send Interrupt to all actors via main mailbox
@@ -299,6 +299,23 @@ pub async fn run_actor(mut ctx: ActorContext) {
         let mut exec_iterations: u32 = 0;
         let mut last_plan_current: Option<usize> = None;
         let max_exec_iterations = ctx.runtime_config.actor.max_exec_iterations;
+        // Load per-role context window overrides ONCE per task (not every iteration).
+        // context_config.json only changes when the user edits it manually — never mid-task.
+        let context_config: Arc<HashMap<String, crate::config::RoleContextConfig>> = {
+            let path = ctx.working_dir.join("context_config.json");
+            match tokio::fs::read_to_string(&path).await {
+                Ok(content) => {
+                    match serde_json::from_str::<crate::commands::settings::ContextWindowConfig>(
+                        &content,
+                    ) {
+                        Ok(cfg) => Arc::new(cfg.roles),
+                        Err(_) => Arc::new(HashMap::new()),
+                    }
+                }
+                Err(_) => Arc::new(HashMap::new()),
+            }
+        };
+
         // Fast interrupt: set by draining fast_rx, checked by AgentController
         let fast_cancel = Arc::new(AtomicBool::new(false));
         'exec: loop {
@@ -319,7 +336,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
             }
             if fast_cancel.load(Ordering::SeqCst) {
                 log_console!("[actor] {}: breaking exec loop (fast interrupt)", role_name);
-                let _ = ctx.emperor_tx.send(ChatMessage::new(
+                let _ = ctx.emperor_tx.try_send(ChatMessage::new(
                     "系统",
                     &format!("{} 已被皇帝中断", role_name),
                 ));
@@ -344,7 +361,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
             if exec_iterations > max_exec_iterations {
                 log_console!("[actor] {}: plan loop exceeded {} iterations without batch progress, forcing exit",
                     role_name, max_exec_iterations);
-                let _ = ctx.emperor_tx.send(ChatMessage::new(
+                let _ = ctx.emperor_tx.try_send(ChatMessage::new(
                     "系统",
                     &format!(
                         "{} 计划循环超过次数限制（同一批次内 {} 轮未推进），请重新路由",
@@ -354,22 +371,6 @@ pub async fn run_actor(mut ctx: ActorContext) {
                 break 'exec;
             }
             let current_skill = ctx.current_skill.lock().ok().and_then(|s| s.clone());
-
-            // Load per-role context window overrides
-            let context_config: Arc<HashMap<String, crate::config::RoleContextConfig>> = {
-                let path = ctx.working_dir.join("context_config.json");
-                match tokio::fs::read_to_string(&path).await {
-                    Ok(content) => {
-                        match serde_json::from_str::<crate::commands::settings::ContextWindowConfig>(
-                            &content,
-                        ) {
-                            Ok(cfg) => Arc::new(cfg.roles),
-                            Err(_) => Arc::new(HashMap::new()),
-                        }
-                    }
-                    Err(_) => Arc::new(HashMap::new()),
-                }
-            };
 
             let input = AgentInput {
                 role: ctx.role,
@@ -393,9 +394,12 @@ pub async fn run_actor(mut ctx: ActorContext) {
 
             // ── Final checkpoint after execution ──
             let ckpt_desc = content.chars().take(80).collect::<String>();
-            let _ =
-                crate::storage::checkpoint::save_final(&ctx.working_dir, &role_name, &ckpt_desc)
-                    .await;
+            if crate::storage::checkpoint::save_final(&ctx.working_dir, &role_name, &ckpt_desc)
+                .await
+                .is_none()
+            {
+                log_console!("[actor] checkpoint save_final 失败 ({})", role_name);
+            }
 
             match step_result {
                 Ok(output) => {
@@ -407,7 +411,9 @@ pub async fn run_actor(mut ctx: ActorContext) {
                     }
 
                     let milestone = format!("{} | {}", role_name, summary);
-                    let _ = ctx.milestone_tx.send(milestone);
+                    if let Err(e) = ctx.milestone_tx.try_send(milestone) {
+                        log_console!("[actor] milestone_tx.try_send 失败 (执行完成): {}", e);
+                    }
                     if let Ok(mut shared) = ctx.shared_context.lock() {
                         shared.insert(ctx.role, output.content.clone());
                     }
@@ -484,20 +490,26 @@ pub async fn run_actor(mut ctx: ActorContext) {
                             } else {
                                 "执行计划已输出".to_string()
                             };
-                            let _ = ctx
+                            if let Err(e) = ctx
                                 .dept_log_tx
-                                .send(DeptLogEntry::new(&role_name, &plan_action));
-                            let _ = ctx
+                                .try_send(DeptLogEntry::new(&role_name, &plan_action)) {
+                                log_console!("[actor] dept_log_tx.try_send 失败 (计划): {}", e);
+                            }
+                            if let Err(e) = ctx
                                 .dept_log_tx
-                                .send(DeptLogEntry::with_detail(&role_name, "计划", &ctx_msg));
-                            let _ = ctx
+                                .try_send(DeptLogEntry::with_detail(&role_name, "计划", &ctx_msg)) {
+                                log_console!("[actor] dept_log_tx.try_send 失败 (计划详情): {}", e);
+                            }
+                            if let Err(e) = ctx
                                 .milestone_tx
-                                .send(format!("{} | {}", role_name, plan_action));
+                                .try_send(format!("{} | {}", role_name, plan_action)) {
+                                log_console!("[actor] milestone_tx.send 失败 (计划): {}", e);
+                            }
                             // Emit structured plan progress for frontend card
                             let plan_json = ctx.agent.plan_display();
                             if let Ok(value) = serde_json::from_str::<serde_json::Value>(&plan_json)
                             {
-                                let _ = ctx.plan_tx.send(value);
+                                let _ = ctx.plan_tx.try_send(value);
                             }
                             context_msgs.push(crate::models::message::Message::user(&ctx_msg));
                             continue 'exec;
@@ -512,7 +524,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
                     ctx.logger.log_agent(ctx.role, &err_msg).await;
                     log_dept(&ctx, &role_name, &format!("❌ {}", err_msg));
                     if ctx.role == Role::Neige {
-                        let _ = ctx.emperor_tx.send(ChatMessage::new("系统", &err_msg));
+                        let _ = ctx.emperor_tx.try_send(ChatMessage::new("系统", &err_msg));
                     } else {
                         fallback_to_dispatcher(&ctx, &role_name, &e.to_string()).await;
                     }
@@ -541,7 +553,7 @@ fn reset_failure_retry(ctx: &ActorContext) {
 
 async fn fallback_to_dispatcher(ctx: &ActorContext, role_name: &str, error: &str) {
     if ctx.role == Role::Shangshuling {
-        let _ = ctx.emperor_tx.send(ChatMessage::new(
+        let _ = ctx.emperor_tx.try_send(ChatMessage::new(
             "系统",
             &format!("{} 执行失败，无法自回退。错误: {}", ctx.role.name(), error),
         ));
@@ -555,7 +567,7 @@ async fn fallback_to_dispatcher(ctx: &ActorContext, role_name: &str, error: &str
             next
         }
         Err(_) => {
-            let _ = ctx.emperor_tx.send(ChatMessage::new(
+            let _ = ctx.emperor_tx.try_send(ChatMessage::new(
                 "系统",
                 &format!(
                     "{} 执行失败，且无法记录重试次数。错误: {}",
@@ -568,7 +580,7 @@ async fn fallback_to_dispatcher(ctx: &ActorContext, role_name: &str, error: &str
     };
 
     if retry_count > MAX_FAILURE_RETRIES {
-        let _ = ctx.emperor_tx.send(ChatMessage::new(
+        if let Err(e) = ctx.emperor_tx.try_send(ChatMessage::new(
             "系统",
             &format!(
                 "{} 执行失败，已重试 {} 次仍未解决。最后错误: {}\n请人工介入。",
@@ -576,7 +588,9 @@ async fn fallback_to_dispatcher(ctx: &ActorContext, role_name: &str, error: &str
                 MAX_FAILURE_RETRIES,
                 error,
             ),
-        ));
+        )) {
+            log_console!("[actor] emperor_tx.try_send 失败 (重试耗尽): {}", e);
+        }
         log_dept(ctx, role_name, "失败回退次数耗尽，已上报");
         return;
     }
@@ -602,7 +616,7 @@ async fn fallback_to_dispatcher(ctx: &ActorContext, role_name: &str, error: &str
             );
         }
         None => {
-            let _ = ctx.emperor_tx.send(ChatMessage::new(
+            let _ = ctx.emperor_tx.try_send(ChatMessage::new(
                 "系统",
                 &format!(
                     "{} 执行失败且无法回退（找不到尚书令）: {}",
@@ -641,7 +655,7 @@ async fn forward_route(ctx: &ActorContext, route: RouteTo) {
             }
         }
         None => {
-            let _ = ctx.emperor_tx.send(ChatMessage::new(
+            let _ = ctx.emperor_tx.try_send(ChatMessage::new(
                 "系统",
                 &format!("找不到目标部门: {}", target_name),
             ));
@@ -651,7 +665,7 @@ async fn forward_route(ctx: &ActorContext, route: RouteTo) {
 
 /// Emit a chat message to the emperor's frontend.
 /// Parses `<options>` tags from the content into structured ChatOption objects.
-fn emit_to_emperor(tx: &mpsc::UnboundedSender<ChatMessage>, role: Role, content: &str) {
+fn emit_to_emperor(tx: &mpsc::Sender<ChatMessage>, role: Role, content: &str) {
     let role_name = role.name();
     let trimmed = content.trim();
     if trimmed.is_empty() {
@@ -660,7 +674,9 @@ fn emit_to_emperor(tx: &mpsc::UnboundedSender<ChatMessage>, role: Role, content:
     let (clean_content, options) = parse_options(trimmed);
     let mut msg = ChatMessage::new(role_name, &clean_content);
     msg.options = options;
-    let _ = tx.send(msg);
+    if let Err(e) = tx.try_send(msg) {
+        log_console!("[actor] emperor_tx.try_send 失败 ({}): {}", role_name, e);
+    }
 }
 
 /// Extract `<options>` from content, return (content_without_options, parsed_options).
@@ -717,5 +733,7 @@ fn extract_attr(tag: &str, attr: &str) -> Option<String> {
 
 /// Emit a department log entry to the frontend status panel.
 fn log_dept(ctx: &ActorContext, dept: &str, action: &str) {
-    let _ = ctx.dept_log_tx.send(DeptLogEntry::new(dept, action));
+    if let Err(e) = ctx.dept_log_tx.try_send(DeptLogEntry::new(dept, action)) {
+        log_console!("[actor] dept_log_tx.try_send 失败 ({}): {}", dept, e);
+    }
 }

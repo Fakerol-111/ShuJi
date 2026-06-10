@@ -75,9 +75,24 @@ export interface Document {
   path: string | null;
 }
 
+// ── Role names (union of all possible ChatMessage.role values) ──
+/** Chinese role label used in ChatMessage.role and DeptMeta.label */
+export type RoleName =
+  | '皇帝'
+  | '系统'
+  | '内阁'
+  | '中书令'
+  | '门下侍中'
+  | '尚书令'
+  | '吏部尚书'
+  | '兵部尚书'
+  | '工部尚书'
+  | '刑部尚书'
+  | '礼部尚书';
+
 // Chat types
 export interface ChatMessage {
-  role: string;
+  role: RoleName;
   content: string;
   options: ChatOption[];
   documents: Document[];

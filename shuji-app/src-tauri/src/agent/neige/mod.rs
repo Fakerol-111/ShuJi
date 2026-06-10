@@ -431,26 +431,18 @@ impl Agent for NeigeAgent {
             let wd = working_dir.clone();
             let role = role_name.clone();
             let cfg = input.runtime_config.clone();
+            // Capture context_config snapshot at registration time (same as
+            // run_actor's per-task caching), avoiding disk reads on every compact.
+            let ctx_roles = input.context_window_config.clone();
             controller.set_compact_handler(
                 Box::new(move |messages: Vec<serde_json::Value>| {
                     let client = client.clone();
                     let model = model.clone();
-                    let wd = wd.clone();
                     let role = role.clone();
                     let cfg = cfg.clone();
+                    let ctx_roles = ctx_roles.clone();
+                    let wd = wd.clone();
                     Box::pin(async move {
-                        // Re-read context config for live threshold updates
-                        let ctx_roles = tokio::fs::read_to_string(wd.join("context_config.json"))
-                            .await
-                            .ok()
-                            .and_then(|c| {
-                                serde_json::from_str::<
-                                        crate::commands::settings::ContextWindowConfig,
-                                    >(&c)
-                                    .ok()
-                            })
-                            .map(|c| c.roles)
-                            .unwrap_or_default();
                         let thresholds =
                             cfg.resolve_compact_thresholds(&role, ctx_roles.get(&role));
 

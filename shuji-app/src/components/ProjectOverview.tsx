@@ -3,6 +3,7 @@ import { listShujiTree, generateDeliveryReport } from '../api';
 import type { ShujiEntry } from '../api';
 import type { PlanInfo, Project } from '../types';
 import { getDeptMeta } from '../constants';
+import { formatError } from '../utils/error';
 import { Card } from './ui/Card';
 
 interface ProjectOverviewProps {
@@ -32,7 +33,7 @@ export default function ProjectOverview({
       const r = await generateDeliveryReport();
       setReport(r);
     } catch (e) {
-      setError(String(e));
+      setError(formatError(e));
     } finally {
       setReportLoading(false);
     }
@@ -52,8 +53,7 @@ export default function ProjectOverview({
         setDocsLoading(false);
       })
       .catch((e) => {
-        console.error('文档树加载失败:', e);
-        setError('加载失败');
+        setError(formatError(e));
         setLatestDocs([]);
         setDocsLoading(false);
       });

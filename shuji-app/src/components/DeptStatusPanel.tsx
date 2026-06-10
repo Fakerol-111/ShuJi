@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
+import { formatError } from '../utils/error';
 import { getDeptLogs } from '../api';
 import { getDeptMeta } from '../constants';
 import type { DeptLogEntry } from '../types';
@@ -24,7 +25,7 @@ export default function DeptStatusPanel() {
       .then((hist) => {
         if (hist.length > 0) setEntries(hist.slice(-MAX_ENTRIES));
       })
-      .catch((e) => console.error('部门日志加载失败:', e));
+      .catch((e) => console.error(formatError(e)));
   }, []);
 
   useEffect(() => {

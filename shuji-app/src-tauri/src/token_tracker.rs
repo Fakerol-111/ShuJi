@@ -156,19 +156,6 @@ pub fn snapshot_grouped() -> HashMap<String, HashMap<String, TokenUsage>> {
     result
 }
 
-/// Clear all tracked data (memory + file).
-#[allow(dead_code)] // available for future reset functionality
-pub fn clear() {
-    if let Ok(mut lock) = RECORDS.lock() {
-        *lock = None;
-    }
-    if let Ok(path_lock) = STORAGE_PATH.lock() {
-        if let Some(ref path) = *path_lock {
-            let _ = std::fs::remove_file(Path::new(path));
-        }
-    }
-}
-
 fn load_from_file(path: &Path) -> Option<Vec<TokenRecord>> {
     match std::fs::read_to_string(path) {
         Ok(content) => serde_json::from_str(&content).ok(),

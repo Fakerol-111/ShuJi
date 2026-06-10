@@ -1,7 +1,9 @@
 /**
- * Pending approvals polling hook for ProjectDashboard.
+ * Pending approvals hook — event-driven instead of polling.
+ * Fetches on mount and on every `project-update` backend event.
  */
 import { useState, useEffect } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import { getPendingApprovals } from '../api';
 
 export function usePendingApprovals(project: { working_dir?: string } | null) {
@@ -17,9 +19,15 @@ export function usePendingApprovals(project: { working_dir?: string } | null) {
         .then(setPendingApprovals)
         .catch(() => {});
     };
+    // Initial fetch
     fetch();
-    const timer = setInterval(fetch, 3000);
-    return () => clearInterval(timer);
+    // Update on project-update events instead of polling every 3s
+    const unlisten = listen('project-update', () => {
+      fetch();
+    });
+    return () => {
+      unlisten.then((f) => f());
+    };
   }, [project?.working_dir, project]);
 
   return { pendingApprovals };

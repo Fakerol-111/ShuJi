@@ -19,7 +19,7 @@ pub mod config;
 mod logging;
 pub mod models;
 mod round_metrics;
-mod storage;
+pub mod storage;
 mod token_tracker;
 pub mod tool;
 pub mod workflow;
@@ -35,7 +35,7 @@ pub type CancelMap = Arc<std::sync::Mutex<HashMap<crate::models::role::Role, Arc
 pub type FastTxMap = Arc<
     HashMap<
         crate::models::role::Role,
-        tokio::sync::mpsc::UnboundedSender<crate::actor::FastMessage>,
+        tokio::sync::mpsc::Sender<crate::actor::FastMessage>,
     >,
 >;
 
@@ -58,6 +58,7 @@ pub fn run() {
             dept_log_history: Arc::new(tokio::sync::Mutex::new(Vec::new())),
             runtime_config: Arc::new(runtime_config),
             compacting_roles: Arc::new(Mutex::new(HashSet::new())),
+            discuss_cancel: Arc::new(AtomicBool::new(false)),
         })
         .invoke_handler(tauri::generate_handler![
             commands::project::create_project,
@@ -75,6 +76,7 @@ pub fn run() {
             commands::workflow::get_token_stats,
             commands::workflow::get_context_stats,
             commands::workflow::compact_context,
+            commands::workflow::cancel_discuss,
             commands::workflow::cancel_processing,
             commands::workflow::get_chat_history,
             commands::workflow::get_dept_logs,

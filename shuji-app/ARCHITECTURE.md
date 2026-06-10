@@ -92,14 +92,17 @@ Session (api/session.rs)              AgentController (api/control.rs)
 | `api/client.rs` | HTTP 客户端（兼容 Anthropic / OpenAI 格式） |
 | `api/compact/mod.rs` | 上下文压缩 |
 | `tool/mod.rs` | 工具调度、resolve_scoped_path、命令安全 |
+| `tool/output.rs` | 结构化工具返回结果 ToolOutput |
+| `tool/registry.rs` | 工具注册表组函数（inspect/file_write/document/route/approval） |
 | `tool/documents.rs` | 文档 CRUD、朱批审批 |
+| `tool/tool_log.rs` | 异步工具调用日志 |
 | `agent/neige/` | 内阁 agent：skill 检测循环、prompt |
 | `agent/*/` | 其他 9 个部门 agent |
 | `config/mod.rs` | RuntimeConfig 加载 |
 | `config.toml` | 运行时配置（限流、超时、阈值） |
 | `context_config.json` | 每角色上下文压缩配置 |
 
-| `workflow/` | Workflow Profile 系统：config/profile/resolver/gate/chain/state |
+| `workflow/` | Workflow Profile 系统：config/profile/resolver/gate/chain/state/stage + yaml profiles |
 
 ## Workflow Profile 系统
 
@@ -116,13 +119,15 @@ Session (api/session.rs)              AgentController (api/control.rs)
 | `brownfield_optimize` | 存量优化：跳过需求展开和门下审查 |
 | `bugfix` | 缺陷修复：直路由到工部/尚书令 |
 | `demo` | 快速原型：最轻量流程 |
+| `refactor` | 架构重构：通过 `workflow_refactor` 路由启发式解析 |
+| `audit` | 审计合规：通过 `workflow_audit` 路由启发式解析 |
 
 | Governance | overlay 行为 |
 |------------|-------------|
 | `full` | 无额外门禁 |
 | `standard` | 无额外门禁（默认） |
 | `fast` | 追加禁 expand_requirements + 禁门下侍中 |
-| `audit` | （Phase B 完善） |
+| `audit` | 完整版，无额外门禁 |
 
 ### 架构
 
@@ -141,7 +146,7 @@ workflow_config.json ─→ WorkflowResolver ─→ ActiveProfile
 | 组件 | 职责 |
 |------|------|
 | `config.rs` | 读写 `.shuji/workflow_config.json`，默认 auto+standard |
-| `profile.rs` | 4 个内置 WorkflowProfile + Governance overlay |
+| `profile.rs` | 6 个内置 WorkflowProfile（4 core + refactor/audit）+ Governance overlay |
 | `resolver.rs` | WorkflowResolver：合并 intent + governance + routing 启发式 |
 | `gate.rs` | GateEngine：工具名 + route_to 目标拦截（替代旧硬编码 demo/bugfix gate） |
 | `chain.rs` | ChainEngine：greenfield_full / brownfield_patch 执行链 |

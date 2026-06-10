@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
-import type { ChatMessage } from "../types";
+import type { ChatMessage, RoleName } from "../types";
 import { useChat } from "./useChat";
 
 // Mock Tauri event system
@@ -23,14 +23,16 @@ vi.mock("@tauri-apps/api/event", () => ({
 const mockSendMessage = vi.fn();
 const mockDiscussWithCabinet = vi.fn();
 const mockGetChatHistory = vi.fn();
+const mockCancelDiscuss = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("../api", () => ({
   sendMessage: (...args: unknown[]) => mockSendMessage(...args),
   discussWithCabinet: (...args: unknown[]) => mockDiscussWithCabinet(...args),
   getChatHistory: (...args: unknown[]) => mockGetChatHistory(...args),
+  cancelDiscuss: (...args: unknown[]) => mockCancelDiscuss(...args),
 }));
 
-function createMsg(text: string, ts: string, role = "内阁"): ChatMessage {
+function createMsg(text: string, ts: string, role: RoleName = "内阁"): ChatMessage {
   return { role, content: text, options: [], documents: [], timestamp: ts };
 }
 

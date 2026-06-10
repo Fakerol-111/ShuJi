@@ -371,3 +371,32 @@ npm test
 - Workflow Profile 是流程行为的单一真相源。
 - 大文件被拆分为可审查、可局部测试的模块。
 - 新功能开发优先修改结构化配置和小模块，而不是继续堆 prompt 与巨型文件。
+
+---
+
+## 执行进度
+
+| 优先级 | 任务 | 状态 | 完成日期 | 说明 |
+|--------|------|------|----------|------|
+| P0-3 | 修 Prettier / CI 断裂 | ✅ | 2026-06-09 | Prettier 加入依赖，CI 格式检查 |
+| P0-1 | 建立前端测试基建（79 tests） | ✅ | 2026-06-09 | Vitest + RTL |
+| P0-2 | 补朱批与门禁测试（+16 tests） | ✅ | 2026-06-09 | document_test 24 tests |
+| P0-4 | 修复聊天状态多源问题 | ✅ | 2026-06-09 | 单一真相源 + mergeMessages |
+| P1-6 | 拆分 ProjectDashboard.tsx（650→380行） | ✅ | 2026-06-09 | 抽出 useDocumentTabs/useDemoFlow/usePendingApprovals |
+| P1-7 | 拆分 SettingsMenu.tsx（580→240行） | ✅ | 2026-06-09 | 4 tab 组件：Api/Context/Workflow/Soul |
+| P1-8 | 拆分 tool/mod.rs（2475→45行，12模块） | ✅ | 2026-06-09 | cache/path/file_ops/command_ops/dispatch/neige_special/audit_tools |
+| P1-10 | 收敛 Workflow 决策入口 | ✅ | 2026-06-09 | GateEngine/ChainEngine + refactor/audit profile |
+| P2-11/12 | AgentController/watchdog/compact 测试（+11 tests） | ✅ | 2026-06-09 | session_control_test + config_test 扩展 |
+| P4-21 | 同步过时文档 | ✅ | 2026-06-09 | ARCHITECTURE.md + CLAUDE.md 更新 |
+| **P0-5** | **提高关键错误可观测性** | **✅** | **2026-06-10** | **emperor_tx/dept_log_tx/milestone_tx send 错误日志 + audit::append 日志化** |
+| **P1-9** | **拆分 commands/workflow.rs** | **✅** | **2026-06-10** | **5 子模块：bootstrap/send/context/query/audit，1168→35 行** |
+| **P2-13** | **ActorSystem 轻量集成测试** | **✅** | **2026-06-10** | **+4 tests：FastMessage 中断、cancel flag、teardown、route_to 跨 actor** |
+| P2-14 | 审计与 checkpoint 测试 | ⬜ | — | audit append、lineage、reverse ref |
+| P3-15 | 缓存与全局状态隔离 | ⬜ | — | READ_CACHE 按项目/session 隔离 |
+| P3-16 | async 锁与 channel 背压 | ⬜ | — | std::sync::Mutex 审计、bounded channel |
+| P3-17 | 配置读取与压缩阈值优化 | ⬜ | — | 避免每轮读 context_config.json |
+| P3-18 | 前端轮询与事件订阅收敛 | ⬜ | — | 统一 status poll、避免重复 listen |
+| P3-19 | 前端类型收紧与死代码清理 | ⬜ | — | ChatMessage.role 联合类型、消除 any |
+| P3-20 | 真正取消讨论模式 | ⬜ | — | discuss_with_cabinet 取消句柄 |
+| P4-22 | 增加贡献与本地开发说明 | ⬜ | — | CONTRIBUTING.md |
+| P4-23 | CI 扩展 | ⬜ | — | windows-latest job、nightly real API test |

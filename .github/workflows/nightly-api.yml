@@ -1,0 +1,25 @@
+name: Nightly API Test
+
+on:
+  schedule:
+    # 每日 UTC 4:00（北京时间 12:00）
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+    # 允许手动触发
+
+jobs:
+  expand-requirements:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install system deps (Tauri)
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
+      - name: Create .env from GitHub Secrets
+        run: |
+          echo "DEFAULT_API_KEY=${{ secrets.DEFAULT_API_KEY }}" > shuji-app/src-tauri/.env
+          echo "DEFAULT_API_URL=${{ secrets.DEFAULT_API_URL }}" >> shuji-app/src-tauri/.env
+          echo "DEFAULT_MODEL=${{ secrets.DEFAULT_MODEL }}" >> shuji-app/src-tauri/.env
+      - name: Run expand_requirements test
+        continue-on-error: true
+        run: cd shuji-app/src-tauri && cargo test --test expand_requirements_test -- --nocapture

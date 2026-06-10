@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getConfig, saveConfig, checkApiConnection, setModelPreset } from '../api';
+import { formatError } from '../utils/error';
 import { API_URL_PRESETS, MODEL_PRESETS } from '../constants/presets';
 import type { AppConfig, RoleEndpoint } from '../types';
 import { SealLogo } from '../components/SealLogo';
@@ -66,7 +67,7 @@ export default function SetupPage() {
       );
       navigate('/', { replace: true });
     } catch (e) {
-      setError(String(e));
+      setError(formatError(e));
     } finally {
       setSaving(false);
     }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatError } from '../utils/error';
 import {
   getConfig,
   saveConfig,
@@ -73,9 +74,8 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
         setOverrides(o);
         setUseDefault(u);
       })
-      .catch((e) => console.error('读取配置失败:', e));
+      .catch((e) => console.error(formatError(e)));
   };
-
   const loadContextConfig = () => {
     getContextConfig()
       .then((ctxCfg: ContextWindowConfig) => {
@@ -99,7 +99,7 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
         setContextOverrides(overrides);
         setContextUseDefault(useDefault);
       })
-      .catch((e) => console.error('读取上下文配置失败:', e));
+      .catch((e) => console.error(formatError(e)));
   };
 
   const loadWorkflowConfig = () => {
