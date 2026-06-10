@@ -150,7 +150,8 @@ async fn test_resolver_auto_refactor_match() {
     // "重构" keyword should resolve to refactor profile at Medium confidence
     let cfg = WorkflowConfig::load_from(tempfile::TempDir::new().unwrap().path()).await;
     let tmp = tempfile::TempDir::new().unwrap();
-    let result = WorkflowResolver::resolve(&cfg, tmp.path(), "重构用户模块架构，拆分 monolith").await;
+    let result =
+        WorkflowResolver::resolve(&cfg, tmp.path(), "重构用户模块架构，拆分 monolith").await;
     assert_eq!(result.profile.profile_id, "refactor");
     assert!(!result.locked);
     assert!(result.hint.is_some());

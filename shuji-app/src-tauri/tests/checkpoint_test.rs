@@ -36,32 +36,42 @@ fn init_temp_project(name: &str) -> tempfile::TempDir {
 /// After this, a checkpoint `save()` with no new changes should return None.
 #[allow(dead_code)]
 fn commit_all(working_dir: &Path) {
-    let add = block_on(
+    let add = block_on(async {
         checkpoint::git_cmd(working_dir)
             .args(["add", "-A"])
             .output()
+            .await
+    });
+    assert!(
+        add.is_ok() && add.as_ref().unwrap().status.success(),
+        "git add -A failed: {:?}",
+        add.as_ref().map(|o| String::from_utf8_lossy(&o.stderr))
     );
-    assert!(add.is_ok() && add.as_ref().unwrap().status.success(),
-        "git add -A failed: {:?}", add.as_ref().map(|o| String::from_utf8_lossy(&o.stderr)));
 
-    let commit = block_on(
+    let commit = block_on(async {
         checkpoint::git_cmd(working_dir)
             .args(["commit", "-m", "test: commit all"])
             .output()
+            .await
+    });
+    assert!(
+        commit.is_ok() && commit.as_ref().unwrap().status.success(),
+        "git commit failed: {:?}",
+        commit.as_ref().map(|o| String::from_utf8_lossy(&o.stderr))
     );
-    assert!(commit.is_ok() && commit.as_ref().unwrap().status.success(),
-        "git commit failed: {:?}", commit.as_ref().map(|o| String::from_utf8_lossy(&o.stderr)));
 }
 
 /// Count the number of commits in the .shuji/.git repo.
 #[allow(dead_code)]
 fn count_commits(working_dir: &Path) -> usize {
-    let out = block_on(
+    let out = block_on(async {
         checkpoint::git_cmd(working_dir)
             .args(["rev-list", "--count", "HEAD"])
             .output()
-    );
-    let stdout = out.map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .await
+    });
+    let stdout = out
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .unwrap_or_default();
     stdout.parse().unwrap_or(0)
 }
@@ -99,8 +109,10 @@ fn test_save_no_changes() {
         &snap,
     ));
 
-    assert!(hash.is_none(),
-        "save() should return None when there are no changes to commit");
+    assert!(
+        hash.is_none(),
+        "save() should return None when there are no changes to commit"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -114,12 +126,7 @@ fn test_save_and_find_checkpoint() {
     let snap = test_snapshot();
 
     // First save should find new .shuji files to commit → returns a hash
-    let hash = block_on(checkpoint::save(
-        dir.path(),
-        "工部",
-        "完成编码任务",
-        &snap,
-    ));
+    let hash = block_on(checkpoint::save(dir.path(), "工部", "完成编码任务", &snap));
     assert!(hash.is_some(), "First save should produce a commit hash");
     let hash = hash.unwrap();
     assert!(!hash.is_empty(), "Commit hash should not be empty");
@@ -149,12 +156,7 @@ fn test_load_snapshot() {
     let dir = init_temp_project("snapshot");
 
     let snap = test_snapshot();
-    let hash = block_on(checkpoint::save(
-        dir.path(),
-        "内阁",
-        "snapshot test",
-        &snap,
-    ));
+    let hash = block_on(checkpoint::save(dir.path(), "内阁", "snapshot test", &snap));
     assert!(hash.is_some(), "save() should succeed");
     let hash = hash.unwrap();
 
@@ -167,14 +169,21 @@ fn test_load_snapshot() {
     assert!(loaded.is_some(), "Should load session snapshot");
 
     // Verify messages were restored by checking the snapshot file on disk
-    let snapshot_file = dir.path()
+    let snapshot_file = dir
+        .path()
         .join(".shuji/checkpoints")
         .join(&role)
         .join(format!("{}.json", hash));
-    let snapshot_content = std::fs::read_to_string(&snapshot_file)
-        .expect("Snapshot file should exist");
-    assert!(snapshot_content.contains("Hello from test"), "Should contain original user message");
-    assert!(snapshot_content.contains("Hello from ShuJi"), "Should contain original assistant message");
+    let snapshot_content =
+        std::fs::read_to_string(&snapshot_file).expect("Snapshot file should exist");
+    assert!(
+        snapshot_content.contains("Hello from test"),
+        "Should contain original user message"
+    );
+    assert!(
+        snapshot_content.contains("Hello from ShuJi"),
+        "Should contain original assistant message"
+    );
 }
 
 #[test]
@@ -191,8 +200,8 @@ fn test_load_snapshot_empty_session() {
     assert!(hash.is_some());
     let hash = hash.unwrap();
 
-    let (role, _entry) = block_on(checkpoint::find_checkpoint(dir.path(), &hash))
-        .expect("Should be findable");
+    let (role, _entry) =
+        block_on(checkpoint::find_checkpoint(dir.path(), &hash)).expect("Should be findable");
 
     let loaded = block_on(checkpoint::load_snapshot(dir.path(), &role, &hash));
     assert!(loaded.is_some(), "Should load even with empty session");
@@ -215,13 +224,17 @@ fn test_save_final() {
 
     // Verify index has the entry
     let index = block_on(checkpoint::load_index(dir.path()));
-    assert!(!index.is_empty(), "Index should contain the final checkpoint");
+    assert!(
+        !index.is_empty(),
+        "Index should contain the final checkpoint"
+    );
     assert_eq!(index[0].role, "兵部尚书");
     assert_eq!(index[0].description, "测试执行完成");
 
     // Verify snapshot file exists (even if empty)
     let hash = hash.unwrap();
-    let snapshot_path = dir.path()
+    let snapshot_path = dir
+        .path()
         .join(".shuji/checkpoints/兵部尚书")
         .join(format!("{}.json", hash));
     assert!(snapshot_path.exists(), "Snapshot file should exist");
@@ -254,7 +267,10 @@ fn test_multiple_checkpoints() {
 
     let index = block_on(checkpoint::load_index(dir.path()));
     assert_eq!(index.len(), 2, "Should have two index entries");
-    assert_ne!(index[0].commit, index[1].commit, "Commits should be different");
+    assert_ne!(
+        index[0].commit, index[1].commit,
+        "Commits should be different"
+    );
 
     // Both should be findable
     let found1 = block_on(checkpoint::find_checkpoint(dir.path(), &hash1.unwrap()));
@@ -270,7 +286,10 @@ fn test_multiple_checkpoints() {
 #[test]
 fn test_find_checkpoint_nonexistent() {
     let dir = init_temp_project("find_nonexist");
-    let found = block_on(checkpoint::find_checkpoint(dir.path(), "deadbeefdeadbeefdeadbeef"));
+    let found = block_on(checkpoint::find_checkpoint(
+        dir.path(),
+        "deadbeefdeadbeefdeadbeef",
+    ));
     assert!(found.is_none(), "Should not find a nonexistent checkpoint");
 }
 

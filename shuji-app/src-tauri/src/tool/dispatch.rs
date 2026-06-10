@@ -1,9 +1,9 @@
 use std::path::Path;
 
-use crate::tool::cache::cache_invalidate;
 use crate::tool::audit_tools::{
     tool_add_violation, tool_init_checklist, tool_request_reauth, tool_update_checklist_item,
 };
+use crate::tool::cache::cache_invalidate;
 use crate::tool::command_ops::{tool_execute_command, tool_run_tests};
 use crate::tool::documents;
 use crate::tool::file_ops::{
@@ -12,8 +12,8 @@ use crate::tool::file_ops::{
     tool_search_text,
 };
 use crate::tool::path::resolve_scoped_path;
-use crate::tool::ToolOutput;
 use crate::tool::tool_log;
+use crate::tool::ToolOutput;
 
 /// Truncate verbose tool results to avoid blowing up context.
 /// Uses per-tool limits. Truncated results include a hint for continuation.

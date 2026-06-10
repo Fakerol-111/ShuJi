@@ -312,45 +312,53 @@ npm test
 
 完成条件：
 
-- [ ] 前端测试能跑。
-- [ ] 朱批门禁有集成测试。
-- [ ] CI 跑前端测试和格式检查。
-- [ ] README/CLAUDE 测试数量更新。
+- [x] 前端测试能跑（Vitest，6 个测试文件、约 78 用例；CI 已接入）。
+- [x] 朱批门禁有集成测试（`document_test.rs` 24 用例）。
+- [x] CI 跑前端测试和格式检查（`format:check` + `npm test` + `npm run lint`）。
+- [ ] README/CLAUDE 测试数量更新（**仍过时**：README 仍写 138，实际约 96 单元 + 186 集成）。
 
 收益：后续重构不再完全依赖手工验收。
+
+**当前状态：基本完成（3/4）**
 
 ### 里程碑 B：前端可维护性
 
 完成条件：
 
-- [ ] `ProjectDashboard.tsx` 小于 300 行。
-- [ ] `SettingsMenu.tsx` 按 tab 拆分。
-- [ ] 聊天状态单一真相源明确。
-- [ ] dept-log / active roles 订阅收敛。
+- [ ] `ProjectDashboard.tsx` 小于 300 行（**当前约 376 行**，已抽 hook，未抽 `DashboardLayout`）。
+- [x] `SettingsMenu.tsx` 按 tab 拆分（约 275 行，4 个 tab 组件）。
+- [x] 聊天状态单一真相源明确（`utils/chat.ts`；仍用 composite key，后端尚无稳定 message id）。
+- [ ] dept-log / active roles 订阅收敛（仍 3–4 处独立 `dept-log` 监听 + 多处轮询）。
 
 收益：UI 功能迭代和 bug 修复成本明显下降。
+
+**当前状态：部分完成（2/4）**
 
 ### 里程碑 C：后端模块化
 
 完成条件：
 
-- [ ] `tool/mod.rs` 拆分。
-- [ ] `commands/workflow.rs` 拆分。
-- [ ] workflow 决策入口统一。
-- [ ] 关键 `let _ =` 改为可观测日志。
+- [x] `tool/mod.rs` 拆分（12 子模块，facade 约 45 行）。
+- [x] `commands/workflow.rs` 拆分（`bootstrap/send/context/query/audit`，`mod.rs` 约 12 行）。
+- [ ] workflow 决策入口统一（GateEngine/ChainEngine 已落地；prompt 层仍可能有重复规则）。
+- [ ] 关键 `let _ =` 改为可观测日志（actor/audit 关键路径已改；全库仍有残留）。
 
 收益：后端核心模块更容易审查、测试和扩展。
+
+**当前状态：大部分完成（2/4 完全，2/4 部分）**
 
 ### 里程碑 D：长会话稳定性
 
 完成条件：
 
-- [ ] compact 模块有测试。
-- [ ] AgentController watchdog 有测试。
-- [ ] actor 中断与项目切换有集成测试。
-- [ ] 缓存和 token 统计按项目隔离或明确生命周期。
+- [x] compact 模块有测试（`api/compact` 内 8 个单元测试：skill 剥离、keep_recent 等）。
+- [ ] AgentController watchdog 有测试（仅有 `config_test` 默认值；**无** mock session 行为级测试）。
+- [x] actor 中断与项目切换有集成测试（`actor_test.rs` 25 用例）。
+- [ ] 缓存和 token 统计按项目隔离或明确生命周期（仅 `cache_clear_all()` 于 `load_project`，非按项目隔离）。
 
 收益：真实长任务、跨项目使用、异常恢复更可靠。
+
+**当前状态：部分完成（2/4）**
 
 ## 不建议优先做的事
 
@@ -376,27 +384,52 @@ npm test
 
 ## 执行进度
 
-| 优先级 | 任务 | 状态 | 完成日期 | 说明 |
-|--------|------|------|----------|------|
-| P0-3 | 修 Prettier / CI 断裂 | ✅ | 2026-06-09 | Prettier 加入依赖，CI 格式检查 |
-| P0-1 | 建立前端测试基建（79 tests） | ✅ | 2026-06-09 | Vitest + RTL |
-| P0-2 | 补朱批与门禁测试（+16 tests） | ✅ | 2026-06-09 | document_test 24 tests |
-| P0-4 | 修复聊天状态多源问题 | ✅ | 2026-06-09 | 单一真相源 + mergeMessages |
-| P1-6 | 拆分 ProjectDashboard.tsx（650→380行） | ✅ | 2026-06-09 | 抽出 useDocumentTabs/useDemoFlow/usePendingApprovals |
-| P1-7 | 拆分 SettingsMenu.tsx（580→240行） | ✅ | 2026-06-09 | 4 tab 组件：Api/Context/Workflow/Soul |
-| P1-8 | 拆分 tool/mod.rs（2475→45行，12模块） | ✅ | 2026-06-09 | cache/path/file_ops/command_ops/dispatch/neige_special/audit_tools |
-| P1-10 | 收敛 Workflow 决策入口 | ✅ | 2026-06-09 | GateEngine/ChainEngine + refactor/audit profile |
-| P2-11/12 | AgentController/watchdog/compact 测试（+11 tests） | ✅ | 2026-06-09 | session_control_test + config_test 扩展 |
-| P4-21 | 同步过时文档 | ✅ | 2026-06-09 | ARCHITECTURE.md + CLAUDE.md 更新 |
-| **P0-5** | **提高关键错误可观测性** | **✅** | **2026-06-10** | **emperor_tx/dept_log_tx/milestone_tx send 错误日志 + audit::append 日志化** |
-| **P1-9** | **拆分 commands/workflow.rs** | **✅** | **2026-06-10** | **5 子模块：bootstrap/send/context/query/audit，1168→35 行** |
-| **P2-13** | **ActorSystem 轻量集成测试** | **✅** | **2026-06-10** | **+4 tests：FastMessage 中断、cancel flag、teardown、route_to 跨 actor** |
-| P2-14 | 审计与 checkpoint 测试 | ⬜ | — | audit append、lineage、reverse ref |
-| P3-15 | 缓存与全局状态隔离 | ⬜ | — | READ_CACHE 按项目/session 隔离 |
-| P3-16 | async 锁与 channel 背压 | ⬜ | — | std::sync::Mutex 审计、bounded channel |
-| P3-17 | 配置读取与压缩阈值优化 | ⬜ | — | 避免每轮读 context_config.json |
-| P3-18 | 前端轮询与事件订阅收敛 | ⬜ | — | 统一 status poll、避免重复 listen |
-| P3-19 | 前端类型收紧与死代码清理 | ⬜ | — | ChatMessage.role 联合类型、消除 any |
-| P3-20 | 真正取消讨论模式 | ⬜ | — | discuss_with_cabinet 取消句柄 |
-| P4-22 | 增加贡献与本地开发说明 | ⬜ | — | CONTRIBUTING.md |
-| P4-23 | CI 扩展 | ⬜ | — | windows-latest job、nightly real API test |
+> **图例**：✅ 已完成 · 🟡 部分完成（有缺口） · ⬜ 未开始  
+> **测试规模（2026-06-10 实测）**：Rust 单元 **96** + 集成 **186** ≈ **282**；前端 Vitest **6 文件 / ~78 用例**。
+
+### 汇总
+
+| 阶段 | 完成 | 部分 | 未完成 |
+|------|------|------|--------|
+| P0 | 3 | 2 | 0 |
+| P1 | 3 | 2 | 0 |
+| P2 | 2 | 2 | 0 |
+| P3 | 2 | 1 | 2 |
+| P4 | 1 | 2 | 0 |
+| **合计** | **11** | **9** | **2** |
+
+### 下一步建议（按优先级）
+
+1. **P4-21** 补完：`README.md` 测试数字、`TEST_FLOW.md` 部门/工具旧名
+2. **P2-11** 补 AgentController watchdog **行为级** mock 测试
+3. **P1-6** 继续压 `ProjectDashboard`（抽 `DashboardLayout`，目标 <300 行）
+4. **P3-18** 收敛 `dept-log` 重复订阅与分散轮询
+5. **P3-15** READ_CACHE 按项目隔离（当前仅全局 `cache_clear_all`）
+
+---
+
+| 优先级 | 任务 | 状态 | 完成日期 | 说明 / 剩余缺口 |
+|--------|------|------|----------|-----------------|
+| P0-3 | 修 Prettier / CI 断裂 | ✅ | 2026-06-09 | Prettier 在 devDependencies；CI 跑 `format:check` |
+| P0-1 | 建立前端测试基建 | ✅ | 2026-06-09 | Vitest + RTL；6 文件 ~78 用例（error/constants/ChatBubble/DocPreview/useChat/chat） |
+| P0-2 | 补朱批与门禁测试 | ✅ | 2026-06-09 | `document_test.rs` 24 用例（in_review、pending、gate、approve/reject） |
+| P0-4 | 修复聊天状态多源问题 | 🟡 | 2026-06-09 | `utils/chat.ts` 统一 merge；**缺口**：后端无稳定 message `id`，`sessionStorage` 仍作刷新恢复 |
+| P0-5 | 提高关键错误可观测性 | 🟡 | 2026-06-10 | actor 事件发送 + audit 写入已日志化；**缺口**：全库仍有大量 `let _ =` 未审计 |
+| P1-6 | 拆分 ProjectDashboard.tsx | 🟡 | 2026-06-09 | 650→**~376 行**；已抽 3 个 hook；**缺口**：未达 <300 行，无 `DashboardLayout` |
+| P1-7 | 拆分 SettingsMenu.tsx | ✅ | 2026-06-09 | 580→**~275 行**；4 tab：Api/Context/Workflow/Soul |
+| P1-8 | 拆分 tool/mod.rs | ✅ | 2026-06-09 | 2475→**~45 行** facade；12 子模块 |
+| P1-9 | 拆分 commands/workflow.rs | ✅ | 2026-06-10 | bootstrap/send/context/query/audit；`mod.rs` **~12 行** |
+| P1-10 | 收敛 Workflow 决策入口 | 🟡 | 2026-06-09 | GateEngine/ChainEngine + profile 测试；**缺口**：prompt 仍可能重复 gate 规则 |
+| P2-11 | AgentController / watchdog 测试 | 🟡 | 2026-06-09 | `config_test` 仅默认值；**缺口**：无 mock session 验证重复工具/只读不写/连续错误停跑 |
+| P2-12 | 上下文压缩测试 | 🟡 | 2026-06-09 | `api/compact` 8 个单元测试（skill 剥离、keep_recent）；**缺口**：无完整 LLM compact 集成测 |
+| P2-13 | ActorSystem 轻量集成测试 | ✅ | 2026-06-10 | `actor_test.rs` 25 用例：FastMessage、cancel、teardown、route_to 跨 actor |
+| P2-14 | 审计与 checkpoint 测试 | ✅ | 2026-06-10 | `audit_test.rs` 24 + `checkpoint_test.rs` 8（lineage、ref index、无变更不 commit、restore） |
+| P3-15 | 缓存与全局状态隔离 | 🟡 | — | `load_project` 调 `cache_clear_all()`；**缺口**：非按项目/session 隔离，`token_tracker` 未评估 |
+| P3-16 | async 锁与 channel 背压 | ⬜ | — | `std::sync::Mutex` 热路径、`unbounded_channel` 未改 |
+| P3-17 | 配置读取与压缩阈值优化 | ✅ | 2026-06-10 | actor 每任务只读一次 `context_config.json`；**缺口**：压缩阈值仍固定 750k，未按模型动态 |
+| P3-18 | 前端轮询与事件订阅收敛 | ⬜ | — | 仍 1s/3s 多处轮询；`dept-log` 在 DocTree/DeptStatusPanel/LogBar/useLatestDeptLogs 重复订阅 |
+| P3-19 | 前端类型收紧与死代码清理 | 🟡 | 2026-06-10 | `ChatMessage.role`→`RoleName`；`DocumentViewer` 已删；**缺口**：`DeptLogEntry` 等仍 `string`，部分 `any`/catch 未统一 |
+| P3-20 | 真正取消讨论模式 | ✅ | 2026-06-10 | 后端 `cancel_discuss` + 前端 `cancelDiscussApi()`；`useChat.test` 有覆盖 |
+| P4-21 | 同步过时文档 | 🟡 | 2026-06-09 | ARCHITECTURE.md / CLAUDE.md 已更新；**缺口**：`README.md` 仍写 138 测；`TEST_FLOW.md` 仍用中书省/门下省旧名 |
+| P4-22 | 增加贡献与本地开发说明 | ✅ | 2026-06-10 | 根目录 `CONTRIBUTING.md` 已存在 |
+| P4-23 | CI 扩展 | 🟡 | 2026-06-10 | 已有 `windows-check`、`format:check`、Vitest；**缺口**：无 nightly `expand_requirements` job |

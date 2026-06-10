@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc;
 
-use crate::actor::{ActorContext, ActorMessage, DeptLogEntry, FastMessage};
 use crate::actor::ActorSystem;
+use crate::actor::{ActorContext, ActorMessage, DeptLogEntry, FastMessage};
 use crate::agent::bingbushangshu::BingbuShangshuAgent;
 use crate::agent::gongbushangshu::GongbuShangshuAgent;
 use crate::agent::liburshangshu::LibuRShangshuAgent;
@@ -233,7 +233,11 @@ pub async fn start_actor_system(
             project_dir: project_dir.to_path_buf(),
             working_dir: working_dir.to_path_buf(),
             cancel: actor_flag,
-            cancel_map: if is_neige { Some(cancel_map.clone()) } else { None },
+            cancel_map: if is_neige {
+                Some(cancel_map.clone())
+            } else {
+                None
+            },
             logger,
             shared_context: shared_context.clone(),
             failure_retries: failure_retries.clone(),

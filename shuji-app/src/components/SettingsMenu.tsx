@@ -13,8 +13,18 @@ import {
   getWorkflowConfig as apiGetWorkflowConfig,
   setWorkflowConfig as apiSetWorkflowConfig,
 } from '../api';
-import { ALL_ROLES, CODE_THEMES, getCodeTheme, setCodeTheme as persistCodeTheme } from '../constants';
-import type { RoleEndpoint, ContextWindowConfig, RoleContextConfig, WorkflowConfig as WFConfig } from '../types';
+import {
+  ALL_ROLES,
+  CODE_THEMES,
+  getCodeTheme,
+  setCodeTheme as persistCodeTheme,
+} from '../constants';
+import type {
+  RoleEndpoint,
+  ContextWindowConfig,
+  RoleContextConfig,
+  WorkflowConfig as WFConfig,
+} from '../types';
 import ApiSettingsTab from './settings/ApiSettingsTab';
 import ContextSettingsTab from './settings/ContextSettingsTab';
 import WorkflowSettingsTab from './settings/WorkflowSettingsTab';
@@ -28,7 +38,11 @@ interface ContextRoleForm {
   keep_recent_count: number;
   mid_run_compact: boolean;
 }
-const DEFAULT_CONTEXT_VALUES: ContextRoleForm = { token_threshold: 750_000, keep_recent_count: 24, mid_run_compact: false };
+const DEFAULT_CONTEXT_VALUES: ContextRoleForm = {
+  token_threshold: 750_000,
+  keep_recent_count: 24,
+  mid_run_compact: false,
+};
 
 function initRoleConfigs(cfg: Record<string, RoleEndpoint>) {
   const def = cfg.default ?? DEFAULT_EMPTY;
@@ -87,7 +101,8 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
           if (roles[role.label]) {
             const raw = roles[role.label] as RoleContextConfig & { char_threshold?: number };
             overrides[role.key] = {
-              token_threshold: raw.token_threshold ?? raw.char_threshold ?? DEFAULT_CONTEXT_VALUES.token_threshold,
+              token_threshold:
+                raw.token_threshold ?? raw.char_threshold ?? DEFAULT_CONTEXT_VALUES.token_threshold,
               keep_recent_count: raw.keep_recent_count ?? DEFAULT_CONTEXT_VALUES.keep_recent_count,
               mid_run_compact: raw.mid_run_compact ?? DEFAULT_CONTEXT_VALUES.mid_run_compact,
             };
@@ -104,24 +119,39 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
 
   const loadWorkflowConfig = () => {
     apiGetWorkflowConfig()
-      .then((cfg: WFConfig) => { setWorkflowIntent(cfg.intent); setWorkflowPresetLocal(cfg.governance); })
+      .then((cfg: WFConfig) => {
+        setWorkflowIntent(cfg.intent);
+        setWorkflowPresetLocal(cfg.governance);
+      })
       .catch(() => {
         setWorkflowIntent('auto');
-        apiGetPreset().then(setWorkflowPresetLocal).catch(() => setWorkflowPresetLocal('standard'));
+        apiGetPreset()
+          .then(setWorkflowPresetLocal)
+          .catch(() => setWorkflowPresetLocal('standard'));
       });
   };
 
   const loadModelPreset = () => {
-    getModelPreset().then(setModelPresetLocal).catch(() => setModelPresetLocal('balanced'));
+    getModelPreset()
+      .then(setModelPresetLocal)
+      .catch(() => setModelPresetLocal('balanced'));
   };
 
   const toggle = () => {
-    if (!open) { loadConfig(); loadContextConfig(); loadWorkflowConfig(); loadModelPreset(); }
+    if (!open) {
+      loadConfig();
+      loadContextConfig();
+      loadWorkflowConfig();
+      loadModelPreset();
+    }
     setOpen(!open);
   };
 
   const setOverride = (role: string, field: keyof RoleFormState, value: string) => {
-    setOverrides((prev) => ({ ...prev, [role]: { ...(prev[role] ?? defaultCfg), [field]: value } }));
+    setOverrides((prev) => ({
+      ...prev,
+      [role]: { ...(prev[role] ?? defaultCfg), [field]: value },
+    }));
     setModelPresetLocal('custom');
   };
 
@@ -138,7 +168,9 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
       const current = prev[roleKey] ?? true;
       if (current) {
         const role = ALL_ROLES.find((r) => r.key === roleKey);
-        const preset = role ? { token_threshold: 750_000, keep_recent_count: 24, mid_run_compact: false } : undefined;
+        const preset = role
+          ? { token_threshold: 750_000, keep_recent_count: 24, mid_run_compact: false }
+          : undefined;
         setContextOverrides((o) => ({ ...o, [roleKey]: preset ?? { ...DEFAULT_CONTEXT_VALUES } }));
       }
       return { ...prev, [roleKey]: !current };
@@ -146,7 +178,10 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
   };
 
   const setContextOverride = (role: string, field: string, value: number | boolean) => {
-    setContextOverrides((prev) => ({ ...prev, [role]: { ...(prev[role] ?? DEFAULT_CONTEXT_VALUES), [field]: value } }));
+    setContextOverrides((prev) => ({
+      ...prev,
+      [role]: { ...(prev[role] ?? DEFAULT_CONTEXT_VALUES), [field]: value },
+    }));
   };
 
   const handleSave = async () => {
@@ -163,12 +198,20 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
       for (const role of ALL_ROLES) {
         if (role.key === 'default') continue;
         if (!(contextUseDefault[role.key] ?? true)) {
-          ctxRoles[role.label] = contextOverrides[role.key] ?? { token_threshold: 750_000, keep_recent_count: 24, mid_run_compact: false };
+          ctxRoles[role.label] = contextOverrides[role.key] ?? {
+            token_threshold: 750_000,
+            keep_recent_count: 24,
+            mid_run_compact: false,
+          };
         }
       }
       await saveContextConfig({ roles: ctxRoles });
       await apiSetPreset(workflowPreset);
-      await apiSetWorkflowConfig({ intent: workflowIntent as WFConfig['intent'], governance: workflowPreset as WFConfig['governance'], intent_override: null });
+      await apiSetWorkflowConfig({
+        intent: workflowIntent as WFConfig['intent'],
+        governance: workflowPreset as WFConfig['governance'],
+        intent_override: null,
+      });
 
       setSavedMsg('已保存');
       setTimeout(() => setSavedMsg(''), 2000);
@@ -181,16 +224,27 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
           await checkApiConnection(def.api_key, def.api_url, def.model);
           setHealthStatus('ok');
           setHealthMsg('连接成功');
-        } else { setHealthStatus('idle'); setHealthMsg(''); }
-      } catch (e) { setHealthStatus('fail'); setHealthMsg(String(e)); }
-    } catch (e) { setSavedMsg(String(e)); }
+        } else {
+          setHealthStatus('idle');
+          setHealthMsg('');
+        }
+      } catch (e) {
+        setHealthStatus('fail');
+        setHealthMsg(String(e));
+      }
+    } catch (e) {
+      setSavedMsg(String(e));
+    }
   };
 
   const roleList = ALL_ROLES.filter((r) => r.key !== 'default');
 
   return (
     <div className="relative">
-      <button onClick={toggle} className="text-xs px-2 py-1 text-ink-400 hover:text-ink-100 hover:bg-ink-800 rounded">
+      <button
+        onClick={toggle}
+        className="text-xs px-2 py-1 text-ink-400 hover:text-ink-100 hover:bg-ink-800 rounded"
+      >
         ⚙ 设置
       </button>
 
@@ -243,7 +297,11 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
               {Object.entries(CODE_THEMES).map(([key, theme]) => (
                 <button
                   key={key}
-                  onClick={() => { setCodeThemeLocal(key); persistCodeTheme(key); document.documentElement.dataset.codeTheme = key; }}
+                  onClick={() => {
+                    setCodeThemeLocal(key);
+                    persistCodeTheme(key);
+                    document.documentElement.dataset.codeTheme = key;
+                  }}
                   className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${codeTheme === key ? 'bg-ink-700 text-ink-100 border-ink-600' : 'bg-ink-800 text-ink-400 border-ink-700 hover:border-ink-500'}`}
                 >
                   {theme.label}
@@ -254,14 +312,25 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
 
           {/* ── Save ── */}
           <div className="flex items-center gap-2 pt-1">
-            <button onClick={handleSave} className="text-xs px-3 py-1.5 bg-ink-700 text-ink-200 rounded hover:bg-ink-600 transition-colors">
+            <button
+              onClick={handleSave}
+              className="text-xs px-3 py-1.5 bg-ink-700 text-ink-200 rounded hover:bg-ink-600 transition-colors"
+            >
               保存所有更改
             </button>
-            {savedMsg && <span className={`text-[10px] ${savedMsg === '已保存' ? 'text-green-400' : 'text-red-400'}`}>{savedMsg}</span>}
+            {savedMsg && (
+              <span
+                className={`text-[10px] ${savedMsg === '已保存' ? 'text-green-400' : 'text-red-400'}`}
+              >
+                {savedMsg}
+              </span>
+            )}
           </div>
 
           {healthStatus !== 'idle' && (
-            <div className={`text-[10px] px-2 py-1 rounded ${healthStatus === 'checking' ? 'text-ink-400 bg-ink-800' : healthStatus === 'ok' ? 'text-green-400 bg-green-900/20' : 'text-red-400 bg-red-900/20'}`}>
+            <div
+              className={`text-[10px] px-2 py-1 rounded ${healthStatus === 'checking' ? 'text-ink-400 bg-ink-800' : healthStatus === 'ok' ? 'text-green-400 bg-green-900/20' : 'text-red-400 bg-red-900/20'}`}
+            >
               {healthStatus === 'checking' && '⏳ 探测 API 连接中...'}
               {healthStatus === 'ok' && '✔ 连接成功'}
               {healthStatus === 'fail' && `✘ 连接失败: ${healthMsg}`}

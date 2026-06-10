@@ -492,17 +492,20 @@ pub async fn run_actor(mut ctx: ActorContext) {
                             };
                             if let Err(e) = ctx
                                 .dept_log_tx
-                                .try_send(DeptLogEntry::new(&role_name, &plan_action)) {
+                                .try_send(DeptLogEntry::new(&role_name, &plan_action))
+                            {
                                 log_console!("[actor] dept_log_tx.try_send 失败 (计划): {}", e);
                             }
                             if let Err(e) = ctx
                                 .dept_log_tx
-                                .try_send(DeptLogEntry::with_detail(&role_name, "计划", &ctx_msg)) {
+                                .try_send(DeptLogEntry::with_detail(&role_name, "计划", &ctx_msg))
+                            {
                                 log_console!("[actor] dept_log_tx.try_send 失败 (计划详情): {}", e);
                             }
                             if let Err(e) = ctx
                                 .milestone_tx
-                                .try_send(format!("{} | {}", role_name, plan_action)) {
+                                .try_send(format!("{} | {}", role_name, plan_action))
+                            {
                                 log_console!("[actor] milestone_tx.send 失败 (计划): {}", e);
                             }
                             // Emit structured plan progress for frontend card

@@ -310,7 +310,10 @@ mod tests {
         new_ctx.extend(skill_msgs);
 
         assert_eq!(new_ctx.len(), 1 + 3 + 2);
-        assert!(new_ctx[0]["content"].as_str().unwrap().contains("[对话摘要]"));
+        assert!(new_ctx[0]["content"]
+            .as_str()
+            .unwrap()
+            .contains("[对话摘要]"));
         // Skill messages should be at the end
         assert!(new_ctx[5]["content"].as_str().unwrap().contains("[skill:"));
         assert_eq!(new_ctx[3]["content"], "msg 4"); // last kept msg at index 3

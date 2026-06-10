@@ -5,9 +5,9 @@
 mod common;
 
 use shuji_app_lib::tool::documents::{
-    tool_append_document, tool_create_document, tool_find_document, tool_modify_document,
-    tool_set_document_status, add_pending_approval, remove_pending_approval,
-    get_first_pending_approval, check_doc_refs_approved_for_route,
+    add_pending_approval, check_doc_refs_approved_for_route, get_first_pending_approval,
+    remove_pending_approval, tool_append_document, tool_create_document, tool_find_document,
+    tool_modify_document, tool_set_document_status,
 };
 use std::path::Path;
 
@@ -275,9 +275,9 @@ fn test_plan_created_in_review() {
     let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
     assert_eq!(parsed["ok"], true);
 
-    let doc_id = parsed["doc_id"].as_str().unwrap_or(
-        parsed["path"].as_str().unwrap_or("")
-    );
+    let doc_id = parsed["doc_id"]
+        .as_str()
+        .unwrap_or(parsed["path"].as_str().unwrap_or(""));
     // Extract bare ID from path like ".shuji/designs/plan_1.md"
     let bare_id = doc_id
         .split('/')
@@ -301,7 +301,11 @@ fn test_revw_created_in_review() {
     assert_eq!(parsed["ok"], true);
 
     let doc_path = parsed["path"].as_str().unwrap();
-    let bare_id = doc_path.split('/').last().unwrap_or(doc_path).trim_end_matches(".md");
+    let bare_id = doc_path
+        .split('/')
+        .last()
+        .unwrap_or(doc_path)
+        .trim_end_matches(".md");
 
     let status = read_doc_status(root, bare_id);
     assert_eq!(status.as_deref(), Some("in_review"));
@@ -319,7 +323,11 @@ fn test_design_not_in_review() {
     assert_eq!(parsed["ok"], true);
 
     let doc_path = parsed["path"].as_str().unwrap();
-    let bare_id = doc_path.split('/').last().unwrap_or(doc_path).trim_end_matches(".md");
+    let bare_id = doc_path
+        .split('/')
+        .last()
+        .unwrap_or(doc_path)
+        .trim_end_matches(".md");
 
     let status = read_doc_status(root, bare_id);
     // dsgn docs should NOT have in_review status
@@ -338,12 +346,19 @@ fn test_plan_adds_pending_approval() {
     assert_eq!(parsed["ok"], true);
 
     let pending = read_pending_approvals(root);
-    assert!(!pending.is_empty(), "pending_approvals should not be empty after creating a plan doc");
+    assert!(
+        !pending.is_empty(),
+        "pending_approvals should not be empty after creating a plan doc"
+    );
 
     let doc_id = parsed["doc_id"].as_str().unwrap_or("");
     // The pending list should contain the doc_id
     if !doc_id.is_empty() {
-        assert!(pending.contains(&doc_id.to_string()), "pending_approvals should contain {}", doc_id);
+        assert!(
+            pending.contains(&doc_id.to_string()),
+            "pending_approvals should contain {}",
+            doc_id
+        );
     }
 }
 
@@ -359,7 +374,10 @@ fn test_design_does_not_add_pending() {
     assert_eq!(parsed["ok"], true);
 
     let pending = read_pending_approvals(root);
-    assert!(pending.is_empty(), "dsgn docs should not create pending approvals");
+    assert!(
+        pending.is_empty(),
+        "dsgn docs should not create pending approvals"
+    );
 }
 
 /// 6. set_document_status(approved) 移除 pending approval 并放行
@@ -375,7 +393,13 @@ fn test_set_approved_removes_pending() {
     assert_eq!(parsed["ok"], true);
 
     let doc_id = parsed["doc_id"].as_str().unwrap_or(
-        parsed["path"].as_str().unwrap_or("").split('/').last().unwrap_or("").trim_end_matches(".md")
+        parsed["path"]
+            .as_str()
+            .unwrap_or("")
+            .split('/')
+            .last()
+            .unwrap_or("")
+            .trim_end_matches(".md"),
     );
 
     // Verify pending exists
@@ -386,11 +410,18 @@ fn test_set_approved_removes_pending() {
     let approve_args = serde_json::json!({"id": doc_id, "status": "approved"});
     let approve_result = block_on(tool_set_document_status(root, &approve_args));
     let approve_parsed: serde_json::Value = serde_json::from_str(&approve_result).unwrap();
-    assert_eq!(approve_parsed["ok"], true, "Approval should succeed: {}", approve_result);
+    assert_eq!(
+        approve_parsed["ok"], true,
+        "Approval should succeed: {}",
+        approve_result
+    );
 
     // Verify pending removed
     let pending_after = read_pending_approvals(root);
-    assert!(!pending_after.contains(&doc_id.to_string()), "pending should not contain approved doc");
+    assert!(
+        !pending_after.contains(&doc_id.to_string()),
+        "pending should not contain approved doc"
+    );
 
     // Verify document status changed
     let status = read_doc_status(root, doc_id);
@@ -409,7 +440,13 @@ fn test_set_rejected_saves_emperor_note() {
     assert_eq!(parsed["ok"], true);
 
     let doc_id = parsed["doc_id"].as_str().unwrap_or(
-        parsed["path"].as_str().unwrap_or("").split('/').last().unwrap_or("").trim_end_matches(".md")
+        parsed["path"]
+            .as_str()
+            .unwrap_or("")
+            .split('/')
+            .last()
+            .unwrap_or("")
+            .trim_end_matches(".md"),
     );
 
     // Reject with note
@@ -443,14 +480,23 @@ fn test_set_rejected_removes_pending() {
     assert_eq!(parsed["ok"], true);
 
     let doc_id = parsed["doc_id"].as_str().unwrap_or(
-        parsed["path"].as_str().unwrap_or("").split('/').last().unwrap_or("").trim_end_matches(".md")
+        parsed["path"]
+            .as_str()
+            .unwrap_or("")
+            .split('/')
+            .last()
+            .unwrap_or("")
+            .trim_end_matches(".md"),
     );
 
     let reject_args = serde_json::json!({"id": doc_id, "status": "rejected"});
     let _ = block_on(tool_set_document_status(root, &reject_args));
 
     let pending = read_pending_approvals(root);
-    assert!(!pending.contains(&doc_id.to_string()), "pending should not contain rejected doc");
+    assert!(
+        !pending.contains(&doc_id.to_string()),
+        "pending should not contain rejected doc"
+    );
 }
 
 /// 9. set_document_status 拒绝非 plan/revw 类型
@@ -464,14 +510,23 @@ fn test_set_status_wrong_type_fails() {
     let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
 
     let doc_id = parsed["doc_id"].as_str().unwrap_or(
-        parsed["path"].as_str().unwrap_or("").split('/').last().unwrap_or("").trim_end_matches(".md")
+        parsed["path"]
+            .as_str()
+            .unwrap_or("")
+            .split('/')
+            .last()
+            .unwrap_or("")
+            .trim_end_matches(".md"),
     );
 
     // Try to approve a dsgn doc
     let approve_args = serde_json::json!({"id": doc_id, "status": "approved"});
     let approve_result = block_on(tool_set_document_status(root, &approve_args));
     let approve_parsed: serde_json::Value = serde_json::from_str(&approve_result).unwrap();
-    assert_eq!(approve_parsed["ok"], false, "Should reject setting status on design doc");
+    assert_eq!(
+        approve_parsed["ok"], false,
+        "Should reject setting status on design doc"
+    );
     assert_eq!(approve_parsed["error_code"], "wrong_type");
 }
 
@@ -498,7 +553,13 @@ fn test_set_status_invalid_value_fails() {
     let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
 
     let doc_id = parsed["doc_id"].as_str().unwrap_or(
-        parsed["path"].as_str().unwrap_or("").split('/').last().unwrap_or("").trim_end_matches(".md")
+        parsed["path"]
+            .as_str()
+            .unwrap_or("")
+            .split('/')
+            .last()
+            .unwrap_or("")
+            .trim_end_matches(".md"),
     );
 
     let bad_args = serde_json::json!({"id": doc_id, "status": "in_review"});
@@ -531,14 +592,27 @@ fn test_gate_blocks_unapproved_ref() {
     assert_eq!(dsgn_parsed["ok"], true);
 
     let dsgn_doc_id = dsgn_parsed["doc_id"].as_str().unwrap_or(
-        dsgn_parsed["path"].as_str().unwrap_or("").split('/').last().unwrap_or("").trim_end_matches(".md")
+        dsgn_parsed["path"]
+            .as_str()
+            .unwrap_or("")
+            .split('/')
+            .last()
+            .unwrap_or("")
+            .trim_end_matches(".md"),
     );
 
     // The gate should block because dsgn_1 references plan_0 which is in_review
     let gate_result = block_on(check_doc_refs_approved_for_route(root, dsgn_doc_id));
-    assert!(gate_result.is_err(), "Gate should block reference to unapproved plan doc");
+    assert!(
+        gate_result.is_err(),
+        "Gate should block reference to unapproved plan doc"
+    );
     let err_msg = gate_result.unwrap_err();
-    assert!(err_msg.contains("尚在待皇帝御批"), "Error should mention pending approval: {}", err_msg);
+    assert!(
+        err_msg.contains("尚在待皇帝御批"),
+        "Error should mention pending approval: {}",
+        err_msg
+    );
 }
 
 /// 13. approved ref 通过 gate 检查
@@ -554,7 +628,13 @@ fn test_gate_passes_approved_ref() {
     assert_eq!(plan_parsed["ok"], true);
 
     let plan_doc_id = plan_parsed["doc_id"].as_str().unwrap_or(
-        plan_parsed["path"].as_str().unwrap_or("").split('/').last().unwrap_or("").trim_end_matches(".md")
+        plan_parsed["path"]
+            .as_str()
+            .unwrap_or("")
+            .split('/')
+            .last()
+            .unwrap_or("")
+            .trim_end_matches(".md"),
     );
 
     // Approve it
@@ -568,12 +648,22 @@ fn test_gate_passes_approved_ref() {
     assert_eq!(dsgn_parsed["ok"], true);
 
     let dsgn_doc_id = dsgn_parsed["doc_id"].as_str().unwrap_or(
-        dsgn_parsed["path"].as_str().unwrap_or("").split('/').last().unwrap_or("").trim_end_matches(".md")
+        dsgn_parsed["path"]
+            .as_str()
+            .unwrap_or("")
+            .split('/')
+            .last()
+            .unwrap_or("")
+            .trim_end_matches(".md"),
     );
 
     // Gate should pass since plan is approved
     let gate_result = block_on(check_doc_refs_approved_for_route(root, dsgn_doc_id));
-    assert!(gate_result.is_ok(), "Gate should pass when refs are approved: {:?}", gate_result.err());
+    assert!(
+        gate_result.is_ok(),
+        "Gate should pass when refs are approved: {:?}",
+        gate_result.err()
+    );
 }
 
 /// 14. 被驳回的 ref 也会被 gate 阻止
@@ -589,7 +679,13 @@ fn test_gate_blocks_rejected_ref() {
     assert_eq!(plan_parsed["ok"], true);
 
     let plan_doc_id = plan_parsed["doc_id"].as_str().unwrap_or(
-        plan_parsed["path"].as_str().unwrap_or("").split('/').last().unwrap_or("").trim_end_matches(".md")
+        plan_parsed["path"]
+            .as_str()
+            .unwrap_or("")
+            .split('/')
+            .last()
+            .unwrap_or("")
+            .trim_end_matches(".md"),
     );
 
     // Reject it
@@ -603,13 +699,22 @@ fn test_gate_blocks_rejected_ref() {
     assert_eq!(dsgn_parsed["ok"], true);
 
     let dsgn_doc_id = dsgn_parsed["doc_id"].as_str().unwrap_or(
-        dsgn_parsed["path"].as_str().unwrap_or("").split('/').last().unwrap_or("").trim_end_matches(".md")
+        dsgn_parsed["path"]
+            .as_str()
+            .unwrap_or("")
+            .split('/')
+            .last()
+            .unwrap_or("")
+            .trim_end_matches(".md"),
     );
 
     // Gate should block rejected refs
     let gate_result = block_on(check_doc_refs_approved_for_route(root, dsgn_doc_id));
     assert!(gate_result.is_err(), "Gate should block rejected ref");
-    assert!(gate_result.unwrap_err().contains("被驳回"), "Error should mention rejection");
+    assert!(
+        gate_result.unwrap_err().contains("被驳回"),
+        "Error should mention rejection"
+    );
 }
 
 /// 15. 无 refs 的文档不会触发门禁
@@ -623,11 +728,20 @@ fn test_gate_no_refs_passes() {
     let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
 
     let doc_id = parsed["doc_id"].as_str().unwrap_or(
-        parsed["path"].as_str().unwrap_or("").split('/').last().unwrap_or("").trim_end_matches(".md")
+        parsed["path"]
+            .as_str()
+            .unwrap_or("")
+            .split('/')
+            .last()
+            .unwrap_or("")
+            .trim_end_matches(".md"),
     );
 
     let gate_result = block_on(check_doc_refs_approved_for_route(root, doc_id));
-    assert!(gate_result.is_ok(), "Gate should pass for docs with no refs");
+    assert!(
+        gate_result.is_ok(),
+        "Gate should pass for docs with no refs"
+    );
 }
 
 /// 16. add/remove_pending_approval API 基本功能

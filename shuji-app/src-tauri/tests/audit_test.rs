@@ -78,9 +78,27 @@ fn create_document(root: &Path, spec: &DocSpec) {
 fn test_append_read_roundtrip() {
     let dir = create_audit_dir();
 
-    block_on(audit::append(dir.path(), "create_document", "工部", "dsgn_001", "创建设计文档"));
-    block_on(audit::append(dir.path(), "set_document_status", "门下侍中", "dsgn_001", "批准"));
-    block_on(audit::append(dir.path(), "checkpoint", "内阁", "", "commit=abc123"));
+    block_on(audit::append(
+        dir.path(),
+        "create_document",
+        "工部",
+        "dsgn_001",
+        "创建设计文档",
+    ));
+    block_on(audit::append(
+        dir.path(),
+        "set_document_status",
+        "门下侍中",
+        "dsgn_001",
+        "批准",
+    ));
+    block_on(audit::append(
+        dir.path(),
+        "checkpoint",
+        "内阁",
+        "",
+        "commit=abc123",
+    ));
 
     let entries = block_on(audit::read_all(dir.path()));
     assert_eq!(entries.len(), 3);
@@ -115,14 +133,17 @@ fn test_read_all_empty() {
 #[test]
 fn test_build_lineage_single() {
     let dir = common::create_test_project("lineage_single");
-    create_document(dir.path(), &DocSpec {
-        id: "dsgn_001",
-        doc_type: "dsgn",
-        author: "工部",
-        status: "draft",
-        refs: "[-1]",
-        body: "Root design doc",
-    });
+    create_document(
+        dir.path(),
+        &DocSpec {
+            id: "dsgn_001",
+            doc_type: "dsgn",
+            author: "工部",
+            status: "draft",
+            refs: "[-1]",
+            body: "Root design doc",
+        },
+    );
 
     let node = block_on(audit::build_lineage(dir.path(), "dsgn_001"));
     assert!(node.is_some());
@@ -138,34 +159,43 @@ fn test_build_lineage_three_tier() {
     let dir = common::create_test_project("lineage_three");
 
     // dsgn_003 has no refs (leaf)
-    create_document(dir.path(), &DocSpec {
-        id: "dsgn_003",
-        doc_type: "dsgn",
-        author: "工部",
-        status: "draft",
-        refs: "[-1]",
-        body: "Leaf design",
-    });
+    create_document(
+        dir.path(),
+        &DocSpec {
+            id: "dsgn_003",
+            doc_type: "dsgn",
+            author: "工部",
+            status: "draft",
+            refs: "[-1]",
+            body: "Leaf design",
+        },
+    );
 
     // dsgn_002 refs 3
-    create_document(dir.path(), &DocSpec {
-        id: "dsgn_002",
-        doc_type: "dsgn",
-        author: "吏部",
-        status: "draft",
-        refs: "[3]",
-        body: "Middle design",
-    });
+    create_document(
+        dir.path(),
+        &DocSpec {
+            id: "dsgn_002",
+            doc_type: "dsgn",
+            author: "吏部",
+            status: "draft",
+            refs: "[3]",
+            body: "Middle design",
+        },
+    );
 
     // dsgn_001 refs 2
-    create_document(dir.path(), &DocSpec {
-        id: "dsgn_001",
-        doc_type: "dsgn",
-        author: "中书令",
-        status: "draft",
-        refs: "[2]",
-        body: "Root design",
-    });
+    create_document(
+        dir.path(),
+        &DocSpec {
+            id: "dsgn_001",
+            doc_type: "dsgn",
+            author: "中书令",
+            status: "draft",
+            refs: "[2]",
+            body: "Root design",
+        },
+    );
 
     let node = block_on(audit::build_lineage(dir.path(), "dsgn_001"));
     assert!(node.is_some());
@@ -204,7 +234,13 @@ fn test_save_diff_creates_patch() {
     let old_body = "# Old Title\n\nSome content here.";
     let new_body = "# New Title\n\nSome content here.\n\nAdded line.";
 
-    block_on(audit::save_diff(dir.path(), "dsgn_001", "modify_document", old_body, new_body));
+    block_on(audit::save_diff(
+        dir.path(),
+        "dsgn_001",
+        "modify_document",
+        old_body,
+        new_body,
+    ));
 
     // Check that a .patch file was created in .shuji/audit/diffs/
     let diffs_dir = dir.path().join(".shuji/audit/diffs");
@@ -229,7 +265,13 @@ fn test_save_diff_no_change() {
     let dir = create_audit_dir();
 
     let body = "# Same Content\n\nNo changes here.";
-    block_on(audit::save_diff(dir.path(), "dsgn_001", "modify_document", body, body));
+    block_on(audit::save_diff(
+        dir.path(),
+        "dsgn_001",
+        "modify_document",
+        body,
+        body,
+    ));
 
     // No patch file should be created (identical content → patch ≤ 2 lines)
     let diffs_dir = dir.path().join(".shuji/audit/diffs");
@@ -237,7 +279,10 @@ fn test_save_diff_no_change() {
         .unwrap()
         .filter_map(|e| e.ok())
         .collect();
-    assert!(entries.is_empty(), "Identical content should not produce a patch file");
+    assert!(
+        entries.is_empty(),
+        "Identical content should not produce a patch file"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -248,18 +293,42 @@ fn test_save_diff_no_change() {
 fn test_generate_report_with_entries() {
     let dir = create_audit_dir();
 
-    block_on(audit::append(dir.path(), "create_document", "工部", "dsgn_001", "总体设计"));
-    block_on(audit::append(dir.path(), "create_document", "兵部", "ctrt_001", "测试契约"));
-    block_on(audit::append(dir.path(), "set_document_status", "门下侍中", "dsgn_001", "批准"));
-    block_on(audit::append(dir.path(), "checkpoint", "内阁", "", "commit=abc"));
+    block_on(audit::append(
+        dir.path(),
+        "create_document",
+        "工部",
+        "dsgn_001",
+        "总体设计",
+    ));
+    block_on(audit::append(
+        dir.path(),
+        "create_document",
+        "兵部",
+        "ctrt_001",
+        "测试契约",
+    ));
+    block_on(audit::append(
+        dir.path(),
+        "set_document_status",
+        "门下侍中",
+        "dsgn_001",
+        "批准",
+    ));
+    block_on(audit::append(
+        dir.path(),
+        "checkpoint",
+        "内阁",
+        "",
+        "commit=abc",
+    ));
 
     let report = block_on(audit::generate_report(dir.path()));
 
     // Should contain Chinese labels
     assert!(report.contains("交付报告"));
     assert!(report.contains("事件总数"));
-    assert!(report.contains("创建文档"));  // create_document localized
-    assert!(report.contains("文档状态变更"));  // set_document_status localized
+    assert!(report.contains("创建文档")); // create_document localized
+    assert!(report.contains("文档状态变更")); // set_document_status localized
 
     // Should list document outputs
     assert!(report.contains("dsgn_001"));
@@ -284,20 +353,48 @@ fn test_generate_report_empty() {
 fn test_build_timeline() {
     let dir = create_audit_dir();
 
-    block_on(audit::append(dir.path(), "create_document", "工部", "d1", "doc 1"));
-    block_on(audit::append(dir.path(), "create_document", "工部", "d2", "doc 2"));
-    block_on(audit::append(dir.path(), "set_document_status", "门下侍中", "d1", "批准"));
+    block_on(audit::append(
+        dir.path(),
+        "create_document",
+        "工部",
+        "d1",
+        "doc 1",
+    ));
+    block_on(audit::append(
+        dir.path(),
+        "create_document",
+        "工部",
+        "d2",
+        "doc 2",
+    ));
+    block_on(audit::append(
+        dir.path(),
+        "set_document_status",
+        "门下侍中",
+        "d1",
+        "批准",
+    ));
     block_on(audit::append(dir.path(), "checkpoint", "内阁", "", "snap"));
 
     let tl = block_on(audit::build_timeline(dir.path()));
     assert_eq!(tl.summary.total_events, 4);
 
     // by_event: create_document (2), set_document_status (1), checkpoint (1)
-    let create_count = tl.summary.by_event.iter().find(|(e, _)| e == "create_document").map(|(_, c)| c);
+    let create_count = tl
+        .summary
+        .by_event
+        .iter()
+        .find(|(e, _)| e == "create_document")
+        .map(|(_, c)| c);
     assert_eq!(create_count, Some(&2));
 
     // by_role: 工部 (2), 门下侍中 (1), 内阁 (1)
-    let gb_count = tl.summary.by_role.iter().find(|(r, _)| r == "工部").map(|(_, c)| c);
+    let gb_count = tl
+        .summary
+        .by_role
+        .iter()
+        .find(|(r, _)| r == "工部")
+        .map(|(_, c)| c);
     assert_eq!(gb_count, Some(&2));
 }
 
@@ -310,22 +407,28 @@ fn test_ref_index_build_query() {
     let dir = common::create_test_project("refindex");
 
     // Create: dsgn_001 refs [2], dsgn_002 refs [-1]
-    create_document(dir.path(), &DocSpec {
-        id: "dsgn_002",
-        doc_type: "dsgn",
-        author: "工部",
-        status: "draft",
-        refs: "[-1]",
-        body: "Independent",
-    });
-    create_document(dir.path(), &DocSpec {
-        id: "dsgn_001",
-        doc_type: "dsgn",
-        author: "中书令",
-        status: "draft",
-        refs: "[2]",
-        body: "References dsgn_002",
-    });
+    create_document(
+        dir.path(),
+        &DocSpec {
+            id: "dsgn_002",
+            doc_type: "dsgn",
+            author: "工部",
+            status: "draft",
+            refs: "[-1]",
+            body: "Independent",
+        },
+    );
+    create_document(
+        dir.path(),
+        &DocSpec {
+            id: "dsgn_001",
+            doc_type: "dsgn",
+            author: "中书令",
+            status: "draft",
+            refs: "[2]",
+            body: "References dsgn_002",
+        },
+    );
 
     let index = block_on(audit::build_ref_index(dir.path()));
 
@@ -338,7 +441,10 @@ fn test_ref_index_build_query() {
     // Actually, build_ref_index adds ALL documents to the index, not just those with refs
     // Let's check: dsgn_002 should be in the index
     let entry_002 = index.entries.get("dsgn_002");
-    assert!(entry_002.is_some(), "All docs should appear in the ref index");
+    assert!(
+        entry_002.is_some(),
+        "All docs should appear in the ref index"
+    );
 
     // dsgn_002 should have dsgn_001 in ref_by (since dsgn_001 references 2)
     assert!(entry_002.unwrap().ref_by.contains(&"dsgn_001".to_string()));
@@ -387,7 +493,12 @@ fn test_checklist_update_item() {
     let dir = create_audit_dir();
 
     block_on(audit::init_checklist(dir.path(), "test"));
-    let result = block_on(audit::update_checklist_item(dir.path(), "test-001", "pass", "已确认"));
+    let result = block_on(audit::update_checklist_item(
+        dir.path(),
+        "test-001",
+        "pass",
+        "已确认",
+    ));
     assert!(result.is_ok());
     assert!(result.unwrap().contains("pass"));
 
@@ -400,7 +511,12 @@ fn test_checklist_update_item() {
 fn test_checklist_update_nonexistent() {
     let dir = create_audit_dir();
     block_on(audit::init_checklist(dir.path(), "spec"));
-    let result = block_on(audit::update_checklist_item(dir.path(), "nonexistent", "pass", ""));
+    let result = block_on(audit::update_checklist_item(
+        dir.path(),
+        "nonexistent",
+        "pass",
+        "",
+    ));
     assert!(result.is_err());
 }
 
@@ -412,8 +528,20 @@ fn test_checklist_update_nonexistent() {
 fn test_violations_add_load() {
     let dir = create_audit_dir();
 
-    block_on(audit::add_violation(dir.path(), "error", "R001", "src/main.rs", "未处理错误"));
-    block_on(audit::add_violation(dir.path(), "warning", "W002", "src/lib.rs", "未使用变量"));
+    block_on(audit::add_violation(
+        dir.path(),
+        "error",
+        "R001",
+        "src/main.rs",
+        "未处理错误",
+    ));
+    block_on(audit::add_violation(
+        dir.path(),
+        "warning",
+        "W002",
+        "src/lib.rs",
+        "未使用变量",
+    ));
 
     let violations = block_on(audit::load_violations(dir.path()));
     assert_eq!(violations.len(), 2);
@@ -426,7 +554,13 @@ fn test_violations_add_load() {
 fn test_violations_update_status() {
     let dir = create_audit_dir();
 
-    block_on(audit::add_violation(dir.path(), "error", "R001", "src/main.rs", "问题"));
+    block_on(audit::add_violation(
+        dir.path(),
+        "error",
+        "R001",
+        "src/main.rs",
+        "问题",
+    ));
     let violations_before = block_on(audit::load_violations(dir.path()));
     let ts = violations_before[0].ts.clone();
 
@@ -440,7 +574,11 @@ fn test_violations_update_status() {
 #[test]
 fn test_violations_update_nonexistent() {
     let dir = create_audit_dir();
-    let result = block_on(audit::update_violation_status(dir.path(), "nonexistent_ts", "fixed"));
+    let result = block_on(audit::update_violation_status(
+        dir.path(),
+        "nonexistent_ts",
+        "fixed",
+    ));
     assert!(result.is_err());
 }
 
@@ -452,7 +590,11 @@ fn test_violations_update_nonexistent() {
 fn test_reauth_flow() {
     let dir = create_audit_dir();
 
-    let msg = block_on(audit::request_reauth(dir.path(), "dsgn_001", "发现设计缺陷"));
+    let msg = block_on(audit::request_reauth(
+        dir.path(),
+        "dsgn_001",
+        "发现设计缺陷",
+    ));
     assert!(msg.contains("dsgn_001"));
 
     // Consume the request
@@ -476,45 +618,60 @@ fn test_check_immutability_with_refs() {
     let dir = common::create_test_project("immutability");
 
     // dsgn_002 is leaf
-    create_document(dir.path(), &DocSpec {
-        id: "dsgn_002",
-        doc_type: "dsgn",
-        author: "工部",
-        status: "draft",
-        refs: "[-1]",
-        body: "Leaf",
-    });
+    create_document(
+        dir.path(),
+        &DocSpec {
+            id: "dsgn_002",
+            doc_type: "dsgn",
+            author: "工部",
+            status: "draft",
+            refs: "[-1]",
+            body: "Leaf",
+        },
+    );
     // dsgn_001 refs dsgn_002
-    create_document(dir.path(), &DocSpec {
-        id: "dsgn_001",
-        doc_type: "dsgn",
-        author: "中书令",
-        status: "draft",
-        refs: "[2]",
-        body: "Root refs 2",
-    });
+    create_document(
+        dir.path(),
+        &DocSpec {
+            id: "dsgn_001",
+            doc_type: "dsgn",
+            author: "中书令",
+            status: "draft",
+            refs: "[2]",
+            body: "Root refs 2",
+        },
+    );
 
     // dsgn_002 is referenced by dsgn_001 → check_immutability should return ["dsgn_001"]
     let ref_by = block_on(audit::check_immutability(dir.path(), "dsgn_002"));
-    assert!(ref_by.contains(&"dsgn_001".to_string()),
-        "dsgn_002 should be referenced by dsgn_001, got: {:?}", ref_by);
+    assert!(
+        ref_by.contains(&"dsgn_001".to_string()),
+        "dsgn_002 should be referenced by dsgn_001, got: {:?}",
+        ref_by
+    );
 
     // dsgn_001 is not referenced by anything
     let ref_by_root = block_on(audit::check_immutability(dir.path(), "dsgn_001"));
-    assert!(ref_by_root.is_empty(), "dsgn_001 should have no refs pointing to it");
+    assert!(
+        ref_by_root.is_empty(),
+        "dsgn_001 should have no refs pointing to it"
+    );
 }
 
 #[test]
 fn test_check_immutability_no_index() {
     let dir = common::create_test_project("immutability_no_index");
-    create_document(dir.path(), &DocSpec {
-        id: "dsgn_001",
-        doc_type: "dsgn",
-        author: "工部",
-        status: "draft",
-        refs: "[-1]",
-        body: "Standalone",
-    });
+    create_document(
+        dir.path(),
+        &DocSpec {
+            id: "dsgn_001",
+            doc_type: "dsgn",
+            author: "工部",
+            status: "draft",
+            refs: "[-1]",
+            body: "Standalone",
+        },
+    );
 
     // No index exists yet; check_immutability should build one and find nothing
     let ref_by = block_on(audit::check_immutability(dir.path(), "dsgn_001"));
@@ -530,32 +687,41 @@ fn test_trace_document() {
     let dir = common::create_test_project("trace");
 
     // dsgn_003 → no refs
-    create_document(dir.path(), &DocSpec {
-        id: "dsgn_003",
-        doc_type: "dsgn",
-        author: "工部",
-        status: "draft",
-        refs: "[-1]",
-        body: "Leaf design doc",
-    });
+    create_document(
+        dir.path(),
+        &DocSpec {
+            id: "dsgn_003",
+            doc_type: "dsgn",
+            author: "工部",
+            status: "draft",
+            refs: "[-1]",
+            body: "Leaf design doc",
+        },
+    );
     // dsgn_002 → refs 3
-    create_document(dir.path(), &DocSpec {
-        id: "dsgn_002",
-        doc_type: "dsgn",
-        author: "吏部",
-        status: "review",
-        refs: "[3]",
-        body: "Middle design that references dsgn_003",
-    });
+    create_document(
+        dir.path(),
+        &DocSpec {
+            id: "dsgn_002",
+            doc_type: "dsgn",
+            author: "吏部",
+            status: "review",
+            refs: "[3]",
+            body: "Middle design that references dsgn_003",
+        },
+    );
     // dsgn_001 → refs 2
-    create_document(dir.path(), &DocSpec {
-        id: "dsgn_001",
-        doc_type: "dsgn",
-        author: "中书令",
-        status: "approved",
-        refs: "[2]",
-        body: "Root design referencing dsgn_002",
-    });
+    create_document(
+        dir.path(),
+        &DocSpec {
+            id: "dsgn_001",
+            doc_type: "dsgn",
+            author: "中书令",
+            status: "approved",
+            refs: "[2]",
+            body: "Root design referencing dsgn_002",
+        },
+    );
 
     // Trace dsgn_002 — it should have:
     // - Target: itself
@@ -576,7 +742,11 @@ fn test_trace_document() {
     // Note: current trace_document has a known issue where docs in "designs"
     // are scanned 3× (due to dsgn/plan/pdsg → designs mapping), producing duplicates.
     // Here we expect 3 upstream entries (1 unique doc × 3 duplicate scans).
-    assert_eq!(result.upstream.len(), 3, "Known trace_document duplicate-scanning behavior");
+    assert_eq!(
+        result.upstream.len(),
+        3,
+        "Known trace_document duplicate-scanning behavior"
+    );
     assert_eq!(result.upstream[0].id, "dsgn_001");
     assert_eq!(result.upstream[0].direction, "upstream");
     assert_eq!(result.upstream[0].id, "dsgn_001");
@@ -600,19 +770,25 @@ fn test_trace_document_nonexistent() {
 fn test_sync_ref_index() {
     let dir = common::create_test_project("sync_ref");
 
-    create_document(dir.path(), &DocSpec {
-        id: "dsgn_001",
-        doc_type: "dsgn",
-        author: "工部",
-        status: "draft",
-        refs: "[-1]",
-        body: "Standalone",
-    });
+    create_document(
+        dir.path(),
+        &DocSpec {
+            id: "dsgn_001",
+            doc_type: "dsgn",
+            author: "工部",
+            status: "draft",
+            refs: "[-1]",
+            body: "Standalone",
+        },
+    );
 
     // sync should not panic
     block_on(audit::sync_ref_index(dir.path(), "dsgn_001"));
 
     // Index file should exist
     let index_path = dir.path().join(".shuji/audit/ref_index.json");
-    assert!(index_path.exists(), "sync_ref_index should create ref_index.json");
+    assert!(
+        index_path.exists(),
+        "sync_ref_index should create ref_index.json"
+    );
 }

@@ -2,8 +2,8 @@ use std::path::Path;
 use std::process::Stdio;
 use tokio::io::AsyncReadExt;
 
-use crate::tool::ToolOutput;
 use crate::tool::path::{PATH_ESCAPE, SYSTEM_BLOCKS};
+use crate::tool::ToolOutput;
 
 // ── execute_command ───────────────────────────────────────────
 

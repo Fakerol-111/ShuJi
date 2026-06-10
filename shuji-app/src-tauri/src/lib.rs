@@ -32,12 +32,8 @@ use tokio::sync::Mutex;
 /// Shared type alias for the complex cancel-flag map used by agents and tools.
 /// 内阁 uses this to interrupt other agents via the `cancel_agent` tool.
 pub type CancelMap = Arc<std::sync::Mutex<HashMap<crate::models::role::Role, Arc<AtomicBool>>>>;
-pub type FastTxMap = Arc<
-    HashMap<
-        crate::models::role::Role,
-        tokio::sync::mpsc::Sender<crate::actor::FastMessage>,
-    >,
->;
+pub type FastTxMap =
+    Arc<HashMap<crate::models::role::Role, tokio::sync::mpsc::Sender<crate::actor::FastMessage>>>;
 
 use commands::project::AppState;
 use config::RuntimeConfig;

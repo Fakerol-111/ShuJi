@@ -14,25 +14,22 @@ export function useDocumentTabs() {
   const [tabs, setTabs] = useState<TabInfo[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
 
-  const openTab = useCallback(
-    (path: string, initialView?: TabInfo['initialView']) => {
-      setTabs((prev) => {
-        const idx = prev.findIndex((t) => t.path === path);
-        if (idx >= 0) {
-          setActiveIndex(idx);
-          if (initialView) {
-            const updated = [...prev];
-            updated[idx] = { ...updated[idx], initialView };
-            return updated;
-          }
-          return prev;
+  const openTab = useCallback((path: string, initialView?: TabInfo['initialView']) => {
+    setTabs((prev) => {
+      const idx = prev.findIndex((t) => t.path === path);
+      if (idx >= 0) {
+        setActiveIndex(idx);
+        if (initialView) {
+          const updated = [...prev];
+          updated[idx] = { ...updated[idx], initialView };
+          return updated;
         }
-        setActiveIndex(prev.length);
-        return [...prev, { path, label: tabLabelFromPath(path), initialView }];
-      });
-    },
-    [],
-  );
+        return prev;
+      }
+      setActiveIndex(prev.length);
+      return [...prev, { path, label: tabLabelFromPath(path), initialView }];
+    });
+  }, []);
 
   const closeTab = useCallback((index: number) => {
     setTabs((prev) => {
@@ -49,10 +46,7 @@ export function useDocumentTabs() {
     });
   }, []);
 
-  const handleDocSelect = useCallback(
-    (path: string) => openTab(path),
-    [openTab],
-  );
+  const handleDocSelect = useCallback((path: string) => openTab(path), [openTab]);
 
   const activeDoc = activeIndex >= 0 && activeIndex < tabs.length ? tabs[activeIndex] : null;
   const hasTabs = tabs.length > 0 && activeDoc !== null;

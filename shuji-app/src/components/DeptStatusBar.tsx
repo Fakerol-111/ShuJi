@@ -34,9 +34,7 @@ export default function DeptStatusBar() {
         .then((stats) => {
           const roles: TokenUsage[] = Object.values(stats['汇总'] || {});
           setTokenPrompt(roles.reduce((sum, u) => sum + u.prompt_tokens, 0));
-          setTokenCached(
-            roles.reduce((sum, u) => sum + (u.cached_prompt_tokens ?? 0), 0)
-          );
+          setTokenCached(roles.reduce((sum, u) => sum + (u.cached_prompt_tokens ?? 0), 0));
           setTokenCompletion(roles.reduce((sum, u) => sum + u.completion_tokens, 0));
         })
         .catch(() => {});

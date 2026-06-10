@@ -77,7 +77,12 @@ pub async fn tool_delete_file(working_dir: &Path, args: &serde_json::Value) -> S
         return ToolOutput::error("delete_file", path, "not_found", "文件不存在");
     }
     if full.is_dir() {
-        return ToolOutput::error("delete_file", path, "is_directory", "不能删除目录，请使用文件路径");
+        return ToolOutput::error(
+            "delete_file",
+            path,
+            "is_directory",
+            "不能删除目录，请使用文件路径",
+        );
     }
     match tokio::fs::remove_file(&full).await {
         Ok(_) => ToolOutput::success("delete_file", path, "删除成功"),
@@ -147,8 +152,15 @@ pub async fn tool_apply_patch(working_dir: &Path, args: &serde_json::Value) -> S
         return ToolOutput::error("apply_patch", path, "empty_patch", "patch 内容为空");
     }
     if patch_str.len() > 50_000 {
-        return ToolOutput::error("apply_patch", path, "patch_too_large",
-            &format!("patch 长度 {} 超过上限 50000 字符。请拆分成多次 apply_patch 调用。", patch_str.len()));
+        return ToolOutput::error(
+            "apply_patch",
+            path,
+            "patch_too_large",
+            &format!(
+                "patch 长度 {} 超过上限 50000 字符。请拆分成多次 apply_patch 调用。",
+                patch_str.len()
+            ),
+        );
     }
     let full = match resolve_scoped_path(working_dir, path).await {
         Ok(p) => p,
@@ -174,19 +186,43 @@ pub async fn tool_apply_patch(working_dir: &Path, args: &serde_json::Value) -> S
             let preview = if search_text.len() > 120 {
                 let cutoff = search_text.floor_char_boundary(120);
                 format!("{}...", &search_text[..cutoff])
-            } else { search_text.clone() };
-            return ToolOutput::error("apply_patch", path, "search_not_found",
-                &format!("第{}个 SEARCH 块未在文件中找到。\n查找的文本：\n```\n{}\n```", block_num, preview));
+            } else {
+                search_text.clone()
+            };
+            return ToolOutput::error(
+                "apply_patch",
+                path,
+                "search_not_found",
+                &format!(
+                    "第{}个 SEARCH 块未在文件中找到。\n查找的文本：\n```\n{}\n```",
+                    block_num, preview
+                ),
+            );
         }
         if count > 1 {
-            return ToolOutput::error("apply_patch", path, "search_ambiguous",
-                &format!("第{}个 SEARCH 块在文件中出现 {} 次，不唯一。", block_num, count));
+            return ToolOutput::error(
+                "apply_patch",
+                path,
+                "search_ambiguous",
+                &format!(
+                    "第{}个 SEARCH 块在文件中出现 {} 次，不唯一。",
+                    block_num, count
+                ),
+            );
         }
         content = content.replacen(search_text.as_str(), replace_text.as_str(), 1);
     }
     match tokio::fs::write(&full, &content).await {
-        Ok(_) => ToolOutput::success("apply_patch", path,
-            &format!("成功应用 {} 个 SEARCH/REPLACE 块（{} 字节 → {} 字节）", blocks.len(), original_len, content.len())),
+        Ok(_) => ToolOutput::success(
+            "apply_patch",
+            path,
+            &format!(
+                "成功应用 {} 个 SEARCH/REPLACE 块（{} 字节 → {} 字节）",
+                blocks.len(),
+                original_len,
+                content.len()
+            ),
+        ),
         Err(e) => ToolOutput::error("apply_patch", path, "write_error", &e.to_string()),
     }
 }
@@ -257,8 +293,12 @@ pub async fn tool_modify_file(working_dir: &Path, args: &serde_json::Value) -> S
         return ToolOutput::error("modify_file", path, "empty_old_text", "old_text 不能为空");
     }
     if old_text.len() > 800 || new_text.len() > 800 {
-        return ToolOutput::error("modify_file", path, "text_too_long",
-            "文本超过 800 字符上限。大块修改请用 apply_patch（支持 50000 字符）。");
+        return ToolOutput::error(
+            "modify_file",
+            path,
+            "text_too_long",
+            "文本超过 800 字符上限。大块修改请用 apply_patch（支持 50000 字符）。",
+        );
     }
     if !content.contains(old_text) {
         return ToolOutput::error("modify_file", path, "not_found",
@@ -266,7 +306,11 @@ pub async fn tool_modify_file(working_dir: &Path, args: &serde_json::Value) -> S
     }
     let new_content = content.replacen(old_text, new_text, 1);
     match tokio::fs::write(&full, &new_content).await {
-        Ok(_) => ToolOutput::success("modify_file", path, &format!("替换成功（替换 {} 字节）", old_text.len())),
+        Ok(_) => ToolOutput::success(
+            "modify_file",
+            path,
+            &format!("替换成功（替换 {} 字节）", old_text.len()),
+        ),
         Err(e) => ToolOutput::error("modify_file", path, "write_error", &e.to_string()),
     }
 }
@@ -276,7 +320,8 @@ pub fn modify_file_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "modify_file".into(),
-            description: "替换文件中的文本 (find+replace)。≤800字符。大块修改请用 apply_patch。".into(),
+            description: "替换文件中的文本 (find+replace)。≤800字符。大块修改请用 apply_patch。"
+                .into(),
             parameters: serde_json::json!({ "type": "object", "properties": { "path": { "type": "string" }, "old_text": { "type": "string", "maxLength": 800 }, "new_text": { "type": "string", "maxLength": 800 } }, "required": ["path", "old_text", "new_text"] }),
         },
     }
@@ -313,15 +358,29 @@ pub async fn tool_read_file(working_dir: &Path, args: &serde_json::Value) -> Str
     let total = lines.len();
     let is_chunked = offset > 0 || limit < u64::MAX;
     if !is_chunked && total > 200 {
-        return ToolOutput::error("read_file", path, "too_large",
-            &format!("文件过大（共 {} 行）。请用 offset 和 limit 参数分段读取。", total));
+        return ToolOutput::error(
+            "read_file",
+            path,
+            "too_large",
+            &format!(
+                "文件过大（共 {} 行）。请用 offset 和 limit 参数分段读取。",
+                total
+            ),
+        );
     }
     let start = (offset as usize).min(total);
     let end = (start + (limit as usize).min(total - start)).min(total);
-    let excerpt: Vec<String> = lines[start..end].iter().enumerate()
-        .map(|(i, line)| format!("{:>4}| {}", start + i + 1, line)).collect();
+    let excerpt: Vec<String> = lines[start..end]
+        .iter()
+        .enumerate()
+        .map(|(i, line)| format!("{:>4}| {}", start + i + 1, line))
+        .collect();
     let meta = format!("{}（共 {} 行，显示 {}-{}）", path, total, start + 1, end);
-    ToolOutput::read_file("read_file", path, &format!("{}\n{}", meta, excerpt.join("\n")))
+    ToolOutput::read_file(
+        "read_file",
+        path,
+        &format!("{}\n{}", meta, excerpt.join("\n")),
+    )
 }
 
 pub fn read_file_tool_def(description: &str) -> crate::api::client::ToolDefinition {
@@ -344,8 +403,15 @@ pub async fn tool_create_file(working_dir: &Path, args: &serde_json::Value) -> S
         return ToolOutput::error("create_file", "", "empty_path", "文件路径为空");
     }
     if content.len() > 8000 {
-        return ToolOutput::error("create_file", path, "content_too_long",
-            &format!("content 长度 {} 超过上限 8000 字符。请使用 create_file + append_file 分块写入。", content.len()));
+        return ToolOutput::error(
+            "create_file",
+            path,
+            "content_too_long",
+            &format!(
+                "content 长度 {} 超过上限 8000 字符。请使用 create_file + append_file 分块写入。",
+                content.len()
+            ),
+        );
     }
     let full = match resolve_scoped_path(working_dir, path).await {
         Ok(p) => p,
@@ -369,7 +435,10 @@ pub fn create_file_tool_def(description: &str) -> crate::api::client::ToolDefini
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "create_file".into(),
-            description: format!("{}。content ≤8000 字符。大文件用 apply_patch 一次性写入。", description),
+            description: format!(
+                "{}。content ≤8000 字符。大文件用 apply_patch 一次性写入。",
+                description
+            ),
             parameters: serde_json::json!({ "type": "object", "properties": { "path": { "type": "string" }, "content": { "type": "string", "maxLength": 8000 } }, "required": ["path", "content"] }),
         },
     }
@@ -386,11 +455,21 @@ pub async fn tool_list_dir(working_dir: &Path, args: &serde_json::Value) -> Stri
     let full_for_blocking = full.clone();
     match tokio::task::spawn_blocking(move || std::fs::read_dir(&full_for_blocking)).await {
         Ok(Ok(entries)) => {
-            let items: Vec<String> = entries.filter_map(|e| e.ok()).map(|e| {
-                let tag = e.file_type().map(|t| if t.is_dir() { "[DIR]" } else { "[FILE]" }).unwrap_or("[?]");
-                format!("{} {}", tag, e.file_name().to_string_lossy())
-            }).collect();
-            let message = if items.is_empty() { "(空目录)".to_string() } else { items.join("\n") };
+            let items: Vec<String> = entries
+                .filter_map(|e| e.ok())
+                .map(|e| {
+                    let tag = e
+                        .file_type()
+                        .map(|t| if t.is_dir() { "[DIR]" } else { "[FILE]" })
+                        .unwrap_or("[?]");
+                    format!("{} {}", tag, e.file_name().to_string_lossy())
+                })
+                .collect();
+            let message = if items.is_empty() {
+                "(空目录)".to_string()
+            } else {
+                items.join("\n")
+            };
             ToolOutput::success_raw("list_dir", &message)
         }
         Ok(Err(e)) => ToolOutput::error("list_dir", path, "list_error", &e.to_string()),
@@ -419,25 +498,57 @@ pub async fn tool_list_dir_tree(working_dir: &Path, args: &serde_json::Value) ->
         Ok(p) => p,
         Err(e) => return ToolOutput::error("list_dir_tree", path, "path_error", &e),
     };
-    let skip_dirs: &[&str] = &[".git", ".shuji", "node_modules", "target", ".venv", "__pycache__", "dist", "build"];
+    let skip_dirs: &[&str] = &[
+        ".git",
+        ".shuji",
+        "node_modules",
+        "target",
+        ".venv",
+        "__pycache__",
+        "dist",
+        "build",
+    ];
     let mut lines = Vec::new();
     let mut total = 0usize;
     const MAX_ITEMS: usize = 200;
 
-    fn collect(dir: &Path, working_dir: &Path, prefix: &str, depth: usize, max_depth: usize,
-        glob: Option<&str>, skip_dirs: &[&str], lines: &mut Vec<String>, total: &mut usize) {
-        if *total >= MAX_ITEMS { return; }
-        let entries = match std::fs::read_dir(dir) { Ok(e) => e, Err(_) => return };
-        let mut items: Vec<_> = entries.filter_map(|e| e.ok()).filter(|e| {
-            if let Some(g) = glob { simple_glob_match(&e.file_name().to_string_lossy(), g) } else { true }
-        }).collect();
+    fn collect(
+        dir: &Path,
+        working_dir: &Path,
+        prefix: &str,
+        depth: usize,
+        max_depth: usize,
+        glob: Option<&str>,
+        skip_dirs: &[&str],
+        lines: &mut Vec<String>,
+        total: &mut usize,
+    ) {
+        if *total >= MAX_ITEMS {
+            return;
+        }
+        let entries = match std::fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(_) => return,
+        };
+        let mut items: Vec<_> = entries
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                if let Some(g) = glob {
+                    simple_glob_match(&e.file_name().to_string_lossy(), g)
+                } else {
+                    true
+                }
+            })
+            .collect();
         items.sort_by(|a, b| {
             let a_dir = a.file_type().map(|t| t.is_dir()).unwrap_or(false);
             let b_dir = b.file_type().map(|t| t.is_dir()).unwrap_or(false);
             (b_dir, a.file_name()).cmp(&(a_dir, b.file_name()))
         });
         for (i, entry) in items.iter().enumerate() {
-            if *total >= MAX_ITEMS { break; }
+            if *total >= MAX_ITEMS {
+                break;
+            }
             let name = entry.file_name().to_string_lossy().to_string();
             let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
             let is_last = i == items.len() - 1;
@@ -449,15 +560,41 @@ pub async fn tool_list_dir_tree(working_dir: &Path, args: &serde_json::Value) ->
             if is_dir && depth < max_depth {
                 let child_prefix = format!("{}{}   ", prefix, if is_last { " " } else { "│" });
                 if !skip_dirs.contains(&name.as_str()) {
-                    collect(&entry.path(), working_dir, &child_prefix, depth + 1, max_depth, glob, skip_dirs, lines, total);
+                    collect(
+                        &entry.path(),
+                        working_dir,
+                        &child_prefix,
+                        depth + 1,
+                        max_depth,
+                        glob,
+                        skip_dirs,
+                        lines,
+                        total,
+                    );
                 }
             }
         }
     }
 
-    collect(&full, working_dir, "", 0, max_depth, glob, skip_dirs, &mut lines, &mut total);
-    let mut output = if lines.is_empty() { "(空)".to_string() } else { lines.join("\n") };
-    if total >= MAX_ITEMS { output.push_str(&format!("\n\n… 显示前 {} 项", MAX_ITEMS)); }
+    collect(
+        &full,
+        working_dir,
+        "",
+        0,
+        max_depth,
+        glob,
+        skip_dirs,
+        &mut lines,
+        &mut total,
+    );
+    let mut output = if lines.is_empty() {
+        "(空)".to_string()
+    } else {
+        lines.join("\n")
+    };
+    if total >= MAX_ITEMS {
+        output.push_str(&format!("\n\n… 显示前 {} 项", MAX_ITEMS));
+    }
     output.push_str(&format!("\n\n共 {} 项", total));
     ToolOutput::success_raw("list_dir_tree", &output)
 }
@@ -501,8 +638,12 @@ pub async fn tool_edit_file(working_dir: &Path, args: &serde_json::Value) -> Str
         Err(e) => return ToolOutput::error("edit_file", path, "path_error", &e),
     };
     if !full.exists() {
-        return ToolOutput::error("edit_file", path, "not_found",
-            "文件不存在。新文件请用 create_file，全量覆盖请用 apply_patch（空 SEARCH）。");
+        return ToolOutput::error(
+            "edit_file",
+            path,
+            "not_found",
+            "文件不存在。新文件请用 create_file，全量覆盖请用 apply_patch（空 SEARCH）。",
+        );
     }
     let content = match tokio::fs::read_to_string(&full).await {
         Ok(c) => c,
@@ -513,38 +654,72 @@ pub async fn tool_edit_file(working_dir: &Path, args: &serde_json::Value) -> Str
         let preview = if search_text.len() > 120 {
             let cutoff = search_text.floor_char_boundary(120);
             format!("{}...", &search_text[..cutoff])
-        } else { search_text.to_string() };
+        } else {
+            search_text.to_string()
+        };
         return ToolOutput::error("edit_file", path, "search_not_found",
             &format!("SEARCH 文本未在文件中找到。\n查找的文本：\n```\n{}\n```\n请用 read_file 确认文件最新内容后再试。", preview));
     }
     if count > 1 {
-        return ToolOutput::error("edit_file", path, "search_ambiguous",
-            &format!("SEARCH 文本在文件中出现 {} 次，不唯一。请在 search 中包含更多上下文行。", count));
+        return ToolOutput::error(
+            "edit_file",
+            path,
+            "search_ambiguous",
+            &format!(
+                "SEARCH 文本在文件中出现 {} 次，不唯一。请在 search 中包含更多上下文行。",
+                count
+            ),
+        );
     }
     let new_content = content.replacen(search_text, replace_text, 1);
     match tokio::fs::write(&full, &new_content).await {
-        Ok(_) => ToolOutput::success("edit_file", path,
-            &format!("成功替换 1 处文本（{} 字节 → {} 字节）", content.len(), new_content.len())),
+        Ok(_) => ToolOutput::success(
+            "edit_file",
+            path,
+            &format!(
+                "成功替换 1 处文本（{} 字节 → {} 字节）",
+                content.len(),
+                new_content.len()
+            ),
+        ),
         Err(e) => ToolOutput::error("edit_file", path, "write_error", &e.to_string()),
     }
 }
 
 // ── search_text ──────────────────────────────────────────────
 
-async fn try_rg_search(working_dir: &Path, pattern: &str, max_results: usize,
-    glob: Option<&str>, case_sensitive: bool) -> Result<String, ()> {
+async fn try_rg_search(
+    working_dir: &Path,
+    pattern: &str,
+    max_results: usize,
+    glob: Option<&str>,
+    case_sensitive: bool,
+) -> Result<String, ()> {
     let mut cmd = tokio::process::Command::new("rg");
-    cmd.arg("--json").arg("-e").arg(pattern).arg("--max-count").arg(max_results.to_string())
+    cmd.arg("--json")
+        .arg("-e")
+        .arg(pattern)
+        .arg("--max-count")
+        .arg(max_results.to_string())
         .current_dir(working_dir);
-    if !case_sensitive { cmd.arg("-i"); }
-    if let Some(g) = glob { cmd.arg("-g").arg(g); }
-    cmd.stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null());
+    if !case_sensitive {
+        cmd.arg("-i");
+    }
+    if let Some(g) = glob {
+        cmd.arg("-g").arg(g);
+    }
+    cmd.stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null());
     let output = cmd.output().await.map_err(|_| ())?;
-    if !output.status.success() { return Err(()); }
+    if !output.status.success() {
+        return Err(());
+    }
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut results: Vec<String> = Vec::new();
     for line in stdout.lines() {
-        if results.len() >= max_results { break; }
+        if results.len() >= max_results {
+            break;
+        }
         if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) {
             if entry["type"].as_str() == Some("match") {
                 let path = entry["data"]["path"]["text"].as_str().unwrap_or("?");
@@ -554,9 +729,17 @@ async fn try_rg_search(working_dir: &Path, pattern: &str, max_results: usize,
             }
         }
     }
-    if results.is_empty() { return Err(()); }
-    Ok(crate::tool::ToolOutput::success_raw("search_text",
-        &format!("[ripgrep] 匹配 {} 处：\n{}", results.len(), results.join("\n"))))
+    if results.is_empty() {
+        return Err(());
+    }
+    Ok(crate::tool::ToolOutput::success_raw(
+        "search_text",
+        &format!(
+            "[ripgrep] 匹配 {} 处：\n{}",
+            results.len(),
+            results.join("\n")
+        ),
+    ))
 }
 
 pub async fn tool_search_text(working_dir: &Path, args: &serde_json::Value) -> String {
@@ -568,50 +751,112 @@ pub async fn tool_search_text(working_dir: &Path, args: &serde_json::Value) -> S
     let glob = args["glob"].as_str().filter(|s| !s.is_empty());
     let case_sensitive = args["case_sensitive"].as_bool().unwrap_or(true);
 
-    if let Ok(result) = try_rg_search(working_dir, pattern, max_results, glob, case_sensitive).await {
+    if let Ok(result) = try_rg_search(working_dir, pattern, max_results, glob, case_sensitive).await
+    {
         return result;
     }
 
     let mut results: Vec<String> = Vec::new();
     let mut file_count = 0usize;
     let mut error_count = 0usize;
-    let skip_dirs: &[&str] = &[".git", ".shuji", "node_modules", "target", ".venv", "__pycache__"];
+    let skip_dirs: &[&str] = &[
+        ".git",
+        ".shuji",
+        "node_modules",
+        "target",
+        ".venv",
+        "__pycache__",
+    ];
     let mut stack = vec![working_dir.to_path_buf()];
 
     while let Some(dir) = stack.pop() {
-        let mut entries = match tokio::fs::read_dir(&dir).await { Ok(e) => e, Err(_) => continue };
+        let mut entries = match tokio::fs::read_dir(&dir).await {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
         while let Some(entry) = entries.next_entry().await.unwrap_or(None) {
-            let ft = match entry.file_type().await { Ok(t) => t, Err(_) => continue };
+            let ft = match entry.file_type().await {
+                Ok(t) => t,
+                Err(_) => continue,
+            };
             let name = entry.file_name().to_string_lossy().to_string();
             if ft.is_dir() {
-                if !skip_dirs.contains(&name.as_str()) { stack.push(entry.path()); }
+                if !skip_dirs.contains(&name.as_str()) {
+                    stack.push(entry.path());
+                }
             } else if ft.is_file() {
-                if let Some(g) = glob { if !simple_glob_match(&name, g) { continue; } }
-                let content = match tokio::fs::read_to_string(entry.path()).await {
-                    Ok(c) => c, Err(_) => { error_count += 1; continue; }
-                };
-                file_count += 1;
-                let rel_path = entry.path().strip_prefix(working_dir).unwrap_or(&entry.path()).to_string_lossy().to_string();
-                for (line_no, line) in content.lines().enumerate() {
-                    let matched = if case_sensitive { line.contains(pattern) } else { line.to_lowercase().contains(&pattern.to_lowercase()) };
-                    if matched {
-                        results.push(format!("{}:{}:{}", rel_path, line_no + 1, line));
-                        if results.len() >= max_results { break; }
+                if let Some(g) = glob {
+                    if !simple_glob_match(&name, g) {
+                        continue;
                     }
                 }
-                if results.len() >= max_results { break; }
+                let content = match tokio::fs::read_to_string(entry.path()).await {
+                    Ok(c) => c,
+                    Err(_) => {
+                        error_count += 1;
+                        continue;
+                    }
+                };
+                file_count += 1;
+                let rel_path = entry
+                    .path()
+                    .strip_prefix(working_dir)
+                    .unwrap_or(&entry.path())
+                    .to_string_lossy()
+                    .to_string();
+                for (line_no, line) in content.lines().enumerate() {
+                    let matched = if case_sensitive {
+                        line.contains(pattern)
+                    } else {
+                        line.to_lowercase().contains(&pattern.to_lowercase())
+                    };
+                    if matched {
+                        results.push(format!("{}:{}:{}", rel_path, line_no + 1, line));
+                        if results.len() >= max_results {
+                            break;
+                        }
+                    }
+                }
+                if results.len() >= max_results {
+                    break;
+                }
             }
         }
-        if results.len() >= max_results { break; }
+        if results.len() >= max_results {
+            break;
+        }
     }
 
     if results.is_empty() {
-        let searched = format!("在 {} 文件中搜索「{}」{}", file_count, pattern,
-            if let Some(g) = glob { format!("（{}）", g) } else { String::new() });
-        return ToolOutput::success_raw("search_text",
-            &format!("{}，未找到匹配{}", searched, if error_count > 0 { format!("（{} 个文件跳过）", error_count) } else { String::new() }));
+        let searched = format!(
+            "在 {} 文件中搜索「{}」{}",
+            file_count,
+            pattern,
+            if let Some(g) = glob {
+                format!("（{}）", g)
+            } else {
+                String::new()
+            }
+        );
+        return ToolOutput::success_raw(
+            "search_text",
+            &format!(
+                "{}，未找到匹配{}",
+                searched,
+                if error_count > 0 {
+                    format!("（{} 个文件跳过）", error_count)
+                } else {
+                    String::new()
+                }
+            ),
+        );
     }
-    let summary = format!("找到 {} 个匹配（共扫描 {} 文件）：\n{}", results.len(), file_count, results.join("\n"));
+    let summary = format!(
+        "找到 {} 个匹配（共扫描 {} 文件）：\n{}",
+        results.len(),
+        file_count,
+        results.join("\n")
+    );
     ToolOutput::success_raw("search_text", &summary)
 }
 
@@ -622,9 +867,15 @@ fn simple_glob_match(name: &str, glob: &str) -> bool {
 }
 
 fn glob_match_inner(name: &[char], glob: &[char], ni: usize, gi: usize) -> bool {
-    if gi == glob.len() { return ni == name.len(); }
+    if gi == glob.len() {
+        return ni == name.len();
+    }
     if glob[gi] == '*' {
-        for i in ni..=name.len() { if glob_match_inner(name, glob, i, gi + 1) { return true; } }
+        for i in ni..=name.len() {
+            if glob_match_inner(name, glob, i, gi + 1) {
+                return true;
+            }
+        }
         false
     } else if glob[gi] == '?' {
         ni < name.len() && glob_match_inner(name, glob, ni + 1, gi + 1)

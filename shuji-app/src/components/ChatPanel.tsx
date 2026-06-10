@@ -112,9 +112,7 @@ export default function ChatPanel(props: ChatPanelProps) {
         <div className="shrink-0 px-4 py-2 border-t border-fold bg-surface-elevated">
           <button
             onClick={() => {
-              const lastUserMsg = [...discussMsgs]
-                .reverse()
-                .find((m) => m.role === '皇帝');
+              const lastUserMsg = [...discussMsgs].reverse().find((m) => m.role === '皇帝');
               if (lastUserMsg) onConvertToCommand(lastUserMsg.content);
             }}
             className="w-full px-3 py-2 text-ui font-medium text-gold bg-gold-light hover:bg-gold-light/80 border border-vermillion/20 rounded-lg transition-colors"

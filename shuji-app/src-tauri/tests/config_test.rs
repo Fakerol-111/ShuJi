@@ -129,5 +129,3 @@ fn test_watchdog_default_delete_create_warning() {
     let config = RuntimeConfig::default();
     assert_eq!(config.watchdog.delete_create_warning_count, 2);
 }
-
-

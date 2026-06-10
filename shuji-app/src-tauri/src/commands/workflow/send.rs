@@ -247,10 +247,14 @@ pub async fn discuss_with_cabinet(
     };
 
     let output = neige.execute(&input).await.map_err(|e| {
-        state.discuss_cancel.store(false, std::sync::atomic::Ordering::SeqCst);
+        state
+            .discuss_cancel
+            .store(false, std::sync::atomic::Ordering::SeqCst);
         friendly_error(&e.to_string())
     })?;
-    state.discuss_cancel.store(false, std::sync::atomic::Ordering::SeqCst);
+    state
+        .discuss_cancel
+        .store(false, std::sync::atomic::Ordering::SeqCst);
     Ok(ChatMessage::new("内阁", &output.content))
 }
 
@@ -258,7 +262,9 @@ pub async fn discuss_with_cabinet(
 /// The flag is checked by AgentController on every tool-call iteration.
 #[tauri::command]
 pub async fn cancel_discuss(state: State<'_, AppState>) -> Result<(), String> {
-    state.discuss_cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+    state
+        .discuss_cancel
+        .store(true, std::sync::atomic::Ordering::SeqCst);
     log_console!("[commands] cancel_discuss: flag set");
     Ok(())
 }

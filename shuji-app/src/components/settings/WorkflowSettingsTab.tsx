@@ -12,7 +12,11 @@ interface WorkflowSettingsTabProps {
 const INTENTS: { key: string; label: string; desc: string }[] = [
   { key: 'auto', label: '自动', desc: '根据任务描述自动推断意图。（默认）' },
   { key: 'greenfield_standard', label: '新功能', desc: '全新功能开发，走完整设计→审查→执行流程。' },
-  { key: 'brownfield_optimize', label: '存量优化', desc: '对现有代码进行优化，跳过需求展开和门下审查。' },
+  {
+    key: 'brownfield_optimize',
+    label: '存量优化',
+    desc: '对现有代码进行优化，跳过需求展开和门下审查。',
+  },
   { key: 'bugfix', label: '缺陷修复', desc: '修复缺陷，直接路由到工部编码修复。' },
   { key: 'demo', label: '快速原型', desc: '快速原型/演示，最轻量流程。' },
 ];

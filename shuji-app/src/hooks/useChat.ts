@@ -1,6 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { sendMessage, discussWithCabinet, cancelDiscuss as cancelDiscussApi, getChatHistory } from '../api';
+import {
+  sendMessage,
+  discussWithCabinet,
+  cancelDiscuss as cancelDiscussApi,
+  getChatHistory,
+} from '../api';
 import { formatError } from '../utils/error';
 import { initialCabinetMessage, mergeMessages } from '../utils/chat';
 import type { ChatMessage, PlanInfo } from '../types';

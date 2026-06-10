@@ -20,7 +20,7 @@ export function useDemoFlow(
   handleSend: (text: string) => void,
   loadProjectIntoState: (path: string) => Promise<void>,
   resetDiscuss: () => void,
-  setTab?: (tab: 'decision' | 'discuss') => void,
+  setTab?: (tab: 'decision' | 'discuss') => void
 ) {
   const [showDemoTour, setShowDemoTour] = useState(false);
   const [demoCreating, setDemoCreating] = useState(false);
