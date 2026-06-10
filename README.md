@@ -45,6 +45,138 @@ Rust 后端提供 **138 个测试**（26 个单元测试 + 112 个集成测试�
 - **Token 缓存跟踪** — 前后端完整支持缓存命中/未命中分开统计和展示（`token_tracker.rs` + `round_metrics.rs`）
 - **config.local.toml 覆盖** — 开发者可创建本地配置文件覆盖默认设置，不污染仓库中的 `config.toml`
 
+## 开发者指南
+
+### 配置文件关系
+
+ShuJi 使用多层配置，理解优先级和关系很重要：
+
+```
+优先级高                         优先级低
+  │                                  │
+  ▼                                  ▼
+config.local.toml    api_config.json    .env     config.toml
+  ──────────────      ──────────────    ─────     ──────────
+  本地覆盖              API 密钥/端点    向后兼容     运行时配置
+  不提交到仓库          不提交到仓库      后备          提交到仓库
+```
+
+#### 1. `config.toml`（仓库中）
+
+运行时行为配置：API 超时、重试次数、max_tokens、tool iteration 次数、压缩阈值、watchdog 参数等。版本控制跟踪，所有开发者共享默认值。
+
+#### 2. `config.local.toml`（本地，不提交）
+
+覆盖 `config.toml` 中的任何字段。只需写要覆盖的部分。例如只改超时：
+
+```toml
+[api]
+timeout_secs = 300
+```
+
+#### 3. `.env`（本地，不提交）
+
+API 密钥和厂商配置。模板见 `.env.template`。
+
+**向后兼容后备**：当 `api_config.json` 不存在时，系统读取 `.env`。首次通过 UI（右上角 ⚙ 设置）保存配置后，自动迁移到 `api_config.json`，后续修改请使用 UI。
+
+#### 4. `api_config.json`（本地，不提交，由 UI 管理）
+
+前端设置面板保存的 API 配置（每个角色可独立设置不同的 key/url/model）。优先于 `.env`。
+
+#### 5. `context_config.json`（本地，不提交）
+
+每角色的压缩阈值覆盖。通过前端「上下文设置」Tab 管理。
+
+**配置加载优先级**：`config.local.toml > config.toml`（运行时）；`api_config.json > .env`（API）；`context_config.json 角色级 > config.toml 角色级 > config.toml 全局默认`（压缩阈值）。
+
+### 运行测试
+
+#### 快速验证（推荐 PR 前）
+
+```bash
+# 后端
+cargo test --manifest-path shuji-app/src-tauri/Cargo.toml --lib
+cargo test --manifest-path shuji-app/src-tauri/Cargo.toml --tests -- --skip expand_requirements --test-threads=1
+
+# 前端
+npm --prefix shuji-app run lint          # tsc --noEmit
+npm --prefix shuji-app test              # Vitest
+npm --prefix shuji-app run format:check  # Prettier
+
+# Rust lint
+cargo clippy --manifest-path shuji-app/src-tauri/Cargo.toml --all-targets 2>&1 | grep "warning"
+```
+
+#### 测试分类
+
+| 类别 | 命令 | 需要 API Key？ |
+|------|------|---------------|
+| 单元测试 | `cargo test --lib` | ❌ |
+| 文件 CRUD | `cargo test --test tool_test` | ❌ |
+| 路径安全 | `cargo test --test path_security_test` | ❌ |
+| 文档系统 | `cargo test --test document_test` | ❌ |
+| Actor 消息 | `cargo test --test actor_test` | ❌ |
+| Session | `cargo test --test session_test` | ❌ |
+| Session 控制 | `cargo test --test session_control_test` | ❌ |
+| 配置覆盖 | `cargo test --test config_test` | ❌ |
+| Workflow Profile | `cargo test --test workflow_profile_test` | ❌ |
+| E2E 工作流 | `cargo test --test workflow_demo_test` | ❌（Mock LLM） |
+| 审计 | `cargo test --test audit_test` | ❌ |
+| Checkpoint | `cargo test --test checkpoint_test` | ❌ |
+| expand_requirements | `cargo test --test expand_requirements_test` | ✅（默认跳过） |
+
+#### 运行单个测试
+
+```bash
+cargo test --manifest-path shuji-app/src-tauri/Cargo.toml --test audit_test test_append_read_roundtrip -- --nocapture
+npm --prefix shuji-app test -- src/hooks/useChat.test.ts
+```
+
+所有后端测试使用 `tempfile::TempDir` 隔离，`--test-threads=1` 规避并发状态竞争。
+
+### 代码风格
+
+- **Rust**：`cargo fmt`（4 空格缩进），提交前清理 `clippy` 警告，公开 API 需 doc comment，优先 `Result<_, String>` / `anyhow::Result<_>`，避免 `unwrap()`
+- **TypeScript / React**：Prettier 格式化（`npm run format`），`ChatMessage.role` 类型为 `RoleName` 联合类型（`types.ts`），新通用组件放 `components/ui/` 并导出到 `index.ts`，新 hook 以 `use` 开头放 `hooks/`
+- **事件命名**：Tauri 事件使用 kebab-case：`chat-message`、`dept-log`、`plan-update`、`project-update`
+
+### 提交前检查
+
+```bash
+# 后端
+cd shuji-app/src-tauri
+cargo fmt --check
+cargo clippy --all-targets
+cargo test --lib
+cargo test --tests -- --skip expand_requirements --test-threads=1
+
+# 前端
+cd ../../
+npm run format:check
+npm run lint
+npm test
+```
+
+### Checkpoint 系统
+
+Checkpoint 系统在 `.shuji/.git/` 中维护一个**完全独立于项目 git 仓库**的隔离 git 仓库：
+
+```
+项目根/
+├── .git/                  ← 项目 git 仓库（不受影响）
+├── .shuji/
+│   ├── .git/              ← ShuJi 隔离 git 仓库
+│   ├── checkpoints/
+│   │   ├── index.json     ← 索引（最多 500 条）
+│   │   ├── 内阁/
+│   │   │   └── <hash>.json  ← 会话快照
+```
+
+工作树是项目根，但 checkout 仅影响 `.shuji/` 目录。首次 checkpoint 提交所有 `.shuji/` 文件。`.gitignore` 中的 `.shuji/` 确保它不被项目 git 跟踪。
+
+---
+
 ## 快速开始
 
 ### 环境要求
