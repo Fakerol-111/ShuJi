@@ -18,6 +18,8 @@ use crate::models::chat::ChatMessage;
 use crate::models::role::Role;
 
 /// Send a message to the 内阁 actor.
+/// If there's an active pipeline runtime on disk, the message is consumed by
+/// the pipeline (resume from AwaitingUserInput/AwaitingApproval) instead.
 #[tauri::command]
 pub async fn send_message(
     app: tauri::AppHandle,
@@ -37,6 +39,136 @@ pub async fn send_message(
             .ok_or_else(|| friendly_error("没有加载项目"))?;
         p.working_dir.clone()
     };
+
+    // ── Pipeline resume: check if there's an active PlanRuntime on disk ──
+    let project_dir = std::path::Path::new(&p_working_dir);
+    if let Some(runtime) = crate::pipeline::PlanRuntime::load_from(project_dir).await {
+        log_console!("[pipeline] found active runtime on disk, resuming pipeline");
+
+        // Ensure actor system is initialized (needed for department routing)
+        {
+            let mut sys_lock = state.actor_system.lock().await;
+            if sys_lock.is_none() {
+                // Same lazy init as below — emit pipeline resume events
+                let (emperor_tx, mut emperor_rx) = tokio::sync::mpsc::channel::<ChatMessage>(200);
+                let (dept_log_tx, mut dept_log_rx) = tokio::sync::mpsc::channel::<DeptLogEntry>(500);
+                let (plan_tx, mut plan_rx) = tokio::sync::mpsc::channel::<serde_json::Value>(50);
+                let (milestone_tx, mut milestone_rx) = tokio::sync::mpsc::channel::<String>(50);
+                let app_handle = app.clone();
+
+                let chat_hist = state.chat_history.clone();
+                let dept_log_hist = state.dept_log_history.clone();
+                let chat_persist_dir = p_working_dir.clone();
+
+                tokio::spawn(async move {
+                    while let Some(msg) = emperor_rx.recv().await {
+                        let _ = app_handle.emit("chat-message", &msg);
+                        let mut hist = chat_hist.lock().await;
+                        hist.push(msg.clone());
+                        let log_dir = std::path::Path::new(&chat_persist_dir).join(".shuji");
+                        let _ = tokio::fs::create_dir_all(&log_dir).await;
+                        let chat_path = log_dir.join("chat.jsonl");
+                        if let Ok(json) = serde_json::to_string(&msg) {
+                            use tokio::io::AsyncWriteExt;
+                            if let Ok(mut f) = tokio::fs::OpenOptions::new()
+                                .create(true).append(true).open(&chat_path).await
+                            {
+                                let _ = f.write_all(format!("{}\n", json).as_bytes()).await;
+                            }
+                        }
+                    }
+                });
+
+                let app2 = app.clone();
+                let dept_log_dir = p_working_dir.clone();
+                tokio::spawn(async move {
+                    while let Some(entry) = dept_log_rx.recv().await {
+                        let _ = app2.emit("dept-log", &entry);
+                        let mut hist = dept_log_hist.lock().await;
+                        hist.push(entry.clone());
+                    }
+                });
+
+                let app_plan = app.clone();
+                tokio::spawn(async move {
+                    while let Some(plan_json) = plan_rx.recv().await {
+                        let _ = app_plan.emit("plan-update", &plan_json);
+                    }
+                });
+
+                let app3 = app.clone();
+                let wd = p_working_dir.clone();
+                tokio::spawn(async move {
+                    let s = crate::storage::shuji_dir::ShujiDir::new(&wd);
+                    while let Some(milestone) = milestone_rx.recv().await {
+                        let st = app3.state::<AppState>();
+                        let mut p_opt = st.current_project.lock().await;
+                        if let Some(ref mut p) = *p_opt {
+                            p.append_talk(&milestone);
+                            p.summary = milestone.chars().take(120).collect();
+                        }
+                    }
+                });
+
+                let system = start_actor_system(
+                    &config,
+                    state.runtime_config.clone(),
+                    Path::new(&p_working_dir),
+                    Path::new(&p_working_dir),
+                    state.cancel_flag.clone(),
+                    emperor_tx,
+                    dept_log_tx,
+                    plan_tx,
+                    milestone_tx,
+                ).await;
+
+                *sys_lock = Some(system);
+            }
+        }
+
+        let sys_lock = state.actor_system.lock().await;
+        if let Some(system) = sys_lock.as_ref() {
+            let engine = crate::pipeline::engine::PipelineEngine::from_runtime(
+                runtime,
+                system.senders.clone(),
+                project_dir.to_path_buf(),
+            );
+
+            // Resume pipeline with user's message as input
+            let result = engine.resume_with_input(Some(&message)).await;
+
+            // Emit result to emperor
+            let msg = match &result {
+                crate::pipeline::PipelineResult::Complete { ref runtime } => {
+                    format!("✅ 管道执行完成：{}", runtime.plan.summary)
+                }
+                crate::pipeline::PipelineResult::AwaitingUserInput { step_id, question, .. } => {
+                    format!("⏳ 管道等待用户输入（步骤 {}）：{}", step_id, question)
+                }
+                crate::pipeline::PipelineResult::AwaitingApproval { doc_id, step_id, .. } => {
+                    format!("⏳ 管道等待审批（步骤 {}，文档 {}）", step_id, doc_id)
+                }
+                crate::pipeline::PipelineResult::StepFailed { step_id, reason, .. } => {
+                    format!("❌ 管道步骤 {} 执行失败：{}", step_id, reason)
+                }
+                crate::pipeline::PipelineResult::Aborted { .. } => {
+                    crate::pipeline::PlanRuntime::cleanup(project_dir).await;
+                    "🛑 管道执行已中止".to_string()
+                }
+                crate::pipeline::PipelineResult::Deadlock { .. } => {
+                    "❌ 管道死锁：所有剩余步骤的依赖无法满足。".to_string()
+                }
+            };
+
+            // Emit pipeline result to frontend
+            let _ = system.emperor_tx.try_send(ChatMessage::new("系统", &msg));
+            log_console!("[pipeline] result: {}", msg);
+
+            return Ok(msg);
+        }
+    }
+
+    // ── Normal flow: send to 内阁 (no active pipeline) ──
 
     // Lazy init: create actor system on first message
     {

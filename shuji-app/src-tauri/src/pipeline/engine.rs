@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::actor::ActorMessage;
 use crate::api::control::RouteMsgType;
@@ -61,6 +61,58 @@ impl PipelineEngine {
     /// Save current runtime to disk.
     pub async fn save(&self) -> Result<(), String> {
         self.runtime.save_to(&self.project_dir).await
+    }
+
+    /// Create engine from existing runtime (resume path).
+    /// Directly uses actor senders without going through ActorSystem.
+    pub fn from_runtime(
+        runtime: PlanRuntime,
+        actor_txs: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
+        project_dir: PathBuf,
+    ) -> Self {
+        Self {
+            runtime,
+            actor_txs,
+            fast_txs: Arc::new(HashMap::new()),
+            cancel_map: Arc::new(Mutex::new(HashMap::<
+                crate::models::role::Role,
+                Arc<AtomicBool>,
+            >::new())),
+            cancel: Arc::new(AtomicBool::new(false)),
+            project_dir,
+        }
+    }
+
+    /// Resume pipeline after user input or approval decision.
+    ///
+    /// For `AwaitingUserInput`: marks the current `ask_user` step as Done
+    /// and records user_input as an artifact, then continues remaining steps.
+    ///
+    /// For `AwaitingApproval`: marks the current `approval_gate` step as Done,
+    /// then continues.
+    pub async fn resume_with_input(mut self, user_input: Option<&str>) -> PipelineResult {
+        // Get the current step that was waiting
+        let current = self.runtime.current_step.clone();
+        let current = match current {
+            Some(ref id) => {
+                // Mark it as Done so find_executable_step can proceed
+                self.set_status(id, StepStatus::Done);
+                id.clone()
+            }
+            None => return self.run().await, // No pending step, just continue
+        };
+
+        // Record user input as artifact if provided
+        if let Some(input) = user_input {
+            self.runtime.artifacts.insert(
+                format!("{}.user_input", current),
+                input.to_string(),
+            );
+            log_console!("[pipeline] resume step {} with user input", current);
+        }
+
+        self.save().await.ok();
+        self.run().await
     }
 
     /// Load engine state from disk (restart recovery).
