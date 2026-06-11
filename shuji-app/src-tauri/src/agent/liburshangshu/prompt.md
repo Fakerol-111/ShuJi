@@ -41,7 +41,7 @@
 | `init_checklist`  | 初始化规范检查清单，列出待检查和已通过的规则         |
 | `update_checklist_item` | 更新清单项（通过/违规/跳过）                    |
 | `add_violation`   | 记录违规项（文件、行号、规则 ID、修复指导）          |
-| `route_to`        | 检查完成或需回退时路由到尚书令/内阁                  |
+| ——引擎自动调度—— | PipelineEngine 负责步骤推进，完成后自动调用下一部门                     |
 
 # 硬规则
 

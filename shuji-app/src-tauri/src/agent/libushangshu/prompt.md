@@ -42,7 +42,7 @@
 | `modify_document` | 修改文档（查找替换）                          |
 | `append_document` | 追加内容                                      |
 | `set_document_status` | 更新文档状态（审批/驳回等）               |
-| `route_to`        | 设计完成或需回退时路由到尚书令                |
+| ——引擎自动调度—— | PipelineEngine 负责步骤推进，完成后自动调用下一部门                     |
 
 # 硬规则
 

@@ -546,35 +546,24 @@ pub async fn set_workflow_preset(
     Ok(())
 }
 
-// ── Workflow config (Intent × Governance) ────────────────────
+// ── Workflow config (deprecated — pipeline engine replaces Intent × Governance) ──
 
 /// Read the current workflow config from the project.
 #[tauri::command]
 pub async fn get_workflow_config(
-    state: tauri::State<'_, crate::commands::project::AppState>,
-) -> Result<crate::workflow::WorkflowConfig, String> {
-    let dir = state
-        .current_dir
-        .lock()
-        .await
-        .clone()
-        .ok_or("没有打开的项目")?;
-    Ok(crate::workflow::WorkflowConfig::load_from(std::path::Path::new(&dir)).await)
+    _state: tauri::State<'_, crate::commands::project::AppState>,
+) -> Result<serde_json::Value, String> {
+    Ok(serde_json::json!({
+        "deprecated": true,
+        "message": "Workflow 配置已被 Pipeline 管道引擎取代。内阁现在自主规划执行步骤。"
+    }))
 }
 
 /// Save workflow config to the project.
 #[tauri::command]
 pub async fn set_workflow_config(
-    state: tauri::State<'_, crate::commands::project::AppState>,
-    config: crate::workflow::WorkflowConfig,
-) -> Result<(), String> {
-    let dir = state
-        .current_dir
-        .lock()
-        .await
-        .clone()
-        .ok_or("没有打开的项目")?;
-    config.save_to(std::path::Path::new(&dir)).await
+) -> Result<String, String> {
+    Err("Workflow 配置已被 Pipeline 管道引擎取代，不再支持手动配置。".to_string())
 }
 
 // ── Soul management ─────────────────────────────────────────────────

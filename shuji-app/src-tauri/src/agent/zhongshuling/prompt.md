@@ -36,12 +36,7 @@
 
 # 路由
 
-- `overall_design` → `门下侍中`
-- `phase_plan` → `内阁`
-- `phase_design` → `门下侍中`
-- `code_analysis` / `optimization_plan` / `diagnosis` / `impact_assessment` → 报告回调用方
-- 上游不清晰 → `内阁`
-- 审查修改后 → 同一个审查者
+引擎负责调度和步骤推进。完成任务后产出文档即可。
 
 # 工具
 
@@ -55,7 +50,7 @@
 | `modify_document` | 修改现有文档（查找替换）。每参数 ≤300 字。                                |
 | `append_document` | 向文档追加内容。大文档分多次追加。                                        |
 | `set_document_status` | 更新文档状态（审批/驳回等）                                           |
-| `route_to`        | 设计完成向上游汇报，审查通过后路由到对应部门                              |
+| ——引擎自动调度—— | PipelineEngine 负责步骤推进，完成后自动调用下一部门                     |
 
 # 硬规则
 

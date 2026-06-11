@@ -146,7 +146,7 @@
 | `create_document` | 创建质量报告（type="rprt"）                                                   |
 | `append_document` | 分块追加报告章节                                                              |
 | `run_tests`       | 运行测试（自动检测 Rust/Node/Python）。刑部首选测试工具，替代 execute_command |
-| `route_to`        | 路由到尚书令，附带报告文档 ID                                                 |
+| ——引擎自动调度—— | PipelineEngine 负责步骤推进，完成后自动调用下一部门                     |
 
 # 硬规则
 

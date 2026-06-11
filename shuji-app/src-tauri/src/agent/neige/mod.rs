@@ -8,8 +8,6 @@ use crate::api::client::{AnthropicClient, ToolDefinition};
 use crate::models::message::Message;
 use crate::models::role::Role;
 
-pub mod routing;
-
 pub struct NeigeAgent {
     client: AnthropicClient,
     model: String,
@@ -133,11 +131,10 @@ impl NeigeAgent {
         default.to_string()
     }
 
-    /// Load skill content. Checks `.shuji/skills/{name}.md` first (runtime-
-    /// created skills), then falls back to compile-time embedded skills.
-    /// Returns empty string if the skill is not found in either location.
+    /// Load skill content. Checks `.shuji/skills/{name}.md` on disk only.
+    /// Runtime-created skills are still supported; compile-time skills removed.
+    /// Returns empty string if the skill is not found.
     pub async fn load_skill(name: &str, working_dir: &Path) -> String {
-        // 1. Check runtime skills on disk
         let disk_path = working_dir
             .join(".shuji")
             .join("skills")
@@ -148,23 +145,7 @@ impl NeigeAgent {
                 return content;
             }
         }
-        // 2. Fall back to compiled-in skills
-        let content: &str = match name {
-            "discuss" => include_str!("skills/discuss.md"),
-            "clarify" => include_str!("skills/clarify.md"),
-            "workflow_demo" => include_str!("skills/workflow_demo.md"),
-            "workflow_simple" => include_str!("skills/workflow_simple.md"),
-            "workflow_standard" => include_str!("skills/workflow_standard.md"),
-            "workflow_complex" => include_str!("skills/workflow_complex.md"),
-            "workflow_optimize" => include_str!("skills/workflow_optimize.md"),
-            "workflow_bugfix" => include_str!("skills/workflow_bugfix.md"),
-            "workflow_refactor" => include_str!("skills/workflow_refactor.md"),
-            "workflow_audit" => include_str!("skills/workflow_audit.md"),
-            "summary" => include_str!("skills/summary.md"),
-            "reflect" => include_str!("skills/reflect.md"),
-            _ => "",
-        };
-        content.to_string()
+        String::new()
     }
 
     /// Save raw session messages for pause/resume.
