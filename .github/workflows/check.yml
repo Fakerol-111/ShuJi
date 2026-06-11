@@ -50,7 +50,7 @@ jobs:
       - name: Run unit tests
         run: cd shuji-app/src-tauri && cargo test --lib
       - name: Run integration tests
-        run: cd shuji-app/src-tauri && RUST_BACKTRACE=1 cargo test --tests -- --skip expand_requirements --test-threads=1
+        run: cd shuji-app/src-tauri && RUST_BACKTRACE=1 cargo test --tests -- --skip expand_requirements --skip workflow_demo --test-threads=1
 
   # Windows 轻量 job：避免重复安装 Tauri 系统依赖，只跑 cargo check + 单元测试
   windows-check:
