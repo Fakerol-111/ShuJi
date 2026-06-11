@@ -18,6 +18,9 @@ pub enum NodeStatus {
     Completed,
     #[serde(rename = "failed")]
     Failed,
+    /// 管道计划预填充——尚未实际执行到此部门
+    #[serde(rename = "planned")]
+    Planned,
 }
 
 /// 图节点：一个部门的一次"出场"
@@ -174,12 +177,23 @@ impl WorkflowGraph {
 
     /// 创建并注册一个节点，返回其 id
     fn alloc_node(&mut self, role: &str, instance: u32, task: &str) -> usize {
+        self.alloc_node_with_status(role, instance, task, NodeStatus::Active)
+    }
+
+    /// 创建并注册一个节点，指定初始状态，返回其 id
+    fn alloc_node_with_status(
+        &mut self,
+        role: &str,
+        instance: u32,
+        task: &str,
+        status: NodeStatus,
+    ) -> usize {
         let node = GraphNode {
             id: self.next_node_id,
             role: role.to_string(),
             instance,
             task_summary: task.to_string(),
-            status: NodeStatus::Active,
+            status,
             created_at: Local::now().format("%H:%M:%S").to_string(),
             duration_secs: None,
         };
@@ -222,6 +236,15 @@ impl WorkflowGraph {
         false
     }
 
+    /// 标记一个角色的当前节点为 active（用于 pipeline 执行开始时将 planned → active）
+    pub fn mark_active(&mut self, role: &str) {
+        if let Some(id) = self.current_nodes.get(role) {
+            if let Some(node) = self.nodes.iter_mut().find(|n| n.id == *id) {
+                node.status = NodeStatus::Active;
+            }
+        }
+    }
+
     /// 标记一个角色的当前节点为 completed
     pub fn mark_completed(&mut self, role: &str) {
         if let Some(id) = self.current_nodes.get(role) {
@@ -234,6 +257,77 @@ impl WorkflowGraph {
     /// 设置本次会话标签
     pub fn set_session_label(&mut self, label: &str) {
         self.session_label = label.to_string();
+    }
+
+    /// 添加一条 planned 边（管道计划预填充）——节点初始状态为 Planned 而非 Active
+    pub fn add_planned_edge(
+        &mut self,
+        from_role: &str,
+        to_role: &str,
+        task_id: &str,
+        task_description: &str,
+    ) {
+        let from_id = match self.current_nodes.get(from_role) {
+            Some(id) => *id,
+            None => {
+                log_console!("[graph] 找不到 {} 的活跃节点，忽略 planned 边", from_role);
+                return;
+            }
+        };
+
+        let target_id = match self.current_nodes.get(to_role) {
+            Some(candidate_id) if self.has_path(*candidate_id, from_id) => {
+                let instance = self.instance_counts.get(to_role).copied().unwrap_or(0) + 1;
+                self.alloc_node_with_status(
+                    to_role,
+                    instance,
+                    task_description,
+                    NodeStatus::Planned,
+                )
+            }
+            Some(candidate_id) => {
+                if let Some(node) = self.nodes.iter_mut().find(|n| n.id == *candidate_id) {
+                    node.task_summary = task_description.to_string();
+                }
+                *candidate_id
+            }
+            None => {
+                let instance = 1;
+                self.alloc_node_with_status(
+                    to_role,
+                    instance,
+                    task_description,
+                    NodeStatus::Planned,
+                )
+            }
+        };
+
+        let edge = GraphEdge {
+            id: self.next_edge_id,
+            source: from_id,
+            target: target_id,
+            task_id: task_id.to_string(),
+            description: task_description.to_string(),
+            timestamp: Local::now().format("%H:%M:%S").to_string(),
+        };
+        self.next_edge_id += 1;
+        self.edges.push(edge);
+
+        log_console!(
+            "[graph] [planned] {}#{:?} → {}#{} (task: {})",
+            from_role,
+            self.nodes
+                .iter()
+                .find(|n| n.id == from_id)
+                .map(|n| n.instance),
+            to_role,
+            self.nodes
+                .iter()
+                .find(|n| n.id == target_id)
+                .map(|n| n.instance)
+                .unwrap_or(0),
+            task_id,
+        );
     }
 
     /// 标记一个角色的当前节点为 failed

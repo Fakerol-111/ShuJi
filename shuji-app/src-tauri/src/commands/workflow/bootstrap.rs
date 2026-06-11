@@ -62,16 +62,6 @@ fn build_agents(
         )),
     );
 
-    let shangshuling_ep = config.for_role("shangshuling");
-    agents.insert(
-        Role::Shangshuling,
-        Box::new(ShangshulingAgent::new(
-            AnthropicClient::new(shangshuling_ep.api_key, shangshuling_ep.api_url),
-            &shangshuling_ep.model,
-            cancel.clone(),
-        )),
-    );
-
     let libushangshu_ep = config.for_role("libushangshu");
     agents.insert(
         Role::LiBuShangshu,
@@ -195,6 +185,47 @@ pub async fn start_actor_system(
         contexts.push((role, agent, rx));
     }
 
+    // ── 文移图：在此创建，尚书省和六部 actor 共享 ──
+    let workflow_graph = Arc::new(tokio::sync::Mutex::new(
+        crate::workflow::WorkflowGraph::load_or_new(working_dir).await,
+    ));
+
+    // ── 尚书省：延迟构造，所有其他部门信道就绪后才创建 ──
+    let shangshuling_ep = config.for_role("shangshuling");
+    let shangshuling_agent = {
+        // 尚书省能看到所有部门（包括自己以外的所有部门）
+        let mut shangshuling_peers: HashMap<Role, mpsc::UnboundedSender<ActorMessage>> =
+            HashMap::new();
+        for (other_role, tx) in &senders {
+            shangshuling_peers.insert(*other_role, tx.clone());
+        }
+        // 创建尚书省自己的信道
+        let (shangshuling_tx, shangshuling_rx) = mpsc::unbounded_channel();
+        senders.insert(Role::Shangshuling, shangshuling_tx);
+
+        let agent = Box::new(ShangshulingAgent::new(
+            AnthropicClient::new(shangshuling_ep.api_key, shangshuling_ep.api_url),
+            &shangshuling_ep.model,
+            cancel.clone(),
+            shangshuling_peers,
+            Some(workflow_graph.clone()),
+            Some(Arc::new((*fast_txs).clone())),
+        ));
+        (agent, shangshuling_rx)
+    };
+
+    // 尚书省入 contexts 表（含 cancel flag + fast_rx）
+    {
+        let (mut agent, rx) = shangshuling_agent;
+        let actor_flag = Arc::new(AtomicBool::new(false));
+        agent.set_interrupt_flag(actor_flag.clone());
+        cancel_map
+            .lock()
+            .unwrap()
+            .insert(Role::Shangshuling, actor_flag);
+        contexts.push((Role::Shangshuling, agent, rx));
+    }
+
     let all_senders = senders.clone();
     let shared_context: Arc<std::sync::Mutex<HashMap<Role, String>>> =
         Arc::new(std::sync::Mutex::new(HashMap::new()));
@@ -202,10 +233,6 @@ pub async fn start_actor_system(
         Arc::new(std::sync::Mutex::new(HashMap::new()));
     let talk_history: Arc<std::sync::Mutex<Vec<String>>> =
         Arc::new(std::sync::Mutex::new(Vec::new()));
-
-    let workflow_graph = Arc::new(tokio::sync::Mutex::new(
-        crate::workflow::WorkflowGraph::load_or_new(working_dir).await,
-    ));
 
     for (role, agent, rx) in contexts {
         let mut peers: HashMap<Role, mpsc::UnboundedSender<ActorMessage>> = HashMap::new();

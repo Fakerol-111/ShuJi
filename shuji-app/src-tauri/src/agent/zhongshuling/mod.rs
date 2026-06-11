@@ -136,7 +136,6 @@ impl Agent for ZhongshulingAgent {
             if self.cancel.load(std::sync::atomic::Ordering::SeqCst) {
                 log_console!("[中书令] interrupted in outer skill loop");
                 result = String::new();
-                route = None;
                 break;
             }
 

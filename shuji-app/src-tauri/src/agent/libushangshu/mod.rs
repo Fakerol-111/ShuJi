@@ -109,7 +109,7 @@ impl Agent for LibuShangshuAgent {
             let wd = wd.clone();
             Box::pin(async move { Self::execute_tool(&name, &args, &wd).await })
         };
-        let (result, route) = controller
+        let (result, _route) = controller
             .run(
                 &mut session,
                 &exec,

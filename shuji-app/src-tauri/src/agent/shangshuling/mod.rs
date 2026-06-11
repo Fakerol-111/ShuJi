@@ -1,40 +1,69 @@
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
+use tokio::sync::mpsc;
+
+use crate::actor::ActorMessage;
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput};
 use crate::api::client::{AnthropicClient, ToolDefinition};
 use crate::models::message::Message;
 use crate::models::role::Role;
+use crate::workflow::WorkflowGraph;
 
 pub struct ShangshulingAgent {
     client: AnthropicClient,
     model: String,
     cancel: Arc<AtomicBool>,
+    peers: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
+    workflow_graph: Option<Arc<tokio::sync::Mutex<WorkflowGraph>>>,
+    fast_txs: Option<crate::FastTxMap>,
 }
 
 impl ShangshulingAgent {
-    pub fn new(client: AnthropicClient, model: &str, cancel: Arc<AtomicBool>) -> Self {
+    pub fn new(
+        client: AnthropicClient,
+        model: &str,
+        cancel: Arc<AtomicBool>,
+        peers: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
+        workflow_graph: Option<Arc<tokio::sync::Mutex<WorkflowGraph>>>,
+        fast_txs: Option<crate::FastTxMap>,
+    ) -> Self {
         Self {
             client,
             model: model.to_string(),
             cancel,
+            peers,
+            workflow_graph,
+            fast_txs,
         }
     }
 
     fn tools() -> Vec<ToolDefinition> {
         let mut tools = crate::tool::registry::doc_inspect_tools();
-        // read_file for reading source code (prompt references it for "仅在报告不足以决策时才读")
+        // read_file for reading source code
         tools.push(crate::tool::read_file_tool_def(
             "读取源文件和 .shuji/ 中的普通文件",
         ));
         tools.extend(crate::tool::registry::document_tools());
         tools.extend(crate::tool::registry::reauth_tool());
-        // route_tool 已移除 —— PipelineEngine 负责调度
+        // 调度工具：向六部分派任务并等待完成
+        tools.push(crate::tool::registry::assign_task_tool());
         tools
     }
 
-    async fn execute_tool(name: &str, args: &serde_json::Value, working_dir: &Path) -> String {
+    async fn execute_tool(
+        name: &str,
+        args: &serde_json::Value,
+        working_dir: &Path,
+        ctx: &crate::tool::ToolContext,
+    ) -> String {
+        // 先匹配尚书省特殊工具（assign_task）
+        if let Some(result) = crate::tool::tool_handle_shangshuling_special(name, args, ctx).await {
+            return result;
+        }
+        // 否则走通用工具分发
         crate::tool::execute_named_tool(name, working_dir, args, "shangshuling").await
     }
 }
@@ -110,13 +139,30 @@ impl Agent for ShangshulingAgent {
 
         let config = input.runtime_config.clone();
         let wd = working_dir.clone();
+        let peers = self.peers.clone();
+        let wf_graph = self.workflow_graph.clone();
+        let fast_txs = self.fast_txs.clone();
         let exec = move |name: &str, args: &serde_json::Value| -> crate::api::control::ToolFuture {
             let name = name.to_owned();
             let args = args.clone();
             let wd = wd.clone();
-            Box::pin(async move { Self::execute_tool(&name, &args, &wd).await })
+            let peers = peers.clone();
+            let wf_graph = wf_graph.clone();
+            let fast_txs = fast_txs.clone();
+            Box::pin(async move {
+                let ctx = crate::tool::ToolContext {
+                    working_dir: wd.clone(),
+                    cancel_map: None,
+                    client: None,
+                    model: None,
+                    fast_txs,
+                    peers: Some(peers),
+                    workflow_graph: wf_graph,
+                };
+                Self::execute_tool(&name, &args, &wd, &ctx).await
+            })
         };
-        let (result, route) = controller
+        let (result, _route) = controller
             .run(
                 &mut session,
                 &exec,

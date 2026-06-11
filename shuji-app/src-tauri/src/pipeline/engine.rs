@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 use crate::actor::ActorMessage;
 use crate::api::control::RouteMsgType;
 use crate::models::role::Role;
+use crate::workflow::WorkflowGraph;
 use tokio::sync::mpsc;
 
 use super::{PipelinePlan, PipelineResult, PlanRuntime, PlanStep, StepStatus};
@@ -15,10 +16,19 @@ use super::{PipelinePlan, PipelineResult, PlanRuntime, PlanStep, StepStatus};
 // ── Internal step result (not yet converted to PipelineResult) ──
 
 enum StepResultInner {
-    Success { artifact_id: Option<String> },
-    ApprovalRequired { doc_id: String },
-    AwaitingUserInput { question: String },
-    Failed { reason: String },
+    Success {
+        artifact_id: Option<String>,
+        target_role: Option<String>,
+    },
+    ApprovalRequired {
+        doc_id: String,
+    },
+    AwaitingUserInput {
+        question: String,
+    },
+    Failed {
+        reason: String,
+    },
 }
 
 // ── PipelineEngine ──────────────────────────────────────────────
@@ -36,6 +46,10 @@ pub struct PipelineEngine {
     pub cancel: Arc<AtomicBool>,
     /// Project working directory.
     pub project_dir: PathBuf,
+    /// 文移图引用（可选）——记录部门间路由用于可视化
+    pub workflow_graph: Option<Arc<tokio::sync::Mutex<WorkflowGraph>>>,
+    /// 追踪上一个路由到的部门角色名（用于文移图边创建）
+    graph_last_role: String,
 }
 
 impl PipelineEngine {
@@ -47,6 +61,7 @@ impl PipelineEngine {
         cancel_map: crate::CancelMap,
         cancel: Arc<AtomicBool>,
         project_dir: PathBuf,
+        workflow_graph: Option<Arc<tokio::sync::Mutex<WorkflowGraph>>>,
     ) -> Self {
         Self {
             runtime: PlanRuntime::new(plan),
@@ -55,6 +70,8 @@ impl PipelineEngine {
             cancel_map,
             cancel,
             project_dir,
+            workflow_graph,
+            graph_last_role: "内阁".to_string(),
         }
     }
 
@@ -80,6 +97,8 @@ impl PipelineEngine {
             >::new())),
             cancel: Arc::new(AtomicBool::new(false)),
             project_dir,
+            workflow_graph: None,
+            graph_last_role: "内阁".to_string(),
         }
     }
 
@@ -104,10 +123,9 @@ impl PipelineEngine {
 
         // Record user input as artifact if provided
         if let Some(input) = user_input {
-            self.runtime.artifacts.insert(
-                format!("{}.user_input", current),
-                input.to_string(),
-            );
+            self.runtime
+                .artifacts
+                .insert(format!("{}.user_input", current), input.to_string());
             log_console!("[pipeline] resume step {} with user input", current);
         }
 
@@ -128,6 +146,8 @@ impl PipelineEngine {
             cancel_map: actor_system.cancel_map.clone(),
             cancel: actor_system.cancel.clone(),
             project_dir: project_dir.to_path_buf(),
+            workflow_graph: Some(actor_system.workflow_graph.clone()),
+            graph_last_role: "内阁".to_string(),
         })
     }
 
@@ -187,10 +207,22 @@ impl PipelineEngine {
 
                 let result = self.execute_step(&step).await;
                 match result {
-                    StepResultInner::Success { artifact_id } => {
+                    StepResultInner::Success {
+                        artifact_id,
+                        target_role,
+                    } => {
                         self.set_status(&next, StepStatus::Done);
                         if let Some(id) = artifact_id {
                             self.runtime.artifacts.insert(next.clone(), id);
+                        }
+                        // 文移图：标记部门节点为 completed
+                        if let Some(role_name) = &target_role {
+                            if let Some(ref graph_lock) = self.workflow_graph {
+                                let mut g = graph_lock.lock().await;
+                                g.mark_completed(role_name);
+                                let _ = g.save_to(&self.project_dir).await;
+                            }
+                            self.graph_last_role = role_name.clone();
                         }
                         self.save().await.ok();
                         break;
@@ -229,7 +261,9 @@ impl PipelineEngine {
             if self.runtime.step_status.get(&next) == Some(&StepStatus::InProgress) {
                 // All retries exhausted — still in progress = failed
                 self.set_status(&next, StepStatus::Failed);
-                self.runtime.error_log.push(format!("{}: {}", next, last_reason));
+                self.runtime
+                    .error_log
+                    .push(format!("{}: {}", next, last_reason));
 
                 match step.on_failure.as_str() {
                     "abort" => {
@@ -295,7 +329,11 @@ impl PipelineEngine {
                 let mut sub_steps: Vec<PlanStep> = Vec::new();
                 for t in &targets {
                     sub_steps.push(PlanStep {
-                        step_id: format!("{}-{}", step.step_id, t["name"].as_str().unwrap_or("sub")),
+                        step_id: format!(
+                            "{}-{}",
+                            step.step_id,
+                            t["name"].as_str().unwrap_or("sub")
+                        ),
                         description: t["task"].as_str().unwrap_or("").to_string(),
                         action: "route_to".into(),
                         action_params: serde_json::json!({
@@ -308,7 +346,10 @@ impl PipelineEngine {
                         retry: 1,
                     });
                 }
-                let futures: Vec<_> = sub_steps.iter().map(|s| self.execute_route_to_step(s)).collect();
+                let futures: Vec<_> = sub_steps
+                    .iter()
+                    .map(|s| self.execute_route_to_step(s))
+                    .collect();
                 let results = futures::future::join_all(futures).await;
                 // Check all results — return first failure
                 for r in results {
@@ -325,13 +366,23 @@ impl PipelineEngine {
                         StepResultInner::Success { .. } => {}
                     }
                 }
-                StepResultInner::Success { artifact_id: None }
+                StepResultInner::Success {
+                    artifact_id: None,
+                    target_role: None,
+                }
             }
             "self_execute" => {
                 // 内阁 self-execute: execute as a sub-agent
-                let task = step.action_params.get("task").and_then(|v| v.as_str()).unwrap_or("");
+                let task = step
+                    .action_params
+                    .get("task")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 let doc_id = self.execute_task_via_session(task, &step.step_id).await;
-                StepResultInner::Success { artifact_id: doc_id }
+                StepResultInner::Success {
+                    artifact_id: doc_id,
+                    target_role: None,
+                }
             }
             other => StepResultInner::Failed {
                 reason: format!("unknown action type: {}", other),
@@ -340,6 +391,7 @@ impl PipelineEngine {
     }
 
     /// Route a step to a department actor and wait for its output.
+    /// Records edges in the workflow graph for 文移图 visualization.
     async fn execute_route_to_step(&self, step: &PlanStep) -> StepResultInner {
         let target = step
             .action_params
@@ -387,6 +439,13 @@ impl PipelineEngine {
             task.chars().take(60).collect::<String>()
         );
 
+        // ── 文移图：标记节点为 active（节点/边已由 preview 预创建） ──
+        if let Some(ref graph_lock) = self.workflow_graph {
+            let mut g = graph_lock.lock().await;
+            g.mark_active(target);
+            let _ = g.save_to(&self.project_dir).await;
+        }
+
         if let Err(e) = tx.send(msg) {
             return StepResultInner::Failed {
                 reason: format!("failed to send message to {}: {}", target, e),
@@ -401,7 +460,10 @@ impl PipelineEngine {
                     target,
                     &output.chars().take(80).collect::<String>()
                 );
-                StepResultInner::Success { artifact_id: None }
+                StepResultInner::Success {
+                    artifact_id: None,
+                    target_role: Some(target.to_string()),
+                }
             }
             None => StepResultInner::Failed {
                 reason: "actor channel closed unexpectedly".into(),
@@ -430,14 +492,95 @@ impl PipelineEngine {
             "content": task,
             "created": chrono::Local::now().to_rfc3339(),
         });
-        let _ = tokio::fs::write(&doc_path, serde_json::to_string_pretty(&doc).unwrap_or_default()).await;
+        let _ = tokio::fs::write(
+            &doc_path,
+            serde_json::to_string_pretty(&doc).unwrap_or_default(),
+        )
+        .await;
         Some(doc_id)
+    }
+
+    /// 预填充文移图：遍历 pipeline plan 中的所有 route_to/parallel 步骤，
+    /// 以 planned 状态添加到 workflow graph 中，让前端提前看到整个计划 DAG。
+    pub async fn preview_pipeline_on_graph(&mut self) {
+        if self.workflow_graph.is_none() {
+            return;
+        }
+
+        let steps = self.runtime.plan.steps.clone();
+        let mut last_role = "内阁".to_string();
+
+        for step in &steps {
+            match step.action.as_str() {
+                "route_to" => {
+                    let target = step
+                        .action_params
+                        .get("target")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    if !target.is_empty() {
+                        if let Some(ref graph_lock) = self.workflow_graph {
+                            let mut g = graph_lock.lock().await;
+                            g.add_planned_edge(
+                                &last_role,
+                                target,
+                                &step.step_id,
+                                &step.description,
+                            );
+                            let _ = g.save_to(&self.project_dir).await;
+                        }
+                        last_role = target.to_string();
+                    }
+                }
+                "parallel" => {
+                    let targets: Vec<serde_json::Value> = step
+                        .action_params
+                        .get("targets")
+                        .and_then(|v| v.as_array())
+                        .cloned()
+                        .unwrap_or_default();
+                    for t in &targets {
+                        let target = t["target"].as_str().unwrap_or("");
+                        if !target.is_empty() {
+                            if let Some(ref graph_lock) = self.workflow_graph {
+                                let mut g = graph_lock.lock().await;
+                                let sub_step_id = format!(
+                                    "{}-{}",
+                                    step.step_id,
+                                    t["name"].as_str().unwrap_or("sub")
+                                );
+                                g.add_planned_edge(
+                                    &last_role,
+                                    target,
+                                    &sub_step_id,
+                                    t["task"].as_str().unwrap_or(""),
+                                );
+                                let _ = g.save_to(&self.project_dir).await;
+                            }
+                        }
+                    }
+                    // 并行步骤的最后一个 target 作为下一条边的 from_role
+                    if let Some(last_t) = targets.last() {
+                        if let Some(t) = last_t["target"].as_str() {
+                            last_role = t.to_string();
+                        }
+                    }
+                }
+                _ => {
+                    // ask_user / approval_gate / self_execute — 不产生部门间边
+                }
+            }
+        }
     }
 
     // ── Helpers ──────────────────────────────────────────────────
 
     fn get_step(&self, step_id: &str) -> Option<&PlanStep> {
-        self.runtime.plan.steps.iter().find(|s| s.step_id == step_id)
+        self.runtime
+            .plan
+            .steps
+            .iter()
+            .find(|s| s.step_id == step_id)
     }
 
     fn set_status(&mut self, step_id: &str, status: StepStatus) {
@@ -448,7 +591,7 @@ impl PipelineEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pipeline::{PipelinePlan, PlanStep, PlanRuntime};
+    use crate::pipeline::{PipelinePlan, PlanRuntime, PlanStep};
 
     fn make_single_step_plan(action: &str, target: &str) -> PipelinePlan {
         PipelinePlan {

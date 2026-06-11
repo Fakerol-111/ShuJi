@@ -279,7 +279,7 @@ impl Agent for GongbuShangshuAgent {
                 }
             })
         };
-        let (result, route) = controller
+        let (result, _route) = controller
             .run(
                 &mut session,
                 &exec,

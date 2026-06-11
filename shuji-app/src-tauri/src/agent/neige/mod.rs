@@ -68,6 +68,7 @@ impl NeigeAgent {
 
     /// Read .shuji/state.json and inject project state + previous summary
     /// into the session as context for the summary skill.
+    #[allow(dead_code)]
     async fn inject_project_state(session: &mut crate::api::session::Session, working_dir: &Path) {
         let state_path = working_dir.join(".shuji").join("state.json");
         let content = match tokio::fs::read_to_string(&state_path).await {
@@ -431,6 +432,8 @@ impl Agent for NeigeAgent {
                 client: Some(client.clone()),
                 model: Some(model.clone()),
                 fast_txs: fast_txs.clone(),
+                peers: None,
+                workflow_graph: None,
             };
             Box::pin(async move {
                 // GateEngine 已移除 —— PipelineEngine 负责所有调度
@@ -448,7 +451,7 @@ impl Agent for NeigeAgent {
         let mut route: Option<crate::api::control::RouteTo>;
         let mut must_approve_retries = 0u32;
         // plan_json: extracted from tool call after run() completes
-        let mut plan_json: Option<String> = None;
+        let plan_json: Option<String>;
         loop {
             // Suspension point: check cancel between controller.run() rounds
             if self.cancel.load(std::sync::atomic::Ordering::SeqCst) {
@@ -499,7 +502,11 @@ impl Agent for NeigeAgent {
                 if !already_asked {
                     must_approve_retries += 1;
                     if must_approve_retries >= 3 {
-                        log_console!("[内阁] must-approve doc {} 重试{}次仍无request_decision，自动批复", id, must_approve_retries);
+                        log_console!(
+                            "[内阁] must-approve doc {} 重试{}次仍无request_decision，自动批复",
+                            id,
+                            must_approve_retries
+                        );
                         let _ =
                             crate::tool::documents::remove_pending_approval(&working_dir, id).await;
                         let msg = format!(
@@ -509,7 +516,11 @@ impl Agent for NeigeAgent {
                         session.inject(&msg);
                         continue;
                     }
-                    log_console!("[内阁] must-approve doc {} pending (retry {}/3) — re-prompting", id, must_approve_retries);
+                    log_console!(
+                        "[内阁] must-approve doc {} pending (retry {}/3) — re-prompting",
+                        id,
+                        must_approve_retries
+                    );
                     let msg = format!(
                         "[系统] 文档 {} 已创建但未经皇帝御批。请立即调用 request_decision 工具，传入选项供皇帝决策。",
                         id
@@ -523,19 +534,31 @@ impl Agent for NeigeAgent {
         }
 
         // ── Extract plan_json from submit_pipeline_plan tool call ──
-        plan_json = session.snapshot().messages.iter().rev()
-            .find_map(|m| {
-                m.get("tool_calls")
-                    .and_then(|tc| tc.as_array())
-                    .and_then(|calls| calls.iter().find(|c| {
-                        c.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()) == Some("submit_pipeline_plan")
-                    }))
-                    .and_then(|call| {
-                        let args_str = call.get("function").and_then(|f| f.get("arguments")).and_then(|a| a.as_str())?;
-                        serde_json::from_str::<serde_json::Value>(args_str).ok()
-                            .and_then(|v| v.get("plan_json").and_then(|pj| pj.as_str()).map(String::from))
+        plan_json = session.snapshot().messages.iter().rev().find_map(|m| {
+            m.get("tool_calls")
+                .and_then(|tc| tc.as_array())
+                .and_then(|calls| {
+                    calls.iter().find(|c| {
+                        c.get("function")
+                            .and_then(|f| f.get("name"))
+                            .and_then(|n| n.as_str())
+                            == Some("submit_pipeline_plan")
                     })
-            });
+                })
+                .and_then(|call| {
+                    let args_str = call
+                        .get("function")
+                        .and_then(|f| f.get("arguments"))
+                        .and_then(|a| a.as_str())?;
+                    serde_json::from_str::<serde_json::Value>(args_str)
+                        .ok()
+                        .and_then(|v| {
+                            v.get("plan_json")
+                                .and_then(|pj| pj.as_str())
+                                .map(String::from)
+                        })
+                })
+        });
 
         // Re-read participation level each turn so /level commands take effect immediately
         let level_prompt = match std::env::var("PARTICIPATION_LEVEL")

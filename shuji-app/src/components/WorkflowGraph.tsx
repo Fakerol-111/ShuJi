@@ -119,7 +119,24 @@ export default function WorkflowGraphView() {
   }
 
   // ── Layered layout (same as before) ──
-  const layoutResult = graph ? computeLayout(graph) : null;
+  // ── 双图拆分：尚书省层（规划阶段）vs 六部层（执行阶段） ──
+  const upperRoles = new Set(['内阁', '中书令', '门下侍中', '尚书令']);
+  const lowerRoles = new Set(['尚书令', '吏部', '兵部', '工部', '刑部', '礼部']);
+  const hasShangshuling = graph?.nodes.some((n) => n.role === '尚书令');
+
+  let upperLayout: ReturnType<typeof computeLayout> | null = null;
+  let lowerLayout: ReturnType<typeof computeLayout> | null = null;
+
+  if (graph && hasShangshuling) {
+    const upperGraph = splitGraph(graph, (n) => upperRoles.has(n.role));
+    const lowerGraph = splitGraph(graph, (n) => lowerRoles.has(n.role));
+    upperLayout = computeLayout(upperGraph);
+    lowerLayout = computeLayout(lowerGraph);
+  } else {
+    // 无尚书省节点 → 只有一个图
+    const layoutResult = graph ? computeLayout(graph) : null;
+    upperLayout = layoutResult;
+  }
 
   return (
     <div className="h-full flex flex-col bg-surface-paper">
@@ -129,8 +146,8 @@ export default function WorkflowGraphView() {
         {graph && (
           <span className="text-caption text-ink-500">
             {graph.nodes.length} 节点 · {graph.edges.length} 边
-            {layoutResult && layoutResult.totalDuration !== '' && (
-              <span className="ml-2 text-ink-400">· 总耗时 {layoutResult.totalDuration}</span>
+            {upperLayout && upperLayout.totalDuration !== '' && (
+              <span className="ml-2 text-ink-400">· 耗时 {upperLayout.totalDuration}</span>
             )}
           </span>
         )}
@@ -177,13 +194,21 @@ export default function WorkflowGraphView() {
 
         {/* SVG canvas */}
         <div className="flex-1 overflow-auto">
-          {layoutResult ? (
-            <svg
-              ref={svgRef}
-              viewBox={`0 0 ${layoutResult.svgW} ${layoutResult.svgH}`}
-              className="min-w-full"
-              style={{ width: layoutResult.svgW, height: layoutResult.svgH }}
-            >
+          {/* 尚书省层（规划阶段） */}
+          {upperLayout ? (
+            <>
+              {lowerLayout && (
+                <div className="px-3 py-1.5 text-caption font-semibold text-ink-500 bg-surface-parchment/50 border-b border-fold sticky top-0 z-10">
+                  🏛 尚书省层（规划阶段）
+                </div>
+              )}
+              <div className="mb-4">
+              <svg
+                ref={svgRef}
+                viewBox={`0 0 ${upperLayout.svgW} ${upperLayout.svgH}`}
+                className="min-w-full"
+                style={{ width: upperLayout.svgW, height: upperLayout.svgH }}
+              >
               <defs>
                 <marker
                   id="arrowhead"
@@ -197,7 +222,7 @@ export default function WorkflowGraphView() {
                 </marker>
               </defs>
               {/* Edges */}
-              {layoutResult.edges.map((e) => {
+              {upperLayout.edges.map((e) => {
                 const sx = e.src.x + NODE_W / 2;
                 const sy = e.src.y + NODE_H;
                 const dx = e.dst.x + NODE_W / 2;
@@ -225,7 +250,7 @@ export default function WorkflowGraphView() {
                 );
               })}
               {/* Nodes */}
-              {layoutResult.layoutNodes.map((n) => {
+              {upperLayout.layoutNodes.map((n) => {
                 const meta = getDeptMeta(n.role) || {
                   color: '#6b7280',
                   label: n.role,
@@ -236,8 +261,10 @@ export default function WorkflowGraphView() {
                     ? '#C41E3A'
                     : n.status === 'completed'
                       ? '#2D5A3F'
-                      : meta.color;
-                const durStr = layoutResult.nodeDurations.get(n.id);
+                      : n.status === 'planned'
+                        ? meta.color + '80'
+                        : meta.color;
+                const durStr = upperLayout.nodeDurations.get(n.id);
                 return (
                   <g key={`node-${n.id}`} className="group">
                     <title>
@@ -254,10 +281,11 @@ export default function WorkflowGraphView() {
                       height={NODE_H}
                       rx="8"
                       ry="8"
-                      fill={n.status === 'failed' ? '#FDE8EC' : '#F5F0E8'}
+                      fill={n.status === 'failed' ? '#FDE8EC' : n.status === 'planned' ? '#FAFAF5' : '#F5F0E8'}
                       stroke={color}
                       strokeWidth={n.status === 'active' ? 2 : 1}
-                      opacity={n.status === 'completed' ? 0.7 : 1}
+                      strokeDasharray={n.status === 'planned' ? '5,3' : 'none'}
+                      opacity={n.status === 'completed' ? 0.7 : n.status === 'planned' ? 0.6 : 1}
                     />
                     <text
                       x={n.x + NODE_W / 2}
@@ -298,6 +326,127 @@ export default function WorkflowGraphView() {
                 );
               })}
             </svg>
+            </div>
+
+            {/* 六部层（执行阶段） */}
+            {lowerLayout && (
+              <div>
+                <div className="px-3 py-1.5 text-caption font-semibold text-ink-500 bg-surface-parchment/50 border-b border-fold sticky top-0 z-10">
+                  ⚙ 六部层（执行阶段 · 实时）
+                </div>
+                <svg
+                  viewBox={`0 0 ${lowerLayout.svgW} ${lowerLayout.svgH}`}
+                  className="min-w-full"
+                  style={{ width: lowerLayout.svgW, height: lowerLayout.svgH }}
+                >
+                  <defs>
+                    <marker
+                      id="arrowhead-lower"
+                      markerWidth="10"
+                      markerHeight="7"
+                      refX="10"
+                      refY="3.5"
+                      orient="auto"
+                    >
+                      <polygon points="0 0, 10 3.5, 0 7" fill="#B83A3A" />
+                    </marker>
+                  </defs>
+                  {lowerLayout.edges.map((e) => {
+                    const sx = e.src.x + NODE_W / 2;
+                    const sy = e.src.y + NODE_H;
+                    const dx = e.dst.x + NODE_W / 2;
+                    const dy = e.dst.y;
+                    const cy = (sy + dy) / 2;
+                    return (
+                      <g key={`ledge-${e.id}`}>
+                        <path
+                          d={`M ${sx} ${sy} C ${sx} ${cy}, ${dx} ${cy}, ${dx} ${dy}`}
+                          fill="none"
+                          stroke="#B83A3A"
+                          strokeWidth="2"
+                          markerEnd="url(#arrowhead-lower)"
+                        />
+                        <text
+                          x={(sx + dx) / 2}
+                          y={cy - 6}
+                          textAnchor="middle"
+                          fill="#B83A3A"
+                          fontSize="11"
+                        >
+                          {e.task_id.length > 24 ? e.task_id.slice(0, 22) + '…' : e.task_id}
+                        </text>
+                      </g>
+                    );
+                  })}
+                  {lowerLayout.layoutNodes.map((n) => {
+                    const meta = getDeptMeta(n.role) || { color: '#6b7280', label: n.role };
+                    const isMulti = n.instance > 1;
+                    const color =
+                      n.status === 'failed'
+                        ? '#C41E3A'
+                        : n.status === 'completed'
+                          ? '#2D5A3F'
+                          : n.status === 'planned'
+                            ? meta.color + '80'
+                            : meta.color;
+                    return (
+                      <g key={`lnode-${n.id}`} className="group">
+                        <title>
+                          {n.role}{isMulti ? `#${n.instance}` : ''}
+                          {n.task_summary ? `\n任务: ${n.task_summary}` : ''}
+                          {n.created_at ? `\n开始: ${n.created_at}` : ''}
+                        </title>
+                        <rect
+                          x={n.x}
+                          y={n.y}
+                          width={NODE_W}
+                          height={NODE_H}
+                          rx="8"
+                          ry="8"
+                          fill={n.status === 'failed' ? '#FDE8EC' : n.status === 'planned' ? '#FAFAF5' : '#F5F0E8'}
+                          stroke={color}
+                          strokeWidth={n.status === 'active' ? 2 : 1}
+                          strokeDasharray={n.status === 'planned' ? '5,3' : 'none'}
+                          opacity={n.status === 'completed' ? 0.7 : n.status === 'planned' ? 0.6 : 1}
+                        />
+                        <text
+                          x={n.x + NODE_W / 2}
+                          y={n.y + 22}
+                          textAnchor="middle"
+                          fill="#1A1512"
+                          fontSize="13"
+                          fontWeight="600"
+                        >
+                          {n.role}{isMulti ? `#${n.instance}` : ''}
+                        </text>
+                        <text
+                          x={n.x + NODE_W / 2}
+                          y={n.y + 42}
+                          textAnchor="middle"
+                          fill="#5C4F3E"
+                          fontSize="10"
+                        >
+                          {n.task_summary.length > 18
+                            ? n.task_summary.slice(0, 16) + '…'
+                            : n.task_summary}
+                        </text>
+                        <circle cx={n.x + 12} cy={n.y + 12} r="4" fill={color} />
+                        <text
+                          x={n.x + NODE_W - 4}
+                          y={n.y + NODE_H - 4}
+                          textAnchor="end"
+                          fill="#A8926D"
+                          fontSize="9"
+                        >
+                          {n.created_at}
+                        </text>
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+            )}
+            </>
           ) : (
             <div className="h-full flex items-center justify-center text-ink-400">暂无文移记录</div>
           )}
@@ -322,6 +471,19 @@ function fmtDuration(secs: number): string {
   if (secs < 60) return `${secs}s`;
   if (secs < 3600) return `${Math.floor(secs / 60)}m${secs % 60}s`;
   return `${Math.floor(secs / 3600)}h${Math.floor((secs % 3600) / 60)}m`;
+}
+
+// ── Split graph by node filter (for dual-diagram rendering) ──
+function splitGraph(
+  graph: WorkflowGraph,
+  filter: (node: GraphNode) => boolean
+): WorkflowGraph {
+  const nodeIds = new Set(graph.nodes.filter(filter).map((n) => n.id));
+  return {
+    session_label: graph.session_label,
+    nodes: graph.nodes.filter((n) => nodeIds.has(n.id)),
+    edges: graph.edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target)),
+  };
 }
 
 // ── Layout computation (pure function) ──

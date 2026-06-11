@@ -179,8 +179,7 @@ pub fn complete_task_tool() -> ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "complete_task".into(),
-            description: "标记当前批次任务完成，推进到下一批。所有批次完成后引擎自动处理。"
-                .into(),
+            description: "标记当前批次任务完成，推进到下一批。所有批次完成后引擎自动处理。".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {}
@@ -299,6 +298,36 @@ pub fn submit_pipeline_plan_tool() -> ToolDefinition {
                     }
                 },
                 "required": ["plan_json"]
+            }),
+        },
+    }
+}
+
+/// 尚书省向六部分派任务。阻塞等待目标部门完成执行后返回。
+/// 每次调用只分派一个部门，尚书省根据执行结果自行决定下一步。
+pub fn assign_task_tool() -> ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "assign_task".into(),
+            description: "向指定部门分派任务，等待其完成后返回执行结果。\
+            根据返回结果判断下一步——测试不过则打回工部，全部通过则推进到下一部门。\
+            每次仅分派一个部门，后续部门根据结果自行决定。"
+                .into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "to": {
+                        "type": "string",
+                        "enum": ["吏部", "兵部", "工部", "刑部", "礼部"],
+                        "description": "目标部门。注意：内阁/中书令/门下侍中由内阁直接调度，不由尚书省管。"
+                    },
+                    "task": {
+                        "type": "string",
+                        "description": "任务描述，告知该部门需要完成什么工作"
+                    }
+                },
+                "required": ["to", "task"]
             }),
         },
     }

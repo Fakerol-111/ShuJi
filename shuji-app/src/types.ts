@@ -271,7 +271,7 @@ export interface TraceResult {
 
 // ── 文移图 DAG ───────────────────────────────────────
 
-export type GraphNodeStatus = 'active' | 'completed' | 'failed';
+export type GraphNodeStatus = 'active' | 'completed' | 'failed' | 'planned';
 
 export interface GraphNode {
   id: number;

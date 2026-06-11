@@ -1,7 +1,12 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::actor::ActorMessage;
 use crate::api::client::AnthropicClient;
+use crate::models::role::Role;
+use crate::workflow::WorkflowGraph;
+use tokio::sync::mpsc;
 
 pub mod audit_tools;
 pub mod cache;
@@ -13,6 +18,7 @@ pub mod neige_special;
 pub mod output;
 pub mod path;
 pub mod registry;
+pub mod shangshuling_special;
 mod tool_log;
 
 pub use audit_tools::*;
@@ -23,6 +29,7 @@ pub use file_ops::*;
 pub use neige_special::*;
 pub use output::*;
 pub use path::*;
+pub use shangshuling_special::*;
 
 // ── Tool context for special tools ─────────────────────────────────
 
@@ -37,4 +44,8 @@ pub struct ToolContext {
     pub model: Option<String>,
     /// Fast mailbox senders for interrupting departments immediately.
     pub fast_txs: Option<crate::FastTxMap>,
+    /// 部门信道映射（尚书省 assign_task 使用）
+    pub peers: Option<HashMap<Role, mpsc::UnboundedSender<ActorMessage>>>,
+    /// 文移图引用（尚书省 assign_task 记录边时使用）
+    pub workflow_graph: Option<Arc<tokio::sync::Mutex<WorkflowGraph>>>,
 }

@@ -51,7 +51,8 @@ pub async fn send_message(
             if sys_lock.is_none() {
                 // Same lazy init as below — emit pipeline resume events
                 let (emperor_tx, mut emperor_rx) = tokio::sync::mpsc::channel::<ChatMessage>(200);
-                let (dept_log_tx, mut dept_log_rx) = tokio::sync::mpsc::channel::<DeptLogEntry>(500);
+                let (dept_log_tx, mut dept_log_rx) =
+                    tokio::sync::mpsc::channel::<DeptLogEntry>(500);
                 let (plan_tx, mut plan_rx) = tokio::sync::mpsc::channel::<serde_json::Value>(50);
                 let (milestone_tx, mut milestone_rx) = tokio::sync::mpsc::channel::<String>(50);
                 let app_handle = app.clone();
@@ -71,7 +72,10 @@ pub async fn send_message(
                         if let Ok(json) = serde_json::to_string(&msg) {
                             use tokio::io::AsyncWriteExt;
                             if let Ok(mut f) = tokio::fs::OpenOptions::new()
-                                .create(true).append(true).open(&chat_path).await
+                                .create(true)
+                                .append(true)
+                                .open(&chat_path)
+                                .await
                             {
                                 let _ = f.write_all(format!("{}\n", json).as_bytes()).await;
                             }
@@ -80,7 +84,7 @@ pub async fn send_message(
                 });
 
                 let app2 = app.clone();
-                let dept_log_dir = p_working_dir.clone();
+                let _dept_log_dir = p_working_dir.clone();
                 tokio::spawn(async move {
                     while let Some(entry) = dept_log_rx.recv().await {
                         let _ = app2.emit("dept-log", &entry);
@@ -99,7 +103,7 @@ pub async fn send_message(
                 let app3 = app.clone();
                 let wd = p_working_dir.clone();
                 tokio::spawn(async move {
-                    let s = crate::storage::shuji_dir::ShujiDir::new(&wd);
+                    let _s = crate::storage::shuji_dir::ShujiDir::new(&wd);
                     while let Some(milestone) = milestone_rx.recv().await {
                         let st = app3.state::<AppState>();
                         let mut p_opt = st.current_project.lock().await;
@@ -120,7 +124,8 @@ pub async fn send_message(
                     dept_log_tx,
                     plan_tx,
                     milestone_tx,
-                ).await;
+                )
+                .await;
 
                 *sys_lock = Some(system);
             }
@@ -142,13 +147,19 @@ pub async fn send_message(
                 crate::pipeline::PipelineResult::Complete { ref runtime } => {
                     format!("✅ 管道执行完成：{}", runtime.plan.summary)
                 }
-                crate::pipeline::PipelineResult::AwaitingUserInput { step_id, question, .. } => {
+                crate::pipeline::PipelineResult::AwaitingUserInput {
+                    step_id, question, ..
+                } => {
                     format!("⏳ 管道等待用户输入（步骤 {}）：{}", step_id, question)
                 }
-                crate::pipeline::PipelineResult::AwaitingApproval { doc_id, step_id, .. } => {
+                crate::pipeline::PipelineResult::AwaitingApproval {
+                    doc_id, step_id, ..
+                } => {
                     format!("⏳ 管道等待审批（步骤 {}，文档 {}）", step_id, doc_id)
                 }
-                crate::pipeline::PipelineResult::StepFailed { step_id, reason, .. } => {
+                crate::pipeline::PipelineResult::StepFailed {
+                    step_id, reason, ..
+                } => {
                     format!("❌ 管道步骤 {} 执行失败：{}", step_id, reason)
                 }
                 crate::pipeline::PipelineResult::Aborted { .. } => {

@@ -436,10 +436,15 @@ pub async fn run_actor(mut ctx: ActorContext) {
 
                         // ── Pipeline integration: if 内阁 submitted a pipeline plan ──
                         if let Some(ref plan_json_str) = output.plan_json {
-                            match serde_json::from_str::<crate::pipeline::PipelinePlan>(plan_json_str) {
+                            match serde_json::from_str::<crate::pipeline::PipelinePlan>(
+                                plan_json_str,
+                            ) {
                                 Ok(plan) => {
-                                    log_console!("[pipeline] 内阁 submitted plan: {} ({} steps)",
-                                        plan.summary, plan.steps.len());
+                                    log_console!(
+                                        "[pipeline] 内阁 submitted plan: {} ({} steps)",
+                                        plan.summary,
+                                        plan.steps.len()
+                                    );
 
                                     let mut engine = crate::pipeline::engine::PipelineEngine::new(
                                         plan,
@@ -448,8 +453,12 @@ pub async fn run_actor(mut ctx: ActorContext) {
                                         Arc::new(Mutex::new(HashMap::new())),
                                         ctx.cancel.clone(),
                                         ctx.project_dir.clone(),
+                                        ctx.workflow_graph.clone(),
                                     );
                                     engine.save().await.ok();
+
+                                    // 文移图：预填充管道计划的所有 planned 边
+                                    engine.preview_pipeline_on_graph().await;
 
                                     // Emit plan summary
                                     let plan_msg = format!(
@@ -463,26 +472,106 @@ pub async fn run_actor(mut ctx: ActorContext) {
                                     let result = engine.run().await;
 
                                     match result {
-                                        crate::pipeline::PipelineResult::Complete { ref runtime } => {
-                                            let msg = format!("✅ 管道执行完成：{}", runtime.plan.summary);
-                                            self::emit_to_emperor(&ctx.emperor_tx, ctx.role, &msg);
-                                            crate::pipeline::PlanRuntime::cleanup(&ctx.project_dir).await;
+                                        crate::pipeline::PipelineResult::Complete {
+                                            ref runtime,
+                                        } => {
+                                            self::emit_to_emperor(
+                                                &ctx.emperor_tx,
+                                                ctx.role,
+                                                &format!(
+                                                "✅ 管道计划「{}」已全部执行完毕，正在生成摘要…",
+                                                runtime.plan.summary),
+                                            );
+                                            crate::pipeline::PlanRuntime::cleanup(&ctx.project_dir)
+                                                .await;
+
+                                            // ── 唤醒内阁：汇报管道执行成果 ──
+                                            let summary_task = format!(
+                                                "管道计划「{}」已全部执行完毕。请查阅各部门产出的文档和报告，\
+                                                向皇帝呈现一份完整的任务摘要，说明完成了哪些工作、产出了什么成果。",
+                                                runtime.plan.summary);
+                                            let summary_input = AgentInput {
+                                                role: ctx.role,
+                                                task_description: summary_task,
+                                                context_messages: context_msgs.clone(),
+                                                project_dir: ctx.project_dir.clone(),
+                                                working_dir: ctx.working_dir.clone(),
+                                                current_skill: None,
+                                                resume_paused: false,
+                                                context_window_config: context_config.clone(),
+                                                runtime_config: ctx.runtime_config.clone(),
+                                                discuss_mode: false,
+                                                fast_cancel: fast_cancel.clone(),
+                                            };
+                                            if let Ok(summary_output) =
+                                                ctx.agent.execute(&summary_input).await
+                                            {
+                                                let summary_text = summary_output.content;
+                                                if !summary_text.trim().is_empty() {
+                                                    self::emit_to_emperor(
+                                                        &ctx.emperor_tx,
+                                                        ctx.role,
+                                                        &summary_text,
+                                                    );
+                                                    if let Ok(mut talk) = ctx.talk_history.lock() {
+                                                        talk.push(format!(
+                                                            "内阁: {}",
+                                                            summary_text
+                                                        ));
+                                                    }
+                                                }
+                                            }
                                         }
-                                        crate::pipeline::PipelineResult::AwaitingUserInput { step_id, question, .. } => {
-                                            self::emit_to_emperor(&ctx.emperor_tx, ctx.role, &format!(
-                                                "⏳ 管道等待用户输入（步骤 {}）：\n{}", step_id, question));
+                                        crate::pipeline::PipelineResult::AwaitingUserInput {
+                                            step_id,
+                                            question,
+                                            ..
+                                        } => {
+                                            self::emit_to_emperor(
+                                                &ctx.emperor_tx,
+                                                ctx.role,
+                                                &format!(
+                                                    "⏳ 管道等待用户输入（步骤 {}）：\n{}",
+                                                    step_id, question
+                                                ),
+                                            );
                                         }
-                                        crate::pipeline::PipelineResult::AwaitingApproval { doc_id, step_id, .. } => {
-                                            self::emit_to_emperor(&ctx.emperor_tx, ctx.role, &format!(
-                                                "⏳ 管道等待审批（步骤 {}，文档 {}）", step_id, doc_id));
+                                        crate::pipeline::PipelineResult::AwaitingApproval {
+                                            doc_id,
+                                            step_id,
+                                            ..
+                                        } => {
+                                            self::emit_to_emperor(
+                                                &ctx.emperor_tx,
+                                                ctx.role,
+                                                &format!(
+                                                    "⏳ 管道等待审批（步骤 {}，文档 {}）",
+                                                    step_id, doc_id
+                                                ),
+                                            );
                                         }
-                                        crate::pipeline::PipelineResult::StepFailed { step_id, reason, .. } => {
-                                            self::emit_to_emperor(&ctx.emperor_tx, ctx.role, &format!(
-                                                "❌ 管道步骤 {} 执行失败：{}", step_id, reason));
+                                        crate::pipeline::PipelineResult::StepFailed {
+                                            step_id,
+                                            reason,
+                                            ..
+                                        } => {
+                                            self::emit_to_emperor(
+                                                &ctx.emperor_tx,
+                                                ctx.role,
+                                                &format!(
+                                                    "❌ 管道步骤 {} 执行失败：{}",
+                                                    step_id, reason
+                                                ),
+                                            );
                                         }
                                         crate::pipeline::PipelineResult::Aborted { .. } => {
-                                            self::emit_to_emperor(&ctx.emperor_tx, ctx.role, "🛑 管道执行已中止");
-                                            crate::pipeline::PlanRuntime::cleanup(&ctx.project_dir).await;
+                                            self::emit_to_emperor(
+                                                &ctx.emperor_tx,
+                                                ctx.role,
+                                                "🛑 管道执行已中止",
+                                            );
+                                            crate::pipeline::PlanRuntime::cleanup(&ctx.project_dir)
+                                                .await;
                                         }
                                         crate::pipeline::PipelineResult::Deadlock { .. } => {
                                             self::emit_to_emperor(&ctx.emperor_tx, ctx.role,
