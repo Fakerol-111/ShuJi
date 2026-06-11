@@ -101,8 +101,12 @@ export default function PlanPanel() {
                 <span className="plan-panel__step-id">{step.step_id}</span>
                 <span className="plan-panel__step-desc">{step.description}</span>
                 {step.action === 'approval_gate' && <span className="plan-panel__badge">审批</span>}
-                {step.action === 'ask_user' && <span className="plan-panel__badge plan-panel__badge--question">提问</span>}
-                {step.action === 'parallel' && <span className="plan-panel__badge plan-panel__badge--parallel">并行</span>}
+                {step.action === 'ask_user' && (
+                  <span className="plan-panel__badge plan-panel__badge--question">提问</span>
+                )}
+                {step.action === 'parallel' && (
+                  <span className="plan-panel__badge plan-panel__badge--parallel">并行</span>
+                )}
               </div>
             );
           })}
