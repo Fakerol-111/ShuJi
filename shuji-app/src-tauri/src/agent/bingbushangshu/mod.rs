@@ -25,7 +25,7 @@ impl BingbuShangshuAgent {
     fn tools() -> Vec<ToolDefinition> {
         let mut tools = crate::tool::registry::doc_inspect_tools();
         tools.extend(crate::tool::registry::document_tools());
-        tools.push(crate::tool::registry::route_tool());
+        // route_tool 已移除 —— PipelineEngine 负责调度
         tools
     }
 
@@ -124,8 +124,7 @@ impl Agent for BingbuShangshuAgent {
 
         crate::agent::runner::save_context(&session, &working_dir, &role_name).await;
 
-        let mut output = AgentOutput::new(result);
-        output.route = route;
-        Ok(output)
+        // route_to 已移除 —— PipelineEngine 负责所有调度
+        Ok(AgentOutput::new(result))
     }
 }

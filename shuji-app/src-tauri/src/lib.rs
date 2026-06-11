@@ -22,6 +22,7 @@ mod round_metrics;
 pub mod storage;
 mod token_tracker;
 pub mod tool;
+pub mod pipeline;
 pub mod workflow;
 
 use std::collections::{HashMap, HashSet};

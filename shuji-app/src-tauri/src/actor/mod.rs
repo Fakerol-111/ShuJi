@@ -433,6 +433,69 @@ pub async fn run_actor(mut ctx: ActorContext) {
                         if !output.content.starts_with("已路由") {
                             self::emit_to_emperor(&ctx.emperor_tx, ctx.role, &output.content);
                         }
+
+                        // ── Pipeline integration: if 内阁 submitted a pipeline plan ──
+                        if let Some(ref plan_json_str) = output.plan_json {
+                            match serde_json::from_str::<crate::pipeline::PipelinePlan>(plan_json_str) {
+                                Ok(plan) => {
+                                    log_console!("[pipeline] 内阁 submitted plan: {} ({} steps)",
+                                        plan.summary, plan.steps.len());
+
+                                    let mut engine = crate::pipeline::engine::PipelineEngine::new(
+                                        plan,
+                                        ctx.peers.clone(),
+                                        Arc::new(HashMap::new()),
+                                        Arc::new(Mutex::new(HashMap::new())),
+                                        ctx.cancel.clone(),
+                                        ctx.project_dir.clone(),
+                                    );
+                                    engine.save().await.ok();
+
+                                    // Emit plan summary
+                                    let plan_msg = format!(
+                                        "📋 管道计划已提交：{}（{} 步骤）",
+                                        engine.runtime.plan.summary,
+                                        engine.runtime.plan.steps.len(),
+                                    );
+                                    self::emit_to_emperor(&ctx.emperor_tx, ctx.role, &plan_msg);
+
+                                    // Execute pipeline
+                                    let result = engine.run().await;
+
+                                    match result {
+                                        crate::pipeline::PipelineResult::Complete { ref runtime } => {
+                                            let msg = format!("✅ 管道执行完成：{}", runtime.plan.summary);
+                                            self::emit_to_emperor(&ctx.emperor_tx, ctx.role, &msg);
+                                            crate::pipeline::PlanRuntime::cleanup(&ctx.project_dir).await;
+                                        }
+                                        crate::pipeline::PipelineResult::AwaitingUserInput { step_id, question, .. } => {
+                                            self::emit_to_emperor(&ctx.emperor_tx, ctx.role, &format!(
+                                                "⏳ 管道等待用户输入（步骤 {}）：\n{}", step_id, question));
+                                        }
+                                        crate::pipeline::PipelineResult::AwaitingApproval { doc_id, step_id, .. } => {
+                                            self::emit_to_emperor(&ctx.emperor_tx, ctx.role, &format!(
+                                                "⏳ 管道等待审批（步骤 {}，文档 {}）", step_id, doc_id));
+                                        }
+                                        crate::pipeline::PipelineResult::StepFailed { step_id, reason, .. } => {
+                                            self::emit_to_emperor(&ctx.emperor_tx, ctx.role, &format!(
+                                                "❌ 管道步骤 {} 执行失败：{}", step_id, reason));
+                                        }
+                                        crate::pipeline::PipelineResult::Aborted { .. } => {
+                                            self::emit_to_emperor(&ctx.emperor_tx, ctx.role, "🛑 管道执行已中止");
+                                            crate::pipeline::PlanRuntime::cleanup(&ctx.project_dir).await;
+                                        }
+                                        crate::pipeline::PipelineResult::Deadlock { .. } => {
+                                            self::emit_to_emperor(&ctx.emperor_tx, ctx.role,
+                                                "❌ 管道死锁：所有剩余步骤的依赖无法满足，请检查计划。");
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    log_console!("[pipeline] invalid plan JSON from 内阁: {}", e);
+                                }
+                            }
+                            break 'exec;
+                        }
                     } else {
                         log_dept(&ctx, &role_name, &format!("→ {}", output.content));
                     }
@@ -482,6 +545,12 @@ pub async fn run_actor(mut ctx: ActorContext) {
                         self::forward_route(&ctx, route).await;
                         break 'exec;
                     }
+                    // ── Pipeline reply_to: if pipeline engine is waiting for output,
+                    // send AgentOutput.content back via reply_to channel.
+                    // Only sent on LoopDecision::Done (not on Continue for 工部 batch loop).
+                    // ──
+                    let should_reply = output.route.is_none() && msg.reply_to.is_some();
+
                     // Let agent decide: need another round?
                     match ctx.agent.after_execute(&output) {
                         crate::agent::r#trait::LoopDecision::Continue(ctx_msg) => {
@@ -522,6 +591,12 @@ pub async fn run_actor(mut ctx: ActorContext) {
                             continue 'exec;
                         }
                         crate::agent::r#trait::LoopDecision::Done => {
+                            // Send reply back to pipeline engine if waiting
+                            if should_reply {
+                                if let Some(reply) = &msg.reply_to {
+                                    let _ = reply.send(output.content.clone());
+                                }
+                            }
                             break 'exec;
                         }
                     }

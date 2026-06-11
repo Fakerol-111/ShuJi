@@ -43,6 +43,9 @@ pub struct AgentOutput {
     /// waiting for a decision. The actor should pause the exec loop and
     /// resume on the next emperor message with resume_paused=true.
     pub paused: bool,
+    /// NEW: when 内阁 calls submit_pipeline_plan, the JSON string is captured here.
+    /// PipelineEngine consumes this field.
+    pub plan_json: Option<String>,
 }
 
 impl AgentOutput {
@@ -52,6 +55,7 @@ impl AgentOutput {
             route: None,
             skill: None,
             paused: false,
+            plan_json: None,
         }
     }
 

@@ -3,11 +3,10 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput};
-use crate::agent::util::{extract_skill, strip_skill_tag};
+use crate::agent::util::strip_skill_tag;
 use crate::api::client::{AnthropicClient, ToolDefinition};
 use crate::models::message::Message;
 use crate::models::role::Role;
-use crate::workflow::{GateEngine, WorkflowConfig, WorkflowResolver, WorkflowState};
 
 pub mod routing;
 
@@ -52,8 +51,9 @@ impl NeigeAgent {
         tools.push(crate::tool::registry::create_skill_tool());
         tools.push(crate::tool::registry::expand_requirements_tool());
         tools.push(crate::tool::registry::survey_codebase_tool());
-        tools.push(crate::tool::registry::route_tool());
+        tools.push(crate::tool::registry::submit_pipeline_plan_tool());
         tools.push(crate::tool::request_decision_tool_def());
+        // route_tool 已移除 —— 内阁提交 Plan 给 PipelineEngine，不再手动 route_to
         tools
     }
 
@@ -366,61 +366,16 @@ impl Agent for NeigeAgent {
             }
         } // end if !resumed
 
-        // ── Workflow Profile: resolve intent + inject skill/hints ──
-        // Always resolves, even without workflow_config.json (defaults to auto+standard).
-        let mut workflow_config = WorkflowConfig::load_from(&working_dir).await;
-        let resolve_result =
-            WorkflowResolver::resolve(&workflow_config, &working_dir, &input.task_description)
-                .await;
-
-        // ── Consume intent_override (one-shot) after resolution ──
-        if workflow_config.intent_override.is_some() {
-            workflow_config.intent_override = None;
-            workflow_config.save_to(&working_dir).await.ok();
-        }
-
-        // ── Initialize workflow state (read by 尚书令 for chain injection) ──
+        // ── Pipeline mode: 内阁不再使用 WorkflowResolver/skill 注入 ──
+        // 内阁现在直接分析任务并产出 PipelinePlan 供 PipelineEngine 执行
+        // discuss_mode 中保留了 inject_workflow_preset（在上面已执行）
         if !input.discuss_mode && !resumed {
-            let wf_state = WorkflowState::new(
-                &resolve_result.profile.profile_id,
-                resolve_result.profile.governance.as_str(),
-                &resolve_result.profile.execution_chain_id,
-            );
-            wf_state.save_to(&working_dir).await;
+            // 简明提示：不使用 workflow preset，内阁自主规划
+            session.inject("[系统] 请分析任务范围并直接规划可执行步骤。调用 submit_pipeline_plan 提交机器可执行的 JSON 计划。不需要 <skill> 标签。");
         }
-
-        // ── Clarify re-evaluation: on resume, hint LLM to reconsider workflow ──
         if resumed && !input.discuss_mode {
-            session.inject("[系统] 皇帝已回复澄清问题。请根据新信息重新评估工作流选择——如果任务类型与最初判断不同，用 <skill> 标签切换到合适的工作流。");
+            session.inject("[系统] 皇帝已回复。请继续完成规划并提交 pipeline plan。");
         }
-
-        // ── Workflow preset + resolver hint (combined for cache efficiency) ──
-        // DeepSeek prefix cache: contiguous system messages = longer stable prefix.
-        // Always inject workflow preset first, then resolver hint/skill right after.
-        if !input.discuss_mode && !resumed {
-            Self::inject_workflow_preset(&mut session, &working_dir).await;
-
-            let resolve_note = if resolve_result.locked {
-                let skill_content =
-                    Self::load_skill(&resolve_result.profile.cabinet_skill, &working_dir).await;
-                if !skill_content.is_empty() {
-                    log_console!(
-                        "[workflow] locked profile {} — injecting skill {}",
-                        resolve_result.profile.profile_id,
-                        resolve_result.profile.cabinet_skill
-                    );
-                    session.inject_skill(&resolve_result.profile.cabinet_skill, &skill_content);
-                }
-                String::new()
-            } else {
-                resolve_result.hint.clone().unwrap_or_default()
-            };
-            if !resolve_note.is_empty() {
-                session.inject(&resolve_note);
-            }
-        }
-
-        let active_profile = Arc::new(resolve_result.profile);
 
         let mut controller = crate::api::control::AgentController::new();
 
@@ -482,11 +437,9 @@ impl Agent for NeigeAgent {
         let config = input.runtime_config.clone();
         let wd = working_dir.clone();
 
-        // Shared skill state for the outer skill detection loop (not used for gates).
-        let skill_state: Arc<Mutex<String>> =
+        // Shared skill state (保留用于 must-approve 循环，不再用于 skill 切换门控).
+        let _skill_state: Arc<Mutex<String>> =
             Arc::new(Mutex::new(input.current_skill.clone().unwrap_or_default()));
-
-        let active_profile_for_exec = active_profile.clone();
 
         let exec = move |name: &str, args: &serde_json::Value| -> crate::api::control::ToolFuture {
             let name = name.to_owned();
@@ -498,13 +451,8 @@ impl Agent for NeigeAgent {
                 model: Some(model.clone()),
                 fast_txs: fast_txs.clone(),
             };
-            let profile = active_profile_for_exec.clone();
             Box::pin(async move {
-                // ── GateEngine: check tool/route restrictions ──
-                if let Err(violation) = GateEngine::check_tool(&profile, &name, &args) {
-                    return serde_json::to_string(&violation.to_error_json())
-                        .unwrap_or_else(|_| String::new());
-                }
+                // GateEngine 已移除 —— PipelineEngine 负责所有调度
                 if let Some(result) =
                     crate::tool::tool_handle_neige_special(&name, &args, &ctx).await
                 {
@@ -517,13 +465,13 @@ impl Agent for NeigeAgent {
 
         let mut result;
         let mut route: Option<crate::api::control::RouteTo>;
-        let mut current_skill = input.current_skill.clone().unwrap_or_default();
-        *skill_state.lock().unwrap() = current_skill.clone();
         let mut must_approve_retries = 0u32;
+        // plan_json: extracted from tool call after run() completes
+        let mut plan_json: Option<String> = None;
         loop {
-            // Suspension point D: check cancel between controller.run() rounds
+            // Suspension point: check cancel between controller.run() rounds
             if self.cancel.load(std::sync::atomic::Ordering::SeqCst) {
-                log_console!("[内阁] interrupted in outer skill loop");
+                log_console!("[内阁] interrupted");
                 result = String::new();
                 route = None;
                 break;
@@ -553,7 +501,6 @@ impl Agent for NeigeAgent {
             // ── Hard enforcement: must-approve doc pending but no request_decision ──
             let pending_id = crate::tool::documents::get_first_pending_approval(&working_dir).await;
             if let Some(ref id) = pending_id {
-                // Check if last message contains a request_decision tool call
                 let snap = session.snapshot();
                 let already_asked = snap.messages.iter().rev().take(3).any(|m| {
                     m.get("tool_calls")
@@ -571,7 +518,7 @@ impl Agent for NeigeAgent {
                 if !already_asked {
                     must_approve_retries += 1;
                     if must_approve_retries >= 3 {
-                        log_console!("[内阁] must-approve doc {} 重试{must_approve_retries}次仍无request_decision，自动批复", id);
+                        log_console!("[内阁] must-approve doc {} 重试{}次仍无request_decision，自动批复", id, must_approve_retries);
                         let _ =
                             crate::tool::documents::remove_pending_approval(&working_dir, id).await;
                         let msg = format!(
@@ -581,9 +528,9 @@ impl Agent for NeigeAgent {
                         session.inject(&msg);
                         continue;
                     }
-                    log_console!("[内阁] must-approve doc {} pending (retry {must_approve_retries}/3) — re-prompting", id);
+                    log_console!("[内阁] must-approve doc {} pending (retry {}/3) — re-prompting", id, must_approve_retries);
                     let msg = format!(
-                        "[系统] 文档 {} 已创建但未经皇帝御批。请立即调用 request_decision 工具，传入选项供皇帝决策。注意：route_to 和 request_decision 不能在同一回合使用。",
+                        "[系统] 文档 {} 已创建但未经皇帝御批。请立即调用 request_decision 工具，传入选项供皇帝决策。",
                         id
                     );
                     session.inject(&msg);
@@ -591,34 +538,23 @@ impl Agent for NeigeAgent {
                 }
             }
 
-            match extract_skill(&result) {
-                Some(skill_name)
-                    if !Self::load_skill(&skill_name, &working_dir).await.is_empty() =>
-                {
-                    if skill_name == current_skill {
-                        log_console!(
-                            "[内阁] skill {} already loaded, prompting continue",
-                            skill_name
-                        );
-                        session.inject(&format!("[系统] 技能 {} 已在当前会话中。请直接继续执行该技能的指令，不要重复输出 <skill> 标签。", skill_name));
-                        continue;
-                    }
-                    current_skill = skill_name.clone();
-                    *skill_state.lock().unwrap() = current_skill.clone();
-                    log_console!("[内阁] replace skill: {}", skill_name);
-                    session.inject_skill(
-                        &skill_name,
-                        &Self::load_skill(&skill_name, &working_dir).await,
-                    );
-                    session.inject(&format!("[系统] 技能 {} 已加载。请立即按照该技能的指令行动，不要再输出 <skill> 标签。", skill_name));
-                    if skill_name == "summary" {
-                        Self::inject_project_state(&mut session, &working_dir).await;
-                    }
-                    continue;
-                }
-                _ => break,
-            }
+            break;
         }
+
+        // ── Extract plan_json from submit_pipeline_plan tool call ──
+        plan_json = session.snapshot().messages.iter().rev()
+            .find_map(|m| {
+                m.get("tool_calls")
+                    .and_then(|tc| tc.as_array())
+                    .and_then(|calls| calls.iter().find(|c| {
+                        c.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()) == Some("submit_pipeline_plan")
+                    }))
+                    .and_then(|call| {
+                        let args_str = call.get("function").and_then(|f| f.get("arguments")).and_then(|a| a.as_str())?;
+                        serde_json::from_str::<serde_json::Value>(args_str).ok()
+                            .and_then(|v| v.get("plan_json").and_then(|pj| pj.as_str()).map(String::from))
+                    })
+            });
 
         // Re-read participation level each turn so /level commands take effect immediately
         let level_prompt = match std::env::var("PARTICIPATION_LEVEL")
@@ -663,9 +599,7 @@ impl Agent for NeigeAgent {
         let mut output = AgentOutput::new(clean);
         output.paused = has_decision_call && route.is_none();
         output.route = route;
-        if !current_skill.is_empty() {
-            output.skill = Some(current_skill);
-        }
+        output.plan_json = plan_json;
         Ok(output)
     }
 }

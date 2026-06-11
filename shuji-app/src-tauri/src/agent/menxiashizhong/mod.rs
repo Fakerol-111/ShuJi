@@ -26,7 +26,7 @@ impl MenxiaShizhongAgent {
     fn tools() -> Vec<ToolDefinition> {
         let mut tools = crate::tool::registry::doc_inspect_tools();
         tools.extend(crate::tool::registry::document_tools());
-        tools.push(crate::tool::registry::route_tool());
+        // route_tool 已移除 —— PipelineEngine 负责调度
         tools
     }
 
@@ -162,11 +162,7 @@ impl Agent for MenxiaShizhongAgent {
         crate::agent::runner::save_context(&session, &working_dir, self.role().name()).await;
 
         let clean = strip_skill_tag(result);
-        let mut output = AgentOutput::new(clean);
-        output.route = route;
-        if !current_skill.is_empty() {
-            output.skill = Some(current_skill);
-        }
-        Ok(output)
+        // route_to 已移除 —— PipelineEngine 负责所有调度
+        Ok(AgentOutput::new(clean))
     }
 }

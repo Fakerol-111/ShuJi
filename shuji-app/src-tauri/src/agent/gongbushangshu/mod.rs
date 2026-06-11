@@ -78,9 +78,9 @@ impl GongbuShangshuAgent {
         tools.push(crate::tool::documents::create_document_tool_def());
         tools.push(crate::tool::documents::append_document_tool_def());
         tools.extend(crate::tool::registry::run_tests_tool());
-        tools.push(crate::tool::registry::submit_plan_tool());
+        tools.push(crate::tool::registry::submit_batch_plan_tool());
         tools.push(crate::tool::registry::complete_task_tool());
-        tools.push(crate::tool::registry::route_tool());
+        // route_tool 已移除 —— PipelineEngine 负责调度
         tools
     }
 
@@ -298,9 +298,8 @@ impl Agent for GongbuShangshuAgent {
         ctx.trim_tool_results(2000);
         ctx.save_to(&working_dir, &role_name).await;
 
-        let mut output = AgentOutput::new(result);
-        output.route = route;
-        Ok(output)
+        // route_to 已移除 —— PipelineEngine 负责所有调度
+        Ok(AgentOutput::new(result))
     }
 
     fn after_execute(&self, _output: &AgentOutput) -> LoopDecision {

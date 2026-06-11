@@ -17,7 +17,25 @@ pub async fn tool_handle_neige_special(
         "expand_requirements" => Some(tool_expand_requirements(args, ctx).await),
         "survey_codebase" => Some(tool_survey_codebase(args, ctx).await),
         "create_skill" => Some(tool_create_skill(args, ctx).await),
+        "submit_pipeline_plan" => Some(tool_submit_pipeline_plan(args, ctx).await),
         _ => None,
+    }
+}
+
+async fn tool_submit_pipeline_plan(args: &serde_json::Value, _ctx: &ToolContext) -> String {
+    let plan_json = args["plan_json"].as_str().unwrap_or("");
+    if plan_json.is_empty() {
+        return r#"{"ok": false, "message": "plan_json 不能为空"}"#.to_string();
+    }
+    // Validate it's parseable JSON
+    match serde_json::from_str::<serde_json::Value>(plan_json) {
+        Ok(_) => {
+            log_console!("[tool] submit_pipeline_plan accepted — plan_json length={}", plan_json.len());
+            serde_json::json!({"ok": true, "message": "管道计划已提交，引擎接管执行", "plan_json": plan_json}).to_string()
+        }
+        Err(e) => {
+            serde_json::json!({"ok": false, "message": format!("plan_json 不是合法 JSON: {}", e)}).to_string()
+        }
     }
 }
 

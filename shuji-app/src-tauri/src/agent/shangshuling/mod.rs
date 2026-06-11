@@ -30,7 +30,7 @@ impl ShangshulingAgent {
         ));
         tools.extend(crate::tool::registry::document_tools());
         tools.extend(crate::tool::registry::reauth_tool());
-        tools.push(crate::tool::registry::route_tool());
+        // route_tool 已移除 —— PipelineEngine 负责调度
         tools
     }
 
@@ -70,21 +70,7 @@ impl Agent for ShangshulingAgent {
         .with_role(self.role().name())
         .with_debug_dir(input.working_dir.clone());
 
-        // ── ChainEngine: inject execution chain from workflow state ──
-        if let Some(wf_state) = crate::workflow::WorkflowState::load_from(&working_dir).await {
-            if let Some(injection) =
-                crate::workflow::ChainEngine::build_injection(&wf_state.execution_chain_id)
-            {
-                session.inject(&injection);
-                log_console!(
-                    "[尚书令] injected execution chain: {}",
-                    wf_state.execution_chain_id
-                );
-            }
-            let mut wf_state = wf_state;
-            wf_state.transition("execution");
-            wf_state.save_to(&working_dir).await;
-        }
+        // 执行链已移除 —— PipelineEngine 负责调度
 
         let thresholds = input.runtime_config.resolve_compact_thresholds(
             self.role().name(),
@@ -145,8 +131,7 @@ impl Agent for ShangshulingAgent {
 
         crate::agent::runner::save_context(&session, &working_dir, &role_name).await;
 
-        let mut output = AgentOutput::new(result);
-        output.route = route;
-        Ok(output)
+        // route_to 已移除 —— PipelineEngine 负责所有调度
+        Ok(AgentOutput::new(result))
     }
 }

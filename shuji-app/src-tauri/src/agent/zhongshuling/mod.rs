@@ -30,7 +30,7 @@ impl ZhongshulingAgent {
             "读取源文件和 .shuji/ 中的普通文件",
         ));
         tools.extend(crate::tool::registry::document_tools());
-        tools.push(crate::tool::registry::route_tool());
+        // route_tool 已移除 —— PipelineEngine 负责调度
         tools
     }
 
@@ -100,26 +100,7 @@ impl Agent for ZhongshulingAgent {
         )
         .await;
 
-        // ── Skill Gate: profile-based skill restrictions ──
-        if let Some(wf_state) = crate::workflow::WorkflowState::load_from(&working_dir).await {
-            let mut hints = Vec::new();
-            match wf_state.profile_id.as_str() {
-                "brownfield_optimize" => {
-                    hints.push("当前为存量优化模式（brownfield_optimize）");
-                    hints.push("禁止使用 overall_design 技能（无需完整方案设计）");
-                    hints.push("推荐使用 code_analysis 或 optimization_plan 技能");
-                }
-                "bugfix" | "demo" => {
-                    hints.push("当前模式不需要方案设计");
-                    hints.push("禁止使用 overall_design、phase_plan、phase_design 技能");
-                    hints.push("如需分析可直接使用 diagnosis 或 impact_assessment");
-                }
-                _ => {}
-            }
-            if !hints.is_empty() {
-                session.inject(&format!("[技能门禁]\n{}", hints.join("\n")));
-            }
-        }
+        // 技能门禁已移除 —— PipelineEngine 负责调度
 
         let mut controller = crate::api::control::AgentController::new();
 
@@ -199,11 +180,7 @@ impl Agent for ZhongshulingAgent {
         crate::agent::runner::save_context(&session, &working_dir, self.role().name()).await;
 
         let clean = strip_skill_tag(result);
-        let mut output = AgentOutput::new(clean);
-        output.route = route;
-        if !current_skill.is_empty() {
-            output.skill = Some(current_skill);
-        }
-        Ok(output)
+        // route_to 已移除 —— PipelineEngine 负责所有调度
+        Ok(AgentOutput::new(clean))
     }
 }

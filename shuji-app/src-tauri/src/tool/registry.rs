@@ -145,7 +145,7 @@ pub fn cancel_agent_tool() -> ToolDefinition {
 }
 
 /// Submit a plan with batches for the plan loop (工部).
-pub fn submit_plan_tool() -> ToolDefinition {
+pub fn submit_batch_plan_tool() -> ToolDefinition {
     crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
@@ -179,7 +179,7 @@ pub fn complete_task_tool() -> ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "complete_task".into(),
-            description: "标记当前批次任务完成，推进到下一批。所有批次完成后会提示写报告并路由。"
+            description: "标记当前批次任务完成，推进到下一批。所有批次完成后引擎自动处理。"
                 .into(),
             parameters: serde_json::json!({
                 "type": "object",
@@ -278,6 +278,57 @@ pub fn update_soul_tool() -> ToolDefinition {
                     }
                 },
                 "required": ["content"]
+            }),
+        },
+    }
+}
+
+/// 内阁提交管道可执行计划。调用后内阁退出调度循环，由 PipelineEngine 接管执行。
+pub fn submit_pipeline_plan_tool() -> ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "submit_pipeline_plan".into(),
+            description: "提交机器可执行的动态任务计划。计划提交后由管道引擎自动按步骤执行，内阁不再参与每步调度。仅在任务需要全自动执行时使用——如果应先向皇帝提问，先问再提交计划。".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "plan_json": {
+                        "type": "string",
+                        "description": "完整 JSON 计划字符串。格式: {\"plan_id\":\"plan-YYYYMMDD-NNN\",\"summary\":\"...\",\"estimated_complexity\":\"low|medium|high\",\"steps\":[...]}"
+                    }
+                },
+                "required": ["plan_json"]
+            }),
+        },
+    }
+}
+
+/// 内阁修改当前管道计划（异常唤醒时使用）。
+pub fn update_pipeline_plan_tool() -> ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "update_pipeline_plan".into(),
+            description: "修改当前执行中的管道计划。可插入/跳过/替换步骤、修改失败策略。修改后管道引擎会自动重新加载并继续执行。".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["insert_after", "skip", "replace"],
+                        "description": "操作类型: insert_after(在某步骤后插入新步骤), skip(跳过步骤), replace(替换整个计划)"
+                    },
+                    "step_id": {
+                        "type": "string",
+                        "description": "目标步骤 ID"
+                    },
+                    "data": {
+                        "type": "string",
+                        "description": "操作数据: insert_after/skip 时为 JSON step 对象; replace 时为完整的新 plan_json"
+                    }
+                },
+                "required": ["action", "data"]
             }),
         },
     }
