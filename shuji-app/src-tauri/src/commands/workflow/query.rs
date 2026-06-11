@@ -227,3 +227,15 @@ pub async fn load_workflow_archive(
     };
     Ok(crate::workflow::WorkflowGraph::load_archive(Path::new(&dir), &filename).await)
 }
+
+/// Get the current pipeline execution status (null if no active pipeline).
+#[tauri::command]
+pub async fn get_pipeline_status(
+    state: State<'_, AppState>,
+) -> Result<Option<crate::pipeline::PlanRuntime>, String> {
+    let dir = {
+        let d = state.current_dir.lock().await;
+        d.clone().ok_or("没有打开的项目")?
+    };
+    Ok(crate::pipeline::PlanRuntime::load_from(std::path::Path::new(&dir)).await)
+}

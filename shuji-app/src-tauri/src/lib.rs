@@ -108,6 +108,7 @@ pub fn run() {
             commands::workflow::get_document_diffs,
             commands::workflow::read_document_diff,
             commands::workflow::trace_document,
+            commands::workflow::get_pipeline_status,
             commands::workflow::get_workflow_state,
             commands::workflow::get_workflow_graph,
             commands::workflow::list_workflow_archives,
