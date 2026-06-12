@@ -38,6 +38,39 @@
   - 驳回时提供快捷理由模板下拉（缺少 API 定义/测试策略/范围过大需拆分）
   - 无上一版时自动隐藏差异 Tab
 
+## [0.6.0] - 2026-06-08
+
+### Added
+- 三提示层架构：base_prompt / soul_prompt / context_messages，消除消息顺序漂移
+- Skill 消息作为普通 system 消息存储，最大化 LLM 前缀缓存命中率
+- 可选输出块：中书令/门下侍中 skill 输出模板（设计结论/待决问题/引用/路由）
+- 可选输出块在 [对话摘要] 压缩后保留，避免结构化数据丢失
+- Agent 模块拆分（session/tool/actor 子模块化）
+
+### Changed
+- 3 层上下文持久化替代旧 4 层设计
+- Context compaction 改用单层压缩，skill 消息在压缩前后剥离重新追加
+- 内阁 context 压缩 prompt 与部门压缩 prompt 分开
+
+### Fixed
+- Soul 消息漂移问题：PersistedContext 单独存储 soul_prompt
+
+## [0.5.0] - 2026-06-05
+
+### Added
+- 尚书令+吏部+兵部+工部+刑部+礼部 全部接入 runner.rs 共享执行框架
+- 工部批量计划循环（PlanState + batch/current/complete）
+- agent/runner.rs 内置 compact handler + checkpoint handler
+- 兵部测试+接口契约工作流
+- 刑部测试验证工作流
+- 礼部规范检查+审计工作流
+- Workflow Profile 系统（profiles/ YAML 定义）
+
+### Changed
+- 内阁 routing.rs 升级：显式 skill > 关键词匹配 > 复杂度分析
+- 内阁 soul 系统：update_soul 工具，8KB 上限，自动 LLM 压缩
+- Agent trait 统一 execute() 返回 anyhow::Result<AgentOutput>
+
 ## [0.4.0] - 2026-06-03
 
 ### Added

@@ -16,10 +16,10 @@ use crate::logging::logger::Logger;
 use crate::models::chat::ChatMessage;
 use crate::models::role::Role;
 
-mod spawn;
 mod routing;
-pub use spawn::*;
+mod spawn;
 pub use routing::*;
+pub use spawn::*;
 
 /// A real-time department log entry emitted to the frontend status panel.
 #[derive(Debug, Clone, Serialize, Deserialize)]

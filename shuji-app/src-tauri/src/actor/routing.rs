@@ -1,8 +1,8 @@
 use crate::api::control::RouteTo;
 use crate::models::chat::ChatMessage;
 
-use super::{ActorContext, ActorMessage};
 use super::spawn::log_dept;
+use super::{ActorContext, ActorMessage};
 
 /// Forward a RouteTo instruction to the target actor.
 pub async fn forward_route(ctx: &ActorContext, route: RouteTo) {

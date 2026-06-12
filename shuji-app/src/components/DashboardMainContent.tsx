@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import ActiveDeptStrip from './ActiveDeptStrip';
 import WorkflowStatus from './WorkflowTimeline';
 import WorkflowGraphView from './WorkflowGraph';
@@ -5,7 +6,8 @@ import DemoSummaryCard from './DemoSummaryCard';
 import TabBar, { type TabInfo } from './TabBar';
 import DocPreview from './DocPreview';
 import ProjectOverview from './ProjectOverview';
-import type { Project, PlanInfo } from '../types';
+import { getRoundMetrics } from '../api';
+import type { Project, PlanInfo, RoundMetrics } from '../types';
 import type { ActivitySelection } from './ActivityBar';
 
 interface Props {
@@ -41,9 +43,52 @@ export default function DashboardMainContent({
   openTab,
   onOpenProject,
 }: Props) {
+  const [roundMetrics, setRoundMetrics] = useState<RoundMetrics | null>(null);
+  const [elapsed, setElapsed] = useState('');
+
+  useEffect(() => {
+    const load = () => {
+      getRoundMetrics()
+        .then((m) => setRoundMetrics(m))
+        .catch(() => {});
+    };
+    load();
+    const timer = window.setInterval(load, 3000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!roundMetrics || roundMetrics.started_at <= 0) {
+      setElapsed('');
+      return;
+    }
+    const tick = () => {
+      const secs = Math.floor((Date.now() - roundMetrics.started_at) / 1000);
+      if (secs < 60) setElapsed(`${secs}s`);
+      else if (secs < 3600) setElapsed(`${Math.floor(secs / 60)}m${secs % 60}s`);
+      else setElapsed(`${Math.floor(secs / 3600)}h${Math.floor((secs % 3600) / 60)}m`);
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [roundMetrics]);
+
+  const totalStageCount = project ? project.phase_count : 0;
+  const completedStageCount = project
+    ? project.phases.filter((p) => p.execution === 'Completed' || p.execution === 'MinorIssue')
+        .length
+    : 0;
+
   return (
     <>
-      <ActiveDeptStrip activeDepts={activeDepts} planInfo={planInfo} />
+      <ActiveDeptStrip
+        activeDepts={activeDepts}
+        planInfo={planInfo}
+        roundMetrics={roundMetrics}
+        elapsed={elapsed}
+        totalStageCount={totalStageCount}
+        completedStageCount={completedStageCount}
+      />
       {project && (
         <WorkflowStatus
           phaseCount={project.phase_count}

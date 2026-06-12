@@ -4,7 +4,7 @@
 
 ## 测试状态
 
-Rust 后端提供 **282 个测试**（96 个单元测试 + 186 个集成测试），覆盖：
+Rust 后端提供 **291+ 测试**（96 个单元测试 + 195+ 个集成测试），覆盖：
 
 - **单元测试** (`cargo test --lib`): token 计数、工具函数（skill/route 提取）、文档 ID 解析、routing 规则引擎、workflow profile/gate/chain/resolver/stage/state/graph、friendly error
 - **集成测试** (`cargo test --tests`): 文件 CRUD、路径安全（22 个细粒度测试覆盖遍历/符号链接/Unicode/空字节/大小写）、文档系统（24 个）、Actor 消息（25 个）、Session sanitize + PersistedContext round-trip（14 个）、Session mock/finish_reason（16 个）、配置覆盖（13 个含 watchdog）、E2E 工作流（Mock LLM）、3 个 E2E demo 工作流、24 个 Workflow Profile 集成测试、8 个 checkpoint 测试、24 个审计测试

@@ -2,11 +2,11 @@ use std::path::Path;
 
 use crate::tool::{resolve_scoped_path, ToolOutput};
 
+use super::approval::add_pending_approval;
 use super::parse::{
     build_doc, dept_to_author, find_rprt_path, next_id, now_iso, parse_doc, resolve_doc_path,
     rprt_rel_path, type_to_dir, DocMeta,
 };
-use super::approval::add_pending_approval;
 
 /// ── create_document ────────────────────────────────────────────────
 pub async fn tool_create_document(
@@ -702,5 +702,3 @@ pub fn find_document_tool_def() -> crate::api::client::ToolDefinition {
         },
     }
 }
-
-

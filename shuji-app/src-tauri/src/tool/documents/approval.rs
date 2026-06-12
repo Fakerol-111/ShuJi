@@ -17,7 +17,8 @@ pub async fn add_pending_approval(working_dir: &Path, doc_id: &str) -> Result<()
     if !list.contains(&doc_id.to_string()) {
         list.push(doc_id.to_string());
     }
-    let json = serde_json::to_string(&list).map_err(|e| format!("序列化 pending_approvals 失败: {e}"))?;
+    let json =
+        serde_json::to_string(&list).map_err(|e| format!("序列化 pending_approvals 失败: {e}"))?;
     tokio::fs::write(&path, json)
         .await
         .map_err(|e| e.to_string())
@@ -32,7 +33,8 @@ pub async fn remove_pending_approval(working_dir: &Path, doc_id: &str) -> Result
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default();
     list.retain(|id| id != doc_id);
-    let json = serde_json::to_string(&list).map_err(|e| format!("序列化 pending_approvals 失败: {e}"))?;
+    let json =
+        serde_json::to_string(&list).map_err(|e| format!("序列化 pending_approvals 失败: {e}"))?;
     tokio::fs::write(&path, json)
         .await
         .map_err(|e| e.to_string())

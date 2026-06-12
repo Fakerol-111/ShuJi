@@ -25,6 +25,7 @@ export default function DeptStatusBar() {
   const [tokenPrompt, setTokenPrompt] = useState(0);
   const [tokenCached, setTokenCached] = useState(0);
   const [tokenCompletion, setTokenCompletion] = useState(0);
+  const [tokenCost, setTokenCost] = useState<string | null>(null);
   const [round, setRound] = useState<RoundMetrics | null>(null);
   const [elapsed, setElapsed] = useState('');
 
@@ -36,6 +37,8 @@ export default function DeptStatusBar() {
           setTokenPrompt(roles.reduce((sum, u) => sum + u.prompt_tokens, 0));
           setTokenCached(roles.reduce((sum, u) => sum + (u.cached_prompt_tokens ?? 0), 0));
           setTokenCompletion(roles.reduce((sum, u) => sum + u.completion_tokens, 0));
+          const totalCost = roles.reduce((sum, u) => sum + (u.estimated_cost ?? 0), 0);
+          setTokenCost(totalCost > 0 ? totalCost.toFixed(3) : null);
         })
         .catch((e) => {
           console.error('获取 Token 统计失败', e);
@@ -144,6 +147,12 @@ export default function DeptStatusBar() {
         <span className="text-ink-700">|</span>
         <span className="text-gold/60">输出</span>
         <span className="text-ink-300">{formatToken(tokenCompletion)}</span>
+        {tokenCost !== null && (
+          <>
+            <span className="text-ink-700">|</span>
+            <span className="text-gold font-semibold">≈ ${tokenCost}</span>
+          </>
+        )}
       </div>
     </div>
   );

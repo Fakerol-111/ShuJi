@@ -278,7 +278,9 @@ async fn tool_expand_requirements(args: &serde_json::Value, ctx: &ToolContext) -
     };
     // Use 内阁's cancel flag so sub-agent stops when "叫停诸司" fires
     let cancel = neige_cancel_flag(ctx).unwrap_or_else(|| Arc::new(AtomicBool::new(false)));
-    match crate::agent::expand_requirements::run(task_id, &ctx.working_dir, client, model, &cancel).await {
+    match crate::agent::expand_requirements::run(task_id, &ctx.working_dir, client, model, &cancel)
+        .await
+    {
         Ok(doc_id) => {
             log_console!("[tool] expand_requirements → {}", doc_id);
             serde_json::json!({"ok": true, "document_id": doc_id}).to_string()
@@ -304,8 +306,14 @@ async fn tool_survey_codebase(args: &serde_json::Value, ctx: &ToolContext) -> St
         None => return serde_json::json!({"ok": false, "message": "模型不可用"}).to_string(),
     };
     let cancel = neige_cancel_flag(ctx).unwrap_or_else(|| Arc::new(AtomicBool::new(false)));
-    match crate::agent::survey_codebase::run(task_description, &ctx.working_dir, client, model, &cancel)
-        .await
+    match crate::agent::survey_codebase::run(
+        task_description,
+        &ctx.working_dir,
+        client,
+        model,
+        &cancel,
+    )
+    .await
     {
         Ok(doc_id) => {
             log_console!("[tool] survey_codebase → {}", doc_id);

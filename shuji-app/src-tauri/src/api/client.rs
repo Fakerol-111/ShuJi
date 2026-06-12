@@ -144,7 +144,7 @@ impl AnthropicClient {
             let prompt = usage["input_tokens"].as_u64().unwrap_or(0);
             let cached = usage["cache_read_input_tokens"].as_u64().unwrap_or(0);
             let completion = usage["output_tokens"].as_u64().unwrap_or(0);
-            crate::token_tracker::record("text", prompt, cached, completion);
+            crate::token_tracker::record("text", prompt, cached, completion, model);
         }
         let text = data["content"]
             .as_array()
@@ -219,7 +219,7 @@ impl AnthropicClient {
                 .as_u64()
                 .unwrap_or(0);
             let completion = usage["completion_tokens"].as_u64().unwrap_or(0);
-            crate::token_tracker::record("text", prompt, cached, completion);
+            crate::token_tracker::record("text", prompt, cached, completion, model);
         }
         Ok(data["choices"][0]["message"]["content"]
             .as_str()

@@ -59,7 +59,12 @@ export default function TokenPanel() {
                     <span className="font-medium text-ink-700">
                       {getDeptMeta(role)?.shortLabel || role}
                     </span>
-                    <span className="text-ink-500">{usage.total_tokens.toLocaleString()}</span>
+                    <span className="text-ink-500">
+                      {usage.total_tokens.toLocaleString()}
+                      {usage.estimated_cost != null && (
+                        <span className="text-gold ml-1">≈ ${usage.estimated_cost.toFixed(3)}</span>
+                      )}
+                    </span>
                   </div>
                   <div className="w-full bg-ink-200 rounded-full h-2 overflow-hidden">
                     <div

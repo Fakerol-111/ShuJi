@@ -30,8 +30,6 @@ pub enum StepResult {
     },
 }
 
-
-
 /// Opaque snapshot of Session internals, used for interrupt/restore.
 #[derive(Clone)]
 pub struct SessionSnapshot {
@@ -309,7 +307,13 @@ impl Session {
                     prompt + completion
                 );
                 if !self.role.is_empty() {
-                    crate::token_tracker::record(&self.role, prompt, cached, completion);
+                    crate::token_tracker::record(
+                        &self.role,
+                        prompt,
+                        cached,
+                        completion,
+                        &self.model,
+                    );
                 }
             }
 
@@ -808,5 +812,3 @@ impl Session {
         self.messages = snap.messages.clone();
     }
 }
-
-

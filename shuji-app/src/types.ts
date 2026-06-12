@@ -121,6 +121,8 @@ export interface TokenUsage {
   completion_tokens: number;
   total_tokens: number;
   call_count: number;
+  model?: string;
+  estimated_cost?: number | null;
 }
 
 // Per-role context usage stats

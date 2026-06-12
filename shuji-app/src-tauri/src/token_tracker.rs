@@ -5,6 +5,92 @@ use std::sync::Mutex;
 use chrono::{Timelike, Utc};
 use serde::{Deserialize, Serialize};
 
+/// 常见模型价格（美元 / 1M tokens）
+#[derive(Debug, Clone)]
+struct ModelPrice {
+    input_per_m: f64,
+    output_per_m: f64,
+}
+
+/// 根据模型名返回价格。未知模型返回 None。
+fn get_model_price(model: &str) -> Option<ModelPrice> {
+    let model_lower = model.to_lowercase();
+    if model_lower.contains("deepseek") {
+        if model_lower.contains("reasoner") || model_lower.contains("r1") {
+            return Some(ModelPrice {
+                input_per_m: 0.55,
+                output_per_m: 2.19,
+            });
+        }
+        return Some(ModelPrice {
+            input_per_m: 0.14,
+            output_per_m: 0.28,
+        });
+    }
+    if model_lower.contains("claude") {
+        if model_lower.contains("3.5") {
+            return Some(ModelPrice {
+                input_per_m: 3.00,
+                output_per_m: 15.00,
+            });
+        }
+        if model_lower.contains("3") && model_lower.contains("opus") {
+            return Some(ModelPrice {
+                input_per_m: 15.00,
+                output_per_m: 75.00,
+            });
+        }
+        if model_lower.contains("3") {
+            return Some(ModelPrice {
+                input_per_m: 3.00,
+                output_per_m: 15.00,
+            });
+        }
+        return Some(ModelPrice {
+            input_per_m: 3.00,
+            output_per_m: 15.00,
+        });
+    }
+    if model_lower.contains("gpt-4o") {
+        return Some(ModelPrice {
+            input_per_m: 2.50,
+            output_per_m: 10.00,
+        });
+    }
+    if model_lower.contains("gpt-4") && model_lower.contains("mini") {
+        return Some(ModelPrice {
+            input_per_m: 0.15,
+            output_per_m: 0.60,
+        });
+    }
+    if model_lower.contains("gpt-4") {
+        return Some(ModelPrice {
+            input_per_m: 30.00,
+            output_per_m: 60.00,
+        });
+    }
+    if model_lower.contains("gpt-3.5") {
+        return Some(ModelPrice {
+            input_per_m: 0.50,
+            output_per_m: 1.50,
+        });
+    }
+    if model_lower.contains("gemini") {
+        return Some(ModelPrice {
+            input_per_m: 0.075,
+            output_per_m: 0.30,
+        });
+    }
+    None
+}
+
+fn estimate_cost(prompt: u64, completion: u64, model: &str) -> Option<f64> {
+    let price = get_model_price(model)?;
+    let input_cost = prompt as f64 / 1_000_000.0 * price.input_per_m;
+    let output_cost = completion as f64 / 1_000_000.0 * price.output_per_m;
+    Some(input_cost + output_cost)
+}
+
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct TokenUsage {
     pub prompt_tokens: u64,
@@ -15,6 +101,10 @@ pub struct TokenUsage {
     pub completion_tokens: u64,
     pub total_tokens: u64,
     pub call_count: u64,
+    #[serde(default)]
+    pub model: String,
+    #[serde(default)]
+    pub estimated_cost: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,6 +116,8 @@ struct TokenRecord {
     #[serde(default)]
     uncached_prompt_tokens: u64,
     completion_tokens: u64,
+    model: String,
+    estimated_cost: Option<f64>,
     timestamp: chrono::DateTime<Utc>,
 }
 
@@ -44,8 +136,9 @@ pub fn init(file_path: &Path) {
 }
 
 /// Record token usage for a given role.
-pub fn record(role: &str, prompt: u64, cached: u64, completion: u64) {
+pub fn record(role: &str, prompt: u64, cached: u64, completion: u64, model: &str) {
     let uncached = prompt.saturating_sub(cached);
+    let cost = estimate_cost(prompt, completion, model);
     // Also update live round metrics
     crate::round_metrics::add_tokens(prompt, cached, completion);
 
@@ -60,6 +153,8 @@ pub fn record(role: &str, prompt: u64, cached: u64, completion: u64) {
         cached_prompt_tokens: cached,
         uncached_prompt_tokens: uncached,
         completion_tokens: completion,
+        model: model.to_string(),
+        estimated_cost: cost,
         timestamp: Utc::now(),
     });
     // Persist to file after each record
@@ -123,6 +218,8 @@ fn aggregate(records: &[TokenRecord], window: TokenWindow) -> HashMap<String, To
         entry.completion_tokens += rec.completion_tokens;
         entry.total_tokens += rec.prompt_tokens + rec.completion_tokens;
         entry.call_count += 1;
+        entry.model = rec.model.clone();
+        entry.estimated_cost = entry.estimated_cost.or(rec.estimated_cost);
     }
     map
 }
