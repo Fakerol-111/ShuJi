@@ -26,6 +26,7 @@ export default function DeptStatusBar() {
   const [tokenCached, setTokenCached] = useState(0);
   const [tokenCompletion, setTokenCompletion] = useState(0);
   const [tokenCost, setTokenCost] = useState<string | null>(null);
+  const [currency, setCurrency] = useState<'usd' | 'cny'>('usd');
   const [round, setRound] = useState<RoundMetrics | null>(null);
   const [elapsed, setElapsed] = useState('');
 
@@ -37,7 +38,11 @@ export default function DeptStatusBar() {
           setTokenPrompt(roles.reduce((sum, u) => sum + u.prompt_tokens, 0));
           setTokenCached(roles.reduce((sum, u) => sum + (u.cached_prompt_tokens ?? 0), 0));
           setTokenCompletion(roles.reduce((sum, u) => sum + u.completion_tokens, 0));
-          const totalCost = roles.reduce((sum, u) => sum + (u.estimated_cost ?? 0), 0);
+          const totalCost = roles.reduce(
+            (sum, u) =>
+              sum + (currency === 'cny' ? (u.estimated_cost_cny ?? 0) : (u.estimated_cost ?? 0)),
+            0
+          );
           setTokenCost(totalCost > 0 ? totalCost.toFixed(3) : null);
         })
         .catch((e) => {
@@ -47,7 +52,7 @@ export default function DeptStatusBar() {
     load();
     const timer = window.setInterval(load, 30000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [currency]);
 
   useEffect(() => {
     const load = () => {
@@ -150,7 +155,17 @@ export default function DeptStatusBar() {
         {tokenCost !== null && (
           <>
             <span className="text-ink-700">|</span>
-            <span className="text-gold font-semibold">≈ ${tokenCost}</span>
+            <span className="text-gold font-semibold">
+              ≈ {currency === 'cny' ? '¥' : '$'}
+              {tokenCost}
+            </span>
+            <button
+              onClick={() => setCurrency(currency === 'usd' ? 'cny' : 'usd')}
+              className="text-[9px] text-ink-500 hover:text-ink-300 ml-0.5"
+              title="切换货币"
+            >
+              {currency === 'usd' ? 'CNY' : 'USD'}
+            </button>
           </>
         )}
       </div>

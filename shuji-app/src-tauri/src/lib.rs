@@ -19,6 +19,7 @@ pub mod config;
 mod logging;
 pub mod models;
 pub mod pipeline;
+pub mod pricing;
 mod round_metrics;
 pub mod storage;
 mod token_tracker;
@@ -108,6 +109,9 @@ pub fn run() {
             commands::workflow::get_document_diffs,
             commands::workflow::read_document_diff,
             commands::workflow::trace_document,
+            commands::pricing::get_pricing,
+            commands::pricing::save_pricing,
+            commands::pricing::refresh_pricing,
             commands::workflow::get_pipeline_status,
             commands::workflow::get_workflow_state,
             commands::workflow::get_workflow_graph,

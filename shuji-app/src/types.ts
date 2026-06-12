@@ -123,6 +123,25 @@ export interface TokenUsage {
   call_count: number;
   model?: string;
   estimated_cost?: number | null;
+  estimated_cost_cny?: number | null;
+}
+
+export interface ModelPrices {
+  input_per_m: number;
+  output_per_m: number;
+  cache_hit_input_per_m: number;
+}
+
+export interface PricingEntry {
+  model_pattern: string;
+  display_name: string;
+  usd: ModelPrices;
+  cny: ModelPrices | null;
+}
+
+export interface PricingConfig {
+  usd_cny_rate: number;
+  entries: PricingEntry[];
 }
 
 // Per-role context usage stats

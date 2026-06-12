@@ -22,6 +22,8 @@ interface ApiSettingsTabProps {
   expandedRole: string | null;
   setExpandedRole: (key: string | null) => void;
   roleList: RoleInfo[];
+  onApplyDefaultToAll: () => void;
+  onApplyRoleToOthers: (role: string) => void;
 }
 
 export default function ApiSettingsTab({
@@ -34,7 +36,11 @@ export default function ApiSettingsTab({
   expandedRole,
   setExpandedRole,
   roleList,
+  onApplyDefaultToAll,
+  onApplyRoleToOthers,
 }: ApiSettingsTabProps) {
+  const customCount = roleList.filter((r) => !(useDefault[r.key] ?? true)).length;
+
   return (
     <div className="space-y-3">
       {/* ── Default role ── */}
@@ -81,7 +87,23 @@ export default function ApiSettingsTab({
 
       {/* ── Per-role overrides ── */}
       <div className="space-y-0.5">
-        <span className="text-[11px] font-semibold text-ink-300">各角色覆盖</span>
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[11px] font-semibold text-ink-300">各角色覆盖</span>
+          <span className="text-[10px] text-ink-500">
+            {customCount}/{roleList.length} 个使用自定义
+          </span>
+        </div>
+
+        {/* Batch actions */}
+        {customCount > 0 && (
+          <button
+            onClick={onApplyDefaultToAll}
+            className="w-full text-[10px] px-2 py-1 mb-1 rounded bg-ink-800 text-ink-400 hover:bg-ink-700 hover:text-ink-200 transition-colors"
+          >
+            全部恢复默认
+          </button>
+        )}
+
         {roleList.map((r) => {
           const isExpanded = expandedRole === r.key;
           const usingDefault = useDefault[r.key] ?? true;
@@ -141,6 +163,12 @@ export default function ApiSettingsTab({
                         model={overrides[r.key]?.model ?? ''}
                         onSelect={(m) => setOverride(r.key, 'model', m)}
                       />
+                      <button
+                        onClick={() => onApplyRoleToOthers(r.key)}
+                        className="w-full text-[10px] px-2 py-1 mt-1 rounded bg-blue-900/30 text-blue-400 hover:bg-blue-900/50 transition-colors"
+                      >
+                        应用到所有其他角色
+                      </button>
                     </>
                   )}
                 </div>

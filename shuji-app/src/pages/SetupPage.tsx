@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getConfig, saveConfig, checkApiConnection, setModelPreset } from '../api';
 import { formatError } from '../utils/error';
-import { API_URL_PRESETS, MODEL_PRESETS } from '../constants/presets';
+import { API_URL_PRESETS, MODEL_PRESETS, detectProvider } from '../constants/presets';
+import { DEPT_META_BY_KEY } from '../constants';
 import type { AppConfig, RoleEndpoint } from '../types';
 import { SealLogo } from '../components/SealLogo';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2 | 3 | 4;
 
 interface PresetOption {
   key: string;
@@ -16,6 +17,76 @@ interface PresetOption {
   label: string;
   description: string;
   detail: string;
+}
+
+/** Derive per-role models from the default model + preset. Mirrors backend apply_model_preset. */
+function deriveRoleModels(
+  apiUrl: string,
+  defaultModel: string,
+  preset: string
+): { key: string; label: string; model: string }[] {
+  const cheapRoles = ['menxiashizhong', 'xingbushangshu', 'liburshangshu'];
+  const strongRoles = ['zhongshuling', 'gongbushangshu', 'libushangshu'];
+  const depts = [
+    { key: 'neige', label: '内阁' },
+    { key: 'zhongshuling', label: '中书令' },
+    { key: 'menxiashizhong', label: '门下侍中' },
+    { key: 'shangshuling', label: '尚书令' },
+    { key: 'libushangshu', label: '吏部尚书' },
+    { key: 'bingbushangshu', label: '兵部尚书' },
+    { key: 'gongbushangshu', label: '工部尚书' },
+    { key: 'xingbushangshu', label: '刑部尚书' },
+    { key: 'liburshangshu', label: '礼部尚书' },
+  ];
+
+  if (preset === 'economy') {
+    const isDeepSeek = apiUrl.includes('deepseek.com');
+    const isAnthropic = apiUrl.includes('anthropic.com');
+    const cheapModel = isDeepSeek
+      ? 'deepseek-v4-flash'
+      : isAnthropic
+        ? 'claude-haiku-4-5-20251001'
+        : 'gpt-4o-mini';
+    const strongModel = isDeepSeek
+      ? 'deepseek-4-pro'
+      : isAnthropic
+        ? 'claude-sonnet-4-20250514'
+        : 'gpt-4o';
+    return depts.map((d) => ({
+      ...d,
+      model: cheapRoles.includes(d.key)
+        ? cheapModel
+        : strongRoles.includes(d.key)
+          ? strongModel
+          : defaultModel,
+    }));
+  }
+
+  if (preset === 'quality') {
+    const isDeepSeek = apiUrl.includes('deepseek.com');
+    const isAnthropic = apiUrl.includes('anthropic.com');
+    const cheapModel = isDeepSeek
+      ? 'deepseek-v4-flash'
+      : isAnthropic
+        ? 'claude-haiku-4-5-20251001'
+        : 'gpt-4o-mini';
+    const strongModel = isDeepSeek
+      ? 'deepseek-4-pro'
+      : isAnthropic
+        ? 'claude-sonnet-4-20250514'
+        : 'gpt-4o';
+    return depts.map((d) => ({
+      ...d,
+      model: strongRoles.includes(d.key)
+        ? strongModel
+        : cheapRoles.includes(d.key)
+          ? cheapModel
+          : defaultModel,
+    }));
+  }
+
+  // balanced or custom: all roles use the default model
+  return depts.map((d) => ({ ...d, model: defaultModel }));
 }
 
 const PRESETS: PresetOption[] = [
@@ -114,6 +185,11 @@ export default function SetupPage() {
     }
   };
 
+  const roleModels: { key: string; label: string; model: string }[] = (() => {
+    const derived = deriveRoleModels(effectiveUrl || API_URL_PRESETS[0].url, model, preset);
+    return [{ key: 'default', label: '默认（全局）', model: model || '' }, ...derived];
+  })();
+
   return (
     <div className="h-screen bg-surface-paper flex items-center justify-center">
       <div className="w-full max-w-lg mx-4">
@@ -130,7 +206,7 @@ export default function SetupPage() {
 
         {/* Step indicator */}
         <div className="flex items-center justify-center gap-2 mb-6">
-          {([1, 2, 3] as const).map((s) => (
+          {([1, 2, 3, 4] as const).map((s) => (
             <div key={s} className="flex items-center gap-2">
               <div
                 className={`w-7 h-7 rounded-full flex items-center justify-center text-ui font-bold transition-colors ${
@@ -146,9 +222,9 @@ export default function SetupPage() {
               <span
                 className={`text-ui ${step === s ? 'text-ink-900 font-medium' : 'text-ink-400'}`}
               >
-                {s === 1 ? '预设' : s === 2 ? '密钥' : '完成'}
+                {s === 1 ? '预设' : s === 2 ? '密钥' : s === 3 ? '角色' : '完成'}
               </span>
-              {s < 3 && <div className="w-6 h-px bg-ink-300 mx-1" />}
+              {s < 4 && <div className="w-6 h-px bg-ink-300 mx-1" />}
             </div>
           ))}
         </div>
@@ -334,6 +410,47 @@ export default function SetupPage() {
         )}
 
         {step === 3 && (
+          <Card variant="paper" className="p-6 space-y-4">
+            <h2 className="font-display text-sm font-bold text-ink-900 text-center">
+              各部门配置概览
+            </h2>
+            <p className="text-caption text-ink-500 text-center">
+              以下是根据你的预设自动分配的模型。后续可在设置中为各部门单独配置。
+            </p>
+            <div className="space-y-1 max-h-[320px] overflow-y-auto">
+              {roleModels.map((r) => {
+                const meta = r.key !== 'default' ? DEPT_META_BY_KEY[r.key] : undefined;
+                const providerLabel = detectProvider(effectiveUrl || API_URL_PRESETS[0].url);
+                return (
+                  <div
+                    key={r.key}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-parchment border border-fold"
+                  >
+                    <div
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: meta?.color || '#8B7355' }}
+                    />
+                    <span className="text-ui font-medium text-ink-700 w-16 shrink-0">
+                      {meta?.shortLabel || r.label}
+                    </span>
+                    <span className="text-caption text-ink-500 truncate flex-1">{r.model}</span>
+                    <span className="text-[10px] text-ink-400 shrink-0">{providerLabel}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="ghost" className="flex-1" onClick={() => setStep(2)}>
+                上一步
+              </Button>
+              <Button variant="primary" className="flex-1" onClick={() => setStep(4)}>
+                确认并完成
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {step === 4 && (
           <Card variant="paper" className="p-6 space-y-5 text-center">
             <div className="w-12 h-12 mx-auto rounded-full bg-jade-light flex items-center justify-center">
               <svg

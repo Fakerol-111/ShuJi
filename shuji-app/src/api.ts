@@ -18,6 +18,9 @@ import type {
   WorkflowConfig,
   WorkflowState,
   WorkflowGraph,
+  PricingConfig,
+  PricingEntry,
+  ModelPrices,
 } from './types';
 
 export interface ShujiEntry {
@@ -115,6 +118,17 @@ export async function getRecentDirs(): Promise<string[]> {
 export type { TokenUsage, ContextStats };
 export async function getTokenStats(): Promise<Record<string, Record<string, TokenUsage>>> {
   return invoke('get_token_stats');
+}
+
+export type { PricingConfig, PricingEntry, ModelPrices };
+export async function getPricing(): Promise<PricingConfig> {
+  return invoke('get_pricing');
+}
+export async function savePricing(config: PricingConfig): Promise<void> {
+  return invoke('save_pricing', { config });
+}
+export async function refreshPricing(): Promise<PricingConfig> {
+  return invoke('refresh_pricing');
 }
 
 export async function getRoundMetrics(): Promise<RoundMetrics | null> {

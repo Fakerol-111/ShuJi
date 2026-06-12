@@ -252,6 +252,30 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
     }
   };
 
+  const applyDefaultToAll = () => {
+    const allDefault: Record<string, boolean> = {};
+    for (const r of ALL_ROLES) {
+      if (r.key !== 'default') allDefault[r.key] = true;
+    }
+    setUseDefault(allDefault);
+    setModelPresetLocal('custom');
+  };
+
+  const applyRoleToOthers = (sourceRole: string) => {
+    const source = overrides[sourceRole];
+    if (!source) return;
+    const newOverrides = { ...overrides };
+    const newUseDefault = { ...useDefault };
+    for (const r of ALL_ROLES) {
+      if (r.key === 'default' || r.key === sourceRole) continue;
+      newOverrides[r.key] = { ...source };
+      newUseDefault[r.key] = false;
+    }
+    setOverrides(newOverrides);
+    setUseDefault(newUseDefault);
+    setModelPresetLocal('custom');
+  };
+
   const roleList = ALL_ROLES.filter((r) => r.key !== 'default');
 
   return (
@@ -275,6 +299,8 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
             expandedRole={expandedRole}
             setExpandedRole={setExpandedRole}
             roleList={roleList}
+            onApplyDefaultToAll={applyDefaultToAll}
+            onApplyRoleToOthers={applyRoleToOthers}
           />
 
           <div className="pt-2 border-t border-ink-700">

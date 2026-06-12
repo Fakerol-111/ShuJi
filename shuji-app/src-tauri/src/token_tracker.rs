@@ -5,92 +5,6 @@ use std::sync::Mutex;
 use chrono::{Timelike, Utc};
 use serde::{Deserialize, Serialize};
 
-/// 常见模型价格（美元 / 1M tokens）
-#[derive(Debug, Clone)]
-struct ModelPrice {
-    input_per_m: f64,
-    output_per_m: f64,
-}
-
-/// 根据模型名返回价格。未知模型返回 None。
-fn get_model_price(model: &str) -> Option<ModelPrice> {
-    let model_lower = model.to_lowercase();
-    if model_lower.contains("deepseek") {
-        if model_lower.contains("reasoner") || model_lower.contains("r1") {
-            return Some(ModelPrice {
-                input_per_m: 0.55,
-                output_per_m: 2.19,
-            });
-        }
-        return Some(ModelPrice {
-            input_per_m: 0.14,
-            output_per_m: 0.28,
-        });
-    }
-    if model_lower.contains("claude") {
-        if model_lower.contains("3.5") {
-            return Some(ModelPrice {
-                input_per_m: 3.00,
-                output_per_m: 15.00,
-            });
-        }
-        if model_lower.contains("3") && model_lower.contains("opus") {
-            return Some(ModelPrice {
-                input_per_m: 15.00,
-                output_per_m: 75.00,
-            });
-        }
-        if model_lower.contains("3") {
-            return Some(ModelPrice {
-                input_per_m: 3.00,
-                output_per_m: 15.00,
-            });
-        }
-        return Some(ModelPrice {
-            input_per_m: 3.00,
-            output_per_m: 15.00,
-        });
-    }
-    if model_lower.contains("gpt-4o") {
-        return Some(ModelPrice {
-            input_per_m: 2.50,
-            output_per_m: 10.00,
-        });
-    }
-    if model_lower.contains("gpt-4") && model_lower.contains("mini") {
-        return Some(ModelPrice {
-            input_per_m: 0.15,
-            output_per_m: 0.60,
-        });
-    }
-    if model_lower.contains("gpt-4") {
-        return Some(ModelPrice {
-            input_per_m: 30.00,
-            output_per_m: 60.00,
-        });
-    }
-    if model_lower.contains("gpt-3.5") {
-        return Some(ModelPrice {
-            input_per_m: 0.50,
-            output_per_m: 1.50,
-        });
-    }
-    if model_lower.contains("gemini") {
-        return Some(ModelPrice {
-            input_per_m: 0.075,
-            output_per_m: 0.30,
-        });
-    }
-    None
-}
-
-fn estimate_cost(prompt: u64, completion: u64, model: &str) -> Option<f64> {
-    let price = get_model_price(model)?;
-    let input_cost = prompt as f64 / 1_000_000.0 * price.input_per_m;
-    let output_cost = completion as f64 / 1_000_000.0 * price.output_per_m;
-    Some(input_cost + output_cost)
-}
-
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct TokenUsage {
     pub prompt_tokens: u64,
@@ -105,6 +19,8 @@ pub struct TokenUsage {
     pub model: String,
     #[serde(default)]
     pub estimated_cost: Option<f64>,
+    #[serde(default)]
+    pub estimated_cost_cny: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -118,6 +34,8 @@ struct TokenRecord {
     completion_tokens: u64,
     model: String,
     estimated_cost: Option<f64>,
+    #[serde(default)]
+    estimated_cost_cny: Option<f64>,
     timestamp: chrono::DateTime<Utc>,
 }
 
@@ -136,10 +54,10 @@ pub fn init(file_path: &Path) {
 }
 
 /// Record token usage for a given role.
+/// Uses the pricing module (with .shuji/pricing.json) for cost estimation.
 pub fn record(role: &str, prompt: u64, cached: u64, completion: u64, model: &str) {
     let uncached = prompt.saturating_sub(cached);
-    let cost = estimate_cost(prompt, completion, model);
-    // Also update live round metrics
+    let (cost_usd, cost_cny) = estimate_dual_cost(prompt, cached, completion, model);
     crate::round_metrics::add_tokens(prompt, cached, completion);
 
     let mut lock = match RECORDS.lock() {
@@ -154,15 +72,71 @@ pub fn record(role: &str, prompt: u64, cached: u64, completion: u64, model: &str
         uncached_prompt_tokens: uncached,
         completion_tokens: completion,
         model: model.to_string(),
-        estimated_cost: cost,
+        estimated_cost: cost_usd,
+        estimated_cost_cny: cost_cny,
         timestamp: Utc::now(),
     });
-    // Persist to file after each record
     if let Ok(path_lock) = STORAGE_PATH.lock() {
         if let Some(ref path) = *path_lock {
             let _ = save_to_file(Path::new(path), records);
         }
     }
+}
+
+/// Estimate cost in both USD and CNY using the pricing module.
+/// Only DeepSeek models get cost estimation; all others track tokens only.
+fn estimate_dual_cost(
+    prompt: u64,
+    cached: u64,
+    completion: u64,
+    model: &str,
+) -> (Option<f64>, Option<f64>) {
+    if !model.to_lowercase().contains("deepseek") {
+        return (None, None);
+    }
+
+    let working_dir = {
+        let path_lock = match STORAGE_PATH.lock() {
+            Ok(p) => p.clone(),
+            Err(_) => None,
+        };
+        path_lock.and_then(|p| {
+            Path::new(&p)
+                .parent()
+                .and_then(|parent| parent.parent())
+                .map(|p| p.to_path_buf())
+        })
+    };
+
+    let config = working_dir
+        .as_ref()
+        .map(|wd| crate::pricing::load_or_init(wd));
+
+    match config {
+        Some(ref cfg) => {
+            let usd = cfg.estimate_cost(model, prompt, cached, completion, "usd");
+            let cny = cfg.estimate_cost(model, prompt, cached, completion, "cny");
+            (usd, cny)
+        }
+        None => {
+            let usd = legacy_deepseek_cost(prompt, completion, model);
+            let cny = usd.map(|v| v * 7.25);
+            (usd, cny)
+        }
+    }
+}
+
+/// Fallback cost for DeepSeek when pricing config is not available.
+fn legacy_deepseek_cost(prompt: u64, completion: u64, model: &str) -> Option<f64> {
+    let model_lower = model.to_lowercase();
+    let (input_pm, output_pm) = if model_lower.contains("reasoner") || model_lower.contains("r1") {
+        (0.55, 2.19)
+    } else {
+        (0.14, 0.28)
+    };
+    let input_cost = prompt as f64 / 1_000_000.0 * input_pm;
+    let output_cost = completion as f64 / 1_000_000.0 * output_pm;
+    Some(input_cost + output_cost)
 }
 
 /// Time window for aggregating token stats.
@@ -171,7 +145,7 @@ pub enum TokenWindow {
     Today,
     Last3Days,
     Last7Days,
-    #[allow(dead_code)] // reserved for custom date-range queries
+    #[allow(dead_code)]
     LastNDays(u64),
     All,
 }
@@ -219,12 +193,17 @@ fn aggregate(records: &[TokenRecord], window: TokenWindow) -> HashMap<String, To
         entry.total_tokens += rec.prompt_tokens + rec.completion_tokens;
         entry.call_count += 1;
         entry.model = rec.model.clone();
-        entry.estimated_cost = entry.estimated_cost.or(rec.estimated_cost);
+        entry.estimated_cost =
+            Some(entry.estimated_cost.unwrap_or(0.0) + rec.estimated_cost.unwrap_or(0.0))
+                .filter(|&c| c > 0.0);
+        entry.estimated_cost_cny =
+            Some(entry.estimated_cost_cny.unwrap_or(0.0) + rec.estimated_cost_cny.unwrap_or(0.0))
+                .filter(|&c| c > 0.0);
     }
     map
 }
 
-#[allow(dead_code)] // convenience wrapper; snapshot_grouped covers current UI
+#[allow(dead_code)]
 pub fn snapshot() -> HashMap<String, TokenUsage> {
     snapshot_window(TokenWindow::All)
 }
@@ -251,6 +230,57 @@ pub fn snapshot_grouped() -> HashMap<String, HashMap<String, TokenUsage>> {
         result.insert(window.label().to_string(), snapshot_window(*window));
     }
     result
+}
+
+/// Recalculate all existing token records using the current pricing config.
+/// Called after refreshing pricing from the provider website.
+pub fn recalculate_all(working_dir: &Path) -> Result<(), String> {
+    let config = crate::pricing::load_or_init(working_dir);
+    let path_lock = STORAGE_PATH.lock().map_err(|e| e.to_string())?;
+    let storage_path = match path_lock.as_ref() {
+        Some(p) => Path::new(p).to_path_buf(),
+        None => return Err("token_tracker 未初始化".to_string()),
+    };
+    drop(path_lock);
+
+    let mut records = load_from_file(&storage_path).unwrap_or_default();
+    let mut changed = false;
+    for rec in &mut records {
+        let (usd, cny) = if rec.model.to_lowercase().contains("deepseek") {
+            let u = config.estimate_cost(
+                &rec.model,
+                rec.prompt_tokens,
+                rec.cached_prompt_tokens,
+                rec.completion_tokens,
+                "usd",
+            );
+            let c = config.estimate_cost(
+                &rec.model,
+                rec.prompt_tokens,
+                rec.cached_prompt_tokens,
+                rec.completion_tokens,
+                "cny",
+            );
+            (u, c)
+        } else {
+            (None, None)
+        };
+        if rec.estimated_cost != usd || rec.estimated_cost_cny != cny {
+            rec.estimated_cost = usd;
+            rec.estimated_cost_cny = cny;
+            changed = true;
+        }
+    }
+
+    // Update in-memory cache
+    if let Ok(mut lock) = RECORDS.lock() {
+        *lock = Some(records.clone());
+    }
+
+    if changed {
+        save_to_file(&storage_path, &records)?;
+    }
+    Ok(())
 }
 
 fn load_from_file(path: &Path) -> Option<Vec<TokenRecord>> {

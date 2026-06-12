@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
-import { getTokenStats } from '../api';
+import { getTokenStats, refreshPricing } from '../api';
 import type { TokenUsage } from '../api';
 import { formatError } from '../utils/error';
 import { getDeptMeta, DEPT_ORDER } from '../constants';
+
+type Currency = 'usd' | 'cny';
 
 export default function TokenPanel() {
   const [stats, setStats] = useState<Record<string, Record<string, TokenUsage>> | null>(null);
   const [windowName, setWindowName] = useState('汇总');
   const [error, setError] = useState('');
+  const [currency, setCurrency] = useState<Currency>('usd');
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = () => {
     setError('');
@@ -16,18 +20,55 @@ export default function TokenPanel() {
       .catch((e) => setError(formatError(e)));
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setError('');
+    try {
+      await refreshPricing();
+      load();
+    } catch (e) {
+      setError(formatError(e));
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   useEffect(load, []);
 
   const current = stats?.[windowName] || {};
   const maxTotal = Math.max(...Object.values(current).map((u) => u.total_tokens), 1);
 
+  const costLabel = currency === 'cny' ? '¥' : '$';
+  const costKey = currency === 'cny' ? 'estimated_cost_cny' : 'estimated_cost';
+
   return (
     <div className="h-full overflow-y-auto p-3 bg-ink-50">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-xs font-bold text-ink-800">度支</h3>
-        <button onClick={load} className="text-[10px] text-ink-400 hover:text-ink-700">
-          刷新
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Currency toggle */}
+          <div className="flex text-[10px] border border-ink-300 rounded overflow-hidden">
+            <button
+              onClick={() => setCurrency('usd')}
+              className={`px-1.5 py-0.5 ${currency === 'usd' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-500 hover:bg-ink-200'}`}
+            >
+              USD
+            </button>
+            <button
+              onClick={() => setCurrency('cny')}
+              className={`px-1.5 py-0.5 ${currency === 'cny' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-500 hover:bg-ink-200'}`}
+            >
+              CNY
+            </button>
+          </div>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="text-[10px] text-ink-400 hover:text-ink-700 disabled:opacity-50"
+          >
+            {refreshing ? '刷新中...' : '刷新价格'}
+          </button>
+        </div>
       </div>
       {stats && Object.keys(stats).length > 0 && (
         <div className="flex gap-1 mb-3 flex-wrap">
@@ -53,6 +94,7 @@ export default function TokenPanel() {
             .sort(([a], [b]) => roleOrder(a) - roleOrder(b))
             .map(([role, usage]) => {
               const pct = (usage.total_tokens / maxTotal) * 100;
+              const cost = usage[costKey as keyof TokenUsage] as number | null | undefined;
               return (
                 <div key={role}>
                   <div className="flex justify-between text-[11px] mb-1">
@@ -61,8 +103,11 @@ export default function TokenPanel() {
                     </span>
                     <span className="text-ink-500">
                       {usage.total_tokens.toLocaleString()}
-                      {usage.estimated_cost != null && (
-                        <span className="text-gold ml-1">≈ ${usage.estimated_cost.toFixed(3)}</span>
+                      {cost != null && (
+                        <span className="text-gold ml-1">
+                          ≈ {costLabel}
+                          {cost.toFixed(3)}
+                        </span>
                       )}
                     </span>
                   </div>
