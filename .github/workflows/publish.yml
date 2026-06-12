@@ -19,6 +19,8 @@ jobs:
           cache: npm
           cache-dependency-path: shuji-app/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install WiX Toolset (for MSI)
+        run: dotnet tool install --global wix --version 4.0.5
       - name: Install frontend dependencies
         run: npm ci
         working-directory: shuji-app
@@ -84,7 +86,7 @@ jobs:
       - name: Install system deps (Tauri on Linux)
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev libfuse2
       - name: Install frontend dependencies
         run: npm ci
         working-directory: shuji-app
