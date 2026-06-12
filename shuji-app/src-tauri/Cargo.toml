@@ -1,6 +1,6 @@
 [package]
 name = "shuji-app"
-version = "0.6.0"
+version = "0.7.0"
 description = "ShuJi - Automated software development system"
 authors = ["Fakerol"]
 edition = "2021"
