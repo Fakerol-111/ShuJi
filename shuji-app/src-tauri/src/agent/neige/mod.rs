@@ -285,11 +285,26 @@ impl Agent for NeigeAgent {
             Self::inject_workflow_preset(&mut session, &working_dir).await;
         }
 
-        // ── Discuss mode: force-inject discuss skill ──
+        // ── Discuss mode: force-inject skill with fallback ──
         if input.discuss_mode {
-            let discuss_skill = Self::load_skill("discuss", &working_dir).await;
-            if !discuss_skill.is_empty() {
-                session.inject_skill("discuss", &discuss_skill);
+            let mut skill_content = Self::load_skill("discuss", &working_dir).await;
+            if skill_content.is_empty() {
+                let fallback = if input.task_description.contains("bug")
+                    || input.task_description.contains("修复")
+                {
+                    "workflow_bugfix"
+                } else if input.task_description.contains("重构") {
+                    "workflow_refactor"
+                } else if input.task_description.contains("优化") {
+                    "workflow_optimize"
+                } else {
+                    "clarify"
+                };
+                log_console!("[内阁] discuss skill 未找到，fallback 为 {}", fallback);
+                skill_content = Self::load_skill(fallback, &working_dir).await;
+            }
+            if !skill_content.is_empty() {
+                session.inject_skill("discuss", &skill_content);
             }
         }
 

@@ -50,7 +50,9 @@ export default function DashboardMainContent({
     const load = () => {
       getRoundMetrics()
         .then((m) => setRoundMetrics(m))
-        .catch(() => {});
+        .catch((e) => {
+          console.error('获取轮次指标失败', e);
+        });
     };
     load();
     const timer = window.setInterval(load, 3000);

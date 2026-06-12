@@ -177,6 +177,17 @@ Checkpoint 系统在 `.shuji/.git/` 中维护一个**完全独立于项目 git �
 
 ---
 
+## 📥 下载
+
+| Windows | macOS | Linux |
+|---------|-------|-------|
+| [NSIS 安装包](https://github.com/xxx/shuji/releases/latest) | [DMG](https://github.com/xxx/shuji/releases/latest) | [deb](https://github.com/xxx/shuji/releases/latest) |
+| [MSI 安装包](https://github.com/xxx/shuji/releases/latest) | | [AppImage](https://github.com/xxx/shuji/releases/latest) |
+
+> 也支持从源码构建，见下方「开发者指南」。
+
+---
+
 ## 快速开始
 
 ### 环境要求

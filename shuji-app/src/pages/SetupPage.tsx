@@ -62,7 +62,9 @@ export default function SetupPage() {
         const def = cfg.roles?.default;
         if (def?.api_key) navigate('/', { replace: true });
       })
-      .catch(() => {});
+      .catch((e) => {
+        console.error('加载配置失败', e);
+      });
   }, []);
 
   const effectiveUrl = apiUrl || customUrl;
