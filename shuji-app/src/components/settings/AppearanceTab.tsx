@@ -67,7 +67,8 @@ export default function AppearanceTab() {
             <span className="font-medium text-ink-900">版本</span> 0.1.0 — 预览版
           </p>
           <p>
-            基于三省六部制的自动化软件开发系统。每个部门是一个 LLM agent，通过角色分工和文档化通信，模拟从需求分析到编码测试的完整软件工程流程。
+            基于三省六部制的自动化软件开发系统。每个部门是一个 LLM
+            agent，通过角色分工和文档化通信，模拟从需求分析到编码测试的完整软件工程流程。
           </p>
         </div>
       </SettingsSection>

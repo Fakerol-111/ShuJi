@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getWorkflowState } from '../api';
+import { docIdToPath } from '../utils/docPath';
 import type {
   PlanInfo,
   PhaseRuntime,
@@ -15,6 +16,32 @@ interface WorkflowStatusProps {
   planInfo: PlanInfo | null;
   pendingApprovals: string[];
   onSelectDoc: (docPath: string) => void;
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
+}
+
+const STORAGE_UI_KEY = 'shuji_ui_prefs';
+
+function loadWorkflowExpanded(defaultCollapsed?: boolean): boolean {
+  try {
+    const raw = localStorage.getItem(STORAGE_UI_KEY);
+    if (raw) {
+      const prefs = JSON.parse(raw) as { workflowCollapsed?: boolean };
+      if (typeof prefs.workflowCollapsed === 'boolean') {
+        return !prefs.workflowCollapsed;
+      }
+    }
+  } catch {}
+  return !defaultCollapsed;
+}
+
+function saveWorkflowCollapsed(collapsed: boolean) {
+  try {
+    const raw = localStorage.getItem(STORAGE_UI_KEY);
+    const prefs = raw ? JSON.parse(raw) : {};
+    prefs.workflowCollapsed = collapsed;
+    localStorage.setItem(STORAGE_UI_KEY, JSON.stringify(prefs));
+  } catch {}
 }
 
 // ── Profile display names ──────────────────────────────────────
@@ -107,12 +134,6 @@ function isBlocked(status: string): boolean {
   return status === 'PendingApproval' || status === 'Rejected';
 }
 
-// Resolve doc ID to full .shuji path
-function docIdToPath(id: string): string {
-  const prefix = id.split('_')[0];
-  return prefix === 'revw' ? `.shuji/reviews/${id}.md` : `.shuji/designs/${id}.md`;
-}
-
 export default function WorkflowStatus({
   phaseCount,
   phases,
@@ -121,8 +142,10 @@ export default function WorkflowStatus({
   planInfo,
   pendingApprovals,
   onSelectDoc,
+  collapsible,
+  defaultCollapsed,
 }: WorkflowStatusProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(() => loadWorkflowExpanded(defaultCollapsed));
   const [wfState, setWfState] = useState<WFState | null>(null);
 
   // ── Poll workflow state every 3s (created after first send_message) ──
@@ -185,6 +208,8 @@ export default function WorkflowStatus({
       </div>
     );
   }
+
+  const showToggle = (phases.length > 0 || wfState) && collapsible;
 
   return (
     <div className="bg-surface-paper border-b border-fold shrink-0">
@@ -270,9 +295,15 @@ export default function WorkflowStatus({
         </div>
 
         {/* Expand toggle */}
-        {(phases.length > 0 || wfState) && (
+        {showToggle && (
           <button
-            onClick={() => setExpanded(!expanded)}
+            onClick={() =>
+              setExpanded((prev) => {
+                const next = !prev;
+                saveWorkflowCollapsed(!next);
+                return next;
+              })
+            }
             className="text-caption text-ink-400 hover:text-ink-600 shrink-0"
           >
             {expanded ? '收起' : '详情'}

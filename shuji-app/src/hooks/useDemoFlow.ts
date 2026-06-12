@@ -21,7 +21,7 @@ export function useDemoFlow(
   loadProjectIntoState: (path: string) => Promise<void>,
   resetDiscuss: () => void,
   setTab?: (tab: 'decision' | 'discuss') => void,
-  setMessages?: (msgs: any[] | ((prev: any[]) => any[])) => void,
+  setMessages?: (msgs: any[] | ((prev: any[]) => any[])) => void
 ) {
   const [showDemoTour, setShowDemoTour] = useState(false);
   const [demoCreating, setDemoCreating] = useState(false);

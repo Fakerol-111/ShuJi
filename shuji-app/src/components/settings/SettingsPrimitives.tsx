@@ -25,9 +25,7 @@ export function SettingsSection({
     >
       <div>
         <h3 className="text-sm font-semibold text-ink-900">{title}</h3>
-        {description && (
-          <p className="mt-1 text-xs text-ink-600 leading-relaxed">{description}</p>
-        )}
+        {description && <p className="mt-1 text-xs text-ink-600 leading-relaxed">{description}</p>}
       </div>
       {children}
     </section>
@@ -49,8 +47,7 @@ export function SettingsChip({
   className = '',
   ...rest
 }: SettingsChipProps) {
-  const sizeClass =
-    size === 'sm' ? 'text-xs px-2.5 py-1' : 'text-xs px-3 py-1.5';
+  const sizeClass = size === 'sm' ? 'text-xs px-2.5 py-1' : 'text-xs px-3 py-1.5';
   return (
     <button
       type="button"
@@ -184,10 +181,7 @@ export function SettingsAction({
   );
 }
 
-export function SettingsSaveButton({
-  children,
-  ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
+export function SettingsSaveButton({ children, ...rest }: ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <Button variant="primary" className="text-xs px-4 py-1.5 rounded-md" {...rest}>
       {children}

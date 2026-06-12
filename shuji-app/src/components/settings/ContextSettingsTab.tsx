@@ -109,9 +109,7 @@ export default function ContextSettingsTab({
                   />
                   <SettingsToggle
                     label="运行中压缩（mid-run compact）"
-                    checked={
-                      contextOverrides[r.key]?.mid_run_compact ?? effective.mid_run_compact
-                    }
+                    checked={contextOverrides[r.key]?.mid_run_compact ?? effective.mid_run_compact}
                     onChange={(v) => setContextOverride(r.key, 'mid_run_compact', v)}
                   />
                 </>

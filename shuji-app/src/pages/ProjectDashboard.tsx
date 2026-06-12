@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { classifyError } from '../utils/error';
-import { useActiveDepts } from '../hooks/useActiveDepts';
+import { useDeptEvents } from '../hooks/useDeptEvents';
 import { useProject } from '../hooks/useProject';
 import { useChat } from '../hooks/useChat';
 import { useDocumentTabs } from '../hooks/useDocumentTabs';
@@ -9,19 +9,22 @@ import { useDemoFlow } from '../hooks/useDemoFlow';
 import { usePendingApprovals } from '../hooks/usePendingApprovals';
 import { useProjectPicker } from '../hooks/useProjectPicker';
 import DashboardLayout from '../components/DashboardLayout';
-import DashboardMainContent from '../components/DashboardMainContent';
-import DashboardChatPanel from '../components/DashboardChatPanel';
+import AgentStreamPanel from '../components/AgentStreamPanel';
+import ArtifactPanel from '../components/ArtifactPanel';
 import ProjectPicker from '../components/ProjectPicker';
 import SettingsMenu from '../components/SettingsMenu';
+import SettingsPage from './SettingsPage';
 import HelpDrawer from '../components/HelpDrawer';
 import DemoTour from '../components/DemoTour';
+import WorkflowGraphView from '../components/WorkflowGraph';
+
 import { Button } from '../components/ui/Button';
+import { docIdToPath } from '../utils/docPath';
 import type { Project } from '../types';
 import type { ActivitySelection } from '../components/ActivityBar';
 
 const STORAGE_KEY = 'shuji_chat';
-const CHAT_PANEL_MIN = 300;
-const CHAT_PANEL_MAX = 600;
+const STORAGE_UI_KEY = 'shuji_ui_prefs';
 
 function loadSession() {
   try {
@@ -32,9 +35,26 @@ function loadSession() {
   }
 }
 
+function loadUiPrefs() {
+  try {
+    const raw = localStorage.getItem(STORAGE_UI_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveUiPrefs(prefs: Record<string, unknown>) {
+  try {
+    localStorage.setItem(STORAGE_UI_KEY, JSON.stringify(prefs));
+  } catch {}
+}
+
 export default function ProjectDashboard() {
   const session = loadSession();
-  const activeDepts = Array.from(useActiveDepts());
+  const { activeDepts } = useDeptEvents();
+  const activeDeptsArr = Array.from(activeDepts);
+  const uiPrefs = loadUiPrefs();
 
   const {
     project,
@@ -76,28 +96,45 @@ export default function ProjectDashboard() {
   } = useDocumentTabs();
 
   const { pendingApprovals } = usePendingApprovals(project);
-  const {
-    showDemoTour,
-    setShowDemoTour,
-    demoCreating,
-    demoSummary,
-    mockScenario,
-    handleDemoProject,
-  } = useDemoFlow(
-    project,
-    activeDepts,
-    planInfo,
-    handleSend,
-    loadProjectIntoState,
-    resetDiscuss,
-    setTab,
-    setMessages
-  );
+  const { showDemoTour, setShowDemoTour, demoCreating, mockScenario, handleDemoProject } =
+    useDemoFlow(
+      project,
+      activeDeptsArr,
+      planInfo,
+      handleSend,
+      loadProjectIntoState,
+      resetDiscuss,
+      setTab,
+      setMessages
+    );
   const picker = useProjectPicker(loadProjectIntoState, setRecentDirs);
 
-  const [activity, setActivity] = useState<ActivitySelection>('files');
-  const [logsExpanded, setLogsExpanded] = useState(false);
-  const [chatWidth, setChatWidth] = useState(400);
+  const [activity, setActivity] = useState<ActivitySelection>(uiPrefs.lastActivity ?? 'files');
+  const [uiMode, setUiMode] = useState<'focus' | 'review' | 'inspect'>(
+    uiPrefs.lastUiMode || 'focus'
+  );
+  const [artifactOpen, setArtifactOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'b' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        setActivity((prev) => (prev === 'files' ? null : 'files'));
+      }
+      if (e.key === '\\' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        setArtifactOpen((prev) => !prev);
+      }
+      if (e.key === 'Escape' && artifactOpen && uiMode !== 'review') {
+        setArtifactOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [artifactOpen, uiMode, setActivity]);
+
   useEffect(() => {
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ msgs: messages, discuss: discussMsgs }));
@@ -124,117 +161,170 @@ export default function ProjectDashboard() {
     return () => clearTimeout(timer);
   }, [error, clearError]);
 
-  const startResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startWidth = chatWidth;
-    const move = (ev: MouseEvent) =>
-      setChatWidth(
-        Math.max(CHAT_PANEL_MIN, Math.min(CHAT_PANEL_MAX, startWidth - (ev.clientX - startX)))
-      );
-    const up = () => {
-      document.removeEventListener('mousemove', move);
-      document.removeEventListener('mouseup', up);
-    };
-    document.addEventListener('mousemove', move);
-    document.addEventListener('mouseup', up);
-  };
+  const handleActivity = useCallback(
+    (a: ActivitySelection) => {
+      if (a === null || a === activity) {
+        setActivity(null);
+        setUiMode('focus');
+      } else if (a === 'graph') {
+        setActivity(a);
+        setUiMode('inspect');
+      } else {
+        setActivity(a);
+        setUiMode('inspect');
+      }
+      saveUiPrefs({
+        lastUiMode: a === null || a === activity ? 'focus' : 'inspect',
+        lastActivity: a === null || a === activity ? null : a,
+      });
+    },
+    [activity]
+  );
+
+  const openArtifact = useCallback(
+    (path?: string) => {
+      if (path) openTab(path);
+      setArtifactOpen(true);
+    },
+    [openTab]
+  );
+
+  useEffect(() => {
+    if (hasTabs) setArtifactOpen(true);
+  }, [hasTabs]);
+
+  useEffect(() => {
+    if (pendingApprovals.length === 0) return;
+    setUiMode('review');
+    setArtifactOpen(true);
+    openTab(docIdToPath(pendingApprovals[0]));
+  }, [pendingApprovals, openTab]);
+
+  const handlePendingApproval = useCallback(
+    (docPath: string) => {
+      openTab(docPath);
+      setArtifactOpen(true);
+    },
+    [openTab]
+  );
+
+  const projectPhases = project?.phases || [];
+  const phaseCount = project?.phase_count || 0;
+  const overall =
+    typeof project?.overall === 'string'
+      ? project.overall
+      : String(project?.overall || 'NotStarted');
+
+  const graphContent = activity === 'graph' ? <WorkflowGraphView /> : null;
 
   return (
-    <DashboardLayout
-      project={project}
-      error={error}
-      clearError={clearError}
-      activity={activity}
-      onActivity={setActivity}
-      activeDocPath={activeDoc?.path || null}
-      onDocSelect={handleDocSelect}
-      onShowDiff={(path) => openTab(path, 'diff')}
-      logsExpanded={logsExpanded}
-      onLogsExpanded={setLogsExpanded}
-      pendingApprovalsCount={pendingApprovals.length}
-      headerRight={
-        <>
-          <Button
-            variant="seal"
-            className="text-xs !px-2 !py-1"
-            onClick={handleDemoProject}
-            disabled={demoCreating}
-          >
-            {demoCreating ? '创建中…' : '体验枢机'}
-          </Button>
-          <Button
-            variant="ghost"
-            className="text-xs !px-2 !py-1 text-ink-400"
-            onClick={picker.openPicker}
-          >
-            打开项目
-          </Button>
-          <HelpDrawer />
-          <SettingsMenu />
-        </>
-      }
-      mainContent={
-        <DashboardMainContent
-          project={project}
-          activeDepts={activeDepts}
-          planInfo={planInfo}
-          activity={activity}
-          pendingApprovals={pendingApprovals}
-          demoSummary={demoSummary}
-          tabs={tabs}
-          activeIndex={activeIndex}
-          activeDoc={activeDoc || null}
-          hasTabs={hasTabs}
-          setActiveIndex={setActiveIndex}
-          closeTab={closeTab}
-          openTab={openTab}
-          onOpenProject={picker.openPicker}
-        />
-      }
-      chatPanel={
-        <DashboardChatPanel
-          chatWidth={chatWidth}
-          project={project}
-          tab={tab}
-          messages={messages}
-          discussMsgs={discussMsgs}
-          discussing={discussing}
-          planInfo={planInfo}
-          activeDeptsCount={activeDepts.length}
-          setTab={setTab}
-          onOption={(k, s) => handleSend(s ? `${k}\n${s}` : k)}
-          onSend={handleSend}
-          onRetrySend={retrySend}
-          onDiscuss={handleDiscuss}
-          onCancelDiscuss={cancelDiscuss}
-          onConvertToCommand={(t) => {
-            handleSend(t);
-            setTab('decision');
-          }}
-          endRef={chatEndRef}
-          onResizeStart={startResize}
-        />
-      }
-      picker={
-        picker.showPicker ? (
-          <ProjectPicker
-            recentDirs={recentDirs}
-            pickerPath={picker.pickerPath}
-            pickerError={picker.pickerError}
-            pickerLoading={picker.pickerLoading}
-            setPickerPath={picker.setPickerPath}
-            onBrowse={picker.onBrowse}
-            onLoad={picker.onLoad}
-            onClose={() => picker.setShowPicker(false)}
-          />
-        ) : undefined
-      }
-      demoTour={
-        showDemoTour ? (
-          <DemoTour onClose={() => setShowDemoTour(false)} mockMode={!!mockScenario} />
-        ) : undefined
-      }
-    />
+    <>
+      <DashboardLayout
+        project={project}
+        error={error}
+        clearError={clearError}
+        activity={activity}
+        onActivity={handleActivity}
+        activeDocPath={activeDoc?.path || null}
+        onDocSelect={handleDocSelect}
+        onShowDiff={(path) => openTab(path, 'diff')}
+        pendingApprovalsCount={pendingApprovals.length}
+        headerRight={
+          <>
+            <Button
+              variant="seal"
+              className="text-xs !px-2 !py-1"
+              onClick={handleDemoProject}
+              disabled={demoCreating}
+            >
+              {demoCreating ? '创建中…' : '体验枢机'}
+            </Button>
+            <Button
+              variant="ghost"
+              className="text-xs !px-2 !py-1 text-ink-400"
+              onClick={picker.openPicker}
+            >
+              打开项目
+            </Button>
+            <HelpDrawer />
+            <SettingsMenu onOpenSettings={() => setSettingsOpen(true)} />
+          </>
+        }
+        agentStream={
+          activity === 'graph' ? null : (
+            <AgentStreamPanel
+              project={project}
+              tab={tab}
+              messages={messages}
+              discussMsgs={discussMsgs}
+              discussing={discussing}
+              planInfo={planInfo}
+              activeDeptsCount={activeDeptsArr.length}
+              activeDepts={activeDeptsArr}
+              pendingApprovals={pendingApprovals}
+              phases={projectPhases}
+              phaseCount={phaseCount}
+              overall={overall}
+              setTab={setTab}
+              onOption={(k, s) => handleSend(s ? `${k}\n${s}` : k)}
+              onSend={handleSend}
+              onRetrySend={retrySend}
+              onDiscuss={handleDiscuss}
+              onCancelDiscuss={cancelDiscuss}
+              onConvertToCommand={(t) => {
+                handleSend(t);
+                setTab('decision');
+              }}
+              onSelectDoc={(path) => openArtifact(path)}
+              onOpenProject={picker.openPicker}
+              endRef={chatEndRef}
+            />
+          )
+        }
+        artifactPanel={
+          activity === 'graph' ? (
+            graphContent
+          ) : project ? (
+            <ArtifactPanel
+              project={project}
+              tabs={tabs}
+              activeIndex={activeIndex}
+              activeDoc={activeDoc || null}
+              hasTabs={hasTabs}
+              pendingApprovals={pendingApprovals}
+              onSelectTab={setActiveIndex}
+              onCloseTab={closeTab}
+              onClosePanel={() => setArtifactOpen(false)}
+              onOpenApproval={handlePendingApproval}
+            />
+          ) : undefined
+        }
+        artifactOpen={artifactOpen}
+        picker={
+          picker.showPicker ? (
+            <ProjectPicker
+              recentDirs={recentDirs}
+              pickerPath={picker.pickerPath}
+              pickerError={picker.pickerError}
+              pickerLoading={picker.pickerLoading}
+              setPickerPath={picker.setPickerPath}
+              onBrowse={picker.onBrowse}
+              onLoad={picker.onLoad}
+              onClose={() => picker.setShowPicker(false)}
+            />
+          ) : undefined
+        }
+        demoTour={
+          showDemoTour ? (
+            <DemoTour onClose={() => setShowDemoTour(false)} mockMode={!!mockScenario} />
+          ) : undefined
+        }
+      />
+      {settingsOpen && (
+        <div className="fixed inset-0 z-50 bg-surface-paper overflow-y-auto">
+          <SettingsPage onClose={() => setSettingsOpen(false)} />
+        </div>
+      )}
+    </>
   );
 }

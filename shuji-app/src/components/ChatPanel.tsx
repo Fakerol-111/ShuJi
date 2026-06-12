@@ -1,10 +1,8 @@
 import { useState } from 'react';
 import { cancelProcessing } from '../api';
-import { useLatestDeptLogs } from '../hooks/useLatestDeptLogs';
-import { getDeptMeta } from '../constants';
 import ChatBubble from './ChatBubble';
 import ChatInput from './ChatInput';
-import type { ChatMessage, DeptLogEntry, PlanInfo } from '../types';
+import type { ChatMessage, PlanInfo } from '../types';
 
 interface ChatPanelProps {
   tab: 'decision' | 'discuss';
@@ -38,7 +36,6 @@ export default function ChatPanel(props: ChatPanelProps) {
     onConvertToCommand,
     endRef,
   } = props;
-  const latestLogs = useLatestDeptLogs();
   const [toast, setToast] = useState('');
   const isProcessing = activeDeptsCount > 0;
 
@@ -72,7 +69,6 @@ export default function ChatPanel(props: ChatPanelProps) {
           endRef={endRef}
           thinking={isProcessing}
           thinkingLabel="诸司处理中…"
-          latestLogs={latestLogs}
         />
         <div className="shrink-0 px-4 py-2 border-t border-fold bg-surface-elevated flex justify-end">
           <button
@@ -133,7 +129,6 @@ function MessageList({
   endRef,
   thinking,
   thinkingLabel,
-  latestLogs,
 }: {
   messages: ChatMessage[];
   onOption: (key: string, supplement?: string) => void;
@@ -141,7 +136,6 @@ function MessageList({
   endRef: React.RefObject<HTMLDivElement | null>;
   thinking?: boolean;
   thinkingLabel?: string;
-  latestLogs?: Map<string, DeptLogEntry>;
 }) {
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
@@ -149,20 +143,9 @@ function MessageList({
         <ChatBubble key={messageKey(msg, i)} msg={msg} onOption={onOption} onRetry={onRetry} />
       ))}
       {thinking && (
-        <div className="flex flex-col items-center gap-1.5 py-3">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-gold animate-pulse" />
-            <span className="text-xs text-ink-500 font-medium">
-              {thinkingLabel || '内阁思考中…'}
-            </span>
-          </div>
-          {latestLogs && latestLogs.size > 0 && (
-            <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 max-w-full">
-              {Array.from(latestLogs.entries()).map(([dept, entry]) => (
-                <LiveAction key={dept} dept={dept} entry={entry} />
-              ))}
-            </div>
-          )}
+        <div className="flex items-center justify-center gap-2 py-3">
+          <span className="w-2 h-2 rounded-full bg-gold animate-pulse" />
+          <span className="text-xs text-ink-500 font-medium">{thinkingLabel || '诸司处理中…'}</span>
         </div>
       )}
       <div ref={endRef} />
@@ -172,31 +155,6 @@ function MessageList({
 
 function messageKey(msg: ChatMessage, index: number) {
   return `${msg.timestamp || index}|${msg.role}|${msg.content.slice(0, 40)}`;
-}
-
-/** Live per-department action indicator shown in the thinking area */
-function LiveAction({ dept, entry }: { dept: string; entry: DeptLogEntry }) {
-  const meta = getDeptMeta(dept);
-  const color = meta?.color || '#8B7355';
-  const label = meta?.shortLabel || dept;
-  const action = entry.action.replace(/^[❌→]\s*/, '').replace(/:.*/, '');
-  const target = entry.action.includes(': ') ? entry.action.split(': ').pop() : '';
-  return (
-    <div
-      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono"
-      style={{ backgroundColor: `${color}12` }}
-    >
-      <span
-        className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0"
-        style={{ backgroundColor: color }}
-      />
-      <span className="font-semibold text-ink-600">{label}</span>
-      <span className="text-ink-400 truncate max-w-[140px]">{action}</span>
-      {target && (
-        <span className="text-ink-300 truncate max-w-[100px] hidden sm:inline">{target}</span>
-      )}
-    </div>
-  );
 }
 
 function PlanCard({ info }: { info: PlanInfo }) {

@@ -10,7 +10,6 @@ export type ActivitySelection =
 interface ActivityBarProps {
   selected: ActivitySelection;
   onSelect: (selected: ActivitySelection) => void;
-  onLogsClick: () => void;
   pendingApprovalsCount?: number;
 }
 
@@ -137,28 +136,6 @@ function NewspaperIcon({ active }: { active: boolean }) {
   );
 }
 
-function ListIcon() {
-  return (
-    <svg
-      width="22"
-      height="22"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <line x1="8" y1="6" x2="21" y2="6" />
-      <line x1="8" y1="12" x2="21" y2="12" />
-      <line x1="8" y1="18" x2="21" y2="18" />
-      <line x1="3" y1="6" x2="3.01" y2="6" />
-      <line x1="3" y1="12" x2="3.01" y2="12" />
-      <line x1="3" y1="18" x2="3.01" y2="18" />
-    </svg>
-  );
-}
-
 const ITEMS: Array<{
   id: Exclude<ActivitySelection, null>;
   icon: (active: boolean) => React.ReactNode;
@@ -175,7 +152,6 @@ const ITEMS: Array<{
 export default function ActivityBar({
   selected,
   onSelect,
-  onLogsClick,
   pendingApprovalsCount,
 }: ActivityBarProps) {
   return (
@@ -208,16 +184,6 @@ export default function ActivityBar({
           </button>
         );
       })}
-      <button
-        onClick={onLogsClick}
-        aria-label="展开日志"
-        className="group relative mt-1 w-full h-11 flex items-center justify-center text-ink-500 hover:text-ink-200 hover:bg-ink-800/60 transition-colors"
-      >
-        <ListIcon />
-        <span className="absolute left-full ml-2 whitespace-nowrap bg-ink-800 text-ink-200 text-xs px-2 py-1 rounded border border-ink-700 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-          日志
-        </span>
-      </button>
     </div>
   );
 }

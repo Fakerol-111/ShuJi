@@ -67,7 +67,11 @@ const CATEGORY_LABELS: Record<SettingsCategory, string> = {
   appearance: '外观',
 };
 
-export default function SettingsPage() {
+interface SettingsPageProps {
+  onClose?: () => void;
+}
+
+export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
   const navigate = useNavigate();
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>('service');
 
@@ -320,8 +324,7 @@ export default function SettingsPage() {
     if (healthStatus === 'idle') return null;
     if (healthStatus === 'checking')
       return <span className="text-xs text-ink-300">⏳ 探测 API 连接中...</span>;
-    if (healthStatus === 'ok')
-      return <span className="text-xs text-jade-light">✔ 连接成功</span>;
+    if (healthStatus === 'ok') return <span className="text-xs text-jade-light">✔ 连接成功</span>;
     return <span className="text-xs text-vermillion-light">✘ 连接失败: {healthMsg}</span>;
   };
 
@@ -331,10 +334,10 @@ export default function SettingsPage() {
       <header className="bg-ink-900 border-b border-gold/30 shrink-0 h-12 px-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/project')}
+            onClick={() => (onClose ? onClose() : navigate('/project'))}
             className="text-sm text-ink-300 hover:text-ink-50 transition-colors"
           >
-            ← 返回项目
+            ← {onClose ? '关闭' : '返回项目'}
           </button>
           <h1 className="font-display text-base font-semibold text-ink-50">枢机 · 设置</h1>
         </div>

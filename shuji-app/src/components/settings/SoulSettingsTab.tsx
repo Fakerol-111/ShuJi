@@ -47,9 +47,7 @@ export default function SoulSettingsTab({ setSavedMsg }: SoulSettingsTabProps) {
           清空 soul
         </SettingsAction>
       </div>
-      <SettingsHint>
-        soul 超过 8KB 时将自动压缩。单条经验/教训/偏好不超过 500 字符。
-      </SettingsHint>
+      <SettingsHint>soul 超过 8KB 时将自动压缩。单条经验/教训/偏好不超过 500 字符。</SettingsHint>
     </SettingsSection>
   );
 }

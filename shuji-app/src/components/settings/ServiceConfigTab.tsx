@@ -142,9 +142,7 @@ export default function ServiceConfigTab({
               {p.label}
             </SettingsChip>
           ))}
-          {modelPreset === 'custom' && (
-            <span className="text-xs text-ink-600 italic">自定义</span>
-          )}
+          {modelPreset === 'custom' && <span className="text-xs text-ink-600 italic">自定义</span>}
         </div>
         <SettingsHint>
           {MODEL_PRESET_OPTIONS.find((p) => p.key === modelPreset)?.desc ||
@@ -290,7 +288,5 @@ function ModelSuggestions({
       </div>
     );
   }
-  return (
-    <SettingsField label="模型" value={model} onChange={(e) => onSelect(e.target.value)} />
-  );
+  return <SettingsField label="模型" value={model} onChange={(e) => onSelect(e.target.value)} />;
 }
