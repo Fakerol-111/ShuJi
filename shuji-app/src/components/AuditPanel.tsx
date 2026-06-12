@@ -87,7 +87,10 @@ export default function AuditPanel({
     setLineage(null);
     getDocumentLineage(lineageDocId.trim())
       .then(setLineage)
-      .catch(() => setLineage(null))
+      .catch((e) => {
+        console.error('血缘查询失败', e);
+        setLineage(null);
+      })
       .finally(() => setLineageLoading(false));
   }
 
@@ -97,7 +100,10 @@ export default function AuditPanel({
     setTraceResult(null);
     traceDocument(traceDocId.trim())
       .then(setTraceResult)
-      .catch(() => setTraceResult(null))
+      .catch((e) => {
+        console.error('追溯查询失败', e);
+        setTraceResult(null);
+      })
       .finally(() => setTraceLoading(false));
   }
 
@@ -106,7 +112,10 @@ export default function AuditPanel({
     setReportLoading(true);
     generateDeliveryReport()
       .then(setReport)
-      .catch(() => setReport('(加载失败)'))
+      .catch((e) => {
+        console.error('生成交付报告失败', e);
+        setReport('(加载失败)');
+      })
       .finally(() => setReportLoading(false));
   }
 

@@ -18,6 +18,9 @@ import {
   CODE_THEMES,
   getCodeTheme,
   setCodeTheme as persistCodeTheme,
+  FONT_SIZE_TIERS,
+  getFontSize,
+  setFontSize as persistFontSize,
 } from '../constants';
 import type {
   RoleEndpoint,
@@ -77,6 +80,7 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
   const [workflowIntent, setWorkflowIntent] = useState<string>('auto');
   const [modelPreset, setModelPresetLocal] = useState('balanced');
   const [codeTheme, setCodeThemeLocal] = useState(getCodeTheme);
+  const [fontSize, setFontSizeLocal] = useState(getFontSize);
   const [contextOverrides, setContextOverrides] = useState<Record<string, ContextRoleForm>>({});
   const [contextUseDefault, setContextUseDefault] = useState<Record<string, boolean>>({});
 
@@ -123,18 +127,25 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
         setWorkflowIntent(cfg.intent);
         setWorkflowPresetLocal(cfg.governance);
       })
-      .catch(() => {
+      .catch((e) => {
+        console.error('加载工作流配置失败', e);
         setWorkflowIntent('auto');
         apiGetPreset()
           .then(setWorkflowPresetLocal)
-          .catch(() => setWorkflowPresetLocal('standard'));
+          .catch((e2) => {
+            console.error('加载工作流预设失败', e2);
+            setWorkflowPresetLocal('standard');
+          });
       });
   };
 
   const loadModelPreset = () => {
     getModelPreset()
       .then(setModelPresetLocal)
-      .catch(() => setModelPresetLocal('balanced'));
+      .catch((e) => {
+        console.error('加载模型预设失败', e);
+        setModelPresetLocal('balanced');
+      });
   };
 
   const toggle = () => {
@@ -192,7 +203,11 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
         if (!(useDefault[role.key] ?? true)) roles[role.key] = overrides[role.key] ?? defaultCfg;
       }
       await saveConfig({ roles });
-      await setModelPreset(modelPreset).catch(() => {});
+      await setModelPreset(modelPreset).catch((e) => {
+        console.error('设置模型预设失败', e);
+        setHealthStatus('fail');
+        setHealthMsg(`设置预设失败: ${formatError(e)}`);
+      });
 
       const ctxRoles: Record<string, ContextRoleForm> = {};
       for (const role of ALL_ROLES) {
@@ -288,6 +303,27 @@ export default function SettingsMenu({ open, setOpen }: SettingsMenuProps) {
 
           <div className="pt-2 border-t border-ink-700">
             <SoulSettingsTab setSavedMsg={setSavedMsg} />
+          </div>
+
+          {/* ── 字体大小 ── */}
+          <div className="space-y-1 pt-2 border-t border-ink-700">
+            <span className="text-[11px] font-semibold text-ink-300">字体大小</span>
+            <div className="flex gap-1 flex-wrap">
+              {Object.entries(FONT_SIZE_TIERS).map(([key, tier]) => (
+                <button
+                  key={key}
+                  onClick={() => {
+                    setFontSizeLocal(key);
+                    persistFontSize(key);
+                    document.documentElement.dataset.fontSize = key;
+                  }}
+                  className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${fontSize === key ? 'bg-ink-700 text-ink-100 border-ink-600' : 'bg-ink-800 text-ink-400 border-ink-700 hover:border-ink-500'}`}
+                  title={tier.description}
+                >
+                  {tier.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* ── 代码主题 ── */}

@@ -191,6 +191,13 @@ export async function createDemoProject(): Promise<Project> {
   return invoke('create_demo_project');
 }
 
+export async function runMockWorkflow(
+  projectDir: string,
+  scenario: string
+): Promise<ChatMessage[]> {
+  return invoke('run_mock_workflow', { projectDir, scenario });
+}
+
 // ── API health check ─────────────────────────────────────────
 
 export async function checkApiConnection(

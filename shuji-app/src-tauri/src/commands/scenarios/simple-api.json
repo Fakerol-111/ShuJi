@@ -1,0 +1,43 @@
+{
+  "name": "Simple API",
+  "description": "一个 RESTful API 服务示例",
+  "steps": [
+    {
+      "agent": "neige",
+      "response": "收到需求：构建简易 API 服务。已选择 workflow_standard 流程。",
+      "route": "zhongshuling",
+      "actions": ["create_document", "route_to"]
+    },
+    {
+      "agent": "zhongshuling",
+      "response": "设计方案：定义三个端点 GET/POST/DELETE。",
+      "actions": ["create_document"]
+    },
+    {
+      "agent": "menxiashizhong",
+      "response": "审查通过，接口定义清晰。",
+      "actions": ["update_document"]
+    },
+    {
+      "agent": "shangshuling",
+      "response": "已路由至相关执行部门。",
+      "route": "libushangshu",
+      "actions": ["route_to"]
+    },
+    {
+      "agent": "libushangshu",
+      "response": "详细设计：数据库 schema 和路由处理。",
+      "actions": ["create_document"]
+    },
+    {
+      "agent": "gongbushangshu",
+      "response": "已完成 server.rs 实现。",
+      "actions": ["create_file", "edit_file"]
+    },
+    {
+      "agent": "xingbushangshu",
+      "response": "所有接口测试通过 ✅",
+      "actions": ["run_tests"]
+    }
+  ]
+}

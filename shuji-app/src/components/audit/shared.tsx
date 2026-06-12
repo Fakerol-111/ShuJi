@@ -14,7 +14,10 @@ export function DiffViewer({ filename }: { filename: string }) {
       setLoading(true);
       readDocumentDiff(filename)
         .then(setPatch)
-        .catch(() => setPatch('(加载失败)'))
+        .catch((e) => {
+          console.error('加载 diff 失败', e);
+          setPatch('(加载失败)');
+        })
         .finally(() => setLoading(false));
     }
   }, [open, filename, patch, loading]);

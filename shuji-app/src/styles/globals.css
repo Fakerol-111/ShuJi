@@ -53,6 +53,11 @@
   --measure-prose: 42rem;
   --measure-chat: 38rem;
 
+  /* ── Font size tiers ── */
+  --fs-dense: 13px;
+  --fs-compact: 14px;
+  --fs-relaxed: 15px;
+
   /* ── Department colors ── */
   --dept-neige: #6b4e9e;
   --dept-zhongshuling: #3d6b8e;
@@ -75,6 +80,20 @@
   --code-line-num: #4c4f6b;
   --code-muted: #565f89;
   --code-line-hover: rgba(255, 255, 255, 0.03);
+
+  /* Default font-size tier: 舒缓 (15px) */
+  --app-font-size: var(--fs-relaxed);
+}
+
+/* ── Font-size tiers ── */
+[data-font-size='dense'] {
+  --app-font-size: var(--fs-dense);
+}
+[data-font-size='compact'] {
+  --app-font-size: var(--fs-compact);
+}
+[data-font-size='relaxed'] {
+  --app-font-size: var(--fs-relaxed);
 }
 
 [data-code-theme='github-dark'] {
@@ -225,7 +244,7 @@
   html,
   body {
     font-family: var(--font-sans);
-    font-size: 16px;
+    font-size: var(--app-font-size);
     background-color: var(--color-surface-paper);
     color: var(--color-ink-900);
     line-height: var(--leading-ui);

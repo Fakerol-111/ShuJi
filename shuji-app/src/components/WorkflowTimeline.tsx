@@ -130,7 +130,10 @@ export default function WorkflowStatus({
     const fetch = () => {
       getWorkflowState()
         .then(setWfState)
-        .catch(() => setWfState(null));
+        .catch((e) => {
+          console.error('加载工作流状态失败', e);
+          setWfState(null);
+        });
     };
     fetch();
     const timer = setInterval(fetch, 3000);
@@ -306,10 +309,14 @@ export default function WorkflowStatus({
           {phases.length > 0 && (
             <div className="space-y-0.5 pt-1.5 border-t border-fold/30">
               {phases.map((phase) => {
-                const dStatus = phase.design as string;
+                const dStatus = typeof phase.design === 'string' ? phase.design : '';
                 const eObj = phase.execution as PhaseExecutionStatus;
                 const eIsBlocked = typeof eObj === 'object' && eObj !== null && 'Blocked' in eObj;
-                const eStr = eIsBlocked ? 'Blocked' : (eObj as string);
+                const eStr = eIsBlocked
+                  ? 'Blocked'
+                  : typeof eObj === 'object' && eObj !== null
+                    ? JSON.stringify(eObj)
+                    : String(eObj);
                 return (
                   <div key={phase.index} className="flex items-center gap-2">
                     <span className="font-mono text-ink-400 w-14 shrink-0">阶段{phase.index}</span>

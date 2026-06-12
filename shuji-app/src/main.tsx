@@ -6,11 +6,12 @@ import ProjectDashboard from './pages/ProjectDashboard';
 import LogsPage from './pages/LogsPage';
 import SetupPage from './pages/SetupPage';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { getCodeTheme } from './constants';
+import { getCodeTheme, getFontSize } from './constants';
 import './styles/globals.css';
 
-// Apply saved code theme
+// Apply saved code theme and font size
 document.documentElement.setAttribute('data-code-theme', getCodeTheme());
+document.documentElement.setAttribute('data-font-size', getFontSize());
 
 const rootEl = document.getElementById('root');
 if (!rootEl) throw new Error('root element not found');

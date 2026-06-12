@@ -85,6 +85,45 @@ export function setCodeTheme(name: string): void {
 
 // ── 代码主题 end ────────────────────────────────────────
 
+// ── 字体大小 ────────────────────────────────────────────
+
+export interface FontSizeTier {
+  label: string; // 显示名称，如 "密集"
+  description: string; // 说明，如 "13px — 信息密度高"
+  value: number; // rem 基准 px 值
+}
+
+export const FONT_SIZE_TIERS: Record<string, FontSizeTier> = {
+  dense: {
+    label: '密集',
+    description: '13px — 信息密度高',
+    value: 13,
+  },
+  compact: {
+    label: '紧凑',
+    description: '14px — 适中紧凑',
+    value: 14,
+  },
+  relaxed: {
+    label: '舒缓',
+    description: '15px — 柔和舒适',
+    value: 15,
+  },
+};
+
+export const DEFAULT_FONT_SIZE = 'relaxed';
+
+export function getFontSize(): string {
+  if (typeof window === 'undefined') return DEFAULT_FONT_SIZE;
+  return localStorage.getItem('shuji_font_size') || DEFAULT_FONT_SIZE;
+}
+
+export function setFontSize(tier: string): void {
+  localStorage.setItem('shuji_font_size', tier);
+}
+
+// ── 字体大小 end ────────────────────────────────────────
+
 // ── Department metadata (single source of truth) ──────────
 
 export interface DeptMeta {

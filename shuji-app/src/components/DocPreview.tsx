@@ -58,8 +58,8 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
     setDiffLoading(true);
     getDocumentDiff(projectDir, docPath)
       .then((d) => setDiffData(d))
-      .catch(() => {
-        /* diff is optional, silently fail */
+      .catch((e) => {
+        console.error('获取文档差异失败', e);
       })
       .finally(() => setDiffLoading(false));
 
@@ -69,7 +69,9 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
       const parsedId = docPath.split('/').pop()?.replace(/\.md$/, '') || '';
       getDocumentLineage(parsedId)
         .then((l) => setLineage(l))
-        .catch(() => {})
+        .catch((e) => {
+          console.error('获取文档血缘失败', e);
+        })
         .finally(() => setLineageLoading(false));
     }
   }, [projectDir, docPath]);
@@ -166,7 +168,7 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
             >
               差异
               <span className="ml-1.5 text-caption text-ink-400">
-                +{diffData!.added}/-{diffData!.removed}
+                {diffData ? `+${diffData.added}/-${diffData.removed}` : ''}
               </span>
             </button>
           )}

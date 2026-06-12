@@ -95,6 +95,29 @@ export default function WorkspaceSelect() {
           {loading ? '创建中...' : '体验枢机 — 5 分钟上手'}
         </Button>
 
+        {/* ── Mock demo (no API key needed) ── */}
+        <Button
+          variant="ghost"
+          className="w-full mb-4 !py-2 !text-ui"
+          disabled={loading}
+          onClick={async () => {
+            setLoading(true);
+            setError('');
+            try {
+              const project = await createDemoProject();
+              await loadProject(project.working_dir);
+              sessionStorage.setItem('shuji_demo', 'true');
+              sessionStorage.setItem('shuji_mock_scenario', 'todo-cli');
+              navigate('/project');
+            } catch (e) {
+              setError(formatError(e));
+              setLoading(false);
+            }
+          }}
+        >
+          {loading ? '创建中...' : '⚡ 离线体验（无需 API 密钥）'}
+        </Button>
+
         <div className="relative mb-4">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-fold" />

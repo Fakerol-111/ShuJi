@@ -49,7 +49,9 @@ export default function WorkflowGraphView() {
           })
         );
       })
-      .catch(() => {});
+      .catch((e) => {
+        console.error('加载工作流存档列表失败', e);
+      });
   }, []);
 
   // ── Load graph (live or archived) ──

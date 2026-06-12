@@ -3,7 +3,29 @@ import { Button } from './ui/Button';
 
 const STORAGE_KEY = 'shuji_demo_tour_done';
 
-const STEPS = [
+const MOCK_STEPS = [
+  {
+    title: '部门状态栏',
+    description:
+      '底部状态栏（整个界面最底行）展示所有部门的实时活动状态。在离线演示中，系统会模拟各部门的对话流程，让您直观感受枢机的工作方式。',
+  },
+  {
+    title: '消息对话',
+    description:
+      '右侧聊天面板显示皇帝（您）与各部门的对话。在离线演示中，系统会按预设剧本展示完整的任务分派和执行过程。',
+  },
+  {
+    title: '文档产出',
+    description: '左侧边栏列出了所有产出文档——设计、审查、报告，归档有序。点击即可预览详情。',
+  },
+  {
+    title: '完成演示',
+    description:
+      '演示结束后，您可以看到完整的执行概览。点击"打开真实项目"即可开始使用枢机进行实际开发。',
+  },
+];
+
+const DEMO_STEPS = [
   {
     title: '部门状态栏',
     description:
@@ -28,9 +50,11 @@ const STEPS = [
 
 interface DemoTourProps {
   onClose: () => void;
+  mockMode?: boolean;
 }
 
-export default function DemoTour({ onClose }: DemoTourProps) {
+export default function DemoTour({ onClose, mockMode }: DemoTourProps & { mockMode?: boolean }) {
+  const STEPS = mockMode ? MOCK_STEPS : DEMO_STEPS;
   const [step, setStep] = useState(0);
   const isLast = step === STEPS.length - 1;
 

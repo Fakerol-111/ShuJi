@@ -1,0 +1,22 @@
+{
+  "name": "Todo CLI",
+  "description": "一个命令行 Todo 管理工具",
+  "steps": [
+    {
+      "agent": "neige",
+      "response": "开始分析需求...已选择 workflow_demo 流程。",
+      "route": "gongbushangshu",
+      "actions": ["create_document", "route_to"]
+    },
+    {
+      "agent": "gongbushangshu",
+      "response": "开始实现 Todo CLI...已完成 main.rs。",
+      "actions": ["create_file", "edit_file"]
+    },
+    {
+      "agent": "xingbushangshu",
+      "response": "运行测试...3/3 通过 ✓",
+      "actions": ["run_tests"]
+    }
+  ]
+}

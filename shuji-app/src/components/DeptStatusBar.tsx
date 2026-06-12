@@ -37,7 +37,9 @@ export default function DeptStatusBar() {
           setTokenCached(roles.reduce((sum, u) => sum + (u.cached_prompt_tokens ?? 0), 0));
           setTokenCompletion(roles.reduce((sum, u) => sum + u.completion_tokens, 0));
         })
-        .catch(() => {});
+        .catch((e) => {
+          console.error('获取 Token 统计失败', e);
+        });
     };
     load();
     const timer = window.setInterval(load, 30000);
@@ -48,7 +50,9 @@ export default function DeptStatusBar() {
     const load = () => {
       getRoundMetrics()
         .then((m) => setRound(m))
-        .catch(() => {});
+        .catch((e) => {
+          console.error('获取轮次指标失败', e);
+        });
     };
     load();
     const timer = window.setInterval(load, 3000);

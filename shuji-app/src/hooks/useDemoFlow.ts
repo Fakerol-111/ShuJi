@@ -26,6 +26,7 @@ export function useDemoFlow(
   const [demoCreating, setDemoCreating] = useState(false);
   const [demoStartTime, setDemoStartTime] = useState<number | null>(null);
   const [demoSummary, setDemoSummary] = useState<DemoSummary | null>(null);
+  const [mockScenario, setMockScenario] = useState<string | null>(null);
   const summaryShownRef = useRef(false);
 
   // ── Demo flow: auto-send from WorkspaceSelect ──────────────
@@ -34,6 +35,11 @@ export function useDemoFlow(
     const isDemo = sessionStorage.getItem('shuji_demo');
     if (isDemo !== 'true') return;
     sessionStorage.removeItem('shuji_demo');
+    const scenario = sessionStorage.getItem('shuji_mock_scenario');
+    sessionStorage.removeItem('shuji_mock_scenario');
+    if (scenario) {
+      setMockScenario(scenario);
+    }
     setDemoStartTime(Date.now());
     handleSend('修复 calc.py 中的 power 和 factorial 函数中的 bug，确保所有测试通过');
   }, [project, handleSend]);
@@ -101,6 +107,7 @@ export function useDemoFlow(
     setShowDemoTour,
     demoCreating,
     demoSummary,
+    mockScenario,
     handleDemoProject,
   };
 }

@@ -30,11 +30,15 @@ async fn tool_submit_pipeline_plan(args: &serde_json::Value, _ctx: &ToolContext)
     // Validate it's parseable JSON
     match serde_json::from_str::<serde_json::Value>(plan_json) {
         Ok(_) => {
-            log_console!("[tool] submit_pipeline_plan accepted — plan_json length={}", plan_json.len());
+            log_console!(
+                "[tool] submit_pipeline_plan accepted — plan_json length={}",
+                plan_json.len()
+            );
             serde_json::json!({"ok": true, "message": "管道计划已提交，引擎接管执行", "plan_json": plan_json}).to_string()
         }
         Err(e) => {
-            serde_json::json!({"ok": false, "message": format!("plan_json 不是合法 JSON: {}", e)}).to_string()
+            serde_json::json!({"ok": false, "message": format!("plan_json 不是合法 JSON: {}", e)})
+                .to_string()
         }
     }
 }

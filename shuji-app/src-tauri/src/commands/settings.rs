@@ -561,8 +561,7 @@ pub async fn get_workflow_config(
 
 /// Save workflow config to the project.
 #[tauri::command]
-pub async fn set_workflow_config(
-) -> Result<String, String> {
+pub async fn set_workflow_config() -> Result<String, String> {
     Err("Workflow 配置已被 Pipeline 管道引擎取代，不再支持手动配置。".to_string())
 }
 

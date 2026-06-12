@@ -149,8 +149,8 @@ impl PlanRuntime {
             .await
             .map_err(|e| format!("create pipeline dir: {}", e))?;
         let path = dir.join("runtime.json");
-        let content = serde_json::to_string_pretty(self)
-            .map_err(|e| format!("serialize runtime: {}", e))?;
+        let content =
+            serde_json::to_string_pretty(self).map_err(|e| format!("serialize runtime: {}", e))?;
         tokio::fs::write(&path, &content)
             .await
             .map_err(|e| format!("write runtime: {}", e))?;
@@ -159,14 +159,20 @@ impl PlanRuntime {
 
     /// Load from .shuji/pipeline/runtime.json.
     pub async fn load_from(project_dir: &std::path::Path) -> Option<Self> {
-        let path = project_dir.join(".shuji").join("pipeline").join("runtime.json");
+        let path = project_dir
+            .join(".shuji")
+            .join("pipeline")
+            .join("runtime.json");
         let content = tokio::fs::read_to_string(&path).await.ok()?;
         serde_json::from_str(&content).ok()
     }
 
     /// Delete runtime file (cleanup after completion).
     pub async fn cleanup(project_dir: &std::path::Path) {
-        let path = project_dir.join(".shuji").join("pipeline").join("runtime.json");
+        let path = project_dir
+            .join(".shuji")
+            .join("pipeline")
+            .join("runtime.json");
         let _ = tokio::fs::remove_file(&path).await;
     }
 }
