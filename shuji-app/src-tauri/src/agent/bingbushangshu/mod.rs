@@ -1,4 +1,3 @@
-use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
@@ -27,10 +26,6 @@ impl BingbuShangshuAgent {
         tools.extend(crate::tool::registry::document_tools());
         // route_tool 已移除 —— PipelineEngine 负责调度
         tools
-    }
-
-    async fn execute_tool(name: &str, args: &serde_json::Value, working_dir: &Path) -> String {
-        crate::tool::execute_named_tool(name, working_dir, args, "bingbushangshu").await
     }
 }
 
@@ -102,12 +97,38 @@ impl Agent for BingbuShangshuAgent {
         ));
 
         let config = input.runtime_config.clone();
+        let esaa_enabled = config.esaa.enabled;
+        let esaa_full_log = config.esaa.full_intent_log;
+        let checkers: std::sync::Arc<Vec<Box<dyn crate::api::intent::IntentChecker>>> =
+            if esaa_enabled {
+                std::sync::Arc::new(vec![
+                    Box::new(crate::api::intent::BoundaryChecker),
+                    Box::new(crate::api::intent::ImmutabilityChecker),
+                    Box::new(crate::api::intent::ApprovalChecker),
+                    Box::new(crate::api::intent::RateLimiter::default()),
+                ])
+            } else {
+                std::sync::Arc::new(vec![])
+            };
+        let dept = role_name.clone();
         let wd = working_dir.clone();
         let exec = move |name: &str, args: &serde_json::Value| -> crate::api::control::ToolFuture {
             let name = name.to_owned();
             let args = args.clone();
             let wd = wd.clone();
-            Box::pin(async move { Self::execute_tool(&name, &args, &wd).await })
+            let checkers = checkers.clone();
+            let dept = dept.clone();
+            Box::pin(async move {
+                crate::api::intent::check_and_execute(
+                    &name,
+                    &args,
+                    &wd,
+                    &dept,
+                    &checkers,
+                    esaa_full_log,
+                )
+                .await
+            })
         };
         let (result, _route) = controller
             .run(

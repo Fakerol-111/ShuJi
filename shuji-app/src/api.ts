@@ -317,3 +317,25 @@ export async function readDocumentDiff(filename: string): Promise<string> {
 export async function traceDocument(docId: string): Promise<TraceResult> {
   return invoke('trace_document', { docId });
 }
+
+// ── ESAA: Audit trail verification ──────────────────────────────
+
+export interface BrokenLink {
+  seq: number;
+  expected_prev_hash: string;
+  actual_prev_hash: string;
+}
+
+export interface VerificationReport {
+  total_entries: number;
+  chain_intact: boolean;
+  first_entry_hash: string;
+  last_entry_hash: string;
+  broken_links: BrokenLink[];
+  first_tampered_seq: number | null;
+  pre_chain_entries: number;
+}
+
+export async function verifyAuditTrail(): Promise<VerificationReport> {
+  return invoke('verify_audit_trail');
+}

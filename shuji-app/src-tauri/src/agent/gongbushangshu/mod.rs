@@ -1,4 +1,3 @@
-use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -82,10 +81,6 @@ impl GongbuShangshuAgent {
         tools.push(crate::tool::registry::complete_task_tool());
         // route_tool 已移除 —— PipelineEngine 负责调度
         tools
-    }
-
-    async fn execute_tool(name: &str, args: &serde_json::Value, working_dir: &Path) -> String {
-        crate::tool::execute_named_tool(name, working_dir, args, "gongbushangshu").await
     }
 }
 
@@ -217,6 +212,20 @@ impl Agent for GongbuShangshuAgent {
         ));
 
         let config = input.runtime_config.clone();
+        let esaa_enabled = config.esaa.enabled;
+        let esaa_full_log = config.esaa.full_intent_log;
+        let checkers: std::sync::Arc<Vec<Box<dyn crate::api::intent::IntentChecker>>> =
+            if esaa_enabled {
+                std::sync::Arc::new(vec![
+                    Box::new(crate::api::intent::BoundaryChecker),
+                    Box::new(crate::api::intent::ImmutabilityChecker),
+                    Box::new(crate::api::intent::ApprovalChecker),
+                    Box::new(crate::api::intent::RateLimiter::default()),
+                ])
+            } else {
+                std::sync::Arc::new(vec![])
+            };
+        let dept = role_name.clone();
         let plan_ref = self.plan.clone();
         let wd = working_dir.clone();
         let force_stop = Arc::new(AtomicBool::new(false));
@@ -227,6 +236,8 @@ impl Agent for GongbuShangshuAgent {
             let plan_ref = plan_ref.clone();
             let force_stop_clone = force_stop_clone.clone();
             let wd = wd.clone();
+            let checkers = checkers.clone();
+            let dept = dept.clone();
             Box::pin(async move {
                 match name.as_str() {
                     "submit_plan" => {
@@ -275,7 +286,17 @@ impl Agent for GongbuShangshuAgent {
                             None => r#"{"ok":false,"message":"没有活跃计划。如需分批，先调用 submit_plan。"}"#.to_string(),
                         }
                     }
-                    _ => Self::execute_tool(&name, &args, &wd).await,
+                    _ => {
+                        crate::api::intent::check_and_execute(
+                            &name,
+                            &args,
+                            &wd,
+                            &dept,
+                            &checkers,
+                            esaa_full_log,
+                        )
+                        .await
+                    }
                 }
             })
         };

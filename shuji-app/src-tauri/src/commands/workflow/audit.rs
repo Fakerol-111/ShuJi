@@ -5,6 +5,21 @@ use tauri::State;
 use crate::commands::friendly_error::friendly_error;
 use crate::commands::project::AppState;
 
+/// Verify the SHA-256 hash chain integrity of the audit log.
+#[tauri::command]
+pub async fn verify_audit_trail(
+    state: State<'_, AppState>,
+) -> Result<crate::audit::VerificationReport, String> {
+    let working_dir = {
+        let project_opt = state.current_project.lock().await;
+        let p = project_opt
+            .as_ref()
+            .ok_or_else(|| friendly_error("没有加载项目"))?;
+        p.working_dir.clone()
+    };
+    crate::audit::verify_audit_trail(Path::new(&working_dir)).await
+}
+
 /// Get the document lineage tree for a given doc ID.
 #[tauri::command]
 pub async fn get_document_lineage(

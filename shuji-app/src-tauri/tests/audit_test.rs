@@ -763,7 +763,104 @@ fn test_trace_document_nonexistent() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 12. sync_ref_index
+// 12. Hash Chain (ESAA Phase 1)
+// ═══════════════════════════════════════════════════════════════
+
+#[test]
+fn test_hash_chain_append() {
+    let dir = create_audit_dir();
+
+    block_on(audit::append(
+        dir.path(),
+        "create_document",
+        "工部",
+        "doc_1",
+        "创建文档",
+    ));
+    let entries = block_on(audit::read_all(dir.path()));
+    assert_eq!(entries.len(), 1);
+    assert!(!entries[0].hash.is_empty(), "hash should not be empty");
+    assert!(
+        !entries[0].prev_hash.is_empty(),
+        "prev_hash should not be empty"
+    );
+    assert_eq!(entries[0].seq, 1);
+    assert_eq!(entries[0].prev_hash.len(), 64);
+    assert_eq!(entries[0].hash.len(), 64);
+}
+
+#[test]
+fn test_hash_chain_verify_ok() {
+    let dir = create_audit_dir();
+
+    block_on(audit::append(dir.path(), "event1", "工部", "d1", "first"));
+    block_on(audit::append(dir.path(), "event2", "兵部", "d2", "second"));
+    block_on(audit::append(dir.path(), "event3", "内阁", "d3", "third"));
+
+    let report = block_on(audit::verify_audit_trail(dir.path())).unwrap();
+    assert_eq!(report.total_entries, 3);
+    assert!(report.chain_intact, "chain should be intact");
+    assert!(report.broken_links.is_empty());
+    assert_eq!(report.pre_chain_entries, 0);
+}
+
+#[test]
+fn test_hash_chain_detect_tamper() {
+    let dir = create_audit_dir();
+
+    block_on(audit::append(dir.path(), "event1", "工部", "d1", "first"));
+    block_on(audit::append(dir.path(), "event2", "兵部", "d2", "second"));
+
+    // Tamper with the second entry in the file
+    let audit_path = dir.path().join(".shuji").join("audit.jsonl");
+    let content = std::fs::read_to_string(&audit_path).unwrap();
+    let tampered = content.replace("兵部", "礼部");
+    std::fs::write(&audit_path, &tampered).unwrap();
+
+    let report = block_on(audit::verify_audit_trail(dir.path())).unwrap();
+    assert!(!report.chain_intact, "chain should detect tampering");
+    assert!(!report.broken_links.is_empty());
+    assert!(report.first_tampered_seq.is_some());
+}
+
+#[test]
+fn test_hash_chain_empty_log() {
+    let dir = create_audit_dir();
+    let report = block_on(audit::verify_audit_trail(dir.path())).unwrap();
+    assert_eq!(report.total_entries, 0);
+    assert!(report.chain_intact);
+    assert!(report.broken_links.is_empty());
+}
+
+#[test]
+fn test_hash_chain_backward_compat() {
+    let dir = create_audit_dir();
+    let audit_path = dir.path().join(".shuji").join("audit.jsonl");
+
+    // Write old-style entry (no hash/prev_hash/seq fields)
+    let old_entry = r#"{"ts":"2024-01-01T00:00:00","event":"legacy","role":"内阁","doc_id":"old","detail":"old style"}"#;
+    std::fs::write(&audit_path, format!("{}\n", old_entry)).unwrap();
+
+    // New-style entry should chain from zero hash
+    block_on(audit::append(
+        dir.path(),
+        "new_event",
+        "工部",
+        "new",
+        "new style",
+    ));
+
+    let report = block_on(audit::verify_audit_trail(dir.path())).unwrap();
+    assert_eq!(report.total_entries, 2);
+    assert_eq!(report.pre_chain_entries, 1, "first entry is pre-upgrade");
+    assert!(
+        report.chain_intact,
+        "new entry should chain correctly from epoch"
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 13. sync_ref_index
 // ═══════════════════════════════════════════════════════════════
 
 #[test]

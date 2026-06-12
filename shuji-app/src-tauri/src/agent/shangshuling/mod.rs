@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
@@ -51,20 +50,6 @@ impl ShangshulingAgent {
         // 调度工具：向六部分派任务并等待完成
         tools.push(crate::tool::registry::assign_task_tool());
         tools
-    }
-
-    async fn execute_tool(
-        name: &str,
-        args: &serde_json::Value,
-        working_dir: &Path,
-        ctx: &crate::tool::ToolContext,
-    ) -> String {
-        // 先匹配尚书省特殊工具（assign_task）
-        if let Some(result) = crate::tool::tool_handle_shangshuling_special(name, args, ctx).await {
-            return result;
-        }
-        // 否则走通用工具分发
-        crate::tool::execute_named_tool(name, working_dir, args, "shangshuling").await
     }
 }
 
@@ -138,6 +123,20 @@ impl Agent for ShangshulingAgent {
         ));
 
         let config = input.runtime_config.clone();
+        let esaa_enabled = config.esaa.enabled;
+        let esaa_full_log = config.esaa.full_intent_log;
+        let checkers: std::sync::Arc<Vec<Box<dyn crate::api::intent::IntentChecker>>> =
+            if esaa_enabled {
+                std::sync::Arc::new(vec![
+                    Box::new(crate::api::intent::BoundaryChecker),
+                    Box::new(crate::api::intent::ImmutabilityChecker),
+                    Box::new(crate::api::intent::ApprovalChecker),
+                    Box::new(crate::api::intent::RateLimiter::default()),
+                ])
+            } else {
+                std::sync::Arc::new(vec![])
+            };
+        let dept = role_name.clone();
         let wd = working_dir.clone();
         let peers = self.peers.clone();
         let wf_graph = self.workflow_graph.clone();
@@ -146,6 +145,8 @@ impl Agent for ShangshulingAgent {
             let name = name.to_owned();
             let args = args.clone();
             let wd = wd.clone();
+            let checkers = checkers.clone();
+            let dept = dept.clone();
             let peers = peers.clone();
             let wf_graph = wf_graph.clone();
             let fast_txs = fast_txs.clone();
@@ -159,7 +160,20 @@ impl Agent for ShangshulingAgent {
                     peers: Some(peers),
                     workflow_graph: wf_graph,
                 };
-                Self::execute_tool(&name, &args, &wd, &ctx).await
+                if let Some(result) =
+                    crate::tool::tool_handle_shangshuling_special(&name, &args, &ctx).await
+                {
+                    return result;
+                }
+                crate::api::intent::check_and_execute(
+                    &name,
+                    &args,
+                    &wd,
+                    &dept,
+                    &checkers,
+                    esaa_full_log,
+                )
+                .await
             })
         };
         let (result, _route) = controller

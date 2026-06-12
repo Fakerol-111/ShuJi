@@ -1,3 +1,5 @@
+pub mod esaa_contract;
+
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::time::Duration;
@@ -12,6 +14,8 @@ pub struct RuntimeConfig {
     pub watchdog: WatchdogConfig,
     #[serde(default)]
     pub checkpoint: CheckpointConfig,
+    #[serde(default)]
+    pub esaa: EsaaConfig,
 }
 
 /// API 相关配置
@@ -138,6 +142,33 @@ pub struct CompactThresholds {
     pub token_threshold: usize,
     pub keep_recent_count: usize,
     pub mid_run_compact: bool,
+}
+
+/// ESAA 意图拦截层配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EsaaConfig {
+    /// 是否启用 intent 校验链
+    #[serde(default = "default_esaa_enabled")]
+    pub enabled: bool,
+    /// 是否将每个已执行的 intent 记录到审计日志
+    #[serde(default = "default_esaa_full_intent_log")]
+    pub full_intent_log: bool,
+}
+
+fn default_esaa_enabled() -> bool {
+    true
+}
+fn default_esaa_full_intent_log() -> bool {
+    false
+}
+
+impl Default for EsaaConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_esaa_enabled(),
+            full_intent_log: default_esaa_full_intent_log(),
+        }
+    }
 }
 
 /// Checkpoint 保存配置

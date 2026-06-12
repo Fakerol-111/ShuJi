@@ -62,10 +62,6 @@ impl NeigeAgent {
         tools
     }
 
-    async fn execute_tool(name: &str, args: &serde_json::Value, working_dir: &Path) -> String {
-        crate::tool::execute_named_tool(name, working_dir, args, "neige").await
-    }
-
     /// Read .shuji/state.json and inject project state + previous summary
     /// into the session as context for the summary skill.
     #[allow(dead_code)]
@@ -432,6 +428,19 @@ impl Agent for NeigeAgent {
         let cancel_map = self.cancel_map.clone();
         let fast_txs: Option<crate::FastTxMap> = self.fast_txs.clone();
         let config = input.runtime_config.clone();
+        let esaa_enabled = config.esaa.enabled;
+        let esaa_full_log = config.esaa.full_intent_log;
+        let checkers: std::sync::Arc<Vec<Box<dyn crate::api::intent::IntentChecker>>> =
+            if esaa_enabled {
+                std::sync::Arc::new(vec![
+                    Box::new(crate::api::intent::BoundaryChecker),
+                    Box::new(crate::api::intent::ImmutabilityChecker),
+                    Box::new(crate::api::intent::ApprovalChecker),
+                    Box::new(crate::api::intent::RateLimiter::default()),
+                ])
+            } else {
+                std::sync::Arc::new(vec![])
+            };
         let wd = working_dir.clone();
 
         // Shared skill state (保留用于 must-approve 循环，不再用于 skill 切换门控).
@@ -450,14 +459,22 @@ impl Agent for NeigeAgent {
                 peers: None,
                 workflow_graph: None,
             };
+            let checkers = checkers.clone();
             Box::pin(async move {
-                // GateEngine 已移除 —— PipelineEngine 负责所有调度
                 if let Some(result) =
                     crate::tool::tool_handle_neige_special(&name, &args, &ctx).await
                 {
                     result
                 } else {
-                    Self::execute_tool(&name, &args, &ctx.working_dir).await
+                    crate::api::intent::check_and_execute(
+                        &name,
+                        &args,
+                        &ctx.working_dir,
+                        "neige",
+                        &checkers,
+                        esaa_full_log,
+                    )
+                    .await
                 }
             })
         };

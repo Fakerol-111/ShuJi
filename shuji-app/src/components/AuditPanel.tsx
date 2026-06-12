@@ -4,6 +4,8 @@ import {
   getDocumentLineage,
   generateDeliveryReport,
   traceDocument,
+  verifyAuditTrail,
+  type VerificationReport,
 } from '../api';
 import type { TimelineData, LineageNode, TraceResult } from '../types';
 import { formatError } from '../utils/error';
@@ -60,6 +62,8 @@ export default function AuditPanel({
   const [traceDocId, setTraceDocId] = useState('');
   const [traceResult, setTraceResult] = useState<TraceResult | null>(null);
   const [traceLoading, setTraceLoading] = useState(false);
+  const [verification, setVerification] = useState<VerificationReport | null>(null);
+  const [verifying, setVerifying] = useState(false);
 
   // Re-fetch when project changes — projectDir acts as a refresh key
   useEffect(() => {
@@ -105,6 +109,17 @@ export default function AuditPanel({
         setTraceResult(null);
       })
       .finally(() => setTraceLoading(false));
+  }
+
+  function handleVerifyTrail() {
+    setVerifying(true);
+    setVerification(null);
+    verifyAuditTrail()
+      .then(setVerification)
+      .catch((e) => {
+        console.error('验证审计完整性失败', e);
+      })
+      .finally(() => setVerifying(false));
   }
 
   function handleLoadReport() {
@@ -344,6 +359,41 @@ export default function AuditPanel({
       {/* ── Dashboard Tab ── */}
       {tab === 'dashboard' && (
         <div className="p-3 space-y-3 flex-1 overflow-y-auto min-h-0">
+          {/* ── Audit Integrity Check ── */}
+          <div className="rounded border border-fold p-2 space-y-1">
+            <div className="text-caption font-semibold text-ink-700">审计完整性验证</div>
+            {!verification && !verifying && (
+              <button
+                onClick={handleVerifyTrail}
+                className="px-2 py-1 rounded bg-ink-700 text-white text-caption hover:bg-ink-600 text-[10px]"
+              >
+                验证审计链完整性
+              </button>
+            )}
+            {verifying && <div className="text-caption text-ink-400">验证中...</div>}
+            {verification && (
+              <div className="space-y-1">
+                <div
+                  className={`text-caption ${verification.chain_intact ? 'text-jade' : 'text-vermillion'}`}
+                >
+                  {verification.chain_intact ? '✓ 链完整' : '✗ 发现篡改'}
+                </div>
+                <div className="text-[10px] text-ink-500">
+                  共 {verification.total_entries} 条
+                  {verification.pre_chain_entries > 0 &&
+                    `（升级前 ${verification.pre_chain_entries} 条无哈希链）`}
+                </div>
+                {verification.broken_links.length > 0 && (
+                  <div className="text-[10px] text-vermillion">
+                    断裂位置: 第 {verification.broken_links.map((b) => b.seq).join(', ')} 条
+                  </div>
+                )}
+                <div className="text-[9px] text-ink-300 font-mono break-all">
+                  last_hash: {verification.last_entry_hash.slice(0, 16)}...
+                </div>
+              </div>
+            )}
+          </div>
           {loading ? (
             <div className="text-caption text-ink-400">载入中...</div>
           ) : !data ? (
