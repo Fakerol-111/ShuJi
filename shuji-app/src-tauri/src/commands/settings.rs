@@ -1,9 +1,17 @@
 use std::collections::HashMap;
+use std::sync::Mutex;
 
 use crate::commands::friendly_error::friendly_error;
 use crate::config::RoleContextConfig;
 
 use serde::{Deserialize, Serialize};
+
+/// In-memory cache for AppConfig read from `api_config.json`.
+/// Populated on first `get_config()` call, updated on `save_config()` / `set_model_preset()`.
+/// Ensures that simply opening the settings page (which reads config) does not cause
+/// disk I/O that might interfere with a running workflow, and that config changes
+/// only take effect for the NEXT actor system initialization (not the current run).
+static APP_CONFIG_CACHE: Mutex<Option<AppConfig>> = Mutex::new(None);
 
 // ── Path helpers ───────────────────────────────────────────
 
@@ -184,14 +192,22 @@ pub fn to_dotenv_lines(config: &AppConfig) -> Vec<String> {
 // ── Tauri commands ────────────────────────────────────────
 
 /// Read config from `api_config.json`, falling back to `.env` with auto-migration.
+/// Results are cached in `APP_CONFIG_CACHE` so that repeated calls (e.g. settings page
+/// mount, every `send_message`) do not repeatedly hit the filesystem.
 #[tauri::command]
 pub async fn get_config() -> Result<AppConfig, String> {
+    // Return cached value if available
+    if let Some(cached) = APP_CONFIG_CACHE.lock().unwrap().as_ref() {
+        return Ok(cached.clone());
+    }
+
     let json_path = api_config_path();
 
     // 1. Try JSON first
     if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
         if let Ok(config) = serde_json::from_str::<AppConfig>(&content) {
             log_console!("[debug] loaded api_config from {}", json_path.display());
+            *APP_CONFIG_CACHE.lock().unwrap() = Some(config.clone());
             return Ok(config);
         }
         log_console!("[warn] corrupted api_config.json, falling back to .env");
@@ -211,11 +227,14 @@ pub async fn get_config() -> Result<AppConfig, String> {
         log_console!("[debug] migrated .env → {}", json_path.display());
     }
 
+    *APP_CONFIG_CACHE.lock().unwrap() = Some(config.clone());
     Ok(config)
 }
 
 /// Save config to `api_config.json` (does NOT touch `.env`).
 /// Preserves `preset` field from existing config if not set in incoming config.
+/// Updates in-memory cache so subsequent `get_config()` calls return the new config
+/// for the NEXT actor system initialization (existing running actors are unaffected).
 #[tauri::command]
 pub async fn save_config(config: AppConfig) -> Result<(), String> {
     let path = api_config_path();
@@ -233,6 +252,7 @@ pub async fn save_config(config: AppConfig) -> Result<(), String> {
         .await
         .map_err(friendly_error)?;
     log_console!("[debug] saved api_config to {}", path.display());
+    *APP_CONFIG_CACHE.lock().unwrap() = Some(final_config);
     Ok(())
 }
 
@@ -361,6 +381,7 @@ pub async fn set_model_preset(preset: String) -> Result<(), String> {
         .await
         .map_err(friendly_error)?;
     log_console!("[settings] model preset applied: {}", preset);
+    *APP_CONFIG_CACHE.lock().unwrap() = Some(config);
     Ok(())
 }
 

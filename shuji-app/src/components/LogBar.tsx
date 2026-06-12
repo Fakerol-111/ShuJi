@@ -31,7 +31,7 @@ export default function LogBar({ expanded, onExpandedChange }: LogBarProps) {
     >
       <button
         onClick={() => onExpandedChange(!expanded)}
-        className="h-6 px-3 flex items-center gap-2 text-[10px] font-mono text-left hover:bg-ink-200/70 shrink-0"
+        className="h-6 px-3 flex items-center gap-2 text-[10px] font-mono text-left hover:bg-ink-200/70 shrink-0 overflow-hidden whitespace-nowrap"
       >
         <span className="text-ink-500">{expanded ? '▾' : '▸'} 日志</span>
         {latest ? (

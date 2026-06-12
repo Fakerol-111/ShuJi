@@ -484,6 +484,14 @@ pub async fn run_actor(mut ctx: ActorContext) {
                             continue 'exec;
                         }
                         crate::agent::r#trait::LoopDecision::Done => {
+                            // Send final plan update to frontend
+                            let plan_json = ctx.agent.plan_display();
+                            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&plan_json)
+                            {
+                                if !value.is_null() {
+                                    let _ = ctx.plan_tx.try_send(value);
+                                }
+                            }
                             // Send reply back to pipeline engine if waiting
                             if should_reply {
                                 if let Some(reply) = &msg.reply_to {

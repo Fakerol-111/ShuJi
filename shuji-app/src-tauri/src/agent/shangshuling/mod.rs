@@ -126,16 +126,7 @@ impl Agent for ShangshulingAgent {
         let esaa_enabled = config.esaa.enabled;
         let esaa_full_log = config.esaa.full_intent_log;
         let checkers: std::sync::Arc<Vec<Box<dyn crate::api::intent::IntentChecker>>> =
-            if esaa_enabled {
-                std::sync::Arc::new(vec![
-                    Box::new(crate::api::intent::BoundaryChecker),
-                    Box::new(crate::api::intent::ImmutabilityChecker),
-                    Box::new(crate::api::intent::ApprovalChecker),
-                    Box::new(crate::api::intent::RateLimiter::default()),
-                ])
-            } else {
-                std::sync::Arc::new(vec![])
-            };
+            crate::api::intent::build_default_checkers(esaa_enabled, &working_dir);
         let dept = role_name.clone();
         let wd = working_dir.clone();
         let peers = self.peers.clone();

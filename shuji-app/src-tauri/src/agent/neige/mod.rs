@@ -431,16 +431,7 @@ impl Agent for NeigeAgent {
         let esaa_enabled = config.esaa.enabled;
         let esaa_full_log = config.esaa.full_intent_log;
         let checkers: std::sync::Arc<Vec<Box<dyn crate::api::intent::IntentChecker>>> =
-            if esaa_enabled {
-                std::sync::Arc::new(vec![
-                    Box::new(crate::api::intent::BoundaryChecker),
-                    Box::new(crate::api::intent::ImmutabilityChecker),
-                    Box::new(crate::api::intent::ApprovalChecker),
-                    Box::new(crate::api::intent::RateLimiter::default()),
-                ])
-            } else {
-                std::sync::Arc::new(vec![])
-            };
+            crate::api::intent::build_default_checkers(esaa_enabled, &working_dir);
         let wd = working_dir.clone();
 
         // Shared skill state (保留用于 must-approve 循环，不再用于 skill 切换门控).

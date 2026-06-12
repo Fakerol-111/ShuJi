@@ -215,16 +215,7 @@ impl Agent for GongbuShangshuAgent {
         let esaa_enabled = config.esaa.enabled;
         let esaa_full_log = config.esaa.full_intent_log;
         let checkers: std::sync::Arc<Vec<Box<dyn crate::api::intent::IntentChecker>>> =
-            if esaa_enabled {
-                std::sync::Arc::new(vec![
-                    Box::new(crate::api::intent::BoundaryChecker),
-                    Box::new(crate::api::intent::ImmutabilityChecker),
-                    Box::new(crate::api::intent::ApprovalChecker),
-                    Box::new(crate::api::intent::RateLimiter::default()),
-                ])
-            } else {
-                std::sync::Arc::new(vec![])
-            };
+            crate::api::intent::build_default_checkers(esaa_enabled, &working_dir);
         let dept = role_name.clone();
         let plan_ref = self.plan.clone();
         let wd = working_dir.clone();
@@ -274,6 +265,7 @@ impl Agent for GongbuShangshuAgent {
                                 }
                                 let all_done = plan.advance();
                                 if all_done {
+                                    force_stop_clone.store(true, Ordering::SeqCst);
                                     log_console!("[工部] complete_task: all batches done");
                                     r#"{"ok":true,"message":"所有批次已完成。请创建报告并路由回尚书令。"}"#.to_string()
                                 } else {

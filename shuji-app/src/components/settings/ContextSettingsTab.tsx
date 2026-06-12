@@ -1,4 +1,14 @@
 import { ALL_ROLES, ROLE_CONTEXT_DEFAULTS } from '../../constants';
+import {
+  SettingsSection,
+  SettingsNumberField,
+  SettingsMuted,
+  SettingsAccordion,
+  SettingsCheckbox,
+  SettingsToggle,
+  SettingsAction,
+  SettingsHint,
+} from './SettingsPrimitives';
 
 interface ContextRoleForm {
   token_threshold: number;
@@ -51,112 +61,67 @@ export default function ContextSettingsTab({
   };
 
   return (
-    <div className="space-y-0.5">
-      <span className="text-[11px] font-semibold text-ink-300">上下文窗口配置</span>
-      <div className="text-[10px] text-ink-500 px-1 pb-1">
-        全局回退: {DEFAULT_CONTEXT_VALUES.token_threshold.toLocaleString()} tokens · cl100k ·
-        DeepSeek 1M 接近上限再压缩
-      </div>
-      {roleList.map((r) => {
-        const isExpanded = expandedRole === r.key;
-        const usingDefault = contextUseDefault[r.key] ?? true;
-        return (
-          <div key={r.key} className="border border-ink-800 rounded">
-            <button
-              onClick={() => setExpandedRole(isExpanded ? null : r.key)}
-              className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-ink-300 hover:bg-ink-800 transition-colors"
-            >
-              <span className="text-ink-500 shrink-0">{isExpanded ? '▾' : '▸'}</span>
-              <label
-                className="flex items-center gap-1.5 shrink-0"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <input
-                  type="checkbox"
+    <SettingsSection
+      title="上下文窗口配置"
+      description={`全局回退：${DEFAULT_CONTEXT_VALUES.token_threshold.toLocaleString()} tokens · cl100k · DeepSeek 1M 接近上限再压缩`}
+    >
+      <div className="space-y-2">
+        {roleList.map((r) => {
+          const isExpanded = expandedRole === r.key;
+          const usingDefault = contextUseDefault[r.key] ?? true;
+          const effective = effectiveContext(r.key);
+          return (
+            <SettingsAccordion
+              key={r.key}
+              expanded={isExpanded}
+              onToggle={() => setExpandedRole(isExpanded ? null : r.key)}
+              title={r.label}
+              meta={`${effective.token_threshold.toLocaleString()} tokens`}
+              leading={
+                <SettingsCheckbox
                   checked={usingDefault}
                   onChange={() => toggleContextDefault(r.key)}
-                  className="accent-ink-500"
+                  label="使用默认"
+                  onClick={(e) => e.stopPropagation()}
                 />
-                <span className="text-[10px] text-ink-500 whitespace-nowrap">使用默认</span>
-              </label>
-              <span className="flex-1 text-left">{r.label}</span>
-              <span className="text-[10px] text-ink-500 italic">
-                {effectiveContext(r.key).token_threshold.toLocaleString()} tokens
-              </span>
-            </button>
-            {isExpanded && (
-              <div className="px-2 pb-2 space-y-1">
-                {usingDefault ? (
-                  <div className="text-[10px] text-ink-500 italic px-1 py-2">
-                    使用部门内置推荐值（
-                    {effectiveContext(r.key).token_threshold.toLocaleString()} tokens，保留{' '}
-                    {effectiveContext(r.key).keep_recent_count} 条）
-                    <br />
-                    取消勾选"使用默认"可单独覆盖
-                  </div>
-                ) : (
-                  <>
-                    <ContextInput
-                      label="压缩阈值（tokens）"
-                      value={
-                        contextOverrides[r.key]?.token_threshold ??
-                        effectiveContext(r.key).token_threshold
-                      }
-                      onChange={(v) => setContextOverride(r.key, 'token_threshold', v)}
-                    />
-                    <ContextInput
-                      label="保留最近消息数"
-                      value={
-                        contextOverrides[r.key]?.keep_recent_count ??
-                        effectiveContext(r.key).keep_recent_count
-                      }
-                      onChange={(v) => setContextOverride(r.key, 'keep_recent_count', v)}
-                    />
-                    <label className="flex items-center gap-2 py-1">
-                      <span className="text-[10px] text-ink-500">mid-run compact</span>
-                      <button
-                        onClick={() =>
-                          setContextOverride(
-                            r.key,
-                            'mid_run_compact',
-                            !(
-                              contextOverrides[r.key]?.mid_run_compact ??
-                              effectiveContext(r.key).mid_run_compact
-                            )
-                          )
-                        }
-                        className={`relative w-8 h-4 rounded-full transition-colors ${
-                          (contextOverrides[r.key]?.mid_run_compact ??
-                          effectiveContext(r.key).mid_run_compact)
-                            ? 'bg-ink-500'
-                            : 'bg-ink-700'
-                        }`}
-                      >
-                        <span
-                          className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
-                            (contextOverrides[r.key]?.mid_run_compact ??
-                            effectiveContext(r.key).mid_run_compact)
-                              ? 'translate-x-4'
-                              : ''
-                          }`}
-                        />
-                      </button>
-                      <span className="text-[10px] text-ink-400">
-                        {(contextOverrides[r.key]?.mid_run_compact ??
-                        effectiveContext(r.key).mid_run_compact)
-                          ? '开启'
-                          : '关闭'}
-                      </span>
-                    </label>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })}
-      {/* ── 恢复默认按钮 ── */}
-      <button
+              }
+            >
+              {usingDefault ? (
+                <SettingsMuted>
+                  使用部门内置推荐值（{effective.token_threshold.toLocaleString()} tokens，保留{' '}
+                  {effective.keep_recent_count} 条）
+                  <br />
+                  取消勾选「使用默认」可单独覆盖
+                </SettingsMuted>
+              ) : (
+                <>
+                  <SettingsNumberField
+                    label="压缩阈值（tokens）"
+                    value={contextOverrides[r.key]?.token_threshold ?? effective.token_threshold}
+                    onChange={(v) => setContextOverride(r.key, 'token_threshold', v)}
+                  />
+                  <SettingsNumberField
+                    label="保留最近消息数"
+                    value={
+                      contextOverrides[r.key]?.keep_recent_count ?? effective.keep_recent_count
+                    }
+                    onChange={(v) => setContextOverride(r.key, 'keep_recent_count', v)}
+                  />
+                  <SettingsToggle
+                    label="运行中压缩（mid-run compact）"
+                    checked={
+                      contextOverrides[r.key]?.mid_run_compact ?? effective.mid_run_compact
+                    }
+                    onChange={(v) => setContextOverride(r.key, 'mid_run_compact', v)}
+                  />
+                </>
+              )}
+            </SettingsAccordion>
+          );
+        })}
+      </div>
+
+      <SettingsAction
         onClick={async () => {
           try {
             const { resetContextConfig } = await import('../../api');
@@ -167,33 +132,10 @@ export default function ContextSettingsTab({
             setSavedMsg(String(e));
           }
         }}
-        className="text-[10px] px-2 py-1 mt-1 text-ink-400 hover:text-ink-200 border border-ink-700 hover:border-ink-500 rounded transition-colors"
       >
         恢复默认
-      </button>
-    </div>
-  );
-}
-
-function ContextInput({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <label className="block">
-      <span className="text-[10px] text-ink-500">{label}</span>
-      <input
-        type="number"
-        min={0}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full mt-0.5 px-2 py-1 text-xs bg-ink-800 border border-ink-700 rounded text-ink-200 focus:outline-none focus:border-ink-500"
-      />
-    </label>
+      </SettingsAction>
+      <SettingsHint>修改后请点击页面底部的「保存所有更改」。</SettingsHint>
+    </SettingsSection>
   );
 }

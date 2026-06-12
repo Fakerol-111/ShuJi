@@ -236,3 +236,21 @@ pub async fn check_and_execute(
 
     result
 }
+
+/// Factory function to create the standard checker chain.
+/// Used by all 9 agents to avoid duplicating the construction code.
+pub fn build_default_checkers(
+    esaa_enabled: bool,
+    working_dir: &Path,
+) -> Arc<Vec<Box<dyn IntentChecker>>> {
+    if !esaa_enabled {
+        return Arc::new(vec![]);
+    }
+    let shuji_dir = working_dir.join(".shuji");
+    Arc::new(vec![
+        Box::new(crate::config::esaa_contract::ContractBoundaryChecker::new(&shuji_dir)),
+        Box::new(ImmutabilityChecker),
+        Box::new(ApprovalChecker),
+        Box::new(RateLimiter::default()),
+    ])
+}

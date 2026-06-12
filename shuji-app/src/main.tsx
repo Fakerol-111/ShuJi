@@ -5,6 +5,7 @@ import WorkspaceSelect from './pages/WorkspaceSelect';
 import ProjectDashboard from './pages/ProjectDashboard';
 import LogsPage from './pages/LogsPage';
 import SetupPage from './pages/SetupPage';
+import SettingsPage from './pages/SettingsPage';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { getCodeTheme, getFontSize } from './constants';
 import './styles/globals.css';
@@ -24,6 +25,7 @@ ReactDOM.createRoot(rootEl).render(
           <Route path="/project" element={<ProjectDashboard />} />
           <Route path="/setup" element={<SetupPage />} />
           <Route path="/logs" element={<LogsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </ErrorBoundary>
     </BrowserRouter>

@@ -61,6 +61,7 @@ export default function ProjectDashboard() {
     cancelDiscuss,
     resetDiscuss,
     chatEndRef,
+    setMessages,
   } = useChat(session?.msgs || []);
 
   const {
@@ -89,15 +90,14 @@ export default function ProjectDashboard() {
     handleSend,
     loadProjectIntoState,
     resetDiscuss,
-    setTab
+    setTab,
+    setMessages
   );
   const picker = useProjectPicker(loadProjectIntoState, setRecentDirs);
 
   const [activity, setActivity] = useState<ActivitySelection>('files');
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [chatWidth, setChatWidth] = useState(400);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
   useEffect(() => {
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ msgs: messages, discuss: discussMsgs }));
@@ -171,7 +171,7 @@ export default function ProjectDashboard() {
             打开项目
           </Button>
           <HelpDrawer />
-          <SettingsMenu open={settingsOpen} setOpen={setSettingsOpen} />
+          <SettingsMenu />
         </>
       }
       mainContent={

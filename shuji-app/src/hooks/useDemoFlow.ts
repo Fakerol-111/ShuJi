@@ -3,7 +3,7 @@
  * Manages demo project creation, auto-send, tour, and completion summary.
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { createDemoProject, getRoundMetrics } from '../api';
+import { createDemoProject, getRoundMetrics, runMockWorkflow } from '../api';
 import { formatError } from '../utils/error';
 
 export interface DemoSummary {
@@ -20,7 +20,8 @@ export function useDemoFlow(
   handleSend: (text: string) => void,
   loadProjectIntoState: (path: string) => Promise<void>,
   resetDiscuss: () => void,
-  setTab?: (tab: 'decision' | 'discuss') => void
+  setTab?: (tab: 'decision' | 'discuss') => void,
+  setMessages?: (msgs: any[] | ((prev: any[]) => any[])) => void,
 ) {
   const [showDemoTour, setShowDemoTour] = useState(false);
   const [demoCreating, setDemoCreating] = useState(false);
@@ -39,6 +40,36 @@ export function useDemoFlow(
     sessionStorage.removeItem('shuji_mock_scenario');
     if (scenario) {
       setMockScenario(scenario);
+      setDemoStartTime(Date.now());
+      // Offline mock mode: load pre-recorded scenario instead of calling real API
+      const userMsg = '修复 calc.py 中的 power 和 factorial 函数中的 bug，确保所有测试通过';
+      if (project.working_dir && setMessages) {
+        runMockWorkflow(project.working_dir, scenario)
+          .then((msgs) => {
+            const ts = new Date().toISOString();
+            const userMessage = {
+              id: crypto.randomUUID(),
+              role: '皇帝',
+              content: userMsg,
+              options: [],
+              documents: [],
+              timestamp: ts,
+            };
+            const normalizedMsgs = msgs.map((m) => ({
+              ...m,
+              documents: (m as any).documents || [],
+            }));
+            setMessages([userMessage, ...normalizedMsgs]);
+          })
+          .catch((err) => {
+            console.error('离线演示加载失败:', err);
+            // fallback: send as real message
+            handleSend(userMsg);
+          });
+      } else {
+        handleSend(userMsg);
+      }
+      return;
     }
     setDemoStartTime(Date.now());
     handleSend('修复 calc.py 中的 power 和 factorial 函数中的 bug，确保所有测试通过');

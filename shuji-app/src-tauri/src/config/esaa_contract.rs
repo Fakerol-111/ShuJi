@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Mutex;
 use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
@@ -158,8 +159,8 @@ fn regex_like_match(pattern: &str, text: &str) -> bool {
 /// Checker that reads from AGENT_CONTRACT.yaml.
 /// Supports hot-reload — checks file mtime every 30 seconds.
 pub struct ContractBoundaryChecker {
-    contracts: AgentContracts,
-    last_load: Instant,
+    contracts: Mutex<AgentContracts>,
+    last_load: Mutex<Instant>,
     shuji_dir: std::path::PathBuf,
     reload_interval: std::time::Duration,
 }
@@ -167,23 +168,26 @@ pub struct ContractBoundaryChecker {
 impl ContractBoundaryChecker {
     pub fn new(shuji_dir: &Path) -> Self {
         Self {
-            contracts: AgentContracts::load(shuji_dir),
-            last_load: Instant::now(),
+            contracts: Mutex::new(AgentContracts::load(shuji_dir)),
+            last_load: Mutex::new(Instant::now()),
             shuji_dir: shuji_dir.to_path_buf(),
             reload_interval: std::time::Duration::from_secs(30),
         }
     }
 
-    fn maybe_reload(&mut self) {
-        if self.last_load.elapsed() >= self.reload_interval {
-            self.contracts = AgentContracts::load(&self.shuji_dir);
-            self.last_load = Instant::now();
+    fn maybe_reload(&self) {
+        let mut last = self.last_load.lock().unwrap();
+        if last.elapsed() >= self.reload_interval {
+            let mut contracts = self.contracts.lock().unwrap();
+            *contracts = AgentContracts::load(&self.shuji_dir);
+            *last = Instant::now();
         }
     }
 
-    pub fn check_tool(&mut self, role: &str, tool: &str) -> Result<(), String> {
+    pub fn check_tool(&self, role: &str, tool: &str) -> Result<(), String> {
         self.maybe_reload();
-        let contract = match self.contracts.for_role(role) {
+        let contracts = self.contracts.lock().unwrap();
+        let contract = match contracts.for_role(role) {
             Some(c) => c,
             None => return Ok(()),
         };
@@ -193,9 +197,10 @@ impl ContractBoundaryChecker {
         Ok(())
     }
 
-    pub fn check_route(&mut self, role: &str, target: &str) -> Result<(), String> {
+    pub fn check_route(&self, role: &str, target: &str) -> Result<(), String> {
         self.maybe_reload();
-        let contract = match self.contracts.for_role(role) {
+        let contracts = self.contracts.lock().unwrap();
+        let contract = match contracts.for_role(role) {
             Some(c) => c,
             None => return Ok(()),
         };
@@ -205,9 +210,10 @@ impl ContractBoundaryChecker {
         Ok(())
     }
 
-    pub fn check_path(&mut self, role: &str, path: &str) -> Result<(), String> {
+    pub fn check_path(&self, role: &str, path: &str) -> Result<(), String> {
         self.maybe_reload();
-        let contract = match self.contracts.for_role(role) {
+        let contracts = self.contracts.lock().unwrap();
+        let contract = match contracts.for_role(role) {
             Some(c) => c,
             None => return Ok(()),
         };
@@ -217,9 +223,10 @@ impl ContractBoundaryChecker {
         Ok(())
     }
 
-    pub fn check_file_size(&mut self, role: &str, content: &str) -> Result<(), String> {
+    pub fn check_file_size(&self, role: &str, content: &str) -> Result<(), String> {
         self.maybe_reload();
-        let contract = match self.contracts.for_role(role) {
+        let contracts = self.contracts.lock().unwrap();
+        let contract = match contracts.for_role(role) {
             Some(c) => c,
             None => return Ok(()),
         };
@@ -233,6 +240,41 @@ impl ContractBoundaryChecker {
             }
         }
         Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl crate::api::intent::IntentChecker for ContractBoundaryChecker {
+    async fn check(&self, intent: &crate::api::intent::Intent, _working_dir: &std::path::Path) -> crate::api::intent::IntentVerdict {
+        use crate::api::intent::IntentVerdict;
+
+        if let Err(msg) = self.check_tool(&intent.agent, &intent.tool) {
+            return IntentVerdict::Reject { reason: msg, rule_id: "CONTRACT_TOOL".into() };
+        }
+
+        if intent.tool == "route_to" {
+            if let Some(to) = intent.params.get("to").and_then(|v| v.as_str()) {
+                if let Err(msg) = self.check_route(&intent.agent, to) {
+                    return IntentVerdict::Reject { reason: msg, rule_id: "CONTRACT_ROUTE".into() };
+                }
+            }
+        }
+
+        if let Some(path) = intent.params.get("path").and_then(|v| v.as_str()) {
+            if let Err(msg) = self.check_path(&intent.agent, path) {
+                return IntentVerdict::Reject { reason: msg, rule_id: "CONTRACT_PATH".into() };
+            }
+        }
+
+        if intent.tool == "create_file" {
+            if let Some(content) = intent.params.get("content").and_then(|v| v.as_str()) {
+                if let Err(msg) = self.check_file_size(&intent.agent, content) {
+                    return IntentVerdict::Reject { reason: msg, rule_id: "CONTRACT_FILESIZE".into() };
+                }
+            }
+        }
+
+        IntentVerdict::Allow
     }
 }
 
