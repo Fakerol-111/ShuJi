@@ -1,4 +1,5 @@
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use crate::actor::FastMessage;
 use crate::models::role::Role;
@@ -253,6 +254,15 @@ async fn compact_soul_file(ctx: &ToolContext) -> Result<String, String> {
     ))
 }
 
+/// Extract 内阁's cancel flag from the ToolContext's cancel_map.
+fn neige_cancel_flag(ctx: &ToolContext) -> Option<Arc<AtomicBool>> {
+    ctx.cancel_map.as_ref().and_then(|m| {
+        m.lock()
+            .ok()
+            .and_then(|guard| guard.get(&Role::Neige).cloned())
+    })
+}
+
 async fn tool_expand_requirements(args: &serde_json::Value, ctx: &ToolContext) -> String {
     let task_id = args["task_id"].as_str().unwrap_or("");
     if task_id.is_empty() {
@@ -266,7 +276,9 @@ async fn tool_expand_requirements(args: &serde_json::Value, ctx: &ToolContext) -
         Some(m) => m,
         None => return serde_json::json!({"ok": false, "message": "模型不可用"}).to_string(),
     };
-    match crate::agent::expand_requirements::run(task_id, &ctx.working_dir, client, model).await {
+    // Use 内阁's cancel flag so sub-agent stops when "叫停诸司" fires
+    let cancel = neige_cancel_flag(ctx).unwrap_or_else(|| Arc::new(AtomicBool::new(false)));
+    match crate::agent::expand_requirements::run(task_id, &ctx.working_dir, client, model, &cancel).await {
         Ok(doc_id) => {
             log_console!("[tool] expand_requirements → {}", doc_id);
             serde_json::json!({"ok": true, "document_id": doc_id}).to_string()
@@ -291,7 +303,8 @@ async fn tool_survey_codebase(args: &serde_json::Value, ctx: &ToolContext) -> St
         Some(m) => m,
         None => return serde_json::json!({"ok": false, "message": "模型不可用"}).to_string(),
     };
-    match crate::agent::survey_codebase::run(task_description, &ctx.working_dir, client, model)
+    let cancel = neige_cancel_flag(ctx).unwrap_or_else(|| Arc::new(AtomicBool::new(false)));
+    match crate::agent::survey_codebase::run(task_description, &ctx.working_dir, client, model, &cancel)
         .await
     {
         Ok(doc_id) => {

@@ -5,6 +5,7 @@
 //! to understand existing code before making changes.
 
 use std::path::Path;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use crate::api::client::AnthropicClient;
@@ -13,12 +14,14 @@ use crate::models::message::Message;
 const PROMPT: &str = include_str!("survey_codebase_prompt.md");
 
 /// Run the codebase survey sub-agent.
+/// `cancel` is the caller's cancel flag — when set, the sub-agent stops promptly.
 /// Returns the analysis document ID on success, or an error description.
 pub async fn run(
     task_description: &str,
     working_dir: &Path,
     client: &Arc<AnthropicClient>,
     model: &str,
+    cancel: &AtomicBool,
 ) -> Result<String, String> {
     let tools = {
         let mut t = crate::tool::registry::code_inspect_tools();
@@ -58,10 +61,9 @@ pub async fn run(
     };
 
     let mut controller = crate::api::control::AgentController::new();
-    let cancel = std::sync::atomic::AtomicBool::new(false);
 
     let run_result = controller
-        .run(&mut session, &exec, &cancel, &tools, None, &config, None)
+        .run(&mut session, &exec, cancel, &tools, None, &config, None)
         .await
         .map_err(|e| format!("勘察失败: {}", e))?;
     let result = run_result.into_text();

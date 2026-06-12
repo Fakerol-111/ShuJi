@@ -5,6 +5,22 @@ use tokio::io::AsyncReadExt;
 use crate::tool::path::{PATH_ESCAPE, SYSTEM_BLOCKS};
 use crate::tool::ToolOutput;
 
+/// 获取当前平台的 shell 命令。
+/// Windows → powershell；其他 → bash（fallback 到 sh）
+fn get_shell() -> (&'static str, Vec<&'static str>) {
+    if cfg!(windows) {
+        ("powershell", vec!["-Command"])
+    } else if std::process::Command::new("bash")
+        .arg("--version")
+        .output()
+        .is_ok()
+    {
+        ("bash", vec!["-l", "-c"])
+    } else {
+        ("sh", vec!["-c"])
+    }
+}
+
 // ── execute_command ───────────────────────────────────────────
 
 /// Execute a shell command with timeout and safety checks.
@@ -25,11 +41,7 @@ pub async fn tool_execute_command(
     }
 
     let timeout = std::time::Duration::from_secs(120);
-    let (shell, shell_args) = if cfg!(windows) {
-        ("powershell", vec!["-Command"])
-    } else {
-        ("bash", vec!["-l", "-c"])
-    };
+    let (shell, shell_args) = get_shell();
     match execute_with_timeout(shell, &shell_args, cmd, working_dir, timeout).await {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
@@ -202,11 +214,7 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
     log_console!("[run_tests] executing: {}", cmd);
     let timeout = std::time::Duration::from_secs(300);
 
-    let (shell, shell_args) = if cfg!(windows) {
-        ("powershell", vec!["-Command"])
-    } else {
-        ("bash", vec!["-l", "-c"])
-    };
+    let (shell, shell_args) = get_shell();
 
     let output = match execute_with_timeout(shell, &shell_args, &cmd, working_dir, timeout).await {
         Ok(o) => o,

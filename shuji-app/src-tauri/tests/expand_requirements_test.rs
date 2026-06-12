@@ -5,6 +5,7 @@
 //! 运行单个: cargo test --test expand_requirements_test expand_requirements_1 -- --nocapture
 
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 fn load_env() {
@@ -87,11 +88,13 @@ async fn expand_requirements_1_vague() {
     );
 
     println!("\n=== 测试1: 极模糊需求（待办事项） ===");
+    let cancel = AtomicBool::new(false);
     let result = shuji_app_lib::agent::expand_requirements::run(
         "task_test1",
         &project_dir(),
         &client,
         &model,
+        &cancel,
     )
     .await;
 
@@ -123,11 +126,13 @@ async fn expand_requirements_2_clear() {
     );
 
     println!("\n=== 测试2: 较明确需求（博客评论） ===");
+    let cancel = AtomicBool::new(false);
     let result = shuji_app_lib::agent::expand_requirements::run(
         "task_test2",
         &project_dir(),
         &client,
         &model,
+        &cancel,
     )
     .await;
 
@@ -150,11 +155,13 @@ async fn expand_requirements_3_broad() {
     setup_task("task_test3", 300, "皇帝需求：做一个电商系统。");
 
     println!("\n=== 测试3: 极宽需求（电商系统） ===");
+    let cancel = AtomicBool::new(false);
     let result = shuji_app_lib::agent::expand_requirements::run(
         "task_test3",
         &project_dir(),
         &client,
         &model,
+        &cancel,
     )
     .await;
 
@@ -181,11 +188,13 @@ async fn expand_requirements_4_non_functional() {
     );
 
     println!("\n=== 测试4: 非功能需求（性能优化） ===");
+    let cancel = AtomicBool::new(false);
     let result = shuji_app_lib::agent::expand_requirements::run(
         "task_test4",
         &project_dir(),
         &client,
         &model,
+        &cancel,
     )
     .await;
 
@@ -212,11 +221,13 @@ async fn expand_requirements_5_narrow() {
     );
 
     println!("\n=== 测试5: 极窄需求（按钮 loading） ===");
+    let cancel = AtomicBool::new(false);
     let result = shuji_app_lib::agent::expand_requirements::run(
         "task_test5",
         &project_dir(),
         &client,
         &model,
+        &cancel,
     )
     .await;
 
@@ -243,11 +254,13 @@ async fn expand_requirements_6_dev_internal() {
     );
 
     println!("\n=== 测试6: 开发者需求（连接池重构） ===");
+    let cancel = AtomicBool::new(false);
     let result = shuji_app_lib::agent::expand_requirements::run(
         "task_test6",
         &project_dir(),
         &client,
         &model,
+        &cancel,
     )
     .await;
 

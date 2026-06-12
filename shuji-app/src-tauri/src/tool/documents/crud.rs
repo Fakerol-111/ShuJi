@@ -1,178 +1,12 @@
-use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::path::Path;
 
 use crate::tool::{resolve_scoped_path, ToolOutput};
 
-/// ── Counter ─────────────────────────────────────────────────────────
-static COUNTER_LOCK: Mutex<()> = Mutex::new(());
-
-/// Get the next ID from the project-local counter at `.shuji/_counter`.
-async fn next_id(working_dir: &Path) -> Result<u64, String> {
-    let counter_path = working_dir.join(".shuji/_counter");
-
-    // Use spawn_blocking so the std::sync::MutexGuard is never held across .await.
-    tokio::task::spawn_blocking(move || {
-        let _lock = COUNTER_LOCK
-            .lock()
-            .map_err(|e| format!("计数器锁失败: {}", e))?;
-        let current: u64 = std::fs::read_to_string(&counter_path)
-            .ok()
-            .and_then(|s| s.trim().parse().ok())
-            .unwrap_or(1);
-        std::fs::write(&counter_path, (current + 1).to_string())
-            .map_err(|e| format!("计数器写入失败: {}", e))?;
-        Ok(current)
-    })
-    .await
-    .map_err(|_| "后台任务异常: next_id".to_string())?
-}
-
-/// ── YAML frontmatter helpers ───────────────────────────────────────
-pub(crate) struct DocMeta {
-    pub(crate) id: String,
-    pub(crate) doc_type: String,
-    pub(crate) author: String,
-    pub(crate) timestamp: String,
-    pub(crate) refs: String,
-    pub(crate) status: String,
-    pub(crate) notes: String,
-}
-
-/// Parse the YAML frontmatter and body from a document string.
-/// Returns (DocMeta, body_text) or an error.
-pub(crate) fn parse_doc(content: &str) -> Result<(DocMeta, &str), String> {
-    let body = content
-        .strip_prefix("---\n")
-        .ok_or_else(|| "缺少 YAML frontmatter 起始标记".to_string())?;
-    let end = body
-        .find("\n---")
-        .ok_or_else(|| "缺少 YAML frontmatter 结束标记".to_string())?;
-    let header = &body[..end];
-    let body_text = body[end + 4..].trim_start();
-
-    let mut id = String::new();
-    let mut doc_type = String::new();
-    let mut author = String::new();
-    let mut timestamp = String::new();
-    let mut refs = String::from("[-1]");
-    let mut status = String::new();
-    let mut notes = String::new();
-
-    for line in header.lines() {
-        if let Some((key, val)) = line.split_once(": ") {
-            let val = val.trim();
-            match key {
-                "id" => id = val.to_string(),
-                "type" => doc_type = val.to_string(),
-                "author" => author = val.to_string(),
-                "timestamp" => timestamp = val.to_string(),
-                "refs" => refs = val.to_string(),
-                "status" => status = val.to_string(),
-                "notes" => notes = val.to_string(),
-                _ => {}
-            }
-        }
-    }
-
-    if id.is_empty() {
-        return Err("文档缺少 id 字段".to_string());
-    }
-
-    Ok((
-        DocMeta {
-            id,
-            doc_type,
-            author,
-            timestamp,
-            refs,
-            status,
-            notes,
-        },
-        body_text,
-    ))
-}
-
-/// Build a full document string from metadata and body.
-fn build_doc(meta: &DocMeta, body: &str) -> String {
-    let mut frontmatter = format!(
-        "---\nid: {}\ntype: {}\nauthor: {}\ntimestamp: {}\nrefs: {}",
-        meta.id, meta.doc_type, meta.author, meta.timestamp, meta.refs,
-    );
-    if !meta.status.is_empty() {
-        frontmatter += &format!("\nstatus: {}", meta.status);
-    }
-    if !meta.notes.is_empty() {
-        frontmatter += &format!("\nnotes: {}", meta.notes);
-    }
-    format!("{}\n---\n{}", frontmatter, body)
-}
-
-/// Timestamp string for the current moment.
-fn now_iso() -> String {
-    chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string()
-}
-
-/// Map English dept string to Chinese author name.
-pub(crate) fn dept_to_author(dept: &str) -> &'static str {
-    match dept {
-        "zhongshuling" => "中书令",
-        "menxiashizhong" => "门下侍中",
-        "neige" => "内阁",
-        "shangshuling" => "尚书令",
-        "libushangshu" => "吏部",
-        "bingbushangshu" => "兵部",
-        "gongbushangshu" => "工部",
-        "xingbushangshu" => "刑部",
-        "liburshangshu" => "礼部",
-        "hubu" => "户部",
-        _ => "未知",
-    }
-}
-
-/// Map document type prefix to subdirectory under `.shuji/`.
-/// Returns empty string for root-level files (e.g. precepts).
-/// For reports, returns the reports base dir — dept subfolder is appended separately.
-pub(crate) fn type_to_dir(doc_type: &str) -> &'static str {
-    match doc_type {
-        "dsgn" | "plan" | "pdsg" => "designs",
-        "ddtl" => "designs/detail",
-        "revw" => "reviews",
-        "task" => "tasks",
-        "ctrt" => "contracts",
-        "rprt" => "reports",
-        "anls" => "analysis",
-        "reqs" => "requirements",
-        "precepts" => "",
-        _ => "misc",
-    }
-}
-
-/// Build the full relative path for a rprt document, scoped to the author department.
-fn rprt_rel_path(dept: &str, doc_id: &str) -> String {
-    format!(".shuji/reports/{}/{}.md", dept, doc_id)
-}
-
-/// Search for a report document across all dept subdirectories.
-async fn find_rprt_path(working_dir: &Path, id: &str) -> Option<PathBuf> {
-    let reports_dir = working_dir.join(".shuji/reports");
-    let id = id.to_string();
-    tokio::task::spawn_blocking(move || {
-        let entries = std::fs::read_dir(&reports_dir).ok()?;
-        for entry in entries.filter_map(|e| e.ok()) {
-            let path = entry.path();
-            if path.is_dir() {
-                let candidate = path.join(format!("{}.md", id));
-                if candidate.exists() {
-                    return Some(candidate);
-                }
-            }
-        }
-        None
-    })
-    .await
-    .ok()
-    .flatten()
-}
+use super::parse::{
+    build_doc, dept_to_author, find_rprt_path, next_id, now_iso, parse_doc, resolve_doc_path,
+    rprt_rel_path, type_to_dir, DocMeta,
+};
+use super::approval::add_pending_approval;
 
 /// ── create_document ────────────────────────────────────────────────
 pub async fn tool_create_document(
@@ -250,7 +84,6 @@ pub async fn tool_create_document(
     };
     let content = build_doc(&meta, "");
 
-    // Resolve the path and write
     let full = match resolve_scoped_path(working_dir, &rel_path).await {
         Ok(p) => p,
         Err(e) => return ToolOutput::error("create_document", &doc_id, "path_error", &e),
@@ -260,11 +93,9 @@ pub async fn tool_create_document(
     }
     match tokio::fs::write(&full, &content).await {
         Ok(_) => {
-            // Track pending approvals for plan/revw docs
             if status == "in_review" {
                 let _ = add_pending_approval(working_dir, &doc_id).await;
             }
-            // Audit log
             let detail = format!("type={}, refs={}", doc_type, meta.refs);
             crate::audit::append(working_dir, "create_document", dept, &doc_id, &detail).await;
             ToolOutput::success(
@@ -291,7 +122,6 @@ pub async fn tool_modify_document(
         return ToolOutput::error("modify_document", "", "empty_id", "文档 ID 不能为空");
     }
 
-    // Runtime length checks (P1-3): both old_text and new_text ≤ 300 chars
     if let Some(old_text) = args["old_text"].as_str() {
         if old_text.len() > 300 {
             return ToolOutput::error(
@@ -363,7 +193,6 @@ pub async fn tool_modify_document(
         Err(e) => return ToolOutput::error("modify_document", id, "parse_error", &e),
     };
 
-    // Apply text replacement
     let new_body = if let Some(old_text) = args["old_text"].as_str() {
         let new_text = args["new_text"].as_str().unwrap_or("");
         if old_text.is_empty() {
@@ -411,7 +240,6 @@ pub async fn tool_append_document(
         return ToolOutput::error("append_document", "", "empty_id", "文档 ID 不能为空");
     }
 
-    // P2-4: Support both single `content` and batch `contents` array
     let append_parts: Vec<String> = if let Some(parts) = args["contents"].as_array() {
         if parts.is_empty() {
             return ToolOutput::error(
@@ -429,7 +257,6 @@ pub async fn tool_append_document(
                 "contents 最多 5 项，请分批调用",
             );
         }
-        // Validate each part
         for (i, part) in parts.iter().enumerate() {
             let text = part.as_str().unwrap_or("");
             if text.is_empty() {
@@ -458,7 +285,6 @@ pub async fn tool_append_document(
             .filter_map(|p| p.as_str().map(|s| s.to_string()))
             .collect()
     } else {
-        // Single content mode
         let single = args["content"].as_str().unwrap_or("").to_string();
         if single.is_empty() {
             return ToolOutput::error(
@@ -526,7 +352,6 @@ pub async fn tool_append_document(
         Err(e) => return ToolOutput::error("append_document", id, "parse_error", &e),
     };
 
-    // P2-4: Join all parts into one body (batch mode)
     let new_body = if body.is_empty() {
         append_parts.join("\n")
     } else {
@@ -647,259 +472,7 @@ pub fn append_document_tool_def() -> crate::api::client::ToolDefinition {
     }
 }
 
-/// ── Pending approvals ───────────────────────────────────────────
-/// Add a document ID to the pending approvals list.
-pub async fn add_pending_approval(working_dir: &Path, doc_id: &str) -> Result<(), String> {
-    let path = working_dir.join(".shuji/pending_approvals.json");
-    let shuji_dir = path.parent().ok_or("路径错误")?;
-    let _ = tokio::fs::create_dir_all(shuji_dir).await;
-    let mut list: Vec<String> = tokio::fs::read_to_string(&path)
-        .await
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default();
-    if !list.contains(&doc_id.to_string()) {
-        list.push(doc_id.to_string());
-    }
-    tokio::fs::write(&path, serde_json::to_string(&list).unwrap())
-        .await
-        .map_err(|e| e.to_string())
-}
-
-/// Remove a document ID from the pending approvals list.
-pub async fn remove_pending_approval(working_dir: &Path, doc_id: &str) -> Result<(), String> {
-    let path = working_dir.join(".shuji/pending_approvals.json");
-    let mut list: Vec<String> = tokio::fs::read_to_string(&path)
-        .await
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default();
-    list.retain(|id| id != doc_id);
-    tokio::fs::write(&path, serde_json::to_string(&list).unwrap())
-        .await
-        .map_err(|e| e.to_string())
-}
-
-/// Get the first pending approval doc ID, if any.
-pub async fn get_first_pending_approval(working_dir: &Path) -> Option<String> {
-    let path = working_dir.join(".shuji/pending_approvals.json");
-    let content = tokio::fs::read_to_string(&path).await.ok()?;
-    let list: Vec<String> = serde_json::from_str(&content).ok()?;
-    list.into_iter().next()
-}
-
-/// ── set_document_status ──────────────────────────────────────────
-/// Must-approve document types that require emperor approval.
-const MUST_APPROVE_TYPES: &[&str] = &["plan", "revw"];
-
-/// Resolve the full path for a document by its ID.
-async fn resolve_doc_path(working_dir: &Path, id: &str) -> Result<PathBuf, String> {
-    let type_prefix = id.split('_').next().unwrap_or("");
-    if type_prefix == "rprt" {
-        find_rprt_path(working_dir, id)
-            .await
-            .ok_or_else(|| format!("文档 {} 不存在", id))
-    } else if MUST_APPROVE_TYPES.contains(&type_prefix) {
-        let dir = type_to_dir(type_prefix);
-        let rel_path = format!(".shuji/{}/{}.md", dir, id);
-        resolve_scoped_path(working_dir, &rel_path)
-            .await
-            .map_err(|e| format!("路径错误: {}", e))
-    } else {
-        let dir = type_to_dir(type_prefix);
-        let rel_path = if dir.is_empty() {
-            format!(".shuji/{}.md", id)
-        } else {
-            format!(".shuji/{}/{}.md", dir, id)
-        };
-        resolve_scoped_path(working_dir, &rel_path)
-            .await
-            .map_err(|e| format!("路径错误: {}", e))
-    }
-}
-
-pub async fn tool_set_document_status(working_dir: &Path, args: &serde_json::Value) -> String {
-    let id = args["id"].as_str().unwrap_or("");
-    let new_status = args["status"].as_str().unwrap_or("");
-    if id.is_empty() || new_status.is_empty() {
-        return ToolOutput::error(
-            "set_document_status",
-            "",
-            "empty_params",
-            "id 和 status 不能为空",
-        );
-    }
-    if !matches!(new_status, "approved" | "rejected") {
-        return ToolOutput::error(
-            "set_document_status",
-            id,
-            "invalid_status",
-            "status 必须是 approved 或 rejected",
-        );
-    }
-
-    let full = match resolve_doc_path(working_dir, id).await {
-        Ok(p) => p,
-        Err(e) => return ToolOutput::error("set_document_status", id, "not_found", &e),
-    };
-    if !full.exists() {
-        return ToolOutput::error(
-            "set_document_status",
-            id,
-            "not_found",
-            &format!("文档 {} 不存在", id),
-        );
-    }
-
-    let content = match tokio::fs::read_to_string(&full).await {
-        Ok(c) => c,
-        Err(e) => {
-            return ToolOutput::error("set_document_status", id, "read_error", &e.to_string())
-        }
-    };
-
-    let (mut meta, body) = match parse_doc(&content) {
-        Ok(m) => m,
-        Err(e) => return ToolOutput::error("set_document_status", id, "parse_error", &e),
-    };
-
-    // Only allow status change on must-approve types
-    if !MUST_APPROVE_TYPES.contains(&meta.doc_type.as_str()) {
-        return ToolOutput::error(
-            "set_document_status",
-            id,
-            "wrong_type",
-            "只有 plan 和 revw 类型文档可以设置审批状态",
-        );
-    }
-
-    meta.status = new_status.to_string();
-    meta.notes = args["emperor_note"].as_str().unwrap_or("").to_string();
-    meta.timestamp = now_iso();
-
-    let new_content = build_doc(&meta, body);
-    match tokio::fs::write(&full, &new_content).await {
-        Ok(_) => {
-            let _ = remove_pending_approval(working_dir, id).await;
-            let detail = format!("status={}", new_status);
-            crate::audit::append(working_dir, "set_document_status", "皇帝", id, &detail).await;
-            ToolOutput::success(
-                "set_document_status",
-                id,
-                &format!("文档 {} 状态已设为 {}", id, new_status),
-            )
-        }
-        Err(e) => ToolOutput::error("set_document_status", id, "write_error", &e.to_string()),
-    }
-}
-
-pub fn set_document_status_tool_def() -> crate::api::client::ToolDefinition {
-    crate::api::client::ToolDefinition {
-        tool_type: "function".into(),
-        function: crate::api::client::ToolFunction {
-            name: "set_document_status".into(),
-            description: "设置文档审批状态（approved/rejected）。仅适用于 plan、revw 类型文档。调用后文档状态变更，下游部门可继续执行。".into(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "description": "文档 ID，如 plan_5 或 revw_3"
-                    },
-                    "status": {
-                        "type": "string",
-                        "enum": ["approved", "rejected"],
-                        "description": "批准(approved)或驳回(rejected)"
-                    },
-                    "emperor_note": {
-                        "type": "string",
-                        "description": "皇帝御批备注（可选）"
-                    }
-                },
-                "required": ["id", "status"]
-            }),
-        },
-    }
-}
-
-/// ── Approval gate helpers ────────────────────────────────────────
-/// Parse refs string like "[3, 4]" or "[-1]" into a Vec<u64>.
-pub(crate) fn parse_refs(refs: &str) -> Vec<u64> {
-    let inner = refs.trim().trim_start_matches('[').trim_end_matches(']');
-    if inner.is_empty() || inner == "-1" {
-        return vec![];
-    }
-    inner
-        .split(',')
-        .filter_map(|s| s.trim().parse().ok())
-        .collect()
-}
-
-/// Check whether any must-approve document referenced by the given doc
-/// is still `in_review`. Returns Err if any referenced plan/revw is pending.
-pub async fn check_doc_refs_approved_for_route(
-    working_dir: &Path,
-    subject_doc_id: &str,
-) -> Result<(), String> {
-    let full = match resolve_doc_path(working_dir, subject_doc_id).await {
-        Ok(p) => p,
-        Err(_) => return Ok(()), // doc doesn't exist, gate passes
-    };
-    if !full.exists() {
-        return Ok(());
-    }
-
-    let content = match tokio::fs::read_to_string(&full).await {
-        Ok(c) => c,
-        Err(_) => return Ok(()),
-    };
-
-    let (meta, _body) = match parse_doc(&content) {
-        Ok(m) => m,
-        Err(_) => return Ok(()),
-    };
-
-    let ref_nums = parse_refs(&meta.refs);
-    if ref_nums.is_empty() {
-        return Ok(());
-    }
-
-    for num in ref_nums {
-        for prefix in MUST_APPROVE_TYPES {
-            let ref_id = format!("{}_{}", prefix, num);
-            let ref_path = match resolve_doc_path(working_dir, &ref_id).await {
-                Ok(p) => p,
-                Err(_) => continue,
-            };
-            if !ref_path.exists() {
-                continue;
-            }
-            if let Ok(ref_content) = tokio::fs::read_to_string(&ref_path).await {
-                if let Ok((ref_meta, _)) = parse_doc(&ref_content) {
-                    if ref_meta.status == "in_review" {
-                        return Err(format!(
-                            "文档 {} 引用了 {}，该文档尚在待皇帝御批中（status: in_review）。请先处理审批。",
-                            subject_doc_id, ref_id
-                        ));
-                    }
-                    if ref_meta.status == "rejected" {
-                        return Err(format!(
-                            "文档 {} 引用了 {}，该文档已被驳回（status: rejected）。请先处理驳回意见。",
-                            subject_doc_id, ref_id
-                        ));
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
 /// ── read_document ─────────────────────────────────────────────────
-/// Read a document by ID, returning parsed frontmatter and body.
-/// Combines find_document + read_file + YAML parsing into one call.
-/// Optionally extracts a specific section (## heading) from the body.
 pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) -> String {
     let id = args["id"].as_str().unwrap_or("");
     if id.is_empty() {
@@ -919,14 +492,12 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
         );
     }
 
-    // P2-2: Read cache — return cached result if content unchanged
     if let Some(cached) = crate::tool::cache_lookup(working_dir, &full) {
         return cached;
     }
 
     let content = match tokio::fs::read_to_string(&full).await {
         Ok(c) => {
-            // Cache raw content with mtime for future reads
             if let Ok(meta) = tokio::fs::metadata(&full).await {
                 if let Ok(mtime) = meta.modified() {
                     crate::tool::cache_insert(working_dir, full.clone(), mtime, c.clone());
@@ -942,7 +513,6 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
         Err(e) => return ToolOutput::error("read_document", id, "parse_error", &e),
     };
 
-    // Optional section extraction
     let target_section = args["section"].as_str().filter(|s| !s.is_empty());
     let extracted = if let Some(section_name) = target_section {
         match extract_section(body, section_name) {
@@ -955,11 +525,8 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
         body.to_string()
     };
 
-    // Default max_chars=4000 to prevent context blowup (P1-2).
-    // Pass max_chars=0 explicitly to disable truncation for small docs.
     let max_chars = args["max_chars"].as_u64().unwrap_or(4000) as usize;
     let display_body = if max_chars > 0 && extracted.len() > max_chars {
-        // Floor to the nearest valid UTF-8 char boundary to avoid panic on multi-byte chars
         let cutoff = extracted.floor_char_boundary(max_chars);
         format!(
             "{}...\n\n[截断：显示前 {} 字符，共 {} 字符]",
@@ -1001,8 +568,6 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
 }
 
 /// Extract a section (## or ### heading) from markdown body text.
-/// Returns the section content (including the heading line) if found,
-/// or an error listing available sections if not found.
 fn extract_section(body: &str, section_name: &str) -> Result<String, String> {
     let heading = format!("## {}", section_name);
     let heading3 = format!("### {}", section_name);
@@ -1012,7 +577,6 @@ fn extract_section(body: &str, section_name: &str) -> Result<String, String> {
 
     for (i, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
-        // Match both ## and ### headings
         if trimmed == heading
             || trimmed.starts_with(&heading)
             || trimmed == heading3
@@ -1032,7 +596,6 @@ fn extract_section(body: &str, section_name: &str) -> Result<String, String> {
         let e = end.unwrap_or(lines.len());
         Ok(lines[s..e].join("\n"))
     } else {
-        // Collect available headings for the error message
         let available: Vec<&str> = lines
             .iter()
             .filter(|l| l.starts_with("## ") || l.starts_with("### "))
@@ -1139,3 +702,5 @@ pub fn find_document_tool_def() -> crate::api::client::ToolDefinition {
         },
     }
 }
+
+
