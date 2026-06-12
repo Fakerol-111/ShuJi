@@ -1,0 +1,175 @@
+# 贡献指南
+
+感谢你对枢机的关注。本文档面向希望本地开发、运行测试或提交 PR 的贡献者。
+
+## 开发环境
+
+```bash
+cd shuji-app
+npm install
+npm run tauri dev      # 完整桌面应用（热重载）
+npm run dev            # 仅前端（浏览器）
+npm run tauri build    # 生产构建
+```
+
+环境要求：Node.js >= 18，Rust >= 1.70。
+
+更完整的架构说明见 [CLAUDE.md](CLAUDE.md)。
+
+## 配置文件
+
+ShuJi 使用多层配置，理解优先级很重要：
+
+```
+优先级高                         优先级低
+  │                                  │
+  ▼                                  ▼
+config.local.toml    api_config.json    .env     config.toml
+  ──────────────      ──────────────    ─────     ──────────
+  本地覆盖              API 密钥/端点    向后兼容     运行时配置
+  不提交到仓库          不提交到仓库      后备          提交到仓库
+```
+
+### `config.toml`（仓库中）
+
+运行时行为：API 超时、重试、max_tokens、tool iteration 次数、压缩阈值、watchdog 参数等。版本控制跟踪，团队共享默认值。
+
+### `config.local.toml`（本地，不提交）
+
+覆盖 `config.toml` 任意字段，只写需要改的部分。例如：
+
+```toml
+[api]
+timeout_secs = 300
+```
+
+### `.env`（本地，不提交）
+
+API 密钥，模板见 `shuji-app/.env.template` 或 `shuji-app/src-tauri/.env.template`。
+
+**向后兼容**：`api_config.json` 不存在时读取 `.env`；首次通过 UI 保存配置后自动迁移到 `api_config.json`。
+
+### `api_config.json`（本地，不提交，UI 管理）
+
+每角色可独立设置 key / url / model，优先于 `.env`。
+
+### `context_config.json`（本地，不提交）
+
+每角色压缩阈值覆盖，通过前端「上下文设置」管理。
+
+**加载优先级**：`config.local.toml > config.toml`（运行时）；`api_config.json > .env`（API）；`context_config.json 角色级 > config.toml 角色级 > config.toml 全局`（压缩阈值）。
+
+## 测试
+
+Rust 后端提供 **291+ 测试**（96 单元 + 195+ 集成），覆盖 token 计数、路由规则、文档系统、Actor 消息、Session、配置、E2E 工作流（Mock LLM）、审计、Checkpoint 等。所有测试使用临时目录隔离，建议 `--test-threads=1` 规避并发状态竞争。
+
+### 快速验证（PR 前推荐）
+
+```bash
+# 后端
+cargo test --manifest-path shuji-app/src-tauri/Cargo.toml --lib
+cargo test --manifest-path shuji-app/src-tauri/Cargo.toml --tests -- --skip expand_requirements --test-threads=1
+
+# 前端
+npm --prefix shuji-app run lint
+npm --prefix shuji-app test
+npm --prefix shuji-app run format:check
+
+# Rust lint
+cargo clippy --manifest-path shuji-app/src-tauri/Cargo.toml --all-targets
+```
+
+### 测试分类
+
+| 类别 | 命令 | 需要 API Key？ |
+|------|------|---------------|
+| 单元测试 | `cargo test --lib` | ❌ |
+| 文件 CRUD | `cargo test --test tool_test` | ❌ |
+| 路径安全 | `cargo test --test path_security_test` | ❌ |
+| 文档系统 | `cargo test --test document_test` | ❌ |
+| Actor 消息 | `cargo test --test actor_test` | ❌ |
+| Session | `cargo test --test session_test` | ❌ |
+| Session 控制 | `cargo test --test session_control_test` | ❌ |
+| 配置覆盖 | `cargo test --test config_test` | ❌ |
+| Workflow Profile | `cargo test --test workflow_profile_test` | ❌ |
+| E2E 工作流 | `cargo test --test workflow_demo_test` | ❌（Mock LLM） |
+| 审计 | `cargo test --test audit_test` | ❌ |
+| Checkpoint | `cargo test --test checkpoint_test` | ❌ |
+| expand_requirements | `cargo test --test expand_requirements_test` | ✅（默认跳过） |
+
+### 运行单个测试
+
+```bash
+cargo test --manifest-path shuji-app/src-tauri/Cargo.toml --test audit_test test_append_read_roundtrip -- --nocapture
+npm --prefix shuji-app test -- src/hooks/useChat.test.ts
+```
+
+## 代码风格
+
+- **Rust**：`cargo fmt`（4 空格），提交前清理 `clippy` 警告，优先 `Result<_, String>` / `anyhow::Result<_>`，避免 `unwrap()`
+- **TypeScript / React**：Prettier（`npm run format`），`ChatMessage.role` 为 `RoleName` 联合类型，新通用组件放 `components/ui/`，新 hook 以 `use` 开头放 `hooks/`
+- **事件命名**：Tauri 事件使用 kebab-case：`chat-message`、`dept-log`、`plan-update`、`project-update`
+
+## 提交前检查
+
+```bash
+cd shuji-app/src-tauri
+cargo fmt --check
+cargo clippy --all-targets
+cargo test --lib
+cargo test --tests -- --skip expand_requirements --test-threads=1
+
+cd ../..
+npm run format:check
+npm run lint
+npm test
+```
+
+## 架构要点
+
+### 消息流
+
+1. 用户输入 → `send_message` → `ActorSystem` 路由到内阁
+2. 内阁根据 `<skill>` 选择工作流，可用 `cancel_agent` 精确中断指定部门
+3. 各部门通过文档（YAML frontmatter + 自动 ID）通信；plan/revw 文档需朱批方可继续
+4. `emperor_tx` → 前端 `chat-message` 事件
+5. `dept_log_tx` → 前端 `dept-log` 事件
+6. `milestone_tx` → 持久化到 `.shuji/state.json`
+7. `plan-update` → 工部批次进度面板
+
+### 核心技术（摘要）
+
+- **Actor 模型** — tokio actor + mpsc，`FastMessage` 精确中断
+- **Skill 系统** — `<skill>` 标签按需加载，内阁可运行时创建技能
+- **3 层上下文** — base_prompt / soul_prompt / context_messages
+- **上下文压缩** — 超阈值 LLM 摘要，skill 消息剥离后重追加
+- **Session / AgentController 分离** — 纯 LLM 层 + 驱动循环（cancel / watchdog / checkpoint）
+- **批量计划循环** — 工部大任务分批执行，批间轻量恢复
+- **审计系统** — JSONL 日志、文档血缘、diff、双向引用索引
+
+完整技术栈与文件布局见 [CLAUDE.md](CLAUDE.md#architecture)。
+
+### Checkpoint 系统
+
+Checkpoint 在 `.shuji/.git/` 维护**独立于项目 `.git/`** 的隔离仓库：
+
+```
+项目根/
+├── .git/                  ← 项目 git（不受影响）
+├── .shuji/
+│   ├── .git/              ← ShuJi 隔离 git
+│   ├── checkpoints/
+│   │   ├── index.json     ← 索引（最多 500 条）
+│   │   └── {角色}/
+│   │       └── <hash>.json
+```
+
+工作树为项目根，checkout 仅影响 `.shuji/`。项目 `.gitignore` 中的 `.shuji/` 确保不被项目 git 跟踪。
+
+## 提交 PR
+
+1. Fork 仓库并创建功能分支
+2. 确保测试与 lint 通过（见上方「提交前检查」）
+3. 提交 PR 到 `main`，简要说明改动动机与测试情况
+
+有问题可先开 [Issue](https://github.com/Fakerol-111/ShuJi/issues)。

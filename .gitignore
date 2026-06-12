@@ -46,8 +46,10 @@ shuji-app/src-tauri/gen/
 # Agent-generated working documents
 .shuji/
 
-# Design docs (local only)
-docs/
+# Design docs (local only); docs/images/ is tracked for README screenshots
+docs/*
+!docs/images/
+!docs/images/**
 
 # Project meta files (local only)
 CLAUDE.md
