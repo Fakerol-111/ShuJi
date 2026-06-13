@@ -1,3 +1,4 @@
+import { getDeptMeta } from '../constants';
 import type { DeptLogEntry } from '../types';
 
 const DOC_PATH_RE = /\.shuji\/[\w./-]+\.md/;
@@ -28,4 +29,14 @@ function hasDocPath(entry: DeptLogEntry): boolean {
 
 export function stripActionPrefix(action: string): string {
   return action.replace(/^[❌→]\s*/, '').replace(/:.*/, '');
+}
+
+export function isDeptActive(deptLabel: string, activeDepts: string[]): boolean {
+  const meta = getDeptMeta(deptLabel);
+  if (!meta) return activeDepts.includes(deptLabel);
+  return (
+    activeDepts.includes(meta.label) ||
+    activeDepts.includes(meta.shortLabel) ||
+    activeDepts.includes(meta.key)
+  );
 }

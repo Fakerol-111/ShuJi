@@ -192,6 +192,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
                 runtime_config: ctx.runtime_config.clone(),
                 discuss_mode: false,
                 fast_cancel: fast_cancel.clone(),
+                dept_step_tx: ctx.dept_step_tx.clone(),
             };
 
             let step_result = {
@@ -306,6 +307,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
                                                 runtime_config: ctx.runtime_config.clone(),
                                                 discuss_mode: false,
                                                 fast_cancel: fast_cancel.clone(),
+                                                dept_step_tx: ctx.dept_step_tx.clone(),
                                             };
                                             if let Ok(summary_output) =
                                                 ctx.agent.execute(&summary_input).await

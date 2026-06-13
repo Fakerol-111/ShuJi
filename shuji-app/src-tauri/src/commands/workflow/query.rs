@@ -130,6 +130,46 @@ pub async fn get_recent_dirs() -> Result<Vec<String>, String> {
     Ok(load_recent_dirs())
 }
 
+/// Read tool-call log for a specific department from `.shuji/logs/tool-calls/{dept}.jsonl`.
+/// Returns up to `limit` most recent entries.
+#[tauri::command]
+pub async fn get_tool_logs(
+    state: State<'_, AppState>,
+    dept: String,
+    limit: Option<usize>,
+) -> Result<Vec<serde_json::Value>, String> {
+    let working_dir = {
+        let project_opt = state.current_project.lock().await;
+        project_opt
+            .as_ref()
+            .ok_or_else(|| friendly_error("没有加载项目"))?
+            .working_dir
+            .clone()
+    };
+    let log_path = std::path::Path::new(&working_dir)
+        .join(".shuji")
+        .join("logs")
+        .join("tool-calls")
+        .join(format!("{}.jsonl", dept));
+
+    let limit = limit.unwrap_or(100);
+    match tokio::fs::read_to_string(&log_path).await {
+        Ok(content) => {
+            let entries: Vec<serde_json::Value> = content
+                .lines()
+                .filter_map(|line| serde_json::from_str(line).ok())
+                .collect();
+            let start = if entries.len() > limit {
+                entries.len() - limit
+            } else {
+                0
+            };
+            Ok(entries[start..].to_vec())
+        }
+        Err(_) => Ok(vec![]),
+    }
+}
+
 // ── Chat and log history ───────────────────────────────────
 
 /// Get buffered chat message history (for re-sync after page navigation).

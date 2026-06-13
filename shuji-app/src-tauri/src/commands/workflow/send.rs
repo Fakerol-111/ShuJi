@@ -7,6 +7,7 @@ use tauri::{Emitter, Manager, State};
 use tokio::sync::mpsc;
 
 use crate::actor::{ActorMessage, DeptLogEntry, FastMessage};
+use crate::models::dept_step::DeptStepEntry;
 use crate::agent::neige::NeigeAgent;
 use crate::agent::r#trait::{Agent, AgentInput};
 use crate::api::client::AnthropicClient;
@@ -53,6 +54,8 @@ pub async fn send_message(
                 let (emperor_tx, mut emperor_rx) = tokio::sync::mpsc::channel::<ChatMessage>(200);
                 let (dept_log_tx, mut dept_log_rx) =
                     tokio::sync::mpsc::channel::<DeptLogEntry>(500);
+                let (dept_step_tx, mut dept_step_rx) =
+                    tokio::sync::mpsc::unbounded_channel::<DeptStepEntry>();
                 let (plan_tx, mut plan_rx) = tokio::sync::mpsc::channel::<serde_json::Value>(50);
                 let (milestone_tx, mut milestone_rx) = tokio::sync::mpsc::channel::<String>(50);
                 let app_handle = app.clone();
@@ -93,6 +96,13 @@ pub async fn send_message(
                     }
                 });
 
+                let app_step = app.clone();
+                tokio::spawn(async move {
+                    while let Some(entry) = dept_step_rx.recv().await {
+                        let _ = app_step.emit("dept-step", &entry);
+                    }
+                });
+
                 let app_plan = app.clone();
                 tokio::spawn(async move {
                     while let Some(plan_json) = plan_rx.recv().await {
@@ -122,6 +132,7 @@ pub async fn send_message(
                     state.cancel_flag.clone(),
                     emperor_tx,
                     dept_log_tx,
+                    Some(dept_step_tx),
                     plan_tx,
                     milestone_tx,
                 )
@@ -187,6 +198,8 @@ pub async fn send_message(
         if sys_lock.is_none() {
             let (emperor_tx, mut emperor_rx) = mpsc::channel::<ChatMessage>(200);
             let (dept_log_tx, mut dept_log_rx) = mpsc::channel::<DeptLogEntry>(500);
+            let (dept_step_tx, mut dept_step_rx) =
+                mpsc::unbounded_channel::<DeptStepEntry>();
             let (plan_tx, mut plan_rx) = mpsc::channel::<serde_json::Value>(50);
             let (milestone_tx, mut milestone_rx) = mpsc::channel::<String>(50);
             let app_handle = app.clone();
@@ -243,6 +256,14 @@ pub async fn send_message(
                 }
             });
 
+            // Forward department step events to frontend
+            let app_step = app.clone();
+            tokio::spawn(async move {
+                while let Some(entry) = dept_step_rx.recv().await {
+                    let _ = app_step.emit("dept-step", &entry);
+                }
+            });
+
             // Forward plan updates to frontend
             let app_plan = app.clone();
             tokio::spawn(async move {
@@ -286,6 +307,7 @@ pub async fn send_message(
                 state.cancel_flag.clone(),
                 emperor_tx,
                 dept_log_tx,
+                Some(dept_step_tx),
                 plan_tx,
                 milestone_tx,
             )
@@ -387,6 +409,7 @@ pub async fn discuss_with_cabinet(
         runtime_config: state.runtime_config.clone(),
         discuss_mode: true,
         fast_cancel: state.discuss_cancel.clone(),
+        dept_step_tx: None,
     };
 
     let output = neige.execute(&input).await.map_err(|e| {

@@ -101,6 +101,12 @@ impl Agent for XingbuShangshuAgent {
             input.task_description.clone(),
         ));
 
+        crate::api::control::setup_agent_step_emitter(
+            &mut controller,
+            &input.dept_step_tx,
+            self.role().name(),
+        );
+
         let config = input.runtime_config.clone();
         let esaa_enabled = config.esaa.enabled;
         let esaa_full_log = config.esaa.full_intent_log;

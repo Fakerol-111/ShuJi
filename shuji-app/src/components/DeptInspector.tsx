@@ -1,0 +1,294 @@
+import { useRef, useEffect, useState } from 'react';
+import { getDeptMeta } from '../constants';
+import DeptActivityCard from './DeptActivityCard';
+import RouteContextBar from './RouteContextBar';
+import { useDeptEvents } from '../hooks/useDeptEvents';
+import type { DeptLogEntry, DeptStepEntry, PlanInfo } from '../types';
+
+const ERROR_PREFIX = '❌';
+
+interface DeptInspectorProps {
+  dept: string | null;
+  mode: 'single' | 'all';
+  entries: DeptLogEntry[];
+  active: boolean;
+  onBack: () => void;
+  onDocClick?: (path: string) => void;
+  planInfo?: PlanInfo | null;
+}
+
+function DeptInspectorHeader({
+  dept,
+  active,
+  entries,
+  onBack,
+}: {
+  dept: string;
+  active: boolean;
+  entries: DeptLogEntry[];
+  onBack: () => void;
+}) {
+  const meta = getDeptMeta(dept);
+  const color = meta?.color || '#8B7355';
+  const latestEntry = entries.length > 0 ? entries[entries.length - 1] : null;
+  const hasError = latestEntry?.action?.startsWith(ERROR_PREFIX) ?? false;
+
+  return (
+    <div className="shrink-0 border-b border-fold bg-surface-elevated px-4 py-3">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onBack}
+          className="text-xs text-ink-500 hover:text-ink-700 transition-colors shrink-0"
+        >
+          ← 返回敕令
+        </button>
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className={`w-2.5 h-2.5 rounded-full shrink-0 ${active ? 'animate-pulse' : ''}`}
+            style={{ backgroundColor: color }}
+          />
+          <span className="text-sm font-semibold text-ink-800 truncate" style={{ color }}>
+            {meta?.label || dept}
+          </span>
+          <span
+            className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+              hasError
+                ? 'bg-vermillion-light text-vermillion'
+                : active
+                  ? 'text-jade bg-jade-light'
+                  : 'text-ink-400 bg-ink-100'
+            }`}
+          >
+            {hasError ? '出错' : active ? '执行中' : '空闲'}
+          </span>
+        </div>
+      </div>
+      {latestEntry && (
+        <div className="text-[11px] text-ink-600 mt-1 ml-1 truncate">{latestEntry.action}</div>
+      )}
+    </div>
+  );
+}
+
+function DeptInspectorEmpty() {
+  return (
+    <div className="flex-1 flex items-center justify-center">
+      <div className="text-center">
+        <div className="text-2xl text-ink-300 mb-2">🏮</div>
+        <div className="text-sm text-ink-400">该部门暂无动态</div>
+      </div>
+    </div>
+  );
+}
+
+function DeptInspectorFeed({
+  entries,
+  onDocClick,
+}: {
+  entries: DeptLogEntry[];
+  onDocClick?: (path: string) => void;
+}) {
+  const feedRef = useRef<HTMLDivElement>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
+
+  useEffect(() => {
+    if (autoScroll && feedRef.current) {
+      feedRef.current.scrollTop = feedRef.current.scrollHeight;
+    }
+  }, [entries, autoScroll]);
+
+  const handleScroll = () => {
+    if (!feedRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = feedRef.current;
+    const atBottom = scrollHeight - scrollTop - clientHeight < 40;
+    if (!atBottom && autoScroll) setAutoScroll(false);
+    if (atBottom && !autoScroll) setAutoScroll(true);
+  };
+
+  if (entries.length === 0) return <DeptInspectorEmpty />;
+
+  return (
+    <div ref={feedRef} onScroll={handleScroll} className="flex-1 overflow-y-auto">
+      {!autoScroll && (
+        <div className="sticky top-0 z-10 px-3 py-1 text-center">
+          <button
+            onClick={() => setAutoScroll(true)}
+            className="text-[10px] text-gold hover:text-gold-dark bg-surface-paper/80 rounded px-2 py-0.5"
+          >
+            滚动到底部
+          </button>
+        </div>
+      )}
+      <div className="divide-y divide-ink-100/50 px-2 py-1">
+        {entries.map((entry, i) => (
+          <DeptActivityCard
+            key={`${entry.ts}-${entry.action}-${i}`}
+            entry={entry}
+            onDocClick={onDocClick}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PlanInfoCard({ info }: { info: PlanInfo }) {
+  return (
+    <div className="shrink-0 mx-4 mt-3 bg-surface-parchment border border-fold rounded-lg px-3 py-2">
+      <div className="font-display text-caption text-ink-600 font-semibold mb-1">工部计划</div>
+      <div className="space-y-0.5">
+        {info.batches.map((b, i) => (
+          <div key={i} className="flex items-center gap-1.5 text-caption font-mono">
+            <span
+              className={`w-1.5 h-1.5 rounded-full shrink-0 ${b.status === 'done' ? 'bg-jade' : b.status === 'current' ? 'bg-gold animate-pulse' : 'bg-ink-300'}`}
+            />
+            <span
+              className={
+                b.status === 'done'
+                  ? 'text-ink-400 line-through'
+                  : b.status === 'current'
+                    ? 'text-ink-800 font-medium'
+                    : 'text-ink-500'
+              }
+            >
+              {b.name}
+            </span>
+            {b.status === 'current' && (
+              <span className="text-ink-400 text-caption ml-auto truncate">{b.goal}</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StepCard({ entry }: { entry: DeptStepEntry }) {
+  const kind = entry.kind;
+  switch (kind.type) {
+    case 'thinking': {
+      const [expanded, setExpanded] = useState(false);
+      const text = kind.content;
+      return (
+        <div className="border-l-2 border-jade/40 pl-2 py-1">
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="text-[10px] text-ink-500 hover:text-ink-700 font-mono flex items-center gap-1"
+          >
+            <span>{expanded ? '▾' : '▸'}</span>
+            <span className="text-jade font-semibold">思考过程</span>
+          </button>
+          {expanded && (
+            <div className="text-[11px] text-ink-600 mt-1 whitespace-pre-wrap font-mono leading-relaxed max-h-60 overflow-y-auto">
+              {text}
+            </div>
+          )}
+        </div>
+      );
+    }
+    case 'tool_call': {
+      const argsStr = kind.args
+        ? Object.entries(kind.args)
+            .slice(0, 2)
+            .map(([k, v]) => `${k}=${JSON.stringify(v).slice(0, 40)}`)
+            .join(', ')
+        : '';
+      return (
+        <div className="flex items-start gap-2 py-0.5 px-2 rounded hover:bg-ink-100/20">
+          <span className="text-xs text-ink-400 shrink-0 mt-0.5">🔧</span>
+          <div className="min-w-0 flex-1">
+            <code className="text-[11px] font-mono font-semibold text-ink-700">{kind.tool}</code>
+            {argsStr && (
+              <span className="text-[10px] text-ink-500 font-mono ml-1 truncate">{argsStr}</span>
+            )}
+          </div>
+        </div>
+      );
+    }
+    case 'tool_result': {
+      return (
+        <div className="flex items-start gap-2 py-0.5 px-2 rounded">
+          <span className="text-xs shrink-0 mt-0.5">{kind.ok ? '✅' : '❌'}</span>
+          <div className="min-w-0 flex-1">
+            <code
+              className={`text-[11px] font-mono font-semibold ${kind.ok ? 'text-jade' : 'text-vermillion'}`}
+            >
+              {kind.tool}
+            </code>
+            <span className="text-[10px] text-ink-500 font-mono ml-1">
+              {kind.summary.slice(0, 120)}
+            </span>
+          </div>
+        </div>
+      );
+    }
+    case 'text': {
+      return (
+        <div className="text-[11px] text-ink-600 px-2 py-1 whitespace-pre-wrap font-mono leading-relaxed">
+          {kind.content.slice(0, 300)}
+        </div>
+      );
+    }
+    default:
+      return null;
+  }
+}
+
+/** Resolve department steps by trying label, shortLabel, and key variants. */
+function resolveDeptSteps(deptSteps: Map<string, DeptStepEntry[]>, dept: string): DeptStepEntry[] {
+  const meta = getDeptMeta(dept);
+  if (!meta) return deptSteps.get(dept) || [];
+  return (
+    deptSteps.get(meta.label) || deptSteps.get(meta.shortLabel) || deptSteps.get(meta.key) || []
+  );
+}
+
+export default function DeptInspector({
+  dept,
+  mode,
+  entries,
+  active,
+  onBack,
+  onDocClick,
+  planInfo,
+}: DeptInspectorProps) {
+  const { deptSteps } = useDeptEvents();
+  const isAllMode = mode === 'all';
+  const showPlan =
+    !isAllMode &&
+    dept &&
+    getDeptMeta(dept)?.key === 'gongbushangshu' &&
+    planInfo &&
+    planInfo.batches.length > 0;
+  const steps = !isAllMode && dept ? resolveDeptSteps(deptSteps, dept) : [];
+
+  return (
+    <div className="flex-1 flex flex-col min-w-0">
+      {!isAllMode && dept && (
+        <DeptInspectorHeader dept={dept} active={active} entries={entries} onBack={onBack} />
+      )}
+      {isAllMode && (
+        <div className="shrink-0 border-b border-fold bg-surface-elevated px-4 py-3 flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="text-xs text-ink-500 hover:text-ink-700 transition-colors shrink-0"
+          >
+            ← 返回敕令
+          </button>
+          <span className="text-sm font-semibold text-ink-700">全部动态</span>
+          <span className="text-[10px] text-ink-400">{entries.length} 条</span>
+        </div>
+      )}
+      {!isAllMode && <RouteContextBar entries={entries} />}
+      {showPlan && planInfo && <PlanInfoCard info={planInfo} />}
+      {steps.length > 0 && (
+        <div className="shrink-0 border-b border-fold divide-y divide-ink-100/30 max-h-[40vh] overflow-y-auto">
+          {steps.map((step, i) => (
+            <StepCard key={`${step.ts}-${i}`} entry={step} />
+          ))}
+        </div>
+      )}
+      <DeptInspectorFeed entries={entries} onDocClick={onDocClick} />
+    </div>
+  );
+}

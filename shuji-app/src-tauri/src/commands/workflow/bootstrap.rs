@@ -7,6 +7,7 @@ use tokio::sync::mpsc;
 
 use crate::actor::ActorSystem;
 use crate::actor::{ActorContext, ActorMessage, DeptLogEntry, FastMessage};
+use crate::models::dept_step::DeptStepSender;
 use crate::agent::bingbushangshu::BingbuShangshuAgent;
 use crate::agent::gongbushangshu::GongbuShangshuAgent;
 use crate::agent::liburshangshu::LibuRShangshuAgent;
@@ -137,6 +138,7 @@ pub async fn start_actor_system(
     cancel: Arc<AtomicBool>,
     emperor_tx: mpsc::Sender<ChatMessage>,
     dept_log_tx: mpsc::Sender<DeptLogEntry>,
+    dept_step_tx: Option<DeptStepSender>,
     plan_tx: mpsc::Sender<serde_json::Value>,
     milestone_tx: mpsc::Sender<String>,
 ) -> ActorSystem {
@@ -254,6 +256,7 @@ pub async fn start_actor_system(
             peers,
             emperor_tx: emperor_tx.clone(),
             dept_log_tx: dept_log_tx.clone(),
+            dept_step_tx: dept_step_tx.clone(),
             plan_tx: plan_tx.clone(),
             plan: Arc::new(std::sync::Mutex::new(Vec::new())),
             milestone_tx: milestone_tx.clone(),
@@ -282,6 +285,7 @@ pub async fn start_actor_system(
         fast_txs: (*fast_txs).clone(),
         emperor_tx,
         dept_log_tx,
+        dept_step_tx,
         cancel_map,
         cancel,
         workflow_graph: workflow_graph.clone(),

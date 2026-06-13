@@ -218,6 +218,25 @@ export interface RoundMetrics {
   dept_iterations: Record<string, number>;
 }
 
+// ── Department Inspector (九司卡片 + 部门观察器) ─────────────
+
+export type SelectedDept = string | null;
+
+// ── Real-time agent step events ─────────────────────────────
+
+export interface DeptStepEntry {
+  dept: string;
+  ts: string;
+  kind: DeptStepKind;
+}
+
+export type DeptStepKind =
+  | { type: 'iteration'; n: number }
+  | { type: 'thinking'; content: string }
+  | { type: 'tool_call'; tool: string; args: Record<string, unknown> }
+  | { type: 'tool_result'; tool: string; ok: boolean; summary: string }
+  | { type: 'text'; content: string };
+
 // ── Workflow Config (Intent × Governance) ───────────────────
 
 export type Intent = 'auto' | 'greenfield_standard' | 'brownfield_optimize' | 'bugfix' | 'demo';

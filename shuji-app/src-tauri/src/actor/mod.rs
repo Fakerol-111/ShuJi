@@ -14,6 +14,7 @@ use crate::api::control::RouteMsgType;
 use crate::config::RuntimeConfig;
 use crate::logging::logger::Logger;
 use crate::models::chat::ChatMessage;
+use crate::models::dept_step::DeptStepSender;
 use crate::models::role::Role;
 
 mod routing;
@@ -103,6 +104,7 @@ pub struct ActorContext {
     pub peers: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
     pub emperor_tx: mpsc::Sender<ChatMessage>,
     pub dept_log_tx: mpsc::Sender<DeptLogEntry>,
+    pub dept_step_tx: Option<DeptStepSender>,
     pub plan_tx: mpsc::Sender<serde_json::Value>,
     pub milestone_tx: mpsc::Sender<String>,
     pub project_dir: PathBuf,
@@ -139,6 +141,8 @@ pub struct ActorSystem {
     pub emperor_tx: mpsc::Sender<ChatMessage>,
     /// Sender for department log entries (→ frontend DeptStatusPanel).
     pub dept_log_tx: mpsc::Sender<DeptLogEntry>,
+    /// Sender for real-time department step events (thinking, tool calls).
+    pub dept_step_tx: Option<DeptStepSender>,
     /// Per-agent cancel flags, indexed by Role.
     pub cancel_map: crate::CancelMap,
     /// Global cancel flag for the frontend cancel button.
@@ -153,6 +157,7 @@ impl ActorSystem {
         fast_txs: HashMap<Role, mpsc::Sender<FastMessage>>,
         emperor_tx: mpsc::Sender<ChatMessage>,
         dept_log_tx: mpsc::Sender<DeptLogEntry>,
+        dept_step_tx: Option<DeptStepSender>,
         cancel_map: crate::CancelMap,
         cancel: Arc<AtomicBool>,
         workflow_graph: Arc<tokio::sync::Mutex<crate::workflow::WorkflowGraph>>,
@@ -162,6 +167,7 @@ impl ActorSystem {
             fast_txs,
             emperor_tx,
             dept_log_tx,
+            dept_step_tx,
             cancel_map,
             cancel,
             workflow_graph,

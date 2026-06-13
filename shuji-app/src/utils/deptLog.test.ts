@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractDocPath, classifyDeptAction, stripActionPrefix } from './deptLog';
+import { extractDocPath, classifyDeptAction, stripActionPrefix, isDeptActive } from './deptLog';
 import type { DeptLogEntry } from '../types';
 
 function entry(overrides: Partial<DeptLogEntry> = {}): DeptLogEntry {
@@ -64,5 +64,27 @@ describe('stripActionPrefix', () => {
 
   it('returns original string when no prefix', () => {
     expect(stripActionPrefix('开始执行')).toBe('开始执行');
+  });
+});
+
+describe('isDeptActive', () => {
+  it('returns true when label matches activeDepts', () => {
+    expect(isDeptActive('工部尚书', ['工部尚书', '内阁'])).toBe(true);
+  });
+
+  it('returns true when shortLabel matches activeDepts', () => {
+    expect(isDeptActive('工部尚书', ['工部', '内阁'])).toBe(true);
+  });
+
+  it('returns true when key matches activeDepts', () => {
+    expect(isDeptActive('工部尚书', ['gongbushangshu'])).toBe(true);
+  });
+
+  it('returns false when dept is not in activeDepts', () => {
+    expect(isDeptActive('工部尚书', ['内阁'])).toBe(false);
+  });
+
+  it('returns false when activeDepts is empty', () => {
+    expect(isDeptActive('工部尚书', [])).toBe(false);
   });
 });

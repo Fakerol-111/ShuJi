@@ -25,6 +25,7 @@ describe('DeptActivityFeed', () => {
       logEntries: [],
       latestLogs: new Map(),
       activeDepts: [],
+      deptSteps: new Map(),
       clearLogs: vi.fn(),
     });
     render(<DeptActivityFeed />);
@@ -36,6 +37,7 @@ describe('DeptActivityFeed', () => {
       logEntries: [entry('工部', '创建文档 .shuji/plan.md')],
       latestLogs: new Map(),
       activeDepts: ['工部'],
+      deptSteps: new Map(),
       clearLogs: vi.fn(),
     });
     render(<DeptActivityFeed />);
@@ -48,6 +50,7 @@ describe('DeptActivityFeed', () => {
       logEntries: [entry('工部', '创建文档 .shuji/plan.md')],
       latestLogs: new Map(),
       activeDepts: ['工部'],
+      deptSteps: new Map(),
       clearLogs: vi.fn(),
     });
     const user = userEvent.setup();
@@ -67,6 +70,7 @@ describe('DeptActivityFeed', () => {
       ],
       latestLogs: new Map(),
       activeDepts: ['工部', '中书令'],
+      deptSteps: new Map(),
       clearLogs: vi.fn(),
     });
     const { container } = render(<DeptActivityFeed />);

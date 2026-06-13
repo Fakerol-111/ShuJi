@@ -9,6 +9,7 @@ use futures::future::join_all;
 use crate::api::client::ToolDefinition;
 use crate::api::session::{Session, SessionSnapshot};
 use crate::config::RuntimeConfig;
+use crate::models::dept_step::{DeptStepEntry, DeptStepKind};
 use crate::models::role::Role;
 
 pub type ToolFuture = Pin<Box<dyn Future<Output = String> + Send + 'static>>;
@@ -28,6 +29,11 @@ pub type CompactFn =
     Box<dyn Fn(Vec<serde_json::Value>) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
 
 const INTERRUPT_RESPONSE: &str = "\n\n[系统] 当前处理已被皇帝中断";
+
+/// Callback for real-time step events emitted during AgentController::run().
+/// Receives a DeptStepKind to emit for each iteration, thinking, tool call, etc.
+pub type DeptStepCallback =
+    Box<dyn Fn(DeptStepKind) + Send + Sync>;
 
 /// Type of a cross-department routing message.
 #[derive(Debug, Clone, Copy)]
@@ -156,6 +162,7 @@ pub struct AgentController {
     last_checkpoint: Instant,
     compact_handler: Option<CompactFn>,
     compact_iter_interval: u32,
+    step_emit: Option<DeptStepCallback>,
 }
 
 impl Default for AgentController {
@@ -172,7 +179,14 @@ impl AgentController {
             last_checkpoint: Instant::now(),
             compact_handler: None,
             compact_iter_interval: 0,
+            step_emit: None,
         }
+    }
+
+    /// Register a handler for real-time step events.
+    /// Called at each iteration, thinking block, tool call, and tool result.
+    pub fn set_step_emitter(&mut self, emitter: DeptStepCallback) {
+        self.step_emit = Some(emitter);
     }
 
     /// Register a handler for periodic checkpoint saves.
@@ -232,6 +246,13 @@ impl AgentController {
         let mut delete_create_cycles: HashMapColl<String, u32> = HashMapColl::new();
 
         for iter in 0..max_iter {
+            // ── Emit iteration step ──
+            if let Some(ref emit) = self.step_emit {
+                emit(DeptStepKind::Iteration {
+                    n: (iter + 1) as u32,
+                });
+            }
+
             // ── Interrupt / force-stop / fast-cancel check ──
             if cancel.load(Ordering::SeqCst) {
                 self.interrupt(session).await;
@@ -303,6 +324,11 @@ impl AgentController {
 
             match step_result {
                 crate::api::session::StepResult::Text(text) => {
+                    if let Some(ref emit) = self.step_emit {
+                        emit(DeptStepKind::Text {
+                            content: text.clone(),
+                        });
+                    }
                     let combined = if last_text.is_empty() {
                         text
                     } else {
@@ -316,6 +342,15 @@ impl AgentController {
                     // Accumulate text from assistant messages that also carried tool_calls
                     if !text.is_empty() {
                         last_text.push_str(&text);
+                    }
+
+                    // ── Emit thinking step ──
+                    if !text.is_empty() {
+                        if let Some(ref emit) = self.step_emit {
+                            emit(DeptStepKind::Thinking {
+                                content: text.clone(),
+                            });
+                        }
                     }
 
                     // ── P2-1: Parallel read-only execution ─────────────
@@ -341,6 +376,14 @@ impl AgentController {
                     }
 
                     for (idx, tc) in calls.iter().enumerate() {
+                        // ── Emit tool call step ──
+                        if let Some(ref emit) = self.step_emit {
+                            emit(DeptStepKind::ToolCall {
+                                tool: tc.name.clone(),
+                                args: tc.args.clone(),
+                            });
+                        }
+
                         // ── Fast cancel check before each tool ──
                         if fast_cancel.is_some_and(|f| f.load(Ordering::SeqCst)) {
                             self.interrupt(session).await;
@@ -391,6 +434,21 @@ impl AgentController {
                         } else {
                             tool_exec(&tc.name, &tc.args).await
                         };
+
+                        // ── Emit tool result step ──
+                        if let Some(ref emit) = self.step_emit {
+                            let is_error = serde_json::from_str::<serde_json::Value>(&result)
+                                .ok()
+                                .and_then(|v| v.get("ok").and_then(|o| o.as_bool()))
+                                .map(|ok| !ok)
+                                .unwrap_or(false);
+                            let summary = result.chars().take(200).collect();
+                            emit(DeptStepKind::ToolResult {
+                                tool: tc.name.clone(),
+                                ok: !is_error,
+                                summary,
+                            });
+                        }
 
                         // ── Watchdog intervention hints ──
                         // Append corrective reminders to the tool result when
@@ -739,7 +797,25 @@ impl AgentController {
         };
         Ok(RunResult::Done(result))
     }
+}
 
+/// Convenience helper: configure step_emit on a controller from AgentInput's dept_step_tx.
+/// Call this after creating the controller and before calling run().
+pub fn setup_agent_step_emitter(
+    controller: &mut AgentController,
+    dept_step_tx: &Option<crate::models::dept_step::DeptStepSender>,
+    dept: &str,
+) {
+    if let Some(ref tx) = dept_step_tx {
+        let tx = tx.clone();
+        let dept = dept.to_string();
+        controller.set_step_emitter(Box::new(move |kind| {
+            let _ = tx.send(DeptStepEntry::new(&dept, kind));
+        }));
+    }
+}
+
+impl AgentController {
     /// Interrupt the current session.
     ///
     /// Save a snapshot of the current conversation state for

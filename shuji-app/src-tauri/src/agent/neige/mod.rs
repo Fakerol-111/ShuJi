@@ -425,6 +425,12 @@ impl Agent for NeigeAgent {
             })
         }));
 
+        crate::api::control::setup_agent_step_emitter(
+            &mut controller,
+            &input.dept_step_tx,
+            self.role().name(),
+        );
+
         let cancel_map = self.cancel_map.clone();
         let fast_txs: Option<crate::FastTxMap> = self.fast_txs.clone();
         let config = input.runtime_config.clone();

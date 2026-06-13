@@ -114,6 +114,7 @@ pub fn run() {
             commands::pricing::refresh_pricing,
             commands::workflow::verify_audit_trail,
             commands::workflow::get_pipeline_status,
+            commands::workflow::get_tool_logs,
             commands::workflow::get_workflow_state,
             commands::workflow::get_workflow_graph,
             commands::workflow::list_workflow_archives,

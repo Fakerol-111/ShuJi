@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::config::{RoleContextConfig, RuntimeConfig};
+use crate::models::dept_step::DeptStepSender;
 use crate::models::message::Message;
 use crate::models::role::Role;
 use std::path::PathBuf;
@@ -31,6 +32,9 @@ pub struct AgentInput {
     /// receives an Interrupt signal. AgentController::run() checks this
     /// before each tool execution and between iterations.
     pub fast_cancel: Arc<AtomicBool>,
+    /// Channel sender for real-time step events (thinking, tool calls, results).
+    /// When Some, the AgentController emits step events during run().
+    pub dept_step_tx: Option<DeptStepSender>,
 }
 
 #[derive(Debug, Clone)]

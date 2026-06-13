@@ -1,9 +1,13 @@
+import { useState, useEffect } from 'react';
 import { Tabs } from './ui/Tabs';
 import WorkflowRibbon from './WorkflowRibbon';
 import WorkflowStatus from './WorkflowTimeline';
-import DeptActivityFeed from './DeptActivityFeed';
+import DeptCardRail from './DeptCardRail';
+import DeptInspector from './DeptInspector';
 import ChatPanel from './ChatPanel';
 import AgentIdleState from './AgentIdleState';
+import { getDeptMeta } from '../constants';
+import { useDeptEvents } from '../hooks/useDeptEvents';
 import { docIdToPath } from '../utils/docPath';
 import type { Project, ChatMessage, PlanInfo, PhaseRuntime } from '../types';
 import type { Tab } from '../hooks/useChat';
@@ -57,6 +61,27 @@ export default function AgentStreamPanel({
   onOpenProject,
   endRef,
 }: AgentStreamPanelProps) {
+  const { latestLogs, logEntries } = useDeptEvents();
+  const [selectedDept, setSelectedDept] = useState<string | null>(null);
+  const [pinDept, setPinDept] = useState(false);
+  const showChat = selectedDept === null || selectedDept === '内阁';
+  const inInspector = !showChat && selectedDept !== null;
+
+  // Auto-follow: when not pinned and in inspector mode, switch to latest active dept
+  // when activeDepts changes and the latest log's dept differs from current selection.
+  useEffect(() => {
+    if (pinDept) return;
+    if (!inInspector) return;
+    if (activeDepts.length === 0) return;
+    const latestActive = activeDepts[activeDepts.length - 1];
+    if (latestActive && selectedDept !== latestActive && selectedDept !== '__all__') {
+      const meta = getDeptMeta(latestActive);
+      if (meta && meta.label !== '内阁') {
+        setSelectedDept(meta.label);
+      }
+    }
+  }, [activeDepts, pinDept, inInspector, selectedDept]);
+
   const totalStageCount = phaseCount || phases.length;
   const completedStageCount = phases.filter(
     (p) => p.execution === 'Completed' || p.execution === 'MinorIssue'
@@ -90,30 +115,51 @@ export default function AgentStreamPanel({
 
       {project ? (
         <div className="flex-1 flex min-h-0">
-          <div className="w-72 shrink-0 overflow-y-auto border-r border-fold bg-surface-paper/50">
-            <DeptActivityFeed onDocClick={onSelectDoc} />
-          </div>
-          <div className="flex-1 flex flex-col min-w-0">
-            <div className="border-b border-fold bg-surface-elevated shrink-0 px-3 py-2">
-              <Tabs
-                tabs={[
-                  { key: 'decision', label: '决策' },
-                  { key: 'discuss', label: '廷议' },
-                ]}
-                activeKey={tab}
-                onChange={(k) => setTab(k as Tab)}
-              />
-              <div className="text-ui text-ink-600 mt-1">
-                {tab === 'decision' ? '下达敕令，驱动各部门执行' : '仅与内阁议政，不改代码、不写文档'}
-              </div>
-            </div>
-            {isIdle && tab === 'decision' ? (
-              <>
-                <AgentIdleState
-                  project={project}
-                  onDocSelect={onSelectDoc}
-                  onOpenProject={onOpenProject}
+          <DeptCardRail
+            selected={selectedDept}
+            onSelect={setSelectedDept}
+            activeDepts={activeDepts}
+            latestLogs={latestLogs}
+            planInfo={planInfo}
+            pinDept={pinDept}
+            onTogglePin={() => setPinDept((p) => !p)}
+          />
+          {showChat ? (
+            <div className="flex-1 flex flex-col min-w-0">
+              <div className="border-b border-fold bg-surface-elevated shrink-0 px-3 py-2">
+                <Tabs
+                  tabs={[
+                    { key: 'decision', label: '决策' },
+                    { key: 'discuss', label: '廷议' },
+                  ]}
+                  activeKey={tab}
+                  onChange={(k) => setTab(k as Tab)}
                 />
+              </div>
+              {isIdle && tab === 'decision' ? (
+                <>
+                  <AgentIdleState
+                    project={project}
+                    onDocSelect={onSelectDoc}
+                    onOpenProject={onOpenProject}
+                  />
+                  <ChatPanel
+                    tab={tab}
+                    messages={messages}
+                    discussMsgs={discussMsgs}
+                    discussing={discussing}
+                    planInfo={planInfo}
+                    activeDeptsCount={activeDeptsCount}
+                    onOption={onOption}
+                    onSend={onSend}
+                    onRetrySend={onRetrySend}
+                    onDiscuss={onDiscuss}
+                    onCancelDiscuss={onCancelDiscuss}
+                    onConvertToCommand={onConvertToCommand}
+                    endRef={endRef}
+                  />
+                </>
+              ) : (
                 <ChatPanel
                   tab={tab}
                   messages={messages}
@@ -129,25 +175,28 @@ export default function AgentStreamPanel({
                   onConvertToCommand={onConvertToCommand}
                   endRef={endRef}
                 />
-              </>
-            ) : (
-              <ChatPanel
-                tab={tab}
-                messages={messages}
-                discussMsgs={discussMsgs}
-                discussing={discussing}
-                planInfo={planInfo}
-                activeDeptsCount={activeDeptsCount}
-                onOption={onOption}
-                onSend={onSend}
-                onRetrySend={onRetrySend}
-                onDiscuss={onDiscuss}
-                onCancelDiscuss={onCancelDiscuss}
-                onConvertToCommand={onConvertToCommand}
-                endRef={endRef}
-              />
-            )}
-          </div>
+              )}
+            </div>
+          ) : selectedDept === '__all__' ? (
+            <DeptInspector
+              dept={null}
+              mode="all"
+              entries={logEntries}
+              active={false}
+              onBack={() => setSelectedDept(null)}
+              onDocClick={onSelectDoc}
+            />
+          ) : (
+            <DeptInspector
+              dept={selectedDept}
+              mode="single"
+              entries={logEntries.filter((e) => e.dept === selectedDept)}
+              active={activeDepts.includes(selectedDept!)}
+              onBack={() => setSelectedDept(null)}
+              onDocClick={onSelectDoc}
+              planInfo={planInfo}
+            />
+          )}
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center text-body text-ink-400">
