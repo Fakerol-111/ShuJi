@@ -2,6 +2,7 @@ import { useRef, useEffect, useState } from 'react';
 import { getDeptMeta } from '../constants';
 import DeptActivityCard from './DeptActivityCard';
 import RouteContextBar from './RouteContextBar';
+import { SealLogo } from './SealLogo';
 import { useDeptEvents } from '../hooks/useDeptEvents';
 import type { DeptLogEntry, DeptStepEntry, PlanInfo } from '../types';
 
@@ -38,9 +39,12 @@ function DeptInspectorHeader({
       <div className="flex items-center gap-3">
         <button
           onClick={onBack}
-          className="text-xs text-ink-500 hover:text-ink-700 transition-colors shrink-0"
+          className="text-ui text-ink-500 hover:text-vermillion transition-colors shrink-0 flex items-center gap-1"
         >
-          ← 返回敕令
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <polyline points="10,3 5,8 10,13" />
+          </svg>
+          返拟旨殿
         </button>
         <div className="flex items-center gap-2 min-w-0">
           <span
@@ -51,7 +55,7 @@ function DeptInspectorHeader({
             {meta?.label || dept}
           </span>
           <span
-            className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+            className={`text-caption px-1.5 py-0.5 rounded font-medium ${
               hasError
                 ? 'bg-vermillion-light text-vermillion'
                 : active
@@ -64,7 +68,7 @@ function DeptInspectorHeader({
         </div>
       </div>
       {latestEntry && (
-        <div className="text-[11px] text-ink-600 mt-1 ml-1 truncate">{latestEntry.action}</div>
+        <div className="text-caption text-ink-600 mt-1 ml-1 truncate">{latestEntry.action}</div>
       )}
     </div>
   );
@@ -73,9 +77,11 @@ function DeptInspectorHeader({
 function DeptInspectorEmpty() {
   return (
     <div className="flex-1 flex items-center justify-center">
-      <div className="text-center">
-        <div className="text-2xl text-ink-300 mb-2">🏮</div>
-        <div className="text-sm text-ink-400">该部门暂无动态</div>
+      <div className="text-center space-y-2">
+        <div className="inline-flex">
+          <SealLogo size={32} />
+        </div>
+        <div className="text-ui text-ink-400">该司暂无奏报</div>
       </div>
     </div>
   );
@@ -113,7 +119,7 @@ function DeptInspectorFeed({
         <div className="sticky top-0 z-10 px-3 py-1 text-center">
           <button
             onClick={() => setAutoScroll(true)}
-            className="text-[10px] text-gold hover:text-gold-dark bg-surface-paper/80 rounded px-2 py-0.5"
+            className="text-caption text-gold hover:text-gold-dark bg-surface-paper/80 rounded px-2 py-0.5"
           >
             滚动到底部
           </button>
@@ -134,8 +140,9 @@ function DeptInspectorFeed({
 
 function PlanInfoCard({ info }: { info: PlanInfo }) {
   return (
-    <div className="shrink-0 mx-4 mt-3 bg-surface-parchment border border-fold rounded-lg px-3 py-2">
-      <div className="font-display text-caption text-ink-600 font-semibold mb-1">工部计划</div>
+    <div className="shrink-0 mx-4 mt-3 bg-surface-parchment border border-fold rounded-xl px-3 py-2"
+      style={{ borderLeft: '3px solid var(--dept-gongbu)' }}>
+      <div className="font-display text-caption text-ink-600 font-semibold mb-1">工部批次</div>
       <div className="space-y-0.5">
         {info.batches.map((b, i) => (
           <div key={i} className="flex items-center gap-1.5 text-caption font-mono">
@@ -173,13 +180,13 @@ function StepCard({ entry }: { entry: DeptStepEntry }) {
         <div className="border-l-2 border-jade/40 pl-2 py-1">
           <button
             onClick={() => setExpanded(!expanded)}
-            className="text-[10px] text-ink-500 hover:text-ink-700 font-mono flex items-center gap-1"
+            className="text-caption text-ink-500 hover:text-ink-700 font-mono flex items-center gap-1"
           >
             <span>{expanded ? '▾' : '▸'}</span>
             <span className="text-jade font-semibold">思考过程</span>
           </button>
           {expanded && (
-            <div className="text-[11px] text-ink-600 mt-1 whitespace-pre-wrap font-mono leading-relaxed max-h-60 overflow-y-auto">
+            <div className="text-caption text-ink-600 mt-1 whitespace-pre-wrap font-mono leading-relaxed max-h-60 overflow-y-auto">
               {text}
             </div>
           )}
@@ -195,11 +202,15 @@ function StepCard({ entry }: { entry: DeptStepEntry }) {
         : '';
       return (
         <div className="flex items-start gap-2 py-0.5 px-2 rounded hover:bg-ink-100/20">
-          <span className="text-xs text-ink-400 shrink-0 mt-0.5">🔧</span>
+          <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-ink-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <circle cx="8" cy="8" r="6" />
+            <line x1="8" y1="4" x2="8" y2="8" />
+            <line x1="8" y1="8" x2="11" y2="10" />
+          </svg>
           <div className="min-w-0 flex-1">
-            <code className="text-[11px] font-mono font-semibold text-ink-700">{kind.tool}</code>
+            <code className="text-caption font-mono font-semibold text-ink-700">{kind.tool}</code>
             {argsStr && (
-              <span className="text-[10px] text-ink-500 font-mono ml-1 truncate">{argsStr}</span>
+              <span className="text-caption text-ink-500 font-mono ml-1 truncate">{argsStr}</span>
             )}
           </div>
         </div>
@@ -208,14 +219,16 @@ function StepCard({ entry }: { entry: DeptStepEntry }) {
     case 'tool_result': {
       return (
         <div className="flex items-start gap-2 py-0.5 px-2 rounded">
-          <span className="text-xs shrink-0 mt-0.5">{kind.ok ? '✅' : '❌'}</span>
+          <span className={`text-caption font-mono font-semibold shrink-0 mt-0.5 ${kind.ok ? 'text-jade' : 'text-vermillion'}`}>
+            {kind.ok ? '成' : '败'}
+          </span>
           <div className="min-w-0 flex-1">
             <code
-              className={`text-[11px] font-mono font-semibold ${kind.ok ? 'text-jade' : 'text-vermillion'}`}
+              className={`text-caption font-mono font-semibold ${kind.ok ? 'text-jade' : 'text-vermillion'}`}
             >
               {kind.tool}
             </code>
-            <span className="text-[10px] text-ink-500 font-mono ml-1">
+            <span className="text-caption text-ink-500 font-mono ml-1">
               {kind.summary.slice(0, 120)}
             </span>
           </div>
@@ -224,7 +237,7 @@ function StepCard({ entry }: { entry: DeptStepEntry }) {
     }
     case 'text': {
       return (
-        <div className="text-[11px] text-ink-600 px-2 py-1 whitespace-pre-wrap font-mono leading-relaxed">
+        <div className="text-caption text-ink-600 px-2 py-1 whitespace-pre-wrap font-mono leading-relaxed">
           {kind.content.slice(0, 300)}
         </div>
       );
@@ -271,12 +284,15 @@ export default function DeptInspector({
         <div className="shrink-0 border-b border-fold bg-surface-elevated px-4 py-3 flex items-center gap-3">
           <button
             onClick={onBack}
-            className="text-xs text-ink-500 hover:text-ink-700 transition-colors shrink-0"
+            className="text-ui text-ink-500 hover:text-vermillion transition-colors shrink-0 flex items-center gap-1"
           >
-            ← 返回敕令
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <polyline points="10,3 5,8 10,13" />
+            </svg>
+            返拟旨殿
           </button>
-          <span className="text-sm font-semibold text-ink-700">全部动态</span>
-          <span className="text-[10px] text-ink-400">{entries.length} 条</span>
+          <span className="text-ui font-semibold text-ink-700">诸司动态</span>
+          <span className="text-caption text-ink-400">{entries.length} 条</span>
         </div>
       )}
       {!isAllMode && <RouteContextBar entries={entries} />}

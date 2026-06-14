@@ -2,8 +2,16 @@
 
 pub mod fixtures;
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+
+use shuji_app_lib::actor::ActorMessage;
+use shuji_app_lib::models::role::Role;
+use shuji_app_lib::pipeline::engine::PipelineEngine;
+use shuji_app_lib::pipeline::{PipelinePlan, PlanStep};
+use tokio::sync::mpsc;
 
 /// Create a temporary test directory that will be cleaned up automatically.
 pub fn create_temp_dir(name: &str) -> tempfile::TempDir {
@@ -183,7 +191,121 @@ pub fn assert_path_error_contains(result: &Result<PathBuf, String>, expected: &s
     }
 }
 
-// ── Mock HTTP API helpers (for wiremock-based E2E tests) ──────
+// ── Mock Pipeline Actor Harness ─────────────────────────────────
+
+/// Simulates department actors for pipeline testing.
+pub struct MockActorHarness {
+    pub senders: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
+    _handles: Vec<tokio::task::JoinHandle<()>>,
+}
+
+impl MockActorHarness {
+    pub fn with_roles(roles: &[Role]) -> Self {
+        let mut senders = HashMap::new();
+        let mut handles = Vec::new();
+        for role in roles {
+            let (tx, mut rx) = mpsc::unbounded_channel::<ActorMessage>();
+            senders.insert(*role, tx);
+            let role_name = role.name().to_string();
+            let handle = tokio::spawn(async move {
+                while let Some(msg) = rx.recv().await {
+                    if let Some(reply) = msg.reply_to {
+                        let _ =
+                            reply.send(format!("mock {} completed: {}", role_name, msg.subject));
+                    }
+                }
+            });
+            handles.push(handle);
+        }
+        Self {
+            senders,
+            _handles: handles,
+        }
+    }
+
+    pub fn all_roles() -> Self {
+        Self::with_roles(&[
+            Role::Neige,
+            Role::Zhongshuling,
+            Role::MenxiaShizhong,
+            Role::Shangshuling,
+            Role::LiBuShangshu,
+            Role::BingbuShangshu,
+            Role::GongbuShangshu,
+            Role::XingbuShangshu,
+            Role::LiBuRShangshu,
+        ])
+    }
+}
+
+/// Create a PipelineEngine with mock actors.
+pub fn make_pipeline_engine(
+    plan: PipelinePlan,
+    harness: &MockActorHarness,
+    dir: &Path,
+) -> PipelineEngine {
+    PipelineEngine::new(
+        plan,
+        harness.senders.clone(),
+        Arc::new(HashMap::new()),
+        Arc::new(std::sync::Mutex::new(HashMap::new())),
+        Arc::new(AtomicBool::new(false)),
+        dir.to_path_buf(),
+        None,
+    )
+}
+
+/// Build a PipelinePlan with a single self_execute step.
+pub fn self_execute_plan(handler: &str, params: serde_json::Value) -> PipelinePlan {
+    let mut ap = serde_json::json!({"handler": handler});
+    if let Some(obj) = params.as_object() {
+        for (k, v) in obj {
+            ap[k] = v.clone();
+        }
+    }
+    PipelinePlan {
+        plan_id: "plan-test".into(),
+        summary: "test".into(),
+        estimated_complexity: "low".into(),
+        created: "2026-06-13T12:00:00".into(),
+        steps: vec![PlanStep {
+            step_id: "s1".into(),
+            description: "test step".into(),
+            action: "self_execute".into(),
+            action_params: ap,
+            depends_on: vec![],
+            require_approval: false,
+            on_failure: "wake_cabinet".into(),
+            retry: 1,
+        }],
+    }
+}
+
+/// Create a minimal Rust project for testing.
+pub async fn create_mini_rust_project(dir: &Path) {
+    tokio::fs::write(
+        dir.join("Cargo.toml"),
+        r#"
+[package]
+name = "test_crate"
+version = "0.1.0"
+edition = "2021"
+"#,
+    )
+    .await
+    .unwrap();
+    let src = dir.join("src");
+    tokio::fs::create_dir_all(&src).await.unwrap();
+    tokio::fs::write(
+        src.join("lib.rs"),
+        r#"
+pub fn greet() -> &'static str { "hello" }
+#[test] fn test_greet() { assert_eq!(greet(), "hello"); }
+"#,
+    )
+    .await
+    .unwrap();
+}
 
 use std::collections::VecDeque;
 use std::sync::Mutex;

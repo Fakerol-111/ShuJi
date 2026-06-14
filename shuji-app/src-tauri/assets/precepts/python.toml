@@ -1,0 +1,46 @@
+[[rules]]
+id = "PY_TYPE_HINTS"
+category = "style"
+description = "所有公共函数应有类型注解"
+severity = "warning"
+lint_tool = "ruff"
+lint_args = ["check", "--select=ANN"]
+
+[[rules]]
+id = "PY_NAMED_CONSTANTS"
+category = "style"
+description = "使用 UPPER_CASE 命名常量，不用 magic number"
+severity = "warning"
+lint_tool = "ruff"
+lint_args = ["check", "--select=PLR2004"]
+
+[[rules]]
+id = "PY_DOCSTRINGS"
+category = "documentation"
+description = "模块和公共函数应有 docstring"
+severity = "info"
+lint_tool = "ruff"
+lint_args = ["check", "--select=D"]
+
+[[rules]]
+id = "PY_IMPORT_ORDER"
+category = "style"
+description = "标准导入顺序：标准库 > 第三方 > 本地"
+severity = "info"
+lint_tool = "ruff"
+lint_args = ["check", "--select=I"]
+
+[[rules]]
+id = "PY_TEST_PREFIX"
+category = "testing"
+description = "测试函数应以 test_ 开头"
+severity = "warning"
+lint_tool = "manual"
+
+[[rules]]
+id = "PY_FORMAT"
+category = "style"
+description = "代码应通过 ruff format 或 black 格式检查"
+severity = "warning"
+lint_tool = "ruff"
+lint_args = ["format", "--check"]

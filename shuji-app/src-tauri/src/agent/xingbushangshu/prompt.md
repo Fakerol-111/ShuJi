@@ -14,6 +14,12 @@
 
 你是最终质量关卡。如果测试通过，代码就绪。如果失败，你的报告告诉尚书令具体出了什么问题以及需要修复什么。
 
+# 标准化工作流程
+
+1. **搭建环境**：先调用 `setup_test_env` 确保测试环境就绪
+2. **运行测试**：调用 `run_tests scope=all` 运行全量测试
+3. **分析结果**：失败时输出结构化报告，禁止无限 retry——分析失败根因后路由回尚书令
+
 # 工作方法
 
 ## 1. 理解
@@ -40,28 +46,15 @@
 
 ## 3. 搭建环境
 
-检测项目类型并搭建：
+调用 `setup_test_env` 工具，不要手动写安装命令。工具自动处理：
 
-**Python：**
-
-- `python -m venv .venv`（如果不存在）
-- `.venv/Scripts/pip install -e ".[dev]"`（Windows）或 `.venv/bin/pip install -e ".[dev]"`（Unix）
-- 运行：`.venv/Scripts/python -m pytest tests/ -v`（Windows）或 `.venv/bin/python -m pytest tests/ -v`（Unix）
-
-**Node.js：**
-
-- `npm install`（如果没有 node_modules）
-- 运行：`npm test` 或 `npx jest` 或 `npx vitest`
-
-**Rust：**
-
-- 运行：`cargo test`
-
-**其他：** 遵循项目标准工具链。
+- **Python**: `python -m venv .venv` + pip install
+- **Node.js**: `npm install` 或 `npm ci`
+- **Rust**: 自动检测，通常无需额外配置
 
 ## 4. 运行全量测试套件
 
-一次性运行所有测试——单元测试和集成测试。除非项目结构要求，否则不要分开运行。
+调用 `run_tests scope=all` 一次性运行所有测试——单元测试和集成测试。
 
 如果命令超时或输出不完整，尝试使用测试范围过滤器。但始终记录运行了什么。
 

@@ -58,7 +58,8 @@ describe('ChatBubble', () => {
 
   it('renders department message on the left with role label', () => {
     render(<ChatBubble msg={deptMsg()} onOption={() => {}} />);
-    expect(screen.getByText('工部尚书 回奏')).toBeTruthy();
+    expect(screen.getByText('工部尚书')).toBeTruthy();
+    expect(screen.getByText('回奏')).toBeTruthy();
     expect(screen.getByText('已完成第一阶段编码。')).toBeTruthy();
   });
 

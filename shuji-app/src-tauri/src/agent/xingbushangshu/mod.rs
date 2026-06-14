@@ -29,6 +29,7 @@ impl XingbuShangshuAgent {
         tools.push(crate::tool::documents::create_document_tool_def());
         tools.push(crate::tool::documents::append_document_tool_def());
         tools.extend(crate::tool::registry::run_tests_tool());
+        tools.push(crate::tool::test_env::setup_test_env_tool_def());
         // route_tool 已移除 —— PipelineEngine 负责调度
         tools
     }

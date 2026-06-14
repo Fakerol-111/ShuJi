@@ -59,6 +59,15 @@
 }
 ```
 
+## 计划质量自检
+
+提交 `submit_pipeline_plan` 前逐条确认：
+- **step_id 唯一**：所有步骤的 step_id 不能重复
+- **depends_on 有效**：每个依赖的 step_id 在计划中确实存在
+- **无循环依赖**：A→B→A 的环会让计划死锁
+- **action 合法**：必须是 `ask_user`/`route_to`/`parallel`/`approval_gate`/`self_execute`（见 `schemas/pipeline_plan.schema.json`）
+- **交付类计划末尾含验证**：凡产生代码产出的计划，最后一步必须是 `self_execute(handler="validate_delivery")`
+
 # 需求保真规则
 
 **下游部门看到的每一个 task 文档，必须逐字包含皇帝的原话。**

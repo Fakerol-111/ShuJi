@@ -17,13 +17,18 @@ pub mod audit;
 mod commands;
 pub mod config;
 mod logging;
+pub mod metrics;
 pub mod models;
 pub mod pipeline;
+pub mod playbook;
+pub mod precepts;
 pub mod pricing;
 mod round_metrics;
+pub mod scenario;
 pub mod storage;
 mod token_tracker;
 pub mod tool;
+pub mod validate;
 pub mod workflow;
 
 use std::collections::{HashMap, HashSet};
@@ -119,6 +124,9 @@ pub fn run() {
             commands::workflow::get_workflow_graph,
             commands::workflow::list_workflow_archives,
             commands::workflow::load_workflow_archive,
+            commands::validate::validate_delivery_cmd,
+            commands::metrics::get_latest_run_metrics,
+            commands::metrics::list_run_metrics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

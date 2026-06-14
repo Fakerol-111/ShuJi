@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "PipelinePlan",
+  "description": "JSON Schema for 内阁's pipeline plan submission",
+  "type": "object",
+  "required": ["plan_id", "summary", "steps"],
+  "properties": {
+    "plan_id": {
+      "type": "string",
+      "pattern": "^plan-"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "estimated_complexity": {
+      "type": "string",
+      "enum": ["low", "medium", "high"]
+    },
+    "created": {
+      "type": "string"
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["step_id", "description", "action", "action_params"],
+        "properties": {
+          "step_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "action": {
+            "type": "string",
+            "enum": ["ask_user", "route_to", "parallel", "approval_gate", "self_execute"]
+          },
+          "action_params": {
+            "type": "object"
+          },
+          "depends_on": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "require_approval": {
+            "type": "boolean"
+          },
+          "on_failure": {
+            "type": "string",
+            "enum": ["wake_cabinet", "skip", "abort"]
+          },
+          "retry": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -31,6 +31,7 @@ impl LibuRShangshuAgent {
         tools.push(crate::tool::documents::append_document_tool_def());
         // Audit checklist
         tools.extend(crate::tool::registry::audit_checklist_tools());
+        tools.push(crate::tool::lint_ops::run_lint_tool_def());
         // route_tool 已移除 —— PipelineEngine 负责调度
         tools
     }

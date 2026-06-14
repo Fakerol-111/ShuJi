@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "tests": {
+    "required": true,
+    "scope": "all",
+    "forbid_unexplained_skip": false
+  },
+  "contract_diff": {
+    "enabled": false,
+    "ctrt_id": null
+  },
+  "lint": {
+    "enabled": false,
+    "fail_on_warning": true
+  }
+}

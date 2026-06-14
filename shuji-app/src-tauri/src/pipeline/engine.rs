@@ -50,6 +50,8 @@ pub struct PipelineEngine {
     pub workflow_graph: Option<Arc<tokio::sync::Mutex<WorkflowGraph>>>,
     /// 追踪上一个路由到的部门角色名（用于文移图边创建）
     graph_last_role: String,
+    /// Run metrics for observability.
+    pub run_metrics: Option<crate::metrics::RunMetrics>,
 }
 
 impl PipelineEngine {
@@ -72,6 +74,7 @@ impl PipelineEngine {
             project_dir,
             workflow_graph,
             graph_last_role: "内阁".to_string(),
+            run_metrics: None,
         }
     }
 
@@ -99,6 +102,42 @@ impl PipelineEngine {
             project_dir,
             workflow_graph: None,
             graph_last_role: "内阁".to_string(),
+            run_metrics: None,
+        }
+    }
+
+    /// Finalize run metrics by saving to disk.
+    async fn finalize_metrics(&mut self, status: &str) {
+        if let Some(ref mut metrics) = self.run_metrics {
+            // Attach validation from artifacts if available
+            if let Some(validation_json) = self.runtime.artifacts.get("validate_report") {
+                if let Ok(report) = serde_json::from_str::<crate::validate::report::ValidationReport>(
+                    validation_json,
+                ) {
+                    metrics.attach_validation(report);
+                }
+            }
+            // Also check step artifacts for validate_delivery steps
+            for (step_id, _artifact) in &self.runtime.artifacts {
+                if step_id.contains("validate") || step_id == "v1" {
+                    // Try to read the validation report from .shuji/validate/latest.json
+                    let report_path = self
+                        .project_dir
+                        .join(".shuji")
+                        .join("validate")
+                        .join("latest.json");
+                    if let Ok(content) = std::fs::read_to_string(&report_path) {
+                        if let Ok(report) = serde_json::from_str::<
+                            crate::validate::report::ValidationReport,
+                        >(&content)
+                        {
+                            metrics.attach_validation(report);
+                            break;
+                        }
+                    }
+                }
+            }
+            metrics.finalize(status, &self.project_dir).await.ok();
         }
     }
 
@@ -148,13 +187,22 @@ impl PipelineEngine {
             project_dir: project_dir.to_path_buf(),
             workflow_graph: Some(actor_system.workflow_graph.clone()),
             graph_last_role: "内阁".to_string(),
+            run_metrics: None,
         })
     }
 
     /// Main execution loop. Drives all steps according to plan.
     pub async fn run(&mut self) -> PipelineResult {
+        // Initialize run metrics
+        if self.run_metrics.is_none() {
+            self.run_metrics = Some(crate::metrics::RunMetrics::start(
+                &self.runtime.plan.plan_id,
+            ));
+        }
+
         loop {
             if self.cancel.load(Ordering::SeqCst) {
+                self.finalize_metrics("aborted").await;
                 return PipelineResult::Aborted {
                     runtime: self.runtime.clone(),
                 };
@@ -165,10 +213,12 @@ impl PipelineEngine {
                 Some(id) => id,
                 None => {
                     if self.runtime.all_done() {
+                        self.finalize_metrics("complete").await;
                         return PipelineResult::Complete {
                             runtime: self.runtime.clone(),
                         };
                     } else {
+                        self.finalize_metrics("deadlock").await;
                         return PipelineResult::Deadlock {
                             runtime: self.runtime.clone(),
                         };
@@ -177,6 +227,7 @@ impl PipelineEngine {
             };
 
             // 2. Execute with retry
+            let step_start = std::time::Instant::now();
             self.runtime.current_step = Some(next.clone());
             self.set_status(&next, StepStatus::InProgress);
 
@@ -197,6 +248,8 @@ impl PipelineEngine {
             };
 
             let mut last_reason = String::new();
+            let mut tool_errors: u32 = 0;
+            let mut iterations: u32 = 0;
 
             for attempt in 0..(step.retry.max(1)) {
                 if self.cancel.load(Ordering::SeqCst) {
@@ -205,6 +258,7 @@ impl PipelineEngine {
                     };
                 }
 
+                iterations += 1;
                 let result = self.execute_step(&step).await;
                 match result {
                     StepResultInner::Success {
@@ -223,6 +277,21 @@ impl PipelineEngine {
                                 let _ = g.save_to(&self.project_dir).await;
                             }
                             self.graph_last_role = role_name.clone();
+                        }
+                        // Record step metric
+                        let duration = step_start.elapsed().as_millis() as u64;
+                        if let Some(ref mut metrics) = self.run_metrics {
+                            let target = target_role.clone();
+                            metrics.add_step(crate::metrics::StepMetric {
+                                step_id: next.clone(),
+                                action: step.action.clone(),
+                                target,
+                                started_at: chrono::Local::now().to_rfc3339(),
+                                duration_ms: duration,
+                                status: "done".into(),
+                                tool_errors,
+                                iterations,
+                            });
                         }
                         self.save().await.ok();
                         break;
@@ -244,6 +313,7 @@ impl PipelineEngine {
                         };
                     }
                     StepResultInner::Failed { reason } => {
+                        tool_errors += 1;
                         last_reason = reason;
                         if attempt + 1 < step.retry.max(1) {
                             log_console!(
@@ -265,11 +335,27 @@ impl PipelineEngine {
                     .error_log
                     .push(format!("{}: {}", next, last_reason));
 
+                // Record failed step metric
+                let duration = step_start.elapsed().as_millis() as u64;
+                if let Some(ref mut metrics) = self.run_metrics {
+                    metrics.add_step(crate::metrics::StepMetric {
+                        step_id: next.clone(),
+                        action: step.action.clone(),
+                        target: None,
+                        started_at: chrono::Local::now().to_rfc3339(),
+                        duration_ms: duration,
+                        status: "failed".into(),
+                        tool_errors,
+                        iterations,
+                    });
+                }
+
                 match step.on_failure.as_str() {
                     "abort" => {
+                        self.finalize_metrics("aborted").await;
                         return PipelineResult::Aborted {
                             runtime: self.runtime.clone(),
-                        }
+                        };
                     }
                     "skip" => {
                         self.set_status(&next, StepStatus::Skipped);
@@ -277,6 +363,7 @@ impl PipelineEngine {
                     }
                     _ => {
                         self.save().await.ok();
+                        self.finalize_metrics("failed").await;
                         return PipelineResult::StepFailed {
                             step_id: next,
                             reason: last_reason,
@@ -372,16 +459,37 @@ impl PipelineEngine {
                 }
             }
             "self_execute" => {
-                // 内阁 self-execute: execute as a sub-agent
-                let task = step
+                // self_execute: dispatch to handler registry
+                let handler = step
                     .action_params
-                    .get("task")
+                    .get("handler")
                     .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let doc_id = self.execute_task_via_session(task, &step.step_id).await;
-                StepResultInner::Success {
-                    artifact_id: doc_id,
-                    target_role: None,
+                    .unwrap_or("noop");
+                match crate::pipeline::handlers::run_self_execute(
+                    handler,
+                    &step.action_params,
+                    &self.project_dir,
+                )
+                .await
+                {
+                    Ok(outcome) => match outcome {
+                        crate::pipeline::handlers::SelfExecuteOutcome::Success {
+                            message,
+                            artifact,
+                        } => {
+                            log_console!("[pipeline] self_execute ({}): {}", handler, message);
+                            StepResultInner::Success {
+                                artifact_id: artifact,
+                                target_role: None,
+                            }
+                        }
+                        crate::pipeline::handlers::SelfExecuteOutcome::Failed { reason } => {
+                            StepResultInner::Failed { reason }
+                        }
+                    },
+                    Err(e) => StepResultInner::Failed {
+                        reason: format!("self_execute handler error: {}", e),
+                    },
                 }
             }
             other => StepResultInner::Failed {
@@ -471,6 +579,7 @@ impl PipelineEngine {
         }
     }
 
+    #[allow(dead_code)]
     /// Execute a task directly via a temporary session (for self_execute steps).
     async fn execute_task_via_session(&self, task: &str, _step_id: &str) -> Option<String> {
         // For self_execute steps: currently creates a document with the task description.

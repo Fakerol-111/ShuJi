@@ -32,7 +32,7 @@ describe('RouteContextBar', () => {
         ]}
       />
     );
-    expect(screen.getByText('路由')).toBeTruthy();
+    expect(screen.getByText('行文路径')).toBeTruthy();
     expect(screen.getByText('转交门下侍中')).toBeTruthy();
     expect(screen.getByText('转交尚书令')).toBeTruthy();
   });

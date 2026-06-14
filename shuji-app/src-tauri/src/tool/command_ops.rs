@@ -7,7 +7,7 @@ use crate::tool::ToolOutput;
 
 /// 获取当前平台的 shell 命令。
 /// Windows → powershell；其他 → bash（fallback 到 sh）
-fn get_shell() -> (&'static str, Vec<&'static str>) {
+pub(crate) fn get_shell() -> (&'static str, Vec<&'static str>) {
     if cfg!(windows) {
         ("powershell", vec!["-Command"])
     } else if std::process::Command::new("bash")
@@ -292,7 +292,7 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
 }
 
 /// Detect project type by checking for key files.
-fn detect_project_type(working_dir: &Path) -> String {
+pub(crate) fn detect_project_type(working_dir: &Path) -> String {
     if working_dir.join("Cargo.toml").exists() {
         "rust".to_string()
     } else if working_dir.join("package.json").exists() {
@@ -317,7 +317,10 @@ fn scope_suffix(scope: &str) -> &str {
 
 /// Parse test output to extract pass/fail/total counts.
 /// Handles both Rust (cargo test) and Python (pytest) output formats.
-fn parse_test_output(stdout: &str, stderr: &str) -> (Option<usize>, Option<usize>, Option<usize>) {
+pub(crate) fn parse_test_output(
+    stdout: &str,
+    stderr: &str,
+) -> (Option<usize>, Option<usize>, Option<usize>) {
     let combined = format!("{}\n{}", stdout, stderr);
 
     /// Extract count before a keyword like "passed" or "failed" from token windows.

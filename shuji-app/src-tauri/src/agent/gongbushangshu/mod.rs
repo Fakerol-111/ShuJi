@@ -77,6 +77,7 @@ impl GongbuShangshuAgent {
         tools.push(crate::tool::documents::create_document_tool_def());
         tools.push(crate::tool::documents::append_document_tool_def());
         tools.extend(crate::tool::registry::run_tests_tool());
+        tools.push(crate::tool::lint_ops::run_lint_tool_def());
         tools.push(crate::tool::registry::submit_batch_plan_tool());
         tools.push(crate::tool::registry::complete_task_tool());
         // route_tool 已移除 —— PipelineEngine 负责调度

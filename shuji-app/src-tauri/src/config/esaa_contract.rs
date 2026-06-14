@@ -245,31 +245,47 @@ impl ContractBoundaryChecker {
 
 #[async_trait::async_trait]
 impl crate::api::intent::IntentChecker for ContractBoundaryChecker {
-    async fn check(&self, intent: &crate::api::intent::Intent, _working_dir: &std::path::Path) -> crate::api::intent::IntentVerdict {
+    async fn check(
+        &self,
+        intent: &crate::api::intent::Intent,
+        _working_dir: &std::path::Path,
+    ) -> crate::api::intent::IntentVerdict {
         use crate::api::intent::IntentVerdict;
 
         if let Err(msg) = self.check_tool(&intent.agent, &intent.tool) {
-            return IntentVerdict::Reject { reason: msg, rule_id: "CONTRACT_TOOL".into() };
+            return IntentVerdict::Reject {
+                reason: msg,
+                rule_id: "CONTRACT_TOOL".into(),
+            };
         }
 
         if intent.tool == "route_to" {
             if let Some(to) = intent.params.get("to").and_then(|v| v.as_str()) {
                 if let Err(msg) = self.check_route(&intent.agent, to) {
-                    return IntentVerdict::Reject { reason: msg, rule_id: "CONTRACT_ROUTE".into() };
+                    return IntentVerdict::Reject {
+                        reason: msg,
+                        rule_id: "CONTRACT_ROUTE".into(),
+                    };
                 }
             }
         }
 
         if let Some(path) = intent.params.get("path").and_then(|v| v.as_str()) {
             if let Err(msg) = self.check_path(&intent.agent, path) {
-                return IntentVerdict::Reject { reason: msg, rule_id: "CONTRACT_PATH".into() };
+                return IntentVerdict::Reject {
+                    reason: msg,
+                    rule_id: "CONTRACT_PATH".into(),
+                };
             }
         }
 
         if intent.tool == "create_file" {
             if let Some(content) = intent.params.get("content").and_then(|v| v.as_str()) {
                 if let Err(msg) = self.check_file_size(&intent.agent, content) {
-                    return IntentVerdict::Reject { reason: msg, rule_id: "CONTRACT_FILESIZE".into() };
+                    return IntentVerdict::Reject {
+                        reason: msg,
+                        rule_id: "CONTRACT_FILESIZE".into(),
+                    };
                 }
             }
         }

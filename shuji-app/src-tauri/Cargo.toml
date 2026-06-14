@@ -31,6 +31,8 @@ toml = "0.8"
 diffy = "0.4"
 tiktoken-rs = "0.6"
 sha2 = "0.10"
+regex-lite = "0.1"
+jsonschema = "0.18"
 
 [dev-dependencies]
 tempfile = "3"

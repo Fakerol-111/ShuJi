@@ -2,7 +2,10 @@ import { useState } from 'react';
 import { cancelProcessing } from '../api';
 import ChatBubble from './ChatBubble';
 import ChatInput from './ChatInput';
+import DeptGlyph from './DeptGlyph';
 import type { ChatMessage, PlanInfo } from '../types';
+import type { ChatInputHandle } from './ChatInput';
+import { useDeptEvents } from '../hooks/useDeptEvents';
 
 interface ChatPanelProps {
   tab: 'decision' | 'discuss';
@@ -18,6 +21,7 @@ interface ChatPanelProps {
   onCancelDiscuss?: () => void;
   onConvertToCommand: (text: string) => void;
   endRef: React.RefObject<HTMLDivElement | null>;
+  chatInputRef?: React.RefObject<ChatInputHandle | null>;
 }
 
 export default function ChatPanel(props: ChatPanelProps) {
@@ -35,8 +39,10 @@ export default function ChatPanel(props: ChatPanelProps) {
     onCancelDiscuss,
     onConvertToCommand,
     endRef,
+    chatInputRef,
   } = props;
   const [toast, setToast] = useState('');
+  const { activeDepts } = useDeptEvents();
   const isProcessing = activeDeptsCount > 0;
 
   const showToast = (msg: string) => {
@@ -57,7 +63,7 @@ export default function ChatPanel(props: ChatPanelProps) {
     return (
       <>
         {toast && (
-          <div className="shrink-0 -mb-px text-center text-xs text-gold bg-gold-light/60 rounded-b px-3 py-1.5">
+          <div className="shrink-0 -mb-px text-center text-caption text-gold bg-gold-light/60 rounded-b px-3 py-1.5">
             {toast}
           </div>
         )}
@@ -68,7 +74,7 @@ export default function ChatPanel(props: ChatPanelProps) {
           onRetry={onRetrySend}
           endRef={endRef}
           thinking={isProcessing}
-          thinkingLabel="诸司处理中…"
+          activeDepts={activeDepts}
         />
         <div className="shrink-0 px-4 py-2 border-t border-fold bg-surface-elevated flex justify-end">
           <button
@@ -79,6 +85,7 @@ export default function ChatPanel(props: ChatPanelProps) {
           </button>
         </div>
         <ChatInput
+          ref={chatInputRef}
           onSend={onSend}
           disabled={isProcessing}
           placeholder={isProcessing ? '诸司处理中…' : '拟旨…'}
@@ -128,24 +135,29 @@ function MessageList({
   onRetry,
   endRef,
   thinking,
-  thinkingLabel,
+  activeDepts,
 }: {
   messages: ChatMessage[];
   onOption: (key: string, supplement?: string) => void;
   onRetry?: (text: string, ts: string) => void;
   endRef: React.RefObject<HTMLDivElement | null>;
   thinking?: boolean;
-  thinkingLabel?: string;
+  activeDepts?: string[];
 }) {
+  const activeDept = activeDepts && activeDepts.length > 0 ? activeDepts[activeDepts.length - 1] : null;
+
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
+    <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
       {messages.map((msg, i) => (
         <ChatBubble key={messageKey(msg, i)} msg={msg} onOption={onOption} onRetry={onRetry} />
       ))}
       {thinking && (
-        <div className="flex items-center justify-center gap-2 py-3">
-          <span className="w-2 h-2 rounded-full bg-gold animate-pulse" />
-          <span className="text-xs text-ink-500 font-medium">{thinkingLabel || '诸司处理中…'}</span>
+        <div className="relative overflow-hidden rounded-lg border border-fold bg-surface-parchment px-4 py-3">
+          <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-gold/10 to-transparent" />
+          <div className="flex items-center gap-2 relative">
+            {activeDept && <DeptGlyph deptKey={activeDept} size={16} stroke="#8B7355" />}
+            <span className="text-ui text-ink-600 font-display">诸司处理中…</span>
+          </div>
         </div>
       )}
       <div ref={endRef} />

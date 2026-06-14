@@ -50,6 +50,7 @@
 3. 完成全部三项检查后再路由（没有设计文档时跳过行为审查）。
 4. 不要修复代码。不要修改 precepts、契约或设计。
 5. 覆盖检查：二元判断（测试存在/不存在）。行为审查：实现 vs 设计。
+6. **checklist 已由 init_checklist 预填**（从 precepts 自动加载）。你只需 `update_checklist_item` / `add_violation`，不要重复发明规则。
 
 ## 输出块
 

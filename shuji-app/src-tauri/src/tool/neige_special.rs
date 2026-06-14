@@ -28,18 +28,26 @@ async fn tool_submit_pipeline_plan(args: &serde_json::Value, _ctx: &ToolContext)
     if plan_json.is_empty() {
         return r#"{"ok": false, "message": "plan_json 不能为空"}"#.to_string();
     }
-    // Validate it's parseable JSON
-    match serde_json::from_str::<serde_json::Value>(plan_json) {
-        Ok(_) => {
+
+    // Validate against JSON Schema + Rust-level checks
+    match crate::pipeline::schema::validate_plan_json(plan_json) {
+        Ok(plan) => {
             log_console!(
-                "[tool] submit_pipeline_plan accepted — plan_json length={}",
-                plan_json.len()
+                "[tool] submit_pipeline_plan accepted — plan '{}' ({} steps)",
+                plan.plan_id,
+                plan.steps.len()
             );
             serde_json::json!({"ok": true, "message": "管道计划已提交，引擎接管执行", "plan_json": plan_json}).to_string()
         }
         Err(e) => {
-            serde_json::json!({"ok": false, "message": format!("plan_json 不是合法 JSON: {}", e)})
-                .to_string()
+            log_console!("[tool] submit_pipeline_plan REJECTED: {}", e);
+            serde_json::json!({
+                "ok": false,
+                "message": format!("管道计划校验失败: {}", e.message),
+                "field_path": e.field_path,
+                "error_type": "schema_validation"
+            })
+            .to_string()
         }
     }
 }

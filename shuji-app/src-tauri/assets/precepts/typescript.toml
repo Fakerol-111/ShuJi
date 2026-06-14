@@ -1,0 +1,37 @@
+[[rules]]
+id = "TS_STRICT_MODE"
+category = "correctness"
+description = "TypeScript 应启用 strict 模式"
+severity = "warning"
+lint_tool = "manual"
+
+[[rules]]
+id = "TS_NO_ANY"
+category = "correctness"
+description = "避免使用 any 类型，使用 unknown 或具体类型"
+severity = "warning"
+lint_tool = "eslint"
+lint_args = ["--rule", "@typescript-eslint/no-explicit-any: error"]
+
+[[rules]]
+id = "TS_CONSISTENT_RETURN"
+category = "correctness"
+description = "函数应有显式返回类型标注"
+severity = "info"
+lint_tool = "eslint"
+lint_args = ["--rule", "@typescript-eslint/explicit-function-return-type: warn"]
+
+[[rules]]
+id = "TS_TEST_NAMING"
+category = "testing"
+description = "测试文件应命名为 *.test.ts 或 *.spec.ts"
+severity = "info"
+lint_tool = "manual"
+
+[[rules]]
+id = "TS_FORMAT"
+category = "style"
+description = "代码应通过 prettier 格式检查"
+severity = "warning"
+lint_tool = "prettier"
+lint_args = ["--check"]

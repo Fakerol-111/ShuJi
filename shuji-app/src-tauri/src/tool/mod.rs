@@ -14,11 +14,13 @@ pub mod command_ops;
 pub mod dispatch;
 pub mod documents;
 pub mod file_ops;
+pub mod lint_ops;
 pub mod neige_special;
 pub mod output;
 pub mod path;
 pub mod registry;
 pub mod shangshuling_special;
+pub mod test_env;
 mod tool_log;
 
 pub use audit_tools::*;

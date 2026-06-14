@@ -123,6 +123,10 @@ pub struct WatchdogConfig {
     /// 当同一路径被 delete_file 后紧接着 create_file 的次数达到此值，注入干预提示
     #[serde(default = "default_delete_create_warning_count")]
     pub delete_create_warning_count: u32,
+
+    /// 测试僵局阈值：同一 role 连续多少次 run_tests 失败触发 hint
+    #[serde(default = "default_test_stalemate_threshold")]
+    pub test_stalemate_threshold: u32,
 }
 
 /// 每个角色可选的上下文窗口覆盖配置
@@ -268,6 +272,9 @@ fn default_read_without_write_warning() -> u32 {
 fn default_delete_create_warning_count() -> u32 {
     2
 }
+fn default_test_stalemate_threshold() -> u32 {
+    3
+}
 
 impl Default for CheckpointConfig {
     fn default() -> Self {
@@ -345,6 +352,7 @@ impl Default for WatchdogConfig {
             same_tool_warning_count: default_same_tool_warning_count(),
             read_without_write_warning: default_read_without_write_warning(),
             delete_create_warning_count: default_delete_create_warning_count(),
+            test_stalemate_threshold: default_test_stalemate_threshold(),
         }
     }
 }
@@ -478,6 +486,9 @@ impl RuntimeConfig {
         }
         if other.watchdog.delete_create_warning_count != default_delete_create_warning_count() {
             self.watchdog.delete_create_warning_count = other.watchdog.delete_create_warning_count;
+        }
+        if other.watchdog.test_stalemate_threshold != default_test_stalemate_threshold() {
+            self.watchdog.test_stalemate_threshold = other.watchdog.test_stalemate_threshold;
         }
 
         // Checkpoint

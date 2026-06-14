@@ -248,7 +248,9 @@ pub fn build_default_checkers(
     }
     let shuji_dir = working_dir.join(".shuji");
     Arc::new(vec![
-        Box::new(crate::config::esaa_contract::ContractBoundaryChecker::new(&shuji_dir)),
+        Box::new(crate::config::esaa_contract::ContractBoundaryChecker::new(
+            &shuji_dir,
+        )),
         Box::new(ImmutabilityChecker),
         Box::new(ApprovalChecker),
         Box::new(RateLimiter::default()),

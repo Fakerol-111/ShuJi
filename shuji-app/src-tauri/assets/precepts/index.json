@@ -1,0 +1,7 @@
+{
+  "detectors": [
+    { "files": ["Cargo.toml"], "precepts": ["rust.toml", "universal.toml"] },
+    { "files": ["pyproject.toml", "setup.py"], "precepts": ["python.toml", "universal.toml"] },
+    { "files": ["package.json"], "precepts": ["typescript.toml", "universal.toml"] }
+  ]
+}

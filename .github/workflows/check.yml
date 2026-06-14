@@ -50,9 +50,15 @@ jobs:
       - name: Run unit tests
         run: cd shuji-app/src-tauri && cargo test --lib
       - name: Run integration tests
-        run: cd shuji-app/src-tauri && RUST_BACKTRACE=1 cargo test --tests -- --skip expand_requirements --skip workflow_demo --test-threads=1
+        run: cd shuji-app/src-tauri && RUST_BACKTRACE=1 cargo test --tests -- --skip expand_requirements --test-threads=1
+      - name: Pipeline integration tests
+        run: cd shuji-app/src-tauri && cargo test --test pipeline_test -- --test-threads=1
+      - name: Workflow mock tests
+        run: cd shuji-app/src-tauri && cargo test --test workflow_mock_test --test workflow_demo_test -- --test-threads=1
+      - name: Scenario replay tests
+        run: cd shuji-app/src-tauri && cargo test --test scenario_replay_test -- --test-threads=1
 
-  # Windows 轻量 job：避免重复安装 Tauri 系统依赖，只跑 cargo check + 单元测试
+  # Windows 轻量 job：避免重复安装 Tauri 系统依赖，只跑 cargo check + 单元 + 轻量集成
   windows-check:
     runs-on: windows-latest
     steps:
@@ -62,6 +68,8 @@ jobs:
         run: cd shuji-app/src-tauri && cargo check
       - name: Run unit tests
         run: cd shuji-app/src-tauri && cargo test --lib
+      - name: Run lightweight integration tests (no GUI)
+        run: cd shuji-app/src-tauri && cargo test --test document_test --test audit_test --test path_security_test --test pipeline_test --test validate_test --test scenario_replay_test -- --test-threads=1
 
   frontend:
     runs-on: ubuntu-latest

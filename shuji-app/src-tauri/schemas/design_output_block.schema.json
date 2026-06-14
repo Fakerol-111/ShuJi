@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "DesignOutputBlock",
+  "description": "Schema for 中书令/吏部 skill output blocks",
+  "type": "object",
+  "required": ["conclusions", "pending_issues", "refs"],
+  "properties": {
+    "conclusions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "设计结论"
+    },
+    "pending_issues": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "待处理问题"
+    },
+    "refs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "引用的文档 ID 列表"
+    },
+    "route": {
+      "type": "string",
+      "description": "可选的下一步路由目标"
+    }
+  }
+}

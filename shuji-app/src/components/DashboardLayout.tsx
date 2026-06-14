@@ -164,7 +164,7 @@ export default function DashboardLayout({
                   onMouseDown={onDragStart}
                 />
                 <aside
-                  className="shrink-0 flex flex-col min-h-0 bg-surface-paper"
+                  className="shrink-0 flex flex-col min-h-0 min-w-0 bg-surface-paper overflow-hidden"
                   style={{ width: artifactWidth }}
                 >
                   {artifactPanel}

@@ -7,7 +7,6 @@ use tokio::sync::mpsc;
 
 use crate::actor::ActorSystem;
 use crate::actor::{ActorContext, ActorMessage, DeptLogEntry, FastMessage};
-use crate::models::dept_step::DeptStepSender;
 use crate::agent::bingbushangshu::BingbuShangshuAgent;
 use crate::agent::gongbushangshu::GongbuShangshuAgent;
 use crate::agent::liburshangshu::LibuRShangshuAgent;
@@ -21,6 +20,7 @@ use crate::agent::zhongshuling::ZhongshulingAgent;
 use crate::api::client::AnthropicClient;
 use crate::commands::settings::AppConfig;
 use crate::models::chat::ChatMessage;
+use crate::models::dept_step::DeptStepSender;
 use crate::models::role::Role;
 
 /// Per-role context usage statistics exposed to the frontend.

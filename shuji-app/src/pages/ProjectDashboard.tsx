@@ -116,6 +116,15 @@ export default function ProjectDashboard() {
   const [artifactOpen, setArtifactOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // When a document is selected from the sidebar (file tree), auto-open the artifact panel
+  const handleDocSelectAndOpenPanel = useCallback(
+    (path: string) => {
+      handleDocSelect(path);
+      setArtifactOpen(true);
+    },
+    [handleDocSelect, setArtifactOpen]
+  );
+
   // Keyboard shortcuts
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -226,7 +235,7 @@ export default function ProjectDashboard() {
         activity={activity}
         onActivity={handleActivity}
         activeDocPath={activeDoc?.path || null}
-        onDocSelect={handleDocSelect}
+        onDocSelect={handleDocSelectAndOpenPanel}
         onShowDiff={(path) => openTab(path, 'diff')}
         pendingApprovalsCount={pendingApprovals.length}
         headerRight={
@@ -246,6 +255,17 @@ export default function ProjectDashboard() {
             >
               打开项目
             </Button>
+            <button
+              onClick={() => setArtifactOpen((v) => !v)}
+              className={`text-xs px-2 py-1 rounded transition-colors ${
+                artifactOpen
+                  ? 'bg-gold/20 text-gold'
+                  : 'text-ink-400 hover:text-ink-200 hover:bg-ink-800'
+              }`}
+              title={`${artifactOpen ? '关闭' : '打开'}架阁 (Ctrl+\)`}
+            >
+              架阁
+            </button>
             <HelpDrawer />
             <SettingsMenu onOpenSettings={() => setSettingsOpen(true)} />
           </>

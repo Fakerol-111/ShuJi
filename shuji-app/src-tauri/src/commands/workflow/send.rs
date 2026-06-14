@@ -7,7 +7,6 @@ use tauri::{Emitter, Manager, State};
 use tokio::sync::mpsc;
 
 use crate::actor::{ActorMessage, DeptLogEntry, FastMessage};
-use crate::models::dept_step::DeptStepEntry;
 use crate::agent::neige::NeigeAgent;
 use crate::agent::r#trait::{Agent, AgentInput};
 use crate::api::client::AnthropicClient;
@@ -16,6 +15,7 @@ use crate::commands::friendly_error::friendly_error;
 use crate::commands::project::AppState;
 use crate::commands::workflow::bootstrap::start_actor_system;
 use crate::models::chat::ChatMessage;
+use crate::models::dept_step::DeptStepEntry;
 use crate::models::role::Role;
 
 /// Send a message to the 内阁 actor.
@@ -198,8 +198,7 @@ pub async fn send_message(
         if sys_lock.is_none() {
             let (emperor_tx, mut emperor_rx) = mpsc::channel::<ChatMessage>(200);
             let (dept_log_tx, mut dept_log_rx) = mpsc::channel::<DeptLogEntry>(500);
-            let (dept_step_tx, mut dept_step_rx) =
-                mpsc::unbounded_channel::<DeptStepEntry>();
+            let (dept_step_tx, mut dept_step_rx) = mpsc::unbounded_channel::<DeptStepEntry>();
             let (plan_tx, mut plan_rx) = mpsc::channel::<serde_json::Value>(50);
             let (milestone_tx, mut milestone_rx) = mpsc::channel::<String>(50);
             let app_handle = app.clone();

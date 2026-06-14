@@ -336,3 +336,52 @@ export interface WorkflowGraph {
   nodes: GraphNode[];
   edges: GraphEdge[];
 }
+
+// ── Validation Report (from Rust validate::report) ──────────────
+
+export interface CheckResult {
+  name: string;
+  pass: boolean;
+  summary: string;
+  details: Record<string, unknown>;
+}
+
+export interface ValidationReport {
+  ts: string;
+  project_type: string;
+  overall_pass: boolean;
+  checks: CheckResult[];
+  ctrt_id: string | null;
+}
+
+// ── Run Metrics (from Rust metrics::run) ────────────────────────
+
+export interface RunMetrics {
+  run_id: string;
+  plan_id: string;
+  started_at: string;
+  completed_at: string | null;
+  status: string;
+  steps: StepMetric[];
+  validation: ValidationReport | null;
+}
+
+export interface StepMetric {
+  step_id: string;
+  action: string;
+  target: string | null;
+  started_at: string;
+  duration_ms: number;
+  status: string;
+  tool_errors: number;
+  iterations: number;
+}
+
+export interface RunMetricsSummary {
+  run_id: string;
+  plan_id: string;
+  started_at: string;
+  status: string;
+  step_count: number;
+  overall_pass: boolean | null;
+}

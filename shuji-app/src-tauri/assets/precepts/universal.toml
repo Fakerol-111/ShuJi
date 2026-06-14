@@ -1,0 +1,34 @@
+[[rules]]
+id = "UNIVERSAL_README"
+category = "documentation"
+description = "项目根目录应有 README.md"
+severity = "info"
+lint_tool = "manual"
+
+[[rules]]
+id = "UNIVERSAL_GITIGNORE"
+category = "project"
+description = "项目应有 .gitignore（至少忽略 .shuji/）"
+severity = "info"
+lint_tool = "manual"
+
+[[rules]]
+id = "UNIVERSAL_LICENSE"
+category = "legal"
+description = "项目应有 LICENSE 文件"
+severity = "info"
+lint_tool = "manual"
+
+[[rules]]
+id = "UNIVERSAL_NO_SECRETS"
+category = "security"
+description = ".env / .env.* 应加入 .gitignore"
+severity = "error"
+lint_tool = "manual"
+
+[[rules]]
+id = "UNIVERSAL_DIR_STRUCTURE"
+category = "project"
+description = "源码应放在 src/ 目录中，测试放在 tests/"
+severity = "info"
+lint_tool = "manual"

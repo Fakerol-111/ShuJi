@@ -136,6 +136,14 @@
 └─ 剩余批次：<当前/N>
 ```
 
+### lint 快速检查
+
+每批 `complete_task` 前可选调用 `run_lint strict=false` 快速检查代码质量。非强制，但 lint 干净可减少礼部后续的规范违规报告。
+
+### 参考规范
+
+`.shuji/precepts/` 目录中存储了当前语言的工程规范（如 `RUST_SAFE_ERROR_HANDLING`）。可参考这些规则编写符合规范的代码，但不要手动修改 precepts 文件。
+
 ## 5. 交付
 
 所有批次完成后（系统会告诉你），创建报告并路由：

@@ -4,6 +4,9 @@
 //! Departments run without `route_to` — the engine handles all routing.
 
 pub mod engine;
+pub mod handlers;
+pub mod schema;
+pub mod templates;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

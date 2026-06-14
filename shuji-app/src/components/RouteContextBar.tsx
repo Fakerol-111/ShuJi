@@ -49,8 +49,8 @@ export default function RouteContextBar({ entries }: RouteContextBarProps) {
 
   return (
     <div className="shrink-0 px-4 py-2 border-b border-fold bg-surface-paper/50">
-      <div className="flex items-center gap-1.5 text-[10px] font-mono text-ink-500 flex-wrap">
-        <span className="text-ink-400 font-semibold mr-0.5">路由</span>
+      <div className="flex items-center gap-1.5 text-caption font-mono text-ink-500 flex-wrap">
+        <span className="text-ink-400 font-semibold mr-0.5">行文路径</span>
         {chain.map((seg, i) => (
           <span key={i} className="flex items-center gap-1">
             {i > 0 && <span className="text-ink-300 mx-0.5">→</span>}

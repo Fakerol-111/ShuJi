@@ -1,5 +1,9 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { setDotenvKey } from '../api';
+
+export interface ChatInputHandle {
+  setText: (text: string) => void;
+}
 
 interface Props {
   onSend: (msg: string) => void;
@@ -19,10 +23,12 @@ const SLASH_COMMANDS: Record<string, { level: string; label: string }> = {
   '/detail': { level: '3', label: '逐步审核' },
 };
 
-export default function ChatInput({ onSend, disabled, placeholder }: Props) {
+export default forwardRef<ChatInputHandle, Props>(function ChatInput({ onSend, disabled, placeholder }, ref) {
   const [text, setText] = useState('');
   const [toast, setToast] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useImperativeHandle(ref, () => ({ setText }));
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -87,7 +93,7 @@ export default function ChatInput({ onSend, disabled, placeholder }: Props) {
           {toast}
         </div>
       )}
-      <div className="flex gap-2 border-t border-fold bg-surface-elevated px-4 py-3 items-end">
+      <div className="flex gap-2 edict-input-wrap px-4 py-3 items-end">
         <textarea
           ref={textareaRef}
           value={text}
@@ -108,4 +114,4 @@ export default function ChatInput({ onSend, disabled, placeholder }: Props) {
       </div>
     </div>
   );
-}
+});

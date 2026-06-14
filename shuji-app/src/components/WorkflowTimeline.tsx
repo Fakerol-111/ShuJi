@@ -319,7 +319,7 @@ export default function WorkflowStatus({
             <div className="pt-1.5 pb-1">
               <div className="flex items-center gap-2 mb-1 text-ink-500 font-medium">
                 <span>工作流</span>
-                <span className="text-[10px] px-1 rounded bg-ink-100/50">{wfState.governance}</span>
+                <span className="text-caption px-1 rounded bg-ink-100/50">{wfState.governance}</span>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="px-2 py-0.5 rounded-full border border-ink-200 text-ink-500">
@@ -329,7 +329,7 @@ export default function WorkflowStatus({
                 <span className="px-2 py-0.5 rounded-full border border-gold/30 text-gold-700 bg-gold/8">
                   {stageLabel(wfState.current_stage)}
                 </span>
-                <span className="text-ink-300 mx-1 text-[10px]">
+                <span className="text-ink-300 mx-1 text-caption">
                   ({wfState.execution_chain_id})
                 </span>
               </div>

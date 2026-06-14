@@ -1,0 +1,34 @@
+# REST Endpoint Contract
+
+## `{{method}} {{path}}`
+
+### 请求
+
+**Headers**:
+```
+Content-Type: application/json
+Authorization: Bearer <token>
+```
+
+**Body**:
+```json
+{{request_body}}
+```
+
+### 响应
+
+**Status**: `{{status_code}}`
+
+**Body**:
+```json
+{{response_body}}
+```
+
+### 错误
+
+| Status | 条件 |
+|--------|------|
+| 400 | 参数校验失败 |
+| 401 | 未授权 |
+| 404 | 资源不存在 |
+| 500 | 服务端错误 |

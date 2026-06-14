@@ -1,16 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Tabs } from './ui/Tabs';
-import WorkflowRibbon from './WorkflowRibbon';
-import WorkflowStatus from './WorkflowTimeline';
+import CommandBar from './CommandBar';
 import DeptCardRail from './DeptCardRail';
 import DeptInspector from './DeptInspector';
 import ChatPanel from './ChatPanel';
 import AgentIdleState from './AgentIdleState';
 import { getDeptMeta } from '../constants';
 import { useDeptEvents } from '../hooks/useDeptEvents';
-import { docIdToPath } from '../utils/docPath';
-import type { Project, ChatMessage, PlanInfo, PhaseRuntime } from '../types';
+import type { Project, ChatMessage, PlanInfo } from '../types';
 import type { Tab } from '../hooks/useChat';
+import type { PhaseRuntime } from '../types';
+import type { ChatInputHandle } from './ChatInput';
 
 interface AgentStreamPanelProps {
   project: Project | null;
@@ -34,6 +34,7 @@ interface AgentStreamPanelProps {
   onConvertToCommand: (text: string) => void;
   onSelectDoc: (path: string) => void;
   onOpenProject?: () => void;
+  onFillInput?: (text: string) => void;
   endRef: React.RefObject<HTMLDivElement | null>;
 }
 
@@ -82,6 +83,8 @@ export default function AgentStreamPanel({
     }
   }, [activeDepts, pinDept, inInspector, selectedDept]);
 
+  const chatInputRef = useRef<ChatInputHandle>(null);
+  const handleFillInput = (text: string) => chatInputRef.current?.setText(text);
   const totalStageCount = phaseCount || phases.length;
   const completedStageCount = phases.filter(
     (p) => p.execution === 'Completed' || p.execution === 'MinorIssue'
@@ -90,28 +93,17 @@ export default function AgentStreamPanel({
 
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0">
-      <WorkflowRibbon
+      <CommandBar
         totalStageCount={totalStageCount}
         completedStageCount={completedStageCount}
-        pendingCount={pendingApprovals.length}
-        onPendingClick={() => {
-          if (pendingApprovals.length > 0) onSelectDoc(docIdToPath(pendingApprovals[0]));
-        }}
+        phaseCount={phaseCount}
+        phases={phases}
+        overall={overall}
+        activeDepts={activeDepts}
+        planInfo={planInfo}
+        pendingApprovals={pendingApprovals}
+        onSelectDoc={onSelectDoc}
       />
-
-      {project && (
-        <WorkflowStatus
-          phaseCount={phaseCount}
-          phases={phases}
-          overall={overall}
-          activeDepts={activeDepts}
-          planInfo={planInfo}
-          pendingApprovals={pendingApprovals}
-          onSelectDoc={onSelectDoc}
-          collapsible
-          defaultCollapsed
-        />
-      )}
 
       {project ? (
         <div className="flex-1 flex min-h-0">
@@ -125,8 +117,11 @@ export default function AgentStreamPanel({
             onTogglePin={() => setPinDept((p) => !p)}
           />
           {showChat ? (
-            <div className="flex-1 flex flex-col min-w-0">
-              <div className="border-b border-fold bg-surface-elevated shrink-0 px-3 py-2">
+            <div
+              className="flex-1 flex flex-col min-w-0 stage-edict"
+            >
+              <div className="border-b border-fold bg-surface-elevated shrink-0 px-4 py-2 flex items-center justify-between">
+                <span className="font-display text-ui font-semibold text-ink-800">拟旨殿</span>
                 <Tabs
                   tabs={[
                     { key: 'decision', label: '决策' },
@@ -142,6 +137,7 @@ export default function AgentStreamPanel({
                     project={project}
                     onDocSelect={onSelectDoc}
                     onOpenProject={onOpenProject}
+                    onFillInput={handleFillInput}
                   />
                   <ChatPanel
                     tab={tab}
@@ -157,6 +153,7 @@ export default function AgentStreamPanel({
                     onCancelDiscuss={onCancelDiscuss}
                     onConvertToCommand={onConvertToCommand}
                     endRef={endRef}
+                    chatInputRef={chatInputRef}
                   />
                 </>
               ) : (
@@ -174,28 +171,36 @@ export default function AgentStreamPanel({
                   onCancelDiscuss={onCancelDiscuss}
                   onConvertToCommand={onConvertToCommand}
                   endRef={endRef}
+                  chatInputRef={chatInputRef}
                 />
               )}
             </div>
-          ) : selectedDept === '__all__' ? (
-            <DeptInspector
-              dept={null}
-              mode="all"
-              entries={logEntries}
-              active={false}
-              onBack={() => setSelectedDept(null)}
-              onDocClick={onSelectDoc}
-            />
           ) : (
-            <DeptInspector
-              dept={selectedDept}
-              mode="single"
-              entries={logEntries.filter((e) => e.dept === selectedDept)}
-              active={activeDepts.includes(selectedDept!)}
-              onBack={() => setSelectedDept(null)}
-              onDocClick={onSelectDoc}
-              planInfo={planInfo}
-            />
+            <div
+              className="flex-1 flex flex-col min-w-0 stage-inspect cockpit-fade-in"
+              data-dept={selectedDept !== '__all__' ? getDeptMeta(selectedDept)?.key : undefined}
+            >
+              {selectedDept === '__all__' ? (
+                <DeptInspector
+                  dept={null}
+                  mode="all"
+                  entries={logEntries}
+                  active={false}
+                  onBack={() => setSelectedDept(null)}
+                  onDocClick={onSelectDoc}
+                />
+              ) : (
+                <DeptInspector
+                  dept={selectedDept}
+                  mode="single"
+                  entries={logEntries.filter((e) => e.dept === selectedDept)}
+                  active={activeDepts.includes(selectedDept!)}
+                  onBack={() => setSelectedDept(null)}
+                  onDocClick={onSelectDoc}
+                  planInfo={planInfo}
+                />
+              )}
+            </div>
           )}
         </div>
       ) : (

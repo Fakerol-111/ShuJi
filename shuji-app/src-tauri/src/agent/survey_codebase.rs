@@ -68,5 +68,58 @@ pub async fn run(
         .map_err(|e| format!("勘察失败: {}", e))?;
     let result = run_result.into_text();
 
-    Ok(result.trim().to_string())
+    // Append structured engineering context
+    let eng_context = build_engineering_context(working_dir);
+    let full_result = format!("{}\n\n{}", result.trim(), eng_context);
+
+    Ok(full_result.trim().to_string())
+}
+
+/// Build engineering context section for survey output.
+fn build_engineering_context(working_dir: &Path) -> String {
+    let project_type = crate::tool::command_ops::detect_project_type(working_dir);
+    let precept_files = crate::precepts::detect_precept_files(working_dir);
+    let rules = crate::precepts::load_rules(&precept_files);
+    let precept_ids: Vec<String> = rules.iter().map(|r| r.id.clone()).collect();
+
+    let test_framework = match project_type.as_str() {
+        "rust" => "cargo test",
+        "node" => {
+            let pkg = working_dir.join("package.json");
+            let content = std::fs::read_to_string(&pkg).unwrap_or_default();
+            if content.contains("vitest") {
+                "vitest"
+            } else if content.contains("jest") {
+                "jest"
+            } else {
+                "npm test"
+            }
+        }
+        "python" => "pytest",
+        _ => "unknown",
+    };
+
+    let lint_command = match project_type.as_str() {
+        "rust" => "cargo clippy",
+        "node" => "npm run lint",
+        "python" => "ruff check",
+        _ => "unknown",
+    };
+
+    let has_ci =
+        working_dir.join(".github").exists() || working_dir.join(".gitlab-ci.yml").exists();
+
+    format!(
+        "## 工程上下文\n\
+         - project_type: {}\n\
+         - test_framework: {}\n\
+         - lint_command: {}\n\
+         - has_ci: {}\n\
+         - precepts_loaded: [{}]\n",
+        project_type,
+        test_framework,
+        lint_command,
+        has_ci,
+        precept_ids.join(", ")
+    )
 }

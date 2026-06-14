@@ -1,0 +1,200 @@
+//! `setup_test_env` tool: prepares test environment for different project types.
+//!
+//! Supports:
+//! - python: `python -m venv .venv` + pip install
+//! - node: `npm ci` or `npm install`
+//! - rust: `cargo fetch` (optional, skip by default)
+
+use std::path::Path;
+
+use crate::tool::command_ops::{execute_with_timeout, get_shell};
+use crate::tool::ToolOutput;
+
+/// Set up test environment for the project.
+///
+/// Parameters:
+/// - `force` (bool, default false): re-create environment even if it exists
+pub async fn tool_setup_test_env(working_dir: &Path, args: &serde_json::Value) -> String {
+    let force = args.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
+
+    let project_type = detect_project_type(working_dir);
+    let (shell, shell_args) = get_shell();
+
+    match project_type.as_str() {
+        "rust" => {
+            // Rust: cargo fetch (optional, only if Cargo.lock absent)
+            if !working_dir.join("Cargo.lock").exists() || force {
+                let cmd = "cargo fetch";
+                let timeout = std::time::Duration::from_secs(600);
+                match execute_with_timeout(shell, &shell_args, cmd, working_dir, timeout).await {
+                    Ok(o) if o.status.success() => {
+                        ToolOutput::success("setup_test_env", "", "cargo fetch 完成")
+                    }
+                    Ok(o) => ToolOutput::error(
+                        "setup_test_env",
+                        "",
+                        "fetch_failed",
+                        &format!("cargo fetch 失败 exit={}", o.status.code().unwrap_or(-1)),
+                    ),
+                    Err(e) => ToolOutput::error("setup_test_env", "", "exec_error", &e),
+                }
+            } else {
+                ToolOutput::success("setup_test_env", "", "rust 环境就绪 (Cargo.lock 已存在)")
+            }
+        }
+        "node" => {
+            let has_lock = working_dir.join("package-lock.json").exists();
+            let has_node_modules = working_dir.join("node_modules").exists();
+
+            if has_node_modules && !force {
+                return ToolOutput::success("setup_test_env", "", "node_modules 已存在");
+            }
+
+            let cmd = if has_lock { "npm ci" } else { "npm install" };
+            let timeout = std::time::Duration::from_secs(600);
+            match execute_with_timeout(shell, &shell_args, cmd, working_dir, timeout).await {
+                Ok(o) if o.status.success() => {
+                    ToolOutput::success("setup_test_env", "", &format!("{} 完成", cmd))
+                }
+                Ok(o) => ToolOutput::error(
+                    "setup_test_env",
+                    "",
+                    "install_failed",
+                    &format!("{} 失败 exit={}", cmd, o.status.code().unwrap_or(-1)),
+                ),
+                Err(e) => ToolOutput::error("setup_test_env", "", "exec_error", &e),
+            }
+        }
+        "python" => {
+            let venv_dir = working_dir.join(".venv");
+            let venv_bin = if cfg!(windows) {
+                venv_dir.join("Scripts").join("python")
+            } else {
+                venv_dir.join("bin").join("python")
+            };
+
+            if venv_bin.exists() && !force {
+                return ToolOutput::success("setup_test_env", "", ".venv 已存在");
+            }
+
+            // Create venv
+            let venv_cmd = "python -m venv .venv";
+            let timeout = std::time::Duration::from_secs(300);
+            match execute_with_timeout(shell, &shell_args, venv_cmd, working_dir, timeout).await {
+                Ok(o) if !o.status.success() => {
+                    return ToolOutput::error(
+                        "setup_test_env",
+                        "",
+                        "venv_failed",
+                        &format!("python -m venv 失败 exit={}", o.status.code().unwrap_or(-1)),
+                    );
+                }
+                Err(e) => {
+                    return ToolOutput::error("setup_test_env", "", "exec_error", &e);
+                }
+                _ => {}
+            }
+
+            // Try pip install editable
+            let pip_install = if cfg!(windows) {
+                ".venv/Scripts/pip install -e ."
+            } else {
+                ".venv/bin/pip install -e ."
+            };
+            let timeout = std::time::Duration::from_secs(300);
+            match execute_with_timeout(shell, &shell_args, pip_install, working_dir, timeout).await
+            {
+                Ok(o) if o.status.success() => {
+                    ToolOutput::success("setup_test_env", "", "python venv 创建完成 + pip install")
+                }
+                Ok(_) => {
+                    // Try with [dev] extra
+                    let pip_install_dev = if cfg!(windows) {
+                        ".venv/Scripts/pip install -e \".[dev]\""
+                    } else {
+                        ".venv/bin/pip install -e '.[dev]'"
+                    };
+                    match execute_with_timeout(
+                        shell,
+                        &shell_args,
+                        pip_install_dev,
+                        working_dir,
+                        timeout,
+                    )
+                    .await
+                    {
+                        Ok(o) if o.status.success() => ToolOutput::success(
+                            "setup_test_env",
+                            "",
+                            "python venv 创建完成 + pip install -e .[dev]",
+                        ),
+                        Ok(_) => ToolOutput::success(
+                            "setup_test_env",
+                            "",
+                            "python venv 创建完成 (pip install 跳过或失败，不影响环境)",
+                        ),
+                        Err(e) => ToolOutput::error("setup_test_env", "", "exec_error", &e),
+                    }
+                }
+                Err(e) => ToolOutput::error("setup_test_env", "", "exec_error", &e),
+            }
+        }
+        _ => ToolOutput::success_raw(
+            "setup_test_env",
+            &format!(
+                "{{\"skipped\": true, \"reason\": \"unknown_project_type: {}\"}}",
+                project_type
+            ),
+        ),
+    }
+}
+
+fn detect_project_type(working_dir: &Path) -> String {
+    if working_dir.join("Cargo.toml").exists() {
+        "rust".to_string()
+    } else if working_dir.join("package.json").exists() {
+        "node".to_string()
+    } else if working_dir.join("pyproject.toml").exists() || working_dir.join("setup.py").exists() {
+        "python".to_string()
+    } else {
+        "unknown".to_string()
+    }
+}
+
+/// Tool definition for setup_test_env.
+pub fn setup_test_env_tool_def() -> crate::api::client::ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "setup_test_env".into(),
+            description:
+                "搭建项目测试环境（创建 venv / npm install / cargo fetch）。force=true 时强制重建。"
+                    .into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "force": {
+                        "type": "boolean",
+                        "description": "默认 false。true 时即使环境已存在也重建"
+                    }
+                }
+            }),
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_setup_test_env_no_project() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let result = tool_setup_test_env(tmp.path(), &serde_json::json!({})).await;
+        assert!(
+            result.contains("unknown"),
+            "unknown project should be skipped: {}",
+            result
+        );
+    }
+}

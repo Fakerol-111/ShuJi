@@ -339,3 +339,16 @@ export interface VerificationReport {
 export async function verifyAuditTrail(): Promise<VerificationReport> {
   return invoke('verify_audit_trail');
 }
+import type { ValidationReport, RunMetrics, RunMetricsSummary } from './types';
+
+export async function validateDelivery(projectDir: string, ctrtId?: string, runLint?: boolean): Promise<ValidationReport> {
+  return invoke('validate_delivery_cmd', { projectDir, ctrtId, runLint, runContractDiff: false });
+}
+
+export async function getLatestRunMetrics(projectDir: string): Promise<RunMetrics | null> {
+  return invoke('get_latest_run_metrics', { projectDir });
+}
+
+export async function listRunMetrics(projectDir: string, limit?: number): Promise<RunMetricsSummary[]> {
+  return invoke('list_run_metrics', { projectDir, limit });
+}

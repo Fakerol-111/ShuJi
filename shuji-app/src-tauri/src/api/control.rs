@@ -32,8 +32,7 @@ const INTERRUPT_RESPONSE: &str = "\n\n[系统] 当前处理已被皇帝中断";
 
 /// Callback for real-time step events emitted during AgentController::run().
 /// Receives a DeptStepKind to emit for each iteration, thinking, tool call, etc.
-pub type DeptStepCallback =
-    Box<dyn Fn(DeptStepKind) + Send + Sync>;
+pub type DeptStepCallback = Box<dyn Fn(DeptStepKind) + Send + Sync>;
 
 /// Type of a cross-department routing message.
 #[derive(Debug, Clone, Copy)]
@@ -675,6 +674,26 @@ impl AgentController {
                                 config.watchdog.max_consecutive_errors
                             );
                             log_console!("  {}", preview);
+
+                            // ── Test stalemate detection ──────
+                            if tc.name == "run_tests"
+                                && consecutive_errors >= config.watchdog.test_stalemate_threshold
+                            {
+                                let stalemate_hint = format!(
+                                    "\n\n⚠️ 测试僵局检测：`run_tests` 连续 {} 次失败。\
+                                     建议：① 检查测试代码和实现是否匹配契约 \
+                                     ② `read_file` 确认源码当前内容 \
+                                     ③ 按 [playbook: test-red] 系统化排查 \
+                                     ④ 若仍无法解决，`wake_cabinet` 请求协助",
+                                    consecutive_errors
+                                );
+                                tool_content.push_str(&stalemate_hint);
+                                log_console!(
+                                    "[control] WATCHDOG: test stalemate detected (consecutive={})",
+                                    consecutive_errors
+                                );
+                            }
+
                             if consecutive_errors >= config.watchdog.max_consecutive_errors {
                                 last_text = format!(
                                     "工具连续出错{}次，终止调用。最后错误：{}",

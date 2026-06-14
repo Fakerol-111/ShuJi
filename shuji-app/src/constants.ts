@@ -135,6 +135,8 @@ export interface DeptMeta {
   bg: string; // Tailwind bg class
   text: string; // Tailwind text class
   accent: string; // Tailwind border-l class for left accent bar
+  tintClass?: string; // dept-tint-{key} utility class
+  tintActiveClass?: string; // dept-tint-active-{key} utility class
 }
 
 export const DEPT_META_LIST: DeptMeta[] = [
@@ -147,6 +149,8 @@ export const DEPT_META_LIST: DeptMeta[] = [
     bg: 'bg-purple-50',
     text: 'text-purple-700',
     accent: 'border-l-purple-400',
+    tintClass: 'dept-tint-neige',
+    tintActiveClass: 'dept-tint-active-neige',
   },
   {
     key: 'zhongshuling',
@@ -157,6 +161,8 @@ export const DEPT_META_LIST: DeptMeta[] = [
     bg: 'bg-blue-50',
     text: 'text-blue-700',
     accent: 'border-l-blue-400',
+    tintClass: 'dept-tint-zhongshuling',
+    tintActiveClass: 'dept-tint-active-zhongshuling',
   },
   {
     key: 'menxiashizhong',
@@ -167,6 +173,8 @@ export const DEPT_META_LIST: DeptMeta[] = [
     bg: 'bg-cyan-50',
     text: 'text-cyan-700',
     accent: 'border-l-cyan-400',
+    tintClass: 'dept-tint-menxiashizhong',
+    tintActiveClass: 'dept-tint-active-menxiashizhong',
   },
   {
     key: 'shangshuling',
@@ -177,6 +185,8 @@ export const DEPT_META_LIST: DeptMeta[] = [
     bg: 'bg-orange-50',
     text: 'text-orange-700',
     accent: 'border-l-orange-400',
+    tintClass: 'dept-tint-shangshuling',
+    tintActiveClass: 'dept-tint-active-shangshuling',
   },
   {
     key: 'libushangshu',
@@ -187,6 +197,8 @@ export const DEPT_META_LIST: DeptMeta[] = [
     bg: 'bg-green-50',
     text: 'text-green-700',
     accent: 'border-l-green-400',
+    tintClass: 'dept-tint-libushangshu',
+    tintActiveClass: 'dept-tint-active-libushangshu',
   },
   {
     key: 'bingbushangshu',
@@ -197,6 +209,8 @@ export const DEPT_META_LIST: DeptMeta[] = [
     bg: 'bg-red-50',
     text: 'text-red-700',
     accent: 'border-l-red-400',
+    tintClass: 'dept-tint-bingbushangshu',
+    tintActiveClass: 'dept-tint-active-bingbushangshu',
   },
   {
     key: 'gongbushangshu',
@@ -207,6 +221,8 @@ export const DEPT_META_LIST: DeptMeta[] = [
     bg: 'bg-amber-50',
     text: 'text-amber-700',
     accent: 'border-l-amber-400',
+    tintClass: 'dept-tint-gongbushangshu',
+    tintActiveClass: 'dept-tint-active-gongbushangshu',
   },
   {
     key: 'xingbushangshu',
@@ -217,6 +233,8 @@ export const DEPT_META_LIST: DeptMeta[] = [
     bg: 'bg-gray-50',
     text: 'text-gray-600',
     accent: 'border-l-gray-400',
+    tintClass: 'dept-tint-xingbushangshu',
+    tintActiveClass: 'dept-tint-active-xingbushangshu',
   },
   {
     key: 'liburshangshu',
@@ -227,6 +245,8 @@ export const DEPT_META_LIST: DeptMeta[] = [
     bg: 'bg-indigo-50',
     text: 'text-indigo-700',
     accent: 'border-l-indigo-400',
+    tintClass: 'dept-tint-liburshangshu',
+    tintActiveClass: 'dept-tint-active-liburshangshu',
   },
 ];
 
@@ -274,6 +294,20 @@ export function getDeptMeta(key: string): DeptMeta | undefined {
 
 /** Display order for departments (matches backend Role enum order) */
 export const DEPT_ORDER = DEPT_META_LIST.map((d) => d.label);
+
+/** 驾驶舱轨道分组 — 规划层 / 执行层 */
+export const DEPT_RAIL_GROUPS: { title: string; subtitle: string; labels: string[] }[] = [
+  {
+    title: '规划',
+    subtitle: '三省',
+    labels: ['内阁', '中书令', '门下侍中', '尚书令'],
+  },
+  {
+    title: '执行',
+    subtitle: '六部',
+    labels: ['吏部尚书', '兵部尚书', '工部尚书', '刑部尚书', '礼部尚书'],
+  },
+];
 
 /** Convenience: English key → Chinese label */
 export const DEPT_LABEL_BY_KEY: Record<string, string> = Object.fromEntries(

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
+import DeptGlyph from './DeptGlyph';
 import type { ChatMessage, ChatOption } from '../types';
 import { getDeptMeta } from '../constants';
 
@@ -16,70 +17,82 @@ export default function ChatBubble({
 }) {
   const isEmperor = msg.role === '皇帝';
   const isFailed = msg.status === 'failed';
-  const deptColor = getDeptMeta(msg.role)?.color;
+  const meta = getDeptMeta(msg.role);
 
   return (
     <div className={`flex ${isEmperor ? 'justify-end' : 'justify-start'}`}>
       <div className={`${isEmperor ? 'max-w-[70%]' : 'max-w-[85%]'}`}>
-        {/* Header */}
-        <div
-          className={`text-caption mb-1 ${isEmperor ? 'text-right text-ink-500' : 'text-ink-600'}`}
-        >
-          {isEmperor ? '御' : `${msg.role} 回奏`}
-        </div>
-
-        {/* Emperor bubble */}
         {isEmperor ? (
-          <div
-            className={`rounded-xl rounded-tr-sm px-4 py-2.5 text-body leading-relaxed ${
-              isFailed
-                ? 'bg-vermillion/10 border border-vermillion/30 text-ink-800'
-                : 'bg-ink-900 text-ink-50'
-            }`}
-          >
-            <p className="whitespace-pre-wrap break-words overflow-hidden">{msg.content}</p>
-            {isFailed && onRetry && (
-              <div className="flex items-center gap-2 mt-2 pt-2 border-t border-vermillion/20">
-                <span className="text-caption text-vermillion">发送失败</span>
-                <button
-                  onClick={() => onRetry(msg.content, msg.timestamp)}
-                  className="text-caption font-semibold px-2 py-0.5 rounded bg-vermillion text-white hover:bg-vermillion-dark"
-                >
-                  重试
-                </button>
+          <>
+            <div className="text-right text-caption text-ink-500 mb-1">
+              <span className="inline-flex items-center gap-1">
+                <span className="inline-flex w-4 h-4 items-center justify-center rounded-sm border border-vermillion/50 text-vermillion text-[10px] font-display leading-none">
+                  御
+                </span>
+                圣旨
+              </span>
+            </div>
+            <div
+              className={`rounded-xl rounded-tr-sm px-4 py-2.5 text-body leading-relaxed border border-gold/20 shadow-sm ${
+                isFailed
+                  ? 'bg-vermillion/10 border-vermillion/30 text-ink-800'
+                  : 'bg-ink-900 text-ink-50'
+              }`}
+            >
+              <p className="whitespace-pre-wrap break-words overflow-hidden">{msg.content}</p>
+              {isFailed && onRetry && (
+                <div className="flex items-center gap-2 mt-2 pt-2 border-t border-vermillion/20">
+                  <span className="text-caption text-vermillion">发送失败</span>
+                  <button
+                    onClick={() => onRetry(msg.content, msg.timestamp)}
+                    className="text-caption font-semibold px-2 py-0.5 rounded bg-vermillion text-white hover:bg-vermillion-dark"
+                  >
+                    重试
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            {meta && (
+              <div className="flex items-center gap-2 mb-2 pb-1 border-b border-fold/60">
+                <DeptGlyph deptKey={meta.key} size={14} stroke={meta.color} />
+                <span className="font-display text-ui font-semibold" style={{ color: meta.color }}>
+                  {msg.role}
+                </span>
+                <span className="text-caption text-ink-400">回奏</span>
               </div>
             )}
-          </div>
-        ) : (
-          /* Department bubble: 3px left color bar */
-          <div
-            className="bg-surface-elevated border border-fold rounded-xl rounded-tl-sm px-4 py-2.5 text-body leading-relaxed"
-            style={deptColor ? { borderLeft: `3px solid ${deptColor}` } : undefined}
-          >
-            <div className="prose prose-shuji max-w-none break-words">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={[rehypeHighlight]}
-                components={{
-                  a: ({ href, children }) => (
-                    <a
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (href) window.open(href, '_blank');
-                      }}
-                    >
-                      {children}
-                    </a>
-                  ),
-                }}
-              >
-                {msg.content}
-              </ReactMarkdown>
+            <div
+              className="bg-surface-elevated border border-fold rounded-xl rounded-tl-sm px-4 py-2.5 text-body leading-relaxed"
+              style={meta?.color ? { borderLeft: `3px solid ${meta.color}` } : undefined}
+            >
+              <div className="prose prose-shuji max-w-none break-words">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeHighlight]}
+                  components={{
+                    a: ({ href, children }) => (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (href) window.open(href, '_blank');
+                        }}
+                      >
+                        {children}
+                      </a>
+                    ),
+                  }}
+                >
+                  {msg.content}
+                </ReactMarkdown>
+              </div>
             </div>
-          </div>
+          </>
         )}
 
         {msg.options.length > 0 && <OptionGroup options={msg.options} onOption={onOption} />}
@@ -147,14 +160,14 @@ function OptionGroup({
               onOption(opt.key);
             }
           }}
-          className={`text-ui font-bold px-3 py-1.5 rounded-lg transition-colors ${
+          className={`text-ui font-bold px-3 py-1.5 rounded-lg transition-colors border ${
             opt.key === 'A'
-              ? 'bg-jade text-white hover:bg-jade/80'
+              ? 'border-jade bg-jade-light text-jade hover:bg-jade'
               : opt.key === 'B'
-                ? 'bg-vermillion text-white hover:bg-vermillion-dark'
+                ? 'border-vermillion bg-vermillion-light text-vermillion hover:bg-vermillion'
                 : opt.key === 'C'
-                  ? 'bg-ink-700 text-white hover:bg-ink-800'
-                  : `bg-ink-600 text-white hover:bg-ink-700`
+                  ? 'border-ink-300 bg-surface-elevated text-ink-800 hover:border-vermillion/40'
+                  : 'border-fold bg-surface-elevated text-ink-800 hover:border-vermillion/40'
           }`}
           title={opt.description}
         >

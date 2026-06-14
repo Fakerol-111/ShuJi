@@ -1,0 +1,61 @@
+[[rules]]
+id = "RUST_SAFE_ERROR_HANDLING"
+category = "error_handling"
+description = "生产代码禁止 unwrap/expect，使用 ? 或 match"
+severity = "error"
+lint_tool = "clippy"
+lint_args = ["--", "-W", "clippy::unwrap_used"]
+
+[[rules]]
+id = "RUST_NO_PANIC"
+category = "error_handling"
+description = "禁止在库代码中直接 panic!，返回 Result"
+severity = "error"
+lint_tool = "manual"
+
+[[rules]]
+id = "RUST_DOC_PUB_API"
+category = "documentation"
+description = "所有 pub 项应有文档注释（///）"
+severity = "warning"
+lint_tool = "clippy"
+lint_args = ["--", "-W", "clippy::missing_docs_in_private_items"]
+
+[[rules]]
+id = "RUST_NAMING_CONVENTION"
+category = "style"
+description = "类型/特征使用 CamelCase，函数/变量使用 snake_case"
+severity = "error"
+lint_tool = "clippy"
+lint_args = ["--", "-D", "non_camel_case_types", "-D", "non_snake_case"]
+
+[[rules]]
+id = "RUST_NO_DEAD_CODE"
+category = "correctness"
+description = "无未使用的代码、导入或变量"
+severity = "warning"
+lint_tool = "clippy"
+lint_args = ["--", "-W", "clippy::dead_code"]
+
+[[rules]]
+id = "RUST_TEST_ATTRS"
+category = "testing"
+description = "测试函数应有 #[test] 或 #[tokio::test] 属性"
+severity = "info"
+lint_tool = "manual"
+
+[[rules]]
+id = "RUST_UNSAFE_AVOID"
+category = "safety"
+description = "避免 unsafe 代码块，除非在明确标记的模块中"
+severity = "warning"
+lint_tool = "clippy"
+lint_args = ["--", "-W", "clippy::undocumented_unsafe_blocks"]
+
+[[rules]]
+id = "RUST_FORMAT"
+category = "style"
+description = "代码必须通过 cargo fmt 格式检查"
+severity = "warning"
+lint_tool = "rustfmt"
+lint_args = []

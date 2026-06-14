@@ -24,6 +24,7 @@ pub fn truncate_tool_result_by_name(name: &str, content: &str) -> String {
         "list_dir" => 8000,
         "execute_command" => 4000,
         "run_tests" => 4000,
+        "run_lint" => 4000,
         "summarize_logs" => 4000,
         _ => 16000,
     };
@@ -86,6 +87,8 @@ pub async fn execute_named_tool(
         "read_document" => documents::tool_read_document(working_dir, args).await,
         "search_text" => tool_search_text(working_dir, args).await,
         "run_tests" => tool_run_tests(working_dir, args).await,
+        "run_lint" => crate::tool::lint_ops::tool_run_lint(working_dir, args).await,
+        "setup_test_env" => crate::tool::test_env::tool_setup_test_env(working_dir, args).await,
         "execute_command" => tool_execute_command(working_dir, args, dept).await,
         "summarize_logs" => tool_summarize_logs(working_dir, args).await,
         "route_to" => {

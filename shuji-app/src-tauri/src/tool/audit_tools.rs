@@ -6,6 +6,19 @@ use crate::tool::ToolOutput;
 
 pub async fn tool_init_checklist(args: &serde_json::Value, working_dir: &Path) -> String {
     let category = args["category"].as_str().unwrap_or("general");
+
+    // If checklist is empty and category is "general", try precepts-based init
+    let existing = crate::audit::load_checklist(working_dir).await;
+    if existing.items.is_empty() && category == "general" {
+        let rules = crate::precepts::load_project_rules(working_dir);
+        if !rules.is_empty() {
+            let items = crate::precepts::rules_to_checklist_items(&rules);
+            let checklist = crate::audit::Checklist { items };
+            crate::audit::save_checklist(working_dir, &checklist).await;
+            return format!("已从 precepts 加载 {} 条检查项", checklist.items.len());
+        }
+    }
+
     let msg = crate::audit::init_checklist(working_dir, category).await;
     serde_json::json!({"ok": true, "message": msg}).to_string()
 }
