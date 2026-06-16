@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { getConfig, saveConfig, checkApiConnection, setModelPreset } from '../api';
 import { formatError } from '../utils/error';
 import { API_URL_PRESETS, MODEL_PRESETS, detectProvider } from '../constants/presets';
@@ -114,6 +115,7 @@ const PRESETS: PresetOption[] = [
 ];
 
 export default function SetupPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>(1);
   const [preset, setPreset] = useState('balanced');
@@ -161,7 +163,7 @@ export default function SetupPage() {
 
   const handleSave = async () => {
     if (!apiKey.trim()) {
-      setError('请输入 API 密钥');
+      setError(t('setup.apiKeyRequired'));
       return;
     }
     setSaving(true);
@@ -199,9 +201,9 @@ export default function SetupPage() {
             <SealLogo size={40} />
           </div>
           <h1 className="font-display text-display font-bold text-ink-900 tracking-wide mb-2">
-            枢机
+            {t('app.name')}
           </h1>
-          <p className="text-body text-ink-600">三省六部制自动化软件开发系统</p>
+          <p className="text-body text-ink-600">{t('app.subtitle')}</p>
         </div>
 
         {/* Step indicator */}
@@ -222,7 +224,7 @@ export default function SetupPage() {
               <span
                 className={`text-ui ${step === s ? 'text-ink-900 font-medium' : 'text-ink-400'}`}
               >
-                {s === 1 ? '预设' : s === 2 ? '密钥' : s === 3 ? '角色' : '完成'}
+                {s === 1 ? t('setup.preset') : s === 2 ? t('setup.apiKey') : s === 3 ? t('setup.role') : t('common.finish')}
               </span>
               {s < 4 && <div className="w-6 h-px bg-ink-300 mx-1" />}
             </div>
@@ -232,7 +234,7 @@ export default function SetupPage() {
         {step === 1 && (
           <Card variant="paper" className="p-6 space-y-4">
             <h2 className="font-display text-sm font-bold text-ink-900 text-center">
-              选择你的使用偏好
+              {t('setup.choosePreference')}
             </h2>
             <div className="space-y-2">
               {PRESETS.map((p) => (
@@ -252,7 +254,7 @@ export default function SetupPage() {
                         {p.label}
                         {p.key === 'balanced' && (
                           <span className="ml-1 text-caption text-vermillion font-normal">
-                            ★ 推荐
+                            {t('setup.recommended')}
                           </span>
                         )}
                       </div>
@@ -265,10 +267,10 @@ export default function SetupPage() {
             </div>
             <div className="flex gap-2 pt-2">
               <Button variant="ghost" className="flex-1" onClick={() => navigate('/setup?skip=1')}>
-                跳过上手指南
+                {t('setup.skipTutorial')}
               </Button>
               <Button variant="primary" className="flex-1" onClick={() => setStep(2)}>
-                下一步
+                {t('setup.next')}
               </Button>
             </div>
           </Card>
@@ -277,13 +279,13 @@ export default function SetupPage() {
         {step === 2 && (
           <Card variant="paper" className="p-6 space-y-4">
             <h2 className="font-display text-sm font-bold text-ink-900 text-center">
-              配置 API 密钥
+              {t('setup.configureApi')}
             </h2>
 
             {/* API Key */}
             <div>
               <label className="block text-ui font-medium text-ink-600 mb-1.5">
-                API 密钥 <span className="text-vermillion">*</span>
+                {t('setup.apiKey')} <span className="text-vermillion">*</span>
               </label>
               <input
                 type="password"
@@ -296,12 +298,12 @@ export default function SetupPage() {
                 autoFocus
                 className="w-full px-3 py-2 text-body border border-fold rounded-lg bg-surface-parchment text-ink-900 placeholder-ink-400 focus:outline-none focus:ring-2 focus:ring-vermillion/30 focus:border-vermillion transition-colors"
               />
-              <p className="text-caption text-ink-400 mt-1">密钥仅保存在本地，不会上传</p>
+              <p className="text-caption text-ink-400 mt-1">{t('setup.keysStoredLocally')}</p>
             </div>
 
             {/* API URL */}
             <div>
-              <label className="block text-ui font-medium text-ink-600 mb-1.5">服务商</label>
+              <label className="block text-ui font-medium text-ink-600 mb-1.5">{t('setup.provider')}</label>
               <div className="flex gap-1.5 flex-wrap mb-2">
                 {API_URL_PRESETS.map((p) => (
                   <button
@@ -365,11 +367,11 @@ export default function SetupPage() {
                 onClick={handleTestConnection}
                 disabled={testing || !apiKey.trim()}
               >
-                {testing ? '测试中...' : '测试连接'}
+                {testing ? t('setup.testing') : t('setup.testConnection')}
               </Button>
-              {testResult === 'ok' && <span className="text-ui text-jade">✔ 连接成功</span>}
+              {testResult === 'ok' && <span className="text-ui text-jade">{t('setup.connectionSuccess')}</span>}
               {testResult === 'fail' && (
-                <span className="text-ui text-vermillion">✘ 连接失败，请检查配置</span>
+                <span className="text-ui text-vermillion">{t('setup.connectionFailHint')}</span>
               )}
             </div>
 
@@ -379,15 +381,13 @@ export default function SetupPage() {
                 onClick={() => setShowAdvanced(!showAdvanced)}
                 className="text-ui text-ink-400 hover:text-ink-600 transition-colors"
               >
-                {showAdvanced ? '▾ 高级配置' : '▸ 高级配置'}
+                {showAdvanced ? '▾ ' + t('setup.advancedConfig') : '▸ ' + t('setup.advancedConfig')}
               </button>
               {showAdvanced && (
                 <div className="mt-2 p-3 bg-surface-parchment rounded-lg text-caption text-ink-500 space-y-1">
-                  <p>
-                    进入主界面后点击右上角 <strong>设置</strong>，可为各部门分别配置 API。
-                  </p>
-                  <p>当前默认 key 将被所有部门共享，除非在设置中单独覆盖。</p>
-                  <p>模型分级预设只影响角色 model 字段，不改 API URL/Key。</p>
+                  <p>{t('setup.advancedHint1')}</p>
+                  <p>{t('setup.advancedHint2')}</p>
+                  <p>{t('setup.advancedHint3')}</p>
                 </div>
               )}
             </div>
@@ -400,10 +400,10 @@ export default function SetupPage() {
 
             <div className="flex gap-3 pt-1">
               <Button variant="ghost" className="flex-1" onClick={() => setStep(1)}>
-                上一步
+                {t('setup.back')}
               </Button>
               <Button variant="primary" className="flex-1" disabled={saving} onClick={handleSave}>
-                {saving ? '保存中...' : '保存并继续'}
+                {saving ? t('setup.saving') : t('setup.saveAndContinue')}
               </Button>
             </div>
           </Card>
@@ -412,10 +412,10 @@ export default function SetupPage() {
         {step === 3 && (
           <Card variant="paper" className="p-6 space-y-4">
             <h2 className="font-display text-sm font-bold text-ink-900 text-center">
-              各部门配置概览
+              {t('setup.roleOverviewTitle')}
             </h2>
             <p className="text-caption text-ink-500 text-center">
-              以下是根据你的预设自动分配的模型。后续可在设置中为各部门单独配置。
+              {t('setup.roleOverviewDesc')}
             </p>
             <div className="space-y-1 max-h-[320px] overflow-y-auto">
               {roleModels.map((r) => {
@@ -441,10 +441,10 @@ export default function SetupPage() {
             </div>
             <div className="flex gap-2 pt-1">
               <Button variant="ghost" className="flex-1" onClick={() => setStep(2)}>
-                上一步
+                {t('setup.back')}
               </Button>
               <Button variant="primary" className="flex-1" onClick={() => setStep(4)}>
-                确认并完成
+                {t('setup.confirmAndFinish')}
               </Button>
             </div>
           </Card>
@@ -464,8 +464,8 @@ export default function SetupPage() {
               </svg>
             </div>
             <div>
-              <h2 className="font-display text-sm font-bold text-ink-900">配置已保存！</h2>
-              <p className="text-body text-ink-600 mt-1">现在可以开始使用枢机了</p>
+              <h2 className="font-display text-sm font-bold text-ink-900">{t('setup.configSaved')}</h2>
+              <p className="text-body text-ink-600 mt-1">{t('setup.configSavedDesc')}</p>
             </div>
             <div className="space-y-2">
               <Button
@@ -473,7 +473,7 @@ export default function SetupPage() {
                 className="w-full"
                 onClick={() => navigate('/', { replace: true })}
               >
-                🚀 开始第一个项目
+                {'🚀 ' + t('setup.startFirstProject')}
               </Button>
               <Button
                 variant="secondary"
@@ -482,7 +482,7 @@ export default function SetupPage() {
                   navigate('/');
                 }}
               >
-                ⚡ 先跑一个 Demo
+                {'⚡ ' + t('setup.runDemo')}
               </Button>
               <Button
                 variant="ghost"

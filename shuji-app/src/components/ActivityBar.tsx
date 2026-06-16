@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 export type ActivitySelection =
   | 'files'
   | 'stats'
@@ -136,24 +138,28 @@ function NewspaperIcon({ active }: { active: boolean }) {
   );
 }
 
-const ITEMS: Array<{
-  id: Exclude<ActivitySelection, null>;
-  icon: (active: boolean) => React.ReactNode;
-  label: string;
-}> = [
-  { id: 'files', icon: (a) => <FolderIcon active={a} />, label: '文件' },
-  { id: 'stats', icon: (a) => <ChartIcon active={a} />, label: '度支' },
-  { id: 'context', icon: (a) => <ScrollIcon active={a} />, label: '文脉' },
-  { id: 'archives', icon: (a) => <ArchiveIcon active={a} />, label: '存档' },
-  { id: 'audit', icon: (a) => <NewspaperIcon active={a} />, label: '朝报' },
-  { id: 'graph', icon: (a) => <GraphIcon active={a} />, label: '文移图' },
-];
-
 export default function ActivityBar({
   selected,
   onSelect,
   pendingApprovalsCount,
 }: ActivityBarProps) {
+  const { t, i18n } = useTranslation();
+  const isEn = i18n.language?.startsWith('en');
+
+  const ITEMS: Array<{
+    id: Exclude<ActivitySelection, null>;
+    icon: (active: boolean) => React.ReactNode;
+    label: string;
+    tooltip: string;
+  }> = [
+    { id: 'files', icon: (a) => <FolderIcon active={a} />, label: t('activityBar.duty'), tooltip: t('activityBar.duty') },
+    { id: 'stats', icon: (a) => <ChartIcon active={a} />, label: t('activityBar.tokens'), tooltip: t('activityBar.tokens') },
+    { id: 'context', icon: (a) => <ScrollIcon active={a} />, label: t('activityBar.context'), tooltip: t('activityBar.context') },
+    { id: 'archives', icon: (a) => <ArchiveIcon active={a} />, label: t('activityBar.checkpoints'), tooltip: t('activityBar.checkpoints') },
+    { id: 'audit', icon: (a) => <NewspaperIcon active={a} />, label: t('activityBar.audit'), tooltip: t('activityBar.audit') },
+    { id: 'graph', icon: (a) => <GraphIcon active={a} />, label: t('activityBar.graph'), tooltip: t('activityBar.graph') },
+  ];
+
   return (
     <div className="w-12 bg-ink-900 border-r border-ink-800 flex flex-col items-center py-2 shrink-0">
       {ITEMS.map((item) => {
@@ -163,7 +169,7 @@ export default function ActivityBar({
           <button
             key={item.id}
             onClick={() => onSelect(active ? null : item.id)}
-            aria-label={item.label}
+            aria-label={item.tooltip}
             className={`group relative w-full h-11 flex items-center justify-center transition-colors ${
               active ? 'bg-ink-800' : 'text-ink-500 hover:text-ink-200 hover:bg-ink-800/60'
             }`}
@@ -175,11 +181,11 @@ export default function ActivityBar({
             {hasBadge && (
               <span
                 className="absolute top-1 right-1.5 w-2 h-2 bg-gold rounded-full animate-pulse"
-                title={`${pendingApprovalsCount} 份朱批待批`}
+                title={isEn ? `${pendingApprovalsCount} pending approval` : `${pendingApprovalsCount} 份朱批待批`}
               />
             )}
             <span className="absolute left-full ml-2 whitespace-nowrap bg-ink-800 text-ink-200 text-xs px-2 py-1 rounded border border-ink-700 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-              {item.label}
+              {item.tooltip}
             </span>
           </button>
         );

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { ALL_ROLES, ROLE_CONTEXT_DEFAULTS } from '../../constants';
 import {
   SettingsSection,
@@ -42,6 +43,7 @@ export default function ContextSettingsTab({
   setExpandedRole,
   setSavedMsg,
 }: ContextSettingsTabProps) {
+  const { t } = useTranslation();
   const roleList = ALL_ROLES.filter((r) => r.key !== 'default');
 
   const effectiveContext = (key: string): ContextRoleForm => {
@@ -62,8 +64,8 @@ export default function ContextSettingsTab({
 
   return (
     <SettingsSection
-      title="上下文窗口配置"
-      description={`全局回退：${DEFAULT_CONTEXT_VALUES.token_threshold.toLocaleString()} tokens · cl100k · DeepSeek 1M 接近上限再压缩`}
+      title={t('settings.contextConfig')}
+      description={`${t('common.descriptionFallback')}：${DEFAULT_CONTEXT_VALUES.token_threshold.toLocaleString()} tokens`}
     >
       <div className="space-y-2">
         {roleList.map((r) => {
@@ -81,27 +83,27 @@ export default function ContextSettingsTab({
                 <SettingsCheckbox
                   checked={usingDefault}
                   onChange={() => toggleContextDefault(r.key)}
-                  label="使用默认"
+                  label={t('common.useDefault')}
                   onClick={(e) => e.stopPropagation()}
                 />
               }
             >
               {usingDefault ? (
                 <SettingsMuted>
-                  使用部门内置推荐值（{effective.token_threshold.toLocaleString()} tokens，保留{' '}
-                  {effective.keep_recent_count} 条）
+                  {t('settings.default')}（{effective.token_threshold.toLocaleString()} tokens，{t('settings.keepRecentMessages')}{' '}
+                  {effective.keep_recent_count}）
                   <br />
-                  取消勾选「使用默认」可单独覆盖
+                  {t('common.useDefault')}
                 </SettingsMuted>
               ) : (
                 <>
                   <SettingsNumberField
-                    label="压缩阈值（tokens）"
+                    label={t('settings.compressionThreshold')}
                     value={contextOverrides[r.key]?.token_threshold ?? effective.token_threshold}
                     onChange={(v) => setContextOverride(r.key, 'token_threshold', v)}
                   />
                   <SettingsNumberField
-                    label="保留最近消息数"
+                    label={t('settings.keepRecentMessages')}
                     value={
                       contextOverrides[r.key]?.keep_recent_count ?? effective.keep_recent_count
                     }
@@ -124,16 +126,16 @@ export default function ContextSettingsTab({
           try {
             const { resetContextConfig } = await import('../../api');
             await resetContextConfig();
-            setSavedMsg('上下文配置已恢复默认');
+            setSavedMsg(t('common.saved'));
             setTimeout(() => setSavedMsg(''), 2000);
           } catch (e) {
             setSavedMsg(String(e));
           }
         }}
       >
-        恢复默认
+        {t('common.restoreDefault')}
       </SettingsAction>
-      <SettingsHint>修改后请点击页面底部的「保存所有更改」。</SettingsHint>
+      <SettingsHint>{t('common.saveAll')}</SettingsHint>
     </SettingsSection>
   );
 }

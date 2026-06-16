@@ -86,12 +86,12 @@ pub async fn run_test_gate(working_dir: &Path, config: &ValidateConfig) -> Check
                     if !summary.is_empty() {
                         summary.push_str("; ");
                     }
-                    summary.push_str("有未说明的 skip 用例");
+                    summary.push_str("has unexplained skip cases");
                 }
             }
 
             if pass {
-                summary = "所有测试通过".to_string();
+                summary = "all tests passed".to_string();
             }
 
             CheckResult {
@@ -104,7 +104,7 @@ pub async fn run_test_gate(working_dir: &Path, config: &ValidateConfig) -> Check
         Err(e) => CheckResult {
             name: "tests".into(),
             pass: false,
-            summary: format!("测试执行失败: {}", e),
+            summary: format!("test execution failed: {}", e),
             details: serde_json::json!({"error": e}),
         },
     }

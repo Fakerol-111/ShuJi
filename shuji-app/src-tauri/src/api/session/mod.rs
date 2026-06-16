@@ -91,7 +91,7 @@ impl Session {
             messages.push(serde_json::json!({"role": m.role, "content": m.content}));
         }
         if messages.len() <= 1 {
-            messages.push(serde_json::json!({"role": "user", "content": "请继续"}));
+            messages.push(serde_json::json!({"role": "user", "content": "Please continue"}));
         }
 
         let has_write_file = tools.iter().any(|t| t.function.name == "create_file");
@@ -265,7 +265,7 @@ impl Session {
                     api_retries += 1;
                     if api_retries < max_api_retries {
                         log_console!(
-                            "[{}] API 请求失败 (retry {}/{}), 2s 后重试: {}",
+                            "[{}] API request failed (retry {}/{}), retrying in 2s: {}",
                             self.role,
                             api_retries,
                             max_api_retries,
@@ -416,10 +416,10 @@ impl Session {
                     let names_hint = if broken_names.is_empty() {
                         String::new()
                     } else {
-                        format!(" 丢失的调用：{}。", broken_names.join("、"))
+                        format!(" Lost calls: {}.", broken_names.join(", "))
                     };
                     let instruction = format!(
-                        "上一轮输出因长度截断，系统已扩大输出空间，请继续完成。{}\n你必须：\n1. 优先补全被截断的工具调用；\n2. 本轮最多 1 个工具调用；\n3. 禁止任何解释文字。如果还需要更多工具，后续轮次继续。",
+                        "The previous output was truncated due to length. The system has expanded the output space. Please continue. {}\nYou must:\n1. Prioritize completing truncated tool calls;\n2. Maximum 1 tool call per round;\n3. No explanatory text. If more tools are needed, continue in subsequent rounds.",
                         names_hint
                     );
                     self.messages.push(serde_json::json!({
@@ -432,9 +432,9 @@ impl Session {
                 // Mixed case: some valid, some broken. Keep the valid ones,
                 // and inject a hint so the LLM re-issues the broken ones.
                 if broken_count > 0 {
-                    let names_hint = broken_names.join("、");
+                    let names_hint = broken_names.join(", ");
                     let hint = format!(
-                        "上一轮输出因长度截断，系统已扩大输出空间，有 {} 个工具调用丢失（{}）。请重新调用这些工具，本轮最多 1 个。",
+                        "The previous output was truncated due to length. The system has expanded the output space. {} tool call(s) were lost ({}). Please re-issue these tools, maximum 1 per round.",
                         broken_count, names_hint
                     );
                     self.messages.push(serde_json::json!({
@@ -600,7 +600,7 @@ impl Session {
                 .chars()
                 .rev()
                 .collect();
-            format!("{}...{} ({}行)", first, last, lines.len())
+            format!("{}...{} ({} lines)", first, last, lines.len())
         }
     }
 
@@ -621,13 +621,13 @@ impl Session {
             .await
             .map_err(|e| {
                 let kind = if e.is_connect() {
-                    "连接失败"
+                    "connection failed"
                 } else if e.is_timeout() {
-                    "请求超时"
+                    "request timeout"
                 } else if e.is_body() {
-                    "请求体错误"
+                    "request body error"
                 } else {
-                    "请求错误"
+                    "request error"
                 };
                 anyhow::anyhow!("[{}] {} {}", client.api_url, kind, e)
             })?;

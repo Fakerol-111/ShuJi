@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getWorkflowGraph, listWorkflowArchives, loadWorkflowArchive } from '../api';
 import type { WorkflowGraph, GraphNode, GraphEdge } from '../types';
 import { getDeptMeta } from '../constants';
@@ -28,6 +29,7 @@ interface ArchiveEntry {
 }
 
 export default function WorkflowGraphView() {
+  const { t } = useTranslation();
   const [graph, setGraph] = useState<WorkflowGraph | null>(null);
   const [archives, setArchives] = useState<ArchiveEntry[]>([]);
   const [currentSession, setCurrentSession] = useState<string | null>(null);
@@ -45,7 +47,7 @@ export default function WorkflowGraphView() {
           entries.map(([filename, label]) => {
             // Parse timestamp from filename: {ts}_{label}.json
             const ts = filename.split('_').slice(0, 2).join('_');
-            return { filename, label: label || '未命名', ts };
+            return { filename, label: label || t('workflowGraph.unnamed'), ts };
           })
         );
       })
@@ -60,7 +62,7 @@ export default function WorkflowGraphView() {
       .then((g) => {
         if (g) {
           setGraph(g);
-          setCurrentSession(g.session_label || '当前');
+          setCurrentSession(g.session_label || t('workflowGraph.current'));
         }
         setLoading(false);
       })
@@ -105,7 +107,7 @@ export default function WorkflowGraphView() {
   // ── SVG layout computation ──
   if (loading && !graph) {
     return (
-      <div className="h-full flex items-center justify-center text-ink-400">加载文移图中…</div>
+      <div className="h-full flex items-center justify-center text-ink-400">{t('workflowGraph.loading')}</div>
     );
   }
 
@@ -114,7 +116,7 @@ export default function WorkflowGraphView() {
       <div className="h-full flex flex-col items-center justify-center gap-3">
         <p className="text-vermillion">{error}</p>
         <button onClick={loadLiveGraph} className="text-ui text-gold underline">
-          重试
+          {t('common.retry')}
         </button>
       </div>
     );
@@ -144,12 +146,12 @@ export default function WorkflowGraphView() {
     <div className="h-full flex flex-col bg-surface-paper">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-2 border-b border-fold shrink-0">
-        <h2 className="font-display text-ui font-semibold text-ink-800">文移图</h2>
+        <h2 className="font-display text-ui font-semibold text-ink-800">{t('workflowGraph.title')}</h2>
         {graph && (
           <span className="text-caption text-ink-500">
-            {graph.nodes.length} 节点 · {graph.edges.length} 边
+            {t('workflowGraph.stats', { nodes: graph.nodes.length, edges: graph.edges.length })}
             {upperLayout && upperLayout.totalDuration !== '' && (
-              <span className="ml-2 text-ink-400">· 耗时 {upperLayout.totalDuration}</span>
+              <span className="ml-2 text-ink-400">· {t('workflowGraph.durationPrefix')} {upperLayout.totalDuration}</span>
             )}
           </span>
         )}
@@ -167,16 +169,16 @@ export default function WorkflowGraphView() {
                   : 'text-ink-600 hover:bg-ink-100'
               }`}
             >
-              <div className="text-xs font-semibold">当前</div>
-              <div className="text-caption text-ink-500 truncate">{currentSession || '实时'}</div>
+              <div className="text-xs font-semibold">{t('workflowGraph.current')}</div>
+              <div className="text-caption text-ink-500 truncate">{currentSession || t('workflowGraph.live')}</div>
               {!activeArchive && (
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-jade animate-pulse ml-1" />
               )}
             </button>
           </div>
           <div className="px-3 py-2">
-            <div className="text-caption font-semibold text-ink-500 mb-1">历史命令</div>
-            {archives.length === 0 && <p className="text-caption text-ink-400 italic">暂无归档</p>}
+            <div className="text-caption font-semibold text-ink-500 mb-1">{t('workflowGraph.history')}</div>
+            {archives.length === 0 && <p className="text-caption text-ink-400 italic">{t('workflowGraph.noArchives')}</p>}
             {archives.map((a) => (
               <button
                 key={a.filename}
@@ -187,7 +189,7 @@ export default function WorkflowGraphView() {
                     : 'text-ink-600 hover:bg-ink-100'
                 }`}
               >
-                <div className="text-caption truncate">{a.label || '未命名'}</div>
+                <div className="text-caption truncate">{a.label || t('workflowGraph.unnamed')}</div>
                 <div className="text-caption text-ink-400 font-mono text-[10px]">{a.ts}</div>
               </button>
             ))}
@@ -201,7 +203,7 @@ export default function WorkflowGraphView() {
             <>
               {lowerLayout && (
                 <div className="px-3 py-1.5 text-caption font-semibold text-ink-500 bg-surface-parchment/50 border-b border-fold sticky top-0 z-10">
-                  🏛 尚书省层（规划阶段）
+                  {t('workflowGraph.upperLayer')}
                 </div>
               )}
               <div className="mb-4">
@@ -272,9 +274,9 @@ export default function WorkflowGraphView() {
                         <title>
                           {n.role}
                           {isMulti ? `#${n.instance}` : ''}
-                          {durStr ? `\n处理耗时: ${durStr}` : ''}
-                          {n.task_summary ? `\n任务: ${n.task_summary}` : ''}
-                          {n.created_at ? `\n开始: ${n.created_at}` : ''}
+                          {durStr ? `\n${t('workflowGraph.processingTime')}: ${durStr}` : ''}
+                          {n.task_summary ? `\n${t('workflowGraph.task')}: ${n.task_summary}` : ''}
+                          {n.created_at ? `\n${t('workflowGraph.start')}: ${n.created_at}` : ''}
                         </title>
                         <rect
                           x={n.x}
@@ -342,7 +344,7 @@ export default function WorkflowGraphView() {
               {lowerLayout && (
                 <div>
                   <div className="px-3 py-1.5 text-caption font-semibold text-ink-500 bg-surface-parchment/50 border-b border-fold sticky top-0 z-10">
-                    ⚙ 六部层（执行阶段 · 实时）
+                    {t('workflowGraph.lowerLayer')}
                   </div>
                   <svg
                     viewBox={`0 0 ${lowerLayout.svgW} ${lowerLayout.svgH}`}
@@ -404,8 +406,8 @@ export default function WorkflowGraphView() {
                           <title>
                             {n.role}
                             {isMulti ? `#${n.instance}` : ''}
-                            {n.task_summary ? `\n任务: ${n.task_summary}` : ''}
-                            {n.created_at ? `\n开始: ${n.created_at}` : ''}
+                            {n.task_summary ? `\n${t('workflowGraph.task')}: ${n.task_summary}` : ''}
+                            {n.created_at ? `\n${t('workflowGraph.start')}: ${n.created_at}` : ''}
                           </title>
                           <rect
                             x={n.x}
@@ -468,7 +470,7 @@ export default function WorkflowGraphView() {
               )}
             </>
           ) : (
-            <div className="h-full flex items-center justify-center text-ink-400">暂无文移记录</div>
+            <div className="h-full flex items-center justify-center text-ink-400">{t('workflowGraph.noRecords')}</div>
           )}
         </div>
       </div>

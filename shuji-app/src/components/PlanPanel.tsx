@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -38,6 +39,7 @@ const STATUS_ICONS: Record<PlanStatus, string> = {
 };
 
 export default function PlanPanel() {
+  const { t } = useTranslation();
   const [runtime, setRuntime] = useState<PlanRuntime | null>(null);
   const [expanded, setExpanded] = useState(true);
 
@@ -58,8 +60,8 @@ export default function PlanPanel() {
   if (!runtime) {
     return (
       <div className="plan-panel plan-panel--empty">
-        <span className="plan-panel__title">📋 管道计划</span>
-        <span className="plan-panel__hint">无活跃计划</span>
+        <span className="plan-panel__title">{t('plan.pipelinePlan')}</span>
+        <span className="plan-panel__hint">{t('plan.noActivePlan')}</span>
       </div>
     );
   }
@@ -72,7 +74,7 @@ export default function PlanPanel() {
   return (
     <div className={`plan-panel ${expanded ? 'plan-panel--expanded' : ''}`}>
       <div className="plan-panel__header" onClick={() => setExpanded(!expanded)}>
-        <span className="plan-panel__title">📋 {runtime.plan.summary}</span>
+        <span className="plan-panel__title">{runtime.plan.summary}</span>
         <span className="plan-panel__progress">
           {doneSteps}/{totalSteps}
         </span>
@@ -100,9 +102,9 @@ export default function PlanPanel() {
                 <span className="plan-panel__step-icon">{STATUS_ICONS[status] || '⬜'}</span>
                 <span className="plan-panel__step-id">{step.step_id}</span>
                 <span className="plan-panel__step-desc">{step.description}</span>
-                {step.action === 'approval_gate' && <span className="plan-panel__badge">审批</span>}
+                {step.action === 'approval_gate' && <span className="plan-panel__badge">{t('plan.approval')}</span>}
                 {step.action === 'ask_user' && (
-                  <span className="plan-panel__badge plan-panel__badge--question">提问</span>
+                  <span className="plan-panel__badge plan-panel__badge--question">{t('plan.question')}</span>
                 )}
                 {step.action === 'parallel' && (
                   <span className="plan-panel__badge plan-panel__badge--parallel">并行</span>

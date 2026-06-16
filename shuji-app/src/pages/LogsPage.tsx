@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { listLogFiles, readLogFile } from '../api';
 import { formatError } from '../utils/error';
 
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export default function LogsPage({ onClose }: Props) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [logFiles, setLogFiles] = useState<string[]>([]);
   const [selectedLog, setSelectedLog] = useState<string | null>(null);
@@ -52,20 +54,20 @@ export default function LogsPage({ onClose }: Props) {
     <div className="h-screen bg-ink-50 flex flex-col">
       <header className="bg-ink-900 border-b border-ink-800 shrink-0">
         <div className="px-5 py-2.5 flex items-center justify-between">
-          <h1 className="text-base font-bold text-ink-50 tracking-wide">日志</h1>
+          <h1 className="text-base font-bold text-ink-50 tracking-wide">{t('logs.title')}</h1>
           <div className="flex items-center gap-1.5">
             <button
               onClick={refresh}
               disabled={loading}
               className="text-xs px-2.5 py-1.5 text-ink-400 hover:text-ink-200 hover:bg-ink-800 rounded transition-colors disabled:opacity-50"
             >
-              {loading ? '加载中…' : '刷新'}
+              {loading ? t('logs.loading') : t('logs.refresh')}
             </button>
             <button
               onClick={close}
               className="text-xs px-2.5 py-1.5 text-ink-400 hover:text-ink-200 hover:bg-ink-800 rounded transition-colors"
             >
-              ← 返回
+              {t('logs.back')}
             </button>
           </div>
         </div>
@@ -88,9 +90,9 @@ export default function LogsPage({ onClose }: Props) {
         </div>
         <div className="flex-1 bg-ink-900 text-ink-200 rounded-lg p-4 overflow-y-auto font-mono">
           {logError && <p className="text-xs text-vermillion mb-2">{logError}</p>}
-          {loading && <p className="text-xs text-ink-500 animate-pulse">加载中…</p>}
+          {loading && <p className="text-xs text-ink-500 animate-pulse">{t('logs.loading')}</p>}
           {!selectedLog && !loading && !logError && (
-            <p className="text-xs text-ink-600">选择左侧日志文件查看</p>
+            <p className="text-xs text-ink-600">{t('logs.selectFile')}</p>
           )}
           {logContent.map((line, i) => (
             <pre key={i} className="text-xs leading-relaxed whitespace-pre-wrap">

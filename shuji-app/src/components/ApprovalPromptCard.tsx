@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { docIdToPath } from '../utils/docPath';
 
 interface ApprovalPromptCardProps {
@@ -7,6 +8,7 @@ interface ApprovalPromptCardProps {
 }
 
 export default function ApprovalPromptCard({ docPaths, onSelect }: ApprovalPromptCardProps) {
+  const { t } = useTranslation();
   if (docPaths.length === 0) return null;
 
   return (
@@ -16,9 +18,9 @@ export default function ApprovalPromptCard({ docPaths, onSelect }: ApprovalPromp
           <svg className="w-4 h-4 text-vermillion shrink-0" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
           </svg>
-          <h3 className="font-display text-sm font-bold text-ink-900">待陛下朱批</h3>
+          <h3 className="font-display text-sm font-bold text-ink-900">{t('document.pendingApproval')}</h3>
         </div>
-        <p className="text-caption text-ink-600 mb-4">以下文档需皇帝御批后方可继续执行</p>
+        <p className="text-caption text-ink-600 mb-4">{t('document.approvalRequired')}</p>
         <div className="space-y-2">
           {docPaths.slice(0, 5).map((docId) => {
             const path = docId.startsWith('.shuji/') ? docId : docIdToPath(docId);
@@ -33,7 +35,7 @@ export default function ApprovalPromptCard({ docPaths, onSelect }: ApprovalPromp
             );
           })}
           {docPaths.length > 5 && (
-            <p className="text-caption text-ink-400">及其他 {docPaths.length - 5} 份文档</p>
+            <p className="text-caption text-ink-400">{t('common.noRecords')} {docPaths.length - 5}</p>
           )}
         </div>
       </div>

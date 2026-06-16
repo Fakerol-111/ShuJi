@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getDeptMeta } from '../constants';
 import DeptActivityCard from './DeptActivityCard';
 import RouteContextBar from './RouteContextBar';
@@ -29,6 +30,7 @@ function DeptInspectorHeader({
   entries: DeptLogEntry[];
   onBack: () => void;
 }) {
+  const { t } = useTranslation();
   const meta = getDeptMeta(dept);
   const color = meta?.color || '#8B7355';
   const latestEntry = entries.length > 0 ? entries[entries.length - 1] : null;
@@ -44,7 +46,7 @@ function DeptInspectorHeader({
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
             <polyline points="10,3 5,8 10,13" />
           </svg>
-          返拟旨殿
+          {t('inspector.backToDuty')}
         </button>
         <div className="flex items-center gap-2 min-w-0">
           <span
@@ -63,7 +65,7 @@ function DeptInspectorHeader({
                   : 'text-ink-400 bg-ink-100'
             }`}
           >
-            {hasError ? '出错' : active ? '执行中' : '空闲'}
+            {hasError ? t('inspector.error') : active ? t('inspector.executing') : t('inspector.idle')}
           </span>
         </div>
       </div>
@@ -75,13 +77,14 @@ function DeptInspectorHeader({
 }
 
 function DeptInspectorEmpty() {
+  const { t } = useTranslation();
   return (
     <div className="flex-1 flex items-center justify-center">
       <div className="text-center space-y-2">
         <div className="inline-flex">
           <SealLogo size={32} />
         </div>
-        <div className="text-ui text-ink-400">该司暂无奏报</div>
+        <div className="text-ui text-ink-400">{t('inspector.noReports')}</div>
       </div>
     </div>
   );
@@ -94,6 +97,7 @@ function DeptInspectorFeed({
   entries: DeptLogEntry[];
   onDocClick?: (path: string) => void;
 }) {
+  const { t } = useTranslation();
   const feedRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
 
@@ -121,7 +125,7 @@ function DeptInspectorFeed({
             onClick={() => setAutoScroll(true)}
             className="text-caption text-gold hover:text-gold-dark bg-surface-paper/80 rounded px-2 py-0.5"
           >
-            滚动到底部
+            {t('common.refresh')}
           </button>
         </div>
       )}
@@ -139,10 +143,11 @@ function DeptInspectorFeed({
 }
 
 function PlanInfoCard({ info }: { info: PlanInfo }) {
+  const { t } = useTranslation();
   return (
     <div className="shrink-0 mx-4 mt-3 bg-surface-parchment border border-fold rounded-xl px-3 py-2"
       style={{ borderLeft: '3px solid var(--dept-gongbu)' }}>
-      <div className="font-display text-caption text-ink-600 font-semibold mb-1">工部批次</div>
+      <div className="font-display text-caption text-ink-600 font-semibold mb-1">{t('inspector.gongbuBatch')}</div>
       <div className="space-y-0.5">
         {info.batches.map((b, i) => (
           <div key={i} className="flex items-center gap-1.5 text-caption font-mono">
@@ -171,6 +176,7 @@ function PlanInfoCard({ info }: { info: PlanInfo }) {
 }
 
 function StepCard({ entry }: { entry: DeptStepEntry }) {
+  const { t } = useTranslation();
   const kind = entry.kind;
   switch (kind.type) {
     case 'thinking': {
@@ -183,7 +189,7 @@ function StepCard({ entry }: { entry: DeptStepEntry }) {
             className="text-caption text-ink-500 hover:text-ink-700 font-mono flex items-center gap-1"
           >
             <span>{expanded ? '▾' : '▸'}</span>
-            <span className="text-jade font-semibold">思考过程</span>
+            <span className="text-jade font-semibold">{t('inspector.thinking')}</span>
           </button>
           {expanded && (
             <div className="text-caption text-ink-600 mt-1 whitespace-pre-wrap font-mono leading-relaxed max-h-60 overflow-y-auto">
@@ -220,7 +226,7 @@ function StepCard({ entry }: { entry: DeptStepEntry }) {
       return (
         <div className="flex items-start gap-2 py-0.5 px-2 rounded">
           <span className={`text-caption font-mono font-semibold shrink-0 mt-0.5 ${kind.ok ? 'text-jade' : 'text-vermillion'}`}>
-            {kind.ok ? '成' : '败'}
+            {kind.ok ? t('common.completed') : t('common.failed')}
           </span>
           <div className="min-w-0 flex-1">
             <code
@@ -265,6 +271,7 @@ export default function DeptInspector({
   onDocClick,
   planInfo,
 }: DeptInspectorProps) {
+  const { t } = useTranslation();
   const { deptSteps } = useDeptEvents();
   const isAllMode = mode === 'all';
   const showPlan =
@@ -289,9 +296,9 @@ export default function DeptInspector({
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
               <polyline points="10,3 5,8 10,13" />
             </svg>
-            返拟旨殿
+            {t('inspector.backToDuty')}
           </button>
-          <span className="text-ui font-semibold text-ink-700">诸司动态</span>
+          <span className="text-ui font-semibold text-ink-700">{t('inspector.deptActivity')}</span>
           <span className="text-caption text-ink-400">{entries.length} 条</span>
         </div>
       )}

@@ -28,7 +28,7 @@ pub type CheckpointFn =
 pub type CompactFn =
     Box<dyn Fn(Vec<serde_json::Value>) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
 
-const INTERRUPT_RESPONSE: &str = "\n\n[系统] 当前处理已被皇帝中断";
+const INTERRUPT_RESPONSE: &str = "\n\n[System] Current processing has been interrupted by 皇帝";
 
 /// Callback for real-time step events emitted during AgentController::run().
 /// Receives a DeptStepKind to emit for each iteration, thinking, tool call, etc.
@@ -265,7 +265,7 @@ impl AgentController {
             }
             if force_stop.is_some_and(|f| f.load(Ordering::SeqCst)) {
                 let result = if last_text.is_empty() {
-                    "已停止".to_string()
+                    "stopped".to_string()
                 } else {
                     last_text
                 };
@@ -306,7 +306,7 @@ impl AgentController {
             // ── Suspension point B: API just returned, don't process if cancelled ──
             if cancel.load(Ordering::SeqCst) {
                 let result = if last_text.is_empty() {
-                    "已中断".to_string()
+                    "interrupted".to_string()
                 } else {
                     last_text.clone()
                 };
@@ -314,7 +314,7 @@ impl AgentController {
             }
             if fast_cancel.is_some_and(|f| f.load(Ordering::SeqCst)) {
                 let result = if last_text.is_empty() {
-                    "已中断".to_string()
+                    "interrupted".to_string()
                 } else {
                     last_text.clone()
                 };
@@ -391,7 +391,7 @@ impl AgentController {
                                 session.feed_tool_result(
                                     &remaining.id,
                                     &remaining.name,
-                                    "已取消：收到快速中断信号",
+                                    "Cancelled: fast interrupt signal received",
                                 );
                             }
                             let result = format!("{}{}", last_text, INTERRUPT_RESPONSE);
@@ -457,7 +457,7 @@ impl AgentController {
                         let mut intervention_hints: Vec<String> = Vec::new();
                         if same_tool_count >= config.watchdog.same_tool_warning_count {
                             intervention_hints.push(format!(
-                                "⚠️ 你已连续调用 {} 工具 {} 次（相同参数）。如果这不是有意的分批操作，请考虑切换操作类型或进入下一步。",
+                                "Intervention] You have called the {} tool {} times (with the same arguments). If this is not an intentional batched operation, please consider switching operations or moving to the next step.",
                                 tc.name, same_tool_count + 1,
                             ));
                         }
@@ -474,14 +474,14 @@ impl AgentController {
                             && read_without_write >= config.watchdog.read_without_write_warning
                         {
                             intervention_hints.push(format!(
-                                "⚠️ 你已读取 {} 次文件但尚未产生任何输出。请检查是否需要创建文件或修改代码。",
+                                "⚠️ You have read files {} times without producing any output. Please check whether you need to create a file or modify code.",
                                 read_without_write + 1,
                             ));
                         }
                         let intervention_note = if intervention_hints.is_empty() {
                             String::new()
                         } else {
-                            format!("\n\n[干预] {}", intervention_hints.join(" "))
+                            format!("\n\n[Intervention] {}", intervention_hints.join(" "))
                         };
 
                         // ── Route detection (output-driven) ──
@@ -496,7 +496,7 @@ impl AgentController {
                                 // Self-routing check
                                 if role_from_name(to_name).is_some_and(|r| r.name() == my_role) {
                                     let msg = format!(
-                                        "禁止路由给自己（{}）。请路由到其他部门，或直接输出结果而非继续路由。",
+                                        "Routing to self ({}) is forbidden. Please route to another department, or output results directly instead of routing.",
                                         my_role
                                     );
                                     session.feed_tool_result(&tc.id, &tc.name, &msg);
@@ -505,7 +505,7 @@ impl AgentController {
                                 let target = match role_from_name(to_name) {
                                     Some(r) => r,
                                     None => {
-                                        let msg = format!("未知目标部门: {}", to_name);
+                                        let msg = format!("Unknown target department: {}", to_name);
                                         session.feed_tool_result(&tc.id, &tc.name, &msg);
                                         continue;
                                     }
@@ -521,7 +521,7 @@ impl AgentController {
                                     session.feed_tool_result(
                                         &remaining.id,
                                         &remaining.name,
-                                        "已取消：本批任务因路由到其他部门而中断",
+                                        "Cancelled: this batch interrupted due to routing to another department",
                                     );
                                 }
 
@@ -543,12 +543,12 @@ impl AgentController {
                                     payload,
                                 };
                                 let summary = format!(
-                                    "路由到 {}（{}）：{}",
+                                    "Routed to {} ({}): {}",
                                     target.name(),
                                     match msg_type {
-                                        RouteMsgType::Task => "新任务",
-                                        RouteMsgType::Replace => "替换",
-                                        RouteMsgType::Interrupt => "中断",
+                                        RouteMsgType::Task => "new task",
+                                        RouteMsgType::Replace => "replace",
+                                        RouteMsgType::Interrupt => "interrupt",
                                     },
                                     route.subject,
                                 );
@@ -599,9 +599,9 @@ impl AgentController {
                                     *cycle_count += 1;
                                     if *cycle_count >= config.watchdog.delete_create_warning_count {
                                         delete_cycle_hint = format!(
-                                            "\n\n[干预] ⚠️ 你已对同一文件（{}）执行了 {} 次 delete → create 循环。\
-                                            对已有文件做局部修改请用 edit_file（search/replace），\
-                                            批量修改请用 apply_patch。delete+create 模式浪费 token 且易丢失文件历史。",
+                                            "\n\n[Intervention] You have executed {} delete → create cycles on the same file ({}). \
+                                            For existing files that need local changes, use edit_file (search/replace). \
+                                            For batch changes, use apply_patch. The delete+create pattern wastes tokens and can lose file history.",
                                             key_path, *cycle_count,
                                         );
                                         log_console!(
@@ -616,17 +616,17 @@ impl AgentController {
                         // ── Progress note ─────────────────
                         let mut notes = Vec::new();
                         if same_tool_count >= config.watchdog.same_tool_warning_count {
-                            notes.push(format!("重复调用{}", tc.name));
+                            notes.push(format!("repeated tool {}", tc.name));
                         }
                         if read_without_write >= config.watchdog.read_without_write_warning + 3
                             && write_count == 0
                         {
-                            notes.push(format!("读取{}次未写入", read_without_write));
+                            notes.push(format!("{} reads without write", read_without_write));
                         }
                         let progress_note = if notes.is_empty() {
                             String::new()
                         } else {
-                            format!("\n\n[progress] {}", notes.join("，"))
+                            format!("\n\n[progress] {}", notes.join(", "))
                         };
 
                         // ── Consecutive error tracking ────
@@ -635,9 +635,9 @@ impl AgentController {
                             .and_then(|v| v.get("ok").and_then(|o| o.as_bool()))
                             .map(|ok| !ok)
                             .unwrap_or_else(|| {
-                                result.contains("失败")
-                                    || result.contains("错误")
-                                    || result.contains("未知工具")
+                                result.contains("failed")
+                                    || result.contains("error")
+                                    || result.contains("unknown tool")
                             });
 
                         let mut tool_content = result.clone();
@@ -680,11 +680,11 @@ impl AgentController {
                                 && consecutive_errors >= config.watchdog.test_stalemate_threshold
                             {
                                 let stalemate_hint = format!(
-                                    "\n\n⚠️ 测试僵局检测：`run_tests` 连续 {} 次失败。\
-                                     建议：① 检查测试代码和实现是否匹配契约 \
-                                     ② `read_file` 确认源码当前内容 \
-                                     ③ 按 [playbook: test-red] 系统化排查 \
-                                     ④ 若仍无法解决，`wake_cabinet` 请求协助",
+                                    "\n\n⚠️ Test stalemate detected: `run_tests` failed {} consecutive times. \
+                                     Suggestions: ① Check test code and implementation match the contract \
+                                     ② `read_file` to confirm current source content \
+                                     ③ Follow [playbook: test-red] systematic troubleshooting \
+                                     ④ If still unresolved, `wake_cabinet` for assistance",
                                     consecutive_errors
                                 );
                                 tool_content.push_str(&stalemate_hint);
@@ -696,7 +696,7 @@ impl AgentController {
 
                             if consecutive_errors >= config.watchdog.max_consecutive_errors {
                                 last_text = format!(
-                                    "工具连续出错{}次，终止调用。最后错误：{}",
+                                    "Tool failed {} consecutive times, terminating. Last error: {}",
                                     config.watchdog.max_consecutive_errors, result
                                 );
                                 // Feed the current tool result before returning
@@ -706,7 +706,7 @@ impl AgentController {
                                     session.feed_tool_result(
                                         &remaining.id,
                                         &remaining.name,
-                                        "已取消：工具连续错误，终止调用",
+                                        "Cancelled: tool consecutive error, terminating",
                                     );
                                 }
                                 return Ok(RunResult::Stopped(last_text));
@@ -725,32 +725,35 @@ impl AgentController {
         log_console!("[control] tool-call limit ({}) reached", max_iter);
         let reason = if write_count == 0 && same_tool_count >= 3 {
             format!(
-                "调用{}次达上限，其中重复工具{}次，无任何写入",
+                "Reached max iterations ({}), repeated tool {} times with no writes",
                 max_iter,
                 same_tool_count + 1
             )
         } else if read_without_write >= 8 && write_count == 0 {
             format!(
-                "调用{}次达上限，读取{}次未写入",
+                "Reached max iterations ({}), read {} times with no writes",
                 max_iter,
                 read_without_write + 1
             )
         } else if write_count > 0 {
             format!(
-                "调用{}次达上限，写入{}次文件，读取{}次",
+                "Reached max iterations ({}), wrote {} files, read {} times",
                 max_iter, write_count, read_without_write
             )
         } else {
-            format!("调用{}次达上限，无特殊异常", max_iter)
+            format!(
+                "Reached max iterations ({}), no special anomalies",
+                max_iter
+            )
         };
         // ── Graceful wrap-up: inject summary request, do one extra step ──
         // Instead of silently cutting off, give the LLM a chance to produce
         // a coherent wrap-up and route to its superior for authorization.
         session.set_reasoning(true);
         let wrap_up = format!(
-            "\n\n---\n[系统] 工具调用次数已达上限（{}次）。{}。\
-             \n请立即总结已完成的工作和遇到的困难。如果需要继续执行，请调用 route_to 路由到尚书令说明原因并请求继续授权。\
-             \n如果没有路由需要，直接输出工作总结即可。\n---",
+            "\n\n---\n[System] Tool call limit reached ({} calls). {}. \
+             \nPlease immediately summarize the work completed and any difficulties encountered. If you need to continue, call route_to to route to 尚书令 explaining the reason and requesting further authorization. \
+             \nIf no routing is needed, directly output the work summary.\n---",
             max_iter, reason,
         );
         session.inject(&wrap_up);
@@ -805,12 +808,12 @@ impl AgentController {
 
         let result = if last_text.is_empty() {
             format!(
-                "工具调用已达上限（{}次）。最后响应：\n{}",
+                "Tool call limit reached ({}). Last response:\n{}",
                 max_iter, final_text
             )
         } else {
             format!(
-                "{}\n\n---\n工具调用已达上限（{}次）。工作总结：\n{}",
+                "{}\n\n---\nTool call limit reached ({}). Work summary:\n{}",
                 last_text, max_iter, final_text
             )
         };
@@ -851,7 +854,7 @@ impl AgentController {
         if let Some(snap) = self.saved.take() {
             session.restore(&snap);
             session.inject(&format!(
-                "系统：之前的操作已被中断。皇帝给出了新指令：{}",
+                "System: Previous operation was interrupted. 皇帝 has given a new instruction: {}",
                 new_instruction
             ));
             log_console!("[control] restart_with: snapshot restored, new instruction injected");
@@ -860,7 +863,7 @@ impl AgentController {
                 "[control] restart_with: no saved snapshot — injecting as new instruction"
             );
             session.inject(&format!(
-                "系统：皇帝给出了新指令，请开始处理：{}",
+                "System: 皇帝 has given a new instruction, please start processing: {}",
                 new_instruction
             ));
         }

@@ -290,10 +290,10 @@ async fn test_execute_command_block_dangerous() {
         // Command should either be blocked by safety check OR fail to execute
         // Both outcomes are safe - we just don't want it to succeed
         assert!(
-            result.contains("安全拦截")
-                || result.contains("禁止")
-                || result.contains("失败")
-                || result.contains("错误"),
+            result.contains("Security block")
+                || result.contains("prohibited")
+                || result.contains("failed")
+                || result.contains("error"),
             "Command '{}' should be blocked or fail: {}",
             cmd,
             result

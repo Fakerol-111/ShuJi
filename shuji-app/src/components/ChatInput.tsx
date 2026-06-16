@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { setDotenvKey } from '../api';
 
 export interface ChatInputHandle {
@@ -15,15 +16,16 @@ const LINE_HEIGHT = 20;
 const MAX_LINES = 4;
 
 const SLASH_COMMANDS: Record<string, { level: string; label: string }> = {
-  '/level-1': { level: '1', label: '全自动' },
-  '/level-2': { level: '2', label: '关键节点确认' },
-  '/level-3': { level: '3', label: '逐步审核' },
-  '/auto': { level: '1', label: '全自动' },
-  '/step': { level: '2', label: '关键节点确认' },
-  '/detail': { level: '3', label: '逐步审核' },
+  '/level-1': { level: '1', label: 'chat.commandLevelAuto' },
+  '/level-2': { level: '2', label: 'chat.commandLevelConfirm' },
+  '/level-3': { level: '3', label: 'chat.commandLevelReview' },
+  '/auto': { level: '1', label: 'chat.commandLevelAuto' },
+  '/step': { level: '2', label: 'chat.commandLevelConfirm' },
+  '/detail': { level: '3', label: 'chat.commandLevelReview' },
 };
 
 export default forwardRef<ChatInputHandle, Props>(function ChatInput({ onSend, disabled, placeholder }, ref) {
+  const { t } = useTranslation();
   const [text, setText] = useState('');
   const [toast, setToast] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -62,9 +64,9 @@ export default forwardRef<ChatInputHandle, Props>(function ChatInput({ onSend, d
       const { level, label } = SLASH_COMMANDS[cmd];
       try {
         await setDotenvKey('PARTICIPATION_LEVEL', level);
-        showToast(`已切换至: ${label} (级别 ${level})`);
+        showToast(`${t(label)} (${t('chat.commandLevel')} ${level})`);
       } catch {
-        showToast('切换失败');
+        showToast(t('common.error'));
       }
       // If there's more text after the command, send it
       const rest = words.slice(1).join(' ');
@@ -99,7 +101,7 @@ export default forwardRef<ChatInputHandle, Props>(function ChatInput({ onSend, d
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder || '/level-1 /level-2 /level-3 切换参与度'}
+          placeholder={placeholder || t('chat.inputPlaceholder')}
           disabled={disabled}
           rows={1}
           className="flex-1 px-3 py-2 border border-fold bg-surface-parchment rounded-lg text-body text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-vermillion focus:ring-1 focus:ring-vermillion/30 disabled:opacity-50 resize-none leading-5"
@@ -109,7 +111,7 @@ export default forwardRef<ChatInputHandle, Props>(function ChatInput({ onSend, d
           disabled={disabled || !text.trim()}
           className="px-5 py-2 bg-ink-900 text-ink-50 rounded-lg hover:bg-ink-800 disabled:opacity-40 text-ui font-medium transition-colors shrink-0"
         >
-          下诏
+          {t('chat.send')}
         </button>
       </div>
     </div>

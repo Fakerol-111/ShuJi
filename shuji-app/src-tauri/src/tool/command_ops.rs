@@ -5,8 +5,8 @@ use tokio::io::AsyncReadExt;
 use crate::tool::path::{PATH_ESCAPE, SYSTEM_BLOCKS};
 use crate::tool::ToolOutput;
 
-/// 获取当前平台的 shell 命令。
-/// Windows → powershell；其他 → bash（fallback 到 sh）
+/// Get the current platform's shell command.
+/// Windows -> powershell; others -> bash (fallback to sh)
 pub(crate) fn get_shell() -> (&'static str, Vec<&'static str>) {
     if cfg!(windows) {
         ("powershell", vec!["-Command"])
@@ -31,13 +31,16 @@ pub async fn tool_execute_command(
 ) -> String {
     let cmd = args["command"].as_str().unwrap_or("");
     if cmd.is_empty() {
-        return ToolOutput::error("execute_command", "", "empty_command", "命令为空");
+        return ToolOutput::error("execute_command", "", "empty_command", "Command is empty");
     }
     log_console!("[{}] executing: {}", dept, cmd);
 
     if let Err(blocked) = check_safe_command(cmd) {
         log_console!("[{}] BLOCKED command: {} — reason: {}", dept, cmd, blocked);
-        return format!("[安全拦截] 命令被禁止执行: {}\n原因: {}", cmd, blocked);
+        return format!(
+            "[Security block] Command prohibited: {}\nReason: {}",
+            cmd, blocked
+        );
     }
 
     let timeout = std::time::Duration::from_secs(120);
@@ -48,10 +51,13 @@ pub async fn tool_execute_command(
             let stderr = String::from_utf8_lossy(&output.stderr);
             let exit_code = output.status.code().unwrap_or(-1);
             if exit_code == 0 {
-                format!("命令执行成功 (exit={}):\n{}", exit_code, stdout)
+                format!(
+                    "Command executed successfully (exit={}):\n{}",
+                    exit_code, stdout
+                )
             } else {
                 format!(
-                    "命令执行失败 (exit={}):\nstdout:\n{}\nstderr:\n{}",
+                    "Command execution failed (exit={}):\nstdout:\n{}\nstderr:\n{}",
                     exit_code, stdout, stderr
                 )
             }
@@ -78,7 +84,7 @@ pub async fn execute_with_timeout(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| format!("无法启动命令: {}", e))?;
+        .map_err(|e| format!("Failed to start command: {}", e))?;
 
     let start = tokio::time::Instant::now();
     let poll_interval = tokio::time::Duration::from_millis(500);
@@ -105,13 +111,13 @@ pub async fn execute_with_timeout(
                     let _ = child.kill().await;
                     let _ = child.wait().await;
                     return Err(format!(
-                        "命令执行超时（超过 {} 秒），进程已终止。",
+                        "Command execution timed out (exceeded {} seconds), process terminated.",
                         timeout.as_secs()
                     ));
                 }
                 tokio::time::sleep(poll_interval).await;
             }
-            Err(e) => return Err(format!("命令执行出错: {}", e)),
+            Err(e) => return Err(format!("Command execution error: {}", e)),
         }
     }
 }
@@ -147,7 +153,7 @@ fn check_safe_command(cmd: &str) -> Result<(), &'static str> {
 
     for &pattern in PATH_ESCAPE {
         if c.to_lowercase().contains(pattern) {
-            return Err("禁止操作项目目录之外的文件");
+            return Err("Operation on files outside the project directory is prohibited");
         }
     }
     Ok(())
@@ -189,7 +195,7 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
         _ => {
             return ToolOutput::success_raw(
                 "run_tests",
-                "未能检测到已知项目类型（Cargo.toml / package.json / pyproject.toml），无法确定测试命令。请使用 execute_command 自定义。",
+                "Unable to detect known project type (Cargo.toml / package.json / pyproject.toml). Cannot determine test command. Use execute_command for custom commands.",
             );
         }
     };
@@ -203,7 +209,7 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
                 "",
                 "scope_mismatch",
                 &format!(
-                    "scope=integration 但路径 {} 不匹配集成测试目录（tests/integration/）",
+                    "scope=integration but path {} does not match integration test directory (tests/integration/)",
                     p
                 ),
             );
@@ -247,20 +253,20 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
     // Build structured result
     let mut report = String::new();
     report.push_str(&format!(
-        "## 测试执行报告\n\n项目类型: {} | 范围: {} | 命令: `{}`\n",
+        "## Test Execution Report\n\nProject type: {} | Scope: {} | Command: `{}`\n",
         project_type, scope, cmd
     ));
     report.push_str(&format!(
-        "退出码: {} | 通过: {} | 失败: {}",
+        "Exit code: {} | Passed: {} | Failed: {}",
         exit_code, pass_count, fail_count,
     ));
     if total_count > 0 {
-        report.push_str(&format!(" | 总计: {}", total_count));
+        report.push_str(&format!(" | Total: {}", total_count));
     }
     report.push('\n');
 
     if !failed_tests.is_empty() {
-        report.push_str("\n### 失败用例\n");
+        report.push_str("\n### Failed Tests\n");
         for t in &failed_tests {
             report.push_str(&format!("- {}\n", t));
         }
@@ -271,7 +277,7 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
         let stderr_trimmed = if stderr.len() > 2000 {
             let cutoff = stderr.floor_char_boundary(2000);
             format!(
-                "{}...\n[截断：显示前 {} 字符，共 {} 字符]",
+                "{}...\n[Truncated: showing first {} chars, total {} chars]",
                 &stderr[..cutoff],
                 cutoff,
                 stderr.len()
@@ -280,12 +286,12 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
             stderr.to_string()
         };
         if !stderr_trimmed.is_empty() {
-            report.push_str(&format!("\n### stderr 摘要\n{}", stderr_trimmed));
+            report.push_str(&format!("\n### stderr Summary\n{}", stderr_trimmed));
         }
     }
 
     if exit_code == 0 && failed_tests.is_empty() {
-        report.push_str("\n✅ 全部通过");
+        report.push_str("\nAll tests passed");
     }
 
     ToolOutput::success_raw("run_tests", &report)
@@ -373,13 +379,13 @@ pub fn execute_command_tool_def(description: &str) -> crate::api::client::ToolDe
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "execute_command".into(),
-            description: format!("{}。注意：运行测试请用 run_tests 工具（自动检测项目类型）。execute_command 仅用于 lint/format/构建等非测试命令。", description),
+            description: format!("{}. Note: use run_tests for running tests (auto-detects project type). execute_command is only for lint/format/build and other non-test commands.", description),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "command": {
                         "type": "string",
-                        "description": "要执行的命令"
+                        "description": "Command to execute"
                     }
                 },
                 "required": ["command"]
@@ -393,18 +399,18 @@ pub fn run_tests_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "run_tests".into(),
-            description: "首选跑测试工具。自动检测项目类型（Rust/Node/Python），根据 scope 选择子命令。返回结构化报告：通过数、失败用例、stderr 摘要。禁止手写 cargo test/pytest——请使用本工具。".into(),
+            description: "Primary test-running tool. Auto-detects project type (Rust/Node/Python), selects appropriate subcommand by scope. Returns structured report: pass count, failed tests, stderr summary. Do NOT manually write cargo test/pytest — use this tool instead.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "scope": {
                         "type": "string",
                         "enum": ["unit", "integration", "all"],
-                        "description": "unit=单元测试, integration=集成测试, all=全部（默认 all）"
+                        "description": "unit=unit tests, integration=integration tests, all=all (default all)"
                     },
                     "path": {
                         "type": "string",
-                        "description": "可选：指定单个测试文件路径，如 tests/test_user.rs。scope 需匹配"
+                        "description": "Optional: specify a single test file path, e.g. tests/test_user.rs. Must match scope"
                     }
                 },
                 "required": ["scope"]

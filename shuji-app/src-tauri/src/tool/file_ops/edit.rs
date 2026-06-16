@@ -11,14 +11,19 @@ pub async fn tool_append_file(working_dir: &Path, args: &serde_json::Value) -> S
     let path = args["path"].as_str().unwrap_or("");
     let content = args["content"].as_str().unwrap_or("");
     if path.is_empty() {
-        return ToolOutput::error("append_file", "", "empty_path", "文件路径为空");
+        return ToolOutput::error("append_file", "", "empty_path", "File path is empty");
     }
     if content.is_empty() {
-        return ToolOutput::error("append_file", path, "empty_content", "追加内容为空");
+        return ToolOutput::error(
+            "append_file",
+            path,
+            "empty_content",
+            "Append content is empty",
+        );
     }
-    if content.len() > 2000 {
+    if content.len() > 6000 {
         return ToolOutput::error("append_file", path, "content_too_long",
-            &format!("content 长度 {} 超过上限 2000 字符。请拆分成多次 append_file 调用，每次 ≤2000 字符。", content.len()));
+            &format!("content length {} exceeds max 6000 chars. Split into multiple append_file calls, each ≤6000 chars.", content.len()));
     }
     let full = match resolve_scoped_path(working_dir, path).await {
         Ok(p) => p,
@@ -38,7 +43,7 @@ pub async fn tool_append_file(working_dir: &Path, args: &serde_json::Value) -> S
             if let Err(e) = file.write_all(format!("{}\n", content).as_bytes()).await {
                 return ToolOutput::error("append_file", path, "write_error", &e.to_string());
             }
-            ToolOutput::success("append_file", path, "追加成功")
+            ToolOutput::success("append_file", path, "Appended successfully")
         }
         Err(e) => ToolOutput::error("append_file", path, "open_error", &e.to_string()),
     }
@@ -49,12 +54,12 @@ pub fn append_file_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "append_file".into(),
-            description: "追加内容到文件末尾。content ≤2000 字符，大文件分批写入。".into(),
+            description: "Append content to the end of a file. content ≤6000 chars; split large files into multiple writes.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "文件路径，相对于项目根目录" },
-                    "content": { "type": "string", "description": "要追加的内容（每次最多 2000 字符）", "maxLength": 2000 }
+                    "path": { "type": "string", "description": "File path, relative to project root" },
+                    "content": { "type": "string", "description": "Content to append (max 6000 chars per call)", "maxLength": 6000 }
                 },
                 "required": ["path", "content"]
             }),
@@ -67,14 +72,14 @@ pub fn append_file_tool_def() -> crate::api::client::ToolDefinition {
 pub async fn tool_modify_file(working_dir: &Path, args: &serde_json::Value) -> String {
     let path = args["path"].as_str().unwrap_or("");
     if path.is_empty() {
-        return ToolOutput::error("modify_file", "", "empty_path", "文件路径为空");
+        return ToolOutput::error("modify_file", "", "empty_path", "File path is empty");
     }
     let full = match resolve_scoped_path(working_dir, path).await {
         Ok(p) => p,
         Err(e) => return ToolOutput::error("modify_file", path, "path_error", &e),
     };
     if !full.exists() {
-        return ToolOutput::error("modify_file", path, "not_found", "文件不存在");
+        return ToolOutput::error("modify_file", path, "not_found", "File does not exist");
     }
     let content = match tokio::fs::read_to_string(&full).await {
         Ok(c) => c,
@@ -83,26 +88,31 @@ pub async fn tool_modify_file(working_dir: &Path, args: &serde_json::Value) -> S
     let old_text = args["old_text"].as_str().unwrap_or("");
     let new_text = args["new_text"].as_str().unwrap_or("");
     if old_text.is_empty() {
-        return ToolOutput::error("modify_file", path, "empty_old_text", "old_text 不能为空");
+        return ToolOutput::error(
+            "modify_file",
+            path,
+            "empty_old_text",
+            "old_text cannot be empty",
+        );
     }
-    if old_text.len() > 800 || new_text.len() > 800 {
+    if old_text.len() > 3000 || new_text.len() > 3000 {
         return ToolOutput::error(
             "modify_file",
             path,
             "text_too_long",
-            "文本超过 800 字符上限。大块修改请用 apply_patch（支持 50000 字符）。",
+            "Text exceeds 3000 char limit. For large changes use apply_patch (supports 50000 chars).",
         );
     }
     if !content.contains(old_text) {
         return ToolOutput::error("modify_file", path, "not_found",
-            "未在文件中找到匹配的文本。请先用 read_file 确认文件内容，并确保 old_text 与原文件完全一致（包括空格和缩进）。");
+            "Could not find matching text in the file. Use read_file to confirm the content and ensure old_text exactly matches (including whitespace and indentation).");
     }
     let new_content = content.replacen(old_text, new_text, 1);
     match tokio::fs::write(&full, &new_content).await {
         Ok(_) => ToolOutput::success(
             "modify_file",
             path,
-            &format!("替换成功（替换 {} 字节）", old_text.len()),
+            &format!("Replaced successfully (replaced {} bytes)", old_text.len()),
         ),
         Err(e) => ToolOutput::error("modify_file", path, "write_error", &e.to_string()),
     }
@@ -113,9 +123,9 @@ pub fn modify_file_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "modify_file".into(),
-            description: "替换文件中的文本 (find+replace)。≤800字符。大块修改请用 apply_patch。"
+            description: "Replace text in a file (find+replace). ≤3000 chars. For large changes use apply_patch."
                 .into(),
-            parameters: serde_json::json!({ "type": "object", "properties": { "path": { "type": "string" }, "old_text": { "type": "string", "maxLength": 800 }, "new_text": { "type": "string", "maxLength": 800 } }, "required": ["path", "old_text", "new_text"] }),
+            parameters: serde_json::json!({ "type": "object", "properties": { "path": { "type": "string" }, "old_text": { "type": "string", "maxLength": 3000 }, "new_text": { "type": "string", "maxLength": 3000 } }, "required": ["path", "old_text", "new_text"] }),
         },
     }
 }
@@ -156,7 +166,7 @@ pub async fn tool_read_file(working_dir: &Path, args: &serde_json::Value) -> Str
             path,
             "too_large",
             &format!(
-                "文件过大（共 {} 行）。请用 offset 和 limit 参数分段读取。",
+                "File too large ({} lines total). Use offset and limit parameters to read in chunks.",
                 total
             ),
         );
@@ -168,7 +178,13 @@ pub async fn tool_read_file(working_dir: &Path, args: &serde_json::Value) -> Str
         .enumerate()
         .map(|(i, line)| format!("{:>4}| {}", start + i + 1, line))
         .collect();
-    let meta = format!("{}（共 {} 行，显示 {}-{}）", path, total, start + 1, end);
+    let meta = format!(
+        "{} ({} lines total, showing {}-{})",
+        path,
+        total,
+        start + 1,
+        end
+    );
     ToolOutput::read_file(
         "read_file",
         path,
@@ -194,7 +210,9 @@ pub fn edit_file_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "edit_file".into(),
-            description: "对已有文件进行 SEARCH/REPLACE 局部修改。一次只做一个替换块。".into(),
+            description:
+                "Apply a SEARCH/REPLACE edit to an existing file. One replacement block per call."
+                    .into(),
             parameters: serde_json::json!({ "type": "object", "properties": { "path": { "type": "string" }, "search": { "type": "string" }, "replace": { "type": "string" } }, "required": ["path", "search", "replace"] }),
         },
     }
@@ -205,10 +223,10 @@ pub async fn tool_edit_file(working_dir: &Path, args: &serde_json::Value) -> Str
     let search_text = args["search"].as_str().unwrap_or("");
     let replace_text = args["replace"].as_str().unwrap_or("");
     if path.is_empty() {
-        return ToolOutput::error("edit_file", "", "empty_path", "文件路径为空");
+        return ToolOutput::error("edit_file", "", "empty_path", "File path is empty");
     }
     if search_text.is_empty() {
-        return ToolOutput::error("edit_file", path, "empty_search", "search 内容为空");
+        return ToolOutput::error("edit_file", path, "empty_search", "search content is empty");
     }
     let full = match resolve_scoped_path(working_dir, path).await {
         Ok(p) => p,
@@ -219,7 +237,7 @@ pub async fn tool_edit_file(working_dir: &Path, args: &serde_json::Value) -> Str
             "edit_file",
             path,
             "not_found",
-            "文件不存在。新文件请用 create_file，全量覆盖请用 apply_patch（空 SEARCH）。",
+            "File does not exist. For new files use create_file; for full overwrite use apply_patch (empty SEARCH).",
         );
     }
     let content = match tokio::fs::read_to_string(&full).await {
@@ -235,7 +253,7 @@ pub async fn tool_edit_file(working_dir: &Path, args: &serde_json::Value) -> Str
             search_text.to_string()
         };
         return ToolOutput::error("edit_file", path, "search_not_found",
-            &format!("SEARCH 文本未在文件中找到。\n查找的文本：\n```\n{}\n```\n请用 read_file 确认文件最新内容后再试。", preview));
+            &format!("SEARCH text not found in the file.\nSearched for:\n```\n{}\n```\nPlease use read_file to confirm the latest content and try again.", preview));
     }
     if count > 1 {
         return ToolOutput::error(
@@ -243,7 +261,7 @@ pub async fn tool_edit_file(working_dir: &Path, args: &serde_json::Value) -> Str
             path,
             "search_ambiguous",
             &format!(
-                "SEARCH 文本在文件中出现 {} 次，不唯一。请在 search 中包含更多上下文行。",
+                "SEARCH text appears {} times in the file, not unique. Include more context lines in search.",
                 count
             ),
         );
@@ -254,7 +272,7 @@ pub async fn tool_edit_file(working_dir: &Path, args: &serde_json::Value) -> Str
             "edit_file",
             path,
             &format!(
-                "成功替换 1 处文本（{} 字节 → {} 字节）",
+                "Successfully replaced 1 occurrence ({} bytes -> {} bytes)",
                 content.len(),
                 new_content.len()
             ),
@@ -312,7 +330,7 @@ async fn try_rg_search(
     Ok(crate::tool::ToolOutput::success_raw(
         "search_text",
         &format!(
-            "[ripgrep] 匹配 {} 处：\n{}",
+            "[ripgrep] {} matches found:\n{}",
             results.len(),
             results.join("\n")
         ),
@@ -322,7 +340,12 @@ async fn try_rg_search(
 pub async fn tool_search_text(working_dir: &Path, args: &serde_json::Value) -> String {
     let pattern = args["pattern"].as_str().unwrap_or("");
     if pattern.is_empty() {
-        return ToolOutput::error("search_text", "", "empty_pattern", "搜索模式不能为空");
+        return ToolOutput::error(
+            "search_text",
+            "",
+            "empty_pattern",
+            "Search pattern cannot be empty",
+        );
     }
     let max_results = args["max_results"].as_u64().unwrap_or(50) as usize;
     let glob = args["glob"].as_str().filter(|s| !s.is_empty());
@@ -406,7 +429,7 @@ pub async fn tool_search_text(working_dir: &Path, args: &serde_json::Value) -> S
 
     if results.is_empty() {
         let searched = format!(
-            "在 {} 文件中搜索「{}」{}",
+            "Searched in {} files for '{}'{}",
             file_count,
             pattern,
             if let Some(g) = glob {
@@ -418,10 +441,10 @@ pub async fn tool_search_text(working_dir: &Path, args: &serde_json::Value) -> S
         return ToolOutput::success_raw(
             "search_text",
             &format!(
-                "{}，未找到匹配{}",
+                "{} — no matches found{}",
                 searched,
                 if error_count > 0 {
-                    format!("（{} 个文件跳过）", error_count)
+                    format!("({} files skipped)", error_count)
                 } else {
                     String::new()
                 }
@@ -429,7 +452,7 @@ pub async fn tool_search_text(working_dir: &Path, args: &serde_json::Value) -> S
         );
     }
     let summary = format!(
-        "找到 {} 个匹配（共扫描 {} 文件）：\n{}",
+        "Found {} matches (scanned {} files):\n{}",
         results.len(),
         file_count,
         results.join("\n")
@@ -466,7 +489,7 @@ pub fn search_text_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "search_text".into(),
-            description: "在项目文件中递归搜索文本模式。返回 文件:行号:内容 格式。".into(),
+            description: "Recursively search for a text pattern in project files. Returns file:line:content format.".into(),
             parameters: serde_json::json!({ "type": "object", "properties": { "pattern": { "type": "string" }, "glob": { "type": "string" }, "max_results": { "type": "integer" }, "case_sensitive": { "type": "boolean" } }, "required": ["pattern"] }),
         },
     }

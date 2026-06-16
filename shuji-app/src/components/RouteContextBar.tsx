@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getDeptMeta } from '../constants';
 import type { DeptLogEntry } from '../types';
 
@@ -15,6 +16,7 @@ interface RouteSegment {
 }
 
 export default function RouteContextBar({ entries }: RouteContextBarProps) {
+  const { t } = useTranslation();
   const chain = useMemo(() => {
     const routeEntries = entries.filter((e) => e.action.startsWith(ROUTE_PREFIX)).slice(-20);
 
@@ -50,7 +52,7 @@ export default function RouteContextBar({ entries }: RouteContextBarProps) {
   return (
     <div className="shrink-0 px-4 py-2 border-b border-fold bg-surface-paper/50">
       <div className="flex items-center gap-1.5 text-caption font-mono text-ink-500 flex-wrap">
-        <span className="text-ink-400 font-semibold mr-0.5">行文路径</span>
+        <span className="text-ink-400 font-semibold mr-0.5">{t('workflowGraph.routePath')}</span>
         {chain.map((seg, i) => (
           <span key={i} className="flex items-center gap-1">
             {i > 0 && <span className="text-ink-300 mx-0.5">→</span>}

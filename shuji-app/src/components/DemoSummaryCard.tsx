@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
 
@@ -7,6 +8,7 @@ interface Props {
 }
 
 export default function DemoSummaryCard({ summary, onOpenProject }: Props) {
+  const { t } = useTranslation();
   const cacheRate =
     summary.tokens > 0
       ? Math.round((summary.cached / (summary.cached + summary.uncached)) * 100)
@@ -26,29 +28,32 @@ export default function DemoSummaryCard({ summary, onOpenProject }: Props) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
             </svg>
           </div>
-          <h2 className="font-display text-display font-bold text-ink-900">Demo 完成</h2>
-          <p className="text-body text-ink-600 mt-1">体验流程已结束，以下是本次 Demo 的概览。</p>
+          <h2 className="font-display text-display font-bold text-ink-900">{t('demo.complete')}</h2>
+          <p className="text-body text-ink-600 mt-1">{t('demo.summaryDesc')}</p>
         </div>
         <section className="mb-6">
           <h3 className="font-display text-ui text-ink-600 font-semibold title-rule-gold mb-3">
-            汇总
+            {t('demo.summary')}
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="bg-surface-parchment border border-fold rounded-lg p-3 text-center">
-              <p className="text-caption text-ink-500 mb-1">耗时</p>
+              <p className="text-caption text-ink-500 mb-1">{t('demo.duration')}</p>
               <p className="font-display text-xl text-ink-900 font-bold">{summary.elapsed}</p>
             </div>
             <div className="bg-surface-parchment border border-fold rounded-lg p-3 text-center">
-              <p className="text-caption text-ink-500 mb-1">Token 消耗</p>
+              <p className="text-caption text-ink-500 mb-1">{t('demo.tokenConsumption')}</p>
               <p className="font-display text-xl text-ink-900 font-bold">
                 {summary.tokens.toLocaleString()}
               </p>
               <p className="text-caption text-ink-500 mt-1">
-                缓存 {summary.cached.toLocaleString()} / 未缓存 {summary.uncached.toLocaleString()}
+                {t('demo.cacheSummary', {
+                  cached: summary.cached.toLocaleString(),
+                  uncached: summary.uncached.toLocaleString(),
+                })}
               </p>
             </div>
             <div className="bg-surface-parchment border border-fold rounded-lg p-3 text-center">
-              <p className="text-caption text-ink-500 mb-1">缓存命中率</p>
+              <p className="text-caption text-ink-500 mb-1">{t('demo.cacheHitRate')}</p>
               <p className="font-display text-xl text-ink-900 font-bold">
                 {cacheRate !== null ? `${cacheRate}%` : 'N/A'}
               </p>
@@ -57,24 +62,24 @@ export default function DemoSummaryCard({ summary, onOpenProject }: Props) {
         </section>
         <section className="mb-6">
           <h3 className="font-display text-ui text-ink-600 font-semibold title-rule-gold mb-3">
-            下一步
+            {t('demo.nextSteps')}
           </h3>
           <ul className="space-y-2 text-body text-ink-700">
             <li className="leading-relaxed">
-              <strong>打开真实项目</strong> — 选择您的项目目录，枢机将根据需求自动规划并执行任务。
+              <strong>{t('demo.openRealProject')}</strong> — {t('demo.openRealProjectDesc')}
             </li>
             <li className="leading-relaxed">
-              <strong>调整参与模式</strong> — 使用{' '}
+              <strong>{t('demo.adjustParticipation')}</strong> — {t('demo.adjustParticipationDesc')}{' '}
               <code className="text-vermillion bg-vermillion-light px-1 rounded text-ui">
                 /level-2
               </code>{' '}
-              切换审批模式，让系统在关键节点等待您的确认。
+              {t('demo.switchApprovalMode')}
             </li>
           </ul>
         </section>
         <div className="flex justify-center gap-3">
           <Button variant="secondary" onClick={onOpenProject}>
-            打开真实项目
+            {t('demo.openRealProject')}
           </Button>
         </div>
       </Card>

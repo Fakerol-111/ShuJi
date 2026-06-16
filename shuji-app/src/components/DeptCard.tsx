@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import DeptGlyph from './DeptGlyph';
 import type { DeptMeta } from '../constants';
 import type { PlanInfo } from '../types';
@@ -21,6 +22,9 @@ export default function DeptCard({
   planInfo,
   onClick,
 }: DeptCardProps) {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language?.startsWith('en') ? 'en' : 'zh';
+  const displayLabel = lang === 'en' ? meta.shortLabelEn : meta.shortLabel;
   const showPlan = meta.key === 'gongbushangshu' && planInfo && planInfo.batches.length > 0;
   const progress =
     showPlan && planInfo
@@ -46,12 +50,12 @@ export default function DeptCard({
       <div className="px-3 py-2.5">
         <div className="flex items-center gap-2">
           <DeptGlyph deptKey={meta.key} size={16} stroke={meta.color} />
-          <span className="text-ui font-display font-semibold text-ink-800 truncate">{meta.shortLabel}</span>
+          <span className="text-ui font-display font-semibold text-ink-800 truncate">{displayLabel}</span>
           {isActive && (
             <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse shrink-0 ml-auto" />
           )}
           {hasError && (
-            <span className="w-1.5 h-1.5 rounded-full bg-vermillion shrink-0 ml-auto" title="最近出错" />
+            <span className="w-1.5 h-1.5 rounded-full bg-vermillion shrink-0 ml-auto" title={t('common.error')} />
           )}
         </div>
         {showPlan && (

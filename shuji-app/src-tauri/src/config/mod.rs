@@ -372,15 +372,15 @@ impl RuntimeConfig {
         let path_ref = path.as_ref();
         let mut config = match Self::from_file(path_ref) {
             Ok(cfg) => {
-                log_console!("[config] 已从 {} 加载配置", path_ref.display());
+                log_console!("[config] loaded config from {}", path_ref.display());
                 cfg
             }
             Err(e) => {
                 if path_ref.exists() {
-                    log_console!("[config] 配置文件解析失败，使用默认值: {}", e);
+                    log_console!("[config] config file parse error, using defaults: {}", e);
                 } else {
                     log_console!(
-                        "[config] 配置文件不存在，使用默认值 (可创建 {} 自定义配置)",
+                        "[config] config file not found, using defaults (create {} to customize)",
                         path_ref.display()
                     );
                 }
@@ -393,17 +393,20 @@ impl RuntimeConfig {
         if local_path.exists() {
             match Self::from_file(&local_path) {
                 Ok(local) => {
-                    log_console!("[config] 已从 {} 加载本地覆盖", local_path.display());
+                    log_console!(
+                        "[config] loaded local override from {}",
+                        local_path.display()
+                    );
                     config.merge_from(local);
                 }
                 Err(e) => {
-                    log_console!("[config] 本地配置文件解析失败，忽略: {}", e);
+                    log_console!("[config] local config parse error, ignoring: {}", e);
                 }
             }
         }
 
         log_console!(
-            "[debug] 配置值: api.timeout={}, api.max_retries={}, compact.token_threshold={}, compact.mid_run_compact={}",
+            "[debug] config values: api.timeout={}, api.max_retries={}, compact.token_threshold={}, compact.mid_run_compact={}",
             config.api.timeout_secs,
             config.api.max_retries,
             config.context_compaction.token_threshold,

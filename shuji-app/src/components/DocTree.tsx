@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import { listShujiTree } from '../api';
 import { formatError } from '../utils/error';
@@ -11,6 +12,7 @@ interface DocTreeProps {
 }
 
 export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreeProps) {
+  const { t } = useTranslation();
   const [tree, setTree] = useState<ShujiEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -55,17 +57,17 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
       </div>
     );
   if (tree.length === 0 && !loading)
-    return <div className="p-3 text-ui text-ink-400">暂无可预览文件</div>;
+    return <div className="p-3 text-ui text-ink-400">{t('docTree.noPreviewFiles')}</div>;
 
   return (
     <div className="py-2 text-ui">
       <div className="sticky top-0 z-10 bg-surface-parchment px-2 pb-2 flex justify-end items-center gap-2 border-b border-fold mb-1">
-        {loading && <span className="text-[10px] text-ink-400 animate-pulse">刷新中…</span>}
+        {loading && <span className="text-[10px] text-ink-400 animate-pulse">{t('docTree.refreshing')}</span>}
         <button
           onClick={loadTree}
           className="px-2 py-1 rounded text-ui text-ink-500 hover:bg-ink-100 hover:text-ink-800"
         >
-          刷新
+          {t('common.refresh')}
         </button>
       </div>
       {tree.map((entry) => (

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getContextStats, compactContext } from '../api';
 import type { ContextStats } from '../api';
 import { getDeptMeta, DEPT_ORDER } from '../constants';
 import { formatError } from '../utils/error';
 
 export default function ContextPanel() {
+  const { t } = useTranslation();
   const [stats, setStats] = useState<Record<string, ContextStats> | null>(null);
   const [error, setError] = useState('');
   const [compactingRole, setCompactingRole] = useState<string | null>(null);
@@ -26,17 +28,17 @@ export default function ContextPanel() {
   return (
     <div className="h-full overflow-y-auto p-3 bg-ink-50">
       <div className="flex items-center justify-between mb-1">
-        <h3 className="text-xs font-bold text-ink-800">文脉</h3>
+        <h3 className="text-xs font-bold text-ink-800">{t('context.contextWindow')}</h3>
         <button onClick={load} className="text-[10px] text-ink-400 hover:text-ink-700">
-          刷新
+          {t('common.refresh')}
         </button>
       </div>
       <p className="text-[9px] text-ink-400 mb-3">
-        单位：tokens（cl100k，与 OpenAI/DeepSeek 兼容 API 估算一致）
+        {t('context.tokenNote')}
       </p>
       {error && <p className="text-xs text-vermillion mb-2">{error}</p>}
       {!stats || Object.keys(stats).length === 0 ? (
-        <p className="text-xs text-ink-400">暂无数据</p>
+        <p className="text-xs text-ink-400">{t('common.noData')}</p>
       ) : (
         <div className="space-y-3">
           {Object.entries(stats)
@@ -72,11 +74,11 @@ export default function ContextPanel() {
                     />
                   </div>
                   <div className="flex justify-between items-center text-[9px] text-ink-400 mt-0.5">
-                    <span>{cs.message_count} 条消息</span>
+                    <span>{t('context.messages', { count: cs.message_count })}</span>
                     {cs.compressed ? (
-                      <span className="text-amber-600">已压缩</span>
+                      <span className="text-amber-600">{t('context.compressed')}</span>
                     ) : (
-                      <span className="text-ink-400">未压缩</span>
+                      <span className="text-ink-400">{t('context.uncompressed')}</span>
                     )}
                   </div>
                   <div className="mt-1">
@@ -103,7 +105,7 @@ export default function ContextPanel() {
                           : 'border-ink-300 hover:bg-ink-100 text-ink-600'
                       }`}
                     >
-                      {compactingRole === role ? '压缩中…' : '立即压缩'}
+                      {compactingRole === role ? t('context.compressing') : t('context.compressNow')}
                     </button>
                     {lastCompactMsg && compactingRole === null && (
                       <span className="text-[9px] text-jade ml-1.5">{lastCompactMsg}</span>

@@ -37,7 +37,7 @@ impl NeigeAgent {
         let mut tools = crate::tool::registry::minimal_inspect_tools();
         // read_file for reading source code & .shuji/ files (read_document only finds docs by ID)
         tools.push(crate::tool::read_file_tool_def(
-            "读取源代码文件和 .shuji/ 中的普通文件",
+            "read source files and .shuji/ regular files",
         ));
         // Documents: create + append only (no modify_document, no set_document_status)
         tools.push(crate::tool::documents::create_document_tool_def());
@@ -112,7 +112,7 @@ impl NeigeAgent {
             if !content.trim().is_empty() {
                 if content.len() > 4000 {
                     log_console!(
-                        "[soul] soul 长度 {} 超过 4000 上限，截断至 4000",
+                        "[soul] soul length {} exceeds 4000 limit, truncating to 4000",
                         content.len()
                     );
                     let truncated: String = content.chars().take(4000).collect();
@@ -188,37 +188,37 @@ impl NeigeAgent {
         let instruction = match preset.as_str() {
             "full" => {
                 "\
-[Workflow Preset: Full — 完整治理]
-- 所有流程必经：需求展开 → 设计 → 门下审查 → 皇帝批复 → 尚书令执行 → 礼部规范检查
-- 必须调用 expand_requirements（除非是极小 bugfix）
-- skill 选择：workflow_standard / workflow_complex（根据复杂度）
-- 门下侍中审查不可跳过"
+[Workflow Preset: Full — Full Governance]
+- All processes must go through: requirements expansion → design → review by 门下侍中 → emperor approval → 尚书令 execution → 礼部 standards check
+- Must call expand_requirements (unless it's a very small bugfix)
+- skill selection: workflow_standard / workflow_complex (based on complexity)
+- 门下侍中 review cannot be skipped"
             }
 
             "fast" => {
                 "\
-[Workflow Preset: Fast — 极速模式]
-- 使用最轻量的流程：workflow_demo 或 workflow_simple
-- 禁止使用 workflow_standard 和 workflow_complex
-- expand_requirements: 已禁用，不得调用
-- 跳过门下侍中审查和礼部规范检查
-- 直接 route_to 尚书令执行"
+[Workflow Preset: Fast — Speed Mode]
+- Use the lightest workflow: workflow_demo or workflow_simple
+- workflow_standard and workflow_complex are forbidden
+- expand_requirements: disabled, must not call
+- Skip 门下侍中 review and 礼部 standards check
+- route_to 尚书令 directly for execution"
             }
             "audit" => {
                 "\
-[Workflow Preset: Audit — 审计模式]
-- 强制包含门下侍中审查和礼部规范检查
-- 推荐 skill: workflow_audit
-- 所有产出必须经门下侍中审查 + 礼部规范检查后才能交付"
+[Workflow Preset: Audit — Audit Mode]
+- Mandatory: 门下侍中 review + 礼部 standards check
+- Recommended skill: workflow_audit
+- All output must pass 门下侍中 review + 礼部 standards check before delivery"
             }
 
             _ => {
                 "\
-[Workflow Preset: Standard — 标准模式]
-- 流程：需求展开 → 设计（中书令）→ 皇帝批复 → 执行（尚书令）
-- 跳过门下侍中审查环节
-- expand_requirements: 仅对 workflow_standard/complex 调用
-- skill 选择：根据复杂度使用 workflow_simple / workflow_standard / workflow_complex"
+[Workflow Preset: Standard — Standard Mode]
+- Process: requirements expansion → design (中书令) → emperor approval → execution (尚书令)
+- Skip 门下侍中 review step
+- expand_requirements: only call for workflow_standard/complex
+- skill selection: workflow_simple / workflow_standard / workflow_complex based on complexity"
             }
         };
 
@@ -296,7 +296,10 @@ impl Agent for NeigeAgent {
                 } else {
                     "clarify"
                 };
-                log_console!("[内阁] discuss skill 未找到，fallback 为 {}", fallback);
+                log_console!(
+                    "[内阁] discuss skill not found, falling back to {}",
+                    fallback
+                );
                 skill_content = Self::load_skill(fallback, &working_dir).await;
             }
             if !skill_content.is_empty() {
@@ -353,7 +356,7 @@ impl Agent for NeigeAgent {
                 .await;
 
                 let mut msgs = ctx.to_messages();
-                msgs.push(serde_json::json!({"role": "user", "content": format!("皇帝新指令：{}", input.task_description)}));
+                msgs.push(serde_json::json!({"role": "user", "content": format!("New instruction from Emperor: {}", input.task_description)}));
                 let snap = crate::api::session::SessionSnapshot::from_messages(msgs);
                 session.restore(&snap);
             }
@@ -364,10 +367,12 @@ impl Agent for NeigeAgent {
         // discuss_mode 中保留了 inject_workflow_preset（在上面已执行）
         if !input.discuss_mode && !resumed {
             // 简明提示：不使用 workflow preset，内阁自主规划
-            session.inject("[系统] 请分析任务范围并直接规划可执行步骤。调用 submit_pipeline_plan 提交机器可执行的 JSON 计划。不需要 <skill> 标签。");
+            session.inject("[System] Please analyze the task scope and directly plan executable steps. Call submit_pipeline_plan to submit a machine-executable JSON plan. No <skill> tags are needed.");
         }
         if resumed && !input.discuss_mode {
-            session.inject("[系统] 皇帝已回复。请继续完成规划并提交 pipeline plan。");
+            session.inject(
+                "[System] 皇帝 has replied. Please continue planning and submit the pipeline plan.",
+            );
         }
 
         let mut controller = crate::api::control::AgentController::new();
@@ -532,14 +537,14 @@ impl Agent for NeigeAgent {
                     must_approve_retries += 1;
                     if must_approve_retries >= 3 {
                         log_console!(
-                            "[内阁] must-approve doc {} 重试{}次仍无request_decision，自动批复",
+                            "[内阁] must-approve doc {} retried {} times without request_decision, auto-approving",
                             id,
                             must_approve_retries
                         );
                         let _ =
                             crate::tool::documents::remove_pending_approval(&working_dir, id).await;
                         let msg = format!(
-                            "[系统] 文档 {} 已自动御批（内阁{}次重试仍未请求皇帝决策）。继续执行。",
+                            "[System] Document {} has been auto-approved (内阁 retried {} times without requesting emperor decision). Continuing execution.",
                             id, must_approve_retries
                         );
                         session.inject(&msg);
@@ -551,7 +556,7 @@ impl Agent for NeigeAgent {
                         must_approve_retries
                     );
                     let msg = format!(
-                        "[系统] 文档 {} 已创建但未经皇帝御批。请立即调用 request_decision 工具，传入选项供皇帝决策。",
+                        "[System] Document {} has been created but not yet approved by 皇帝. Please immediately call request_decision tool with options for 皇帝 to decide.",
                         id
                     );
                     session.inject(&msg);

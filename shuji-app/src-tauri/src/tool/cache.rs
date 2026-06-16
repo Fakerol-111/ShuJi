@@ -27,7 +27,7 @@ pub fn cache_lookup(working_dir: &Path, path: &Path) -> Option<String> {
         if let Ok(current_mtime) = std::fs::metadata(path).and_then(|m| m.modified()) {
             if current_mtime == *cached_mtime {
                 return Some(format!(
-                    "{}[缓存命中: 内容未变 (cached: true)]",
+                    "{}[cache hit: content unchanged (cached: true)]",
                     cached_result
                 ));
             }

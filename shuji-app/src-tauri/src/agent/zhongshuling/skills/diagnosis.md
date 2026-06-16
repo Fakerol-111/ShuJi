@@ -1,63 +1,63 @@
-# 缺陷诊断
+# Defect Diagnosis
 
-通过系统的代码阅读独立诊断缺陷时使用此模式。这是中书令侧的诊断能力，用于缺陷可能具有架构性根因的场景。
+Use this mode to independently diagnose defects through systematic code reading. This is the Chief Architect's diagnostic capability, used for scenarios where the defect may have architectural root causes.
 
-## 何时使用
+## When to Use
 
-- 内阁路由任务，要求你从设计/架构角度诊断缺陷
-- 缺陷可能具有架构性根因而非局部实现错误
-- 需要更广泛的系统理解以跨模块追溯问题
+- The Cabinet routes a task asking you to diagnose a defect from a design/architecture perspective
+- The defect may have architectural root causes rather than local implementation errors
+- A broader system understanding is needed to trace the problem across modules
 
-注意：在 `workflow_bugfix` 流程中进行运行时缺陷诊断时，内阁路由到尚书令进行端到端诊断和修复。中书令诊断用于缺陷可能涉及设计级问题或跨模块架构问题的场景。
+Note: When performing runtime defect diagnosis in the `workflow_bugfix` workflow, the Cabinet routes to the Chief Executor for end-to-end diagnosis and fix. Chief Architect diagnosis is for scenarios where the defect may involve design-level issues or cross-module architecture problems.
 
-## 工作方法
+## Work Method
 
-1. 从任务中读取缺陷描述和复现步骤
-2. 基于架构知识识别候选模块/文件
-3. 阅读 → 假设 → 验证：
-   - 阅读相关源文件
-   - 形成关于根因的假设
-   - 阅读更多代码以验证或反驳假设
-   - 重复直至根因确认
-4. 通过 `create_document(type="anls")` 创建诊断文档
-5. 通过 `append_document` 分块填充
+1. Read the defect description and reproduction steps from the task
+2. Identify candidate modules/files based on architecture knowledge
+3. Read -> Hypothesize -> Verify:
+   - Read relevant source files
+   - Form a hypothesis about the root cause
+   - Read more code to verify or refute the hypothesis
+   - Repeat until root cause is confirmed
+4. Create a diagnosis document via `create_document(type="anls")`
+5. Fill in chunks via `append_document`
 
-## 诊断报告结构
+## Diagnosis Report Structure
 
-报告（`.shuji/analysis/`）必须包含：
-- **缺陷摘要**：观察 vs 预期行为，一句话
-- **根因**：具体文件、函数和逻辑缺陷
-- **链路**：从触发点到失败点的调用链
-- **促成因素**：使缺陷成为可能的设计问题（如有）
-- **影响范围**：其他可能受影响的内容
-- **修复指导**：在哪里修复（文件/函数）以及需要保持什么约束
+The report (`.shuji/analysis/`) must contain:
+- **Defect Summary**: Observed vs expected behavior, one sentence
+- **Root Cause**: Specific file, function, and logic defect
+- **Chain**: The call chain from trigger point to failure point
+- **Contributing Factors**: Design issues that made the defect possible (if any)
+- **Impact Scope**: What else may be affected
+- **Fix Guidance**: Where to fix (file/function) and what constraints to maintain
 
-## 诊断纪律
+## Diagnostic Discipline
 
-- 不编写修复代码——描述在哪里以及什么约束重要
-- 通过实际代码阅读验证假设，而非凭空猜测
-- 如果缺陷跨多个模块，追溯完整的跨模块路径
-- 如果无法确认根因，明确说明——不猜测
+- Do not write fix code — describe where and what constraints matter
+- Verify hypotheses through actual code reading, not guesswork
+- If the defect crosses multiple modules, trace the complete cross-module path
+- If the root cause cannot be confirmed, state that clearly — do not guess
 
-## 路由
+## Routing
 
-- 诊断完成 → 路由回调用方（内阁或尚书令）
+- Diagnosis complete -> Route back to the caller (Cabinet or Chief Executor)
 
-## 规则
+## Rules
 
-- 读取链路路径中的每个文件——不仅凭架构知识猜测
-- 报告根因，而非症状
-- 如果修复需要架构变更，显式标记
+- Read every file in the chain path — do not guess based on architecture knowledge alone
+- Report the root cause, not the symptom
+- If the fix requires architecture changes, explicitly flag this
 
-## 输出块
+## Output Block
 
-每次诊断结束时，输出以下结构化摘要：
+At the end of each diagnosis, output the following structured summary:
 
 ```
-诊断结论：<根因一句话>
-根因文件：<文件名+行号>
-触发链路：<简要调用链>
-影响范围：<受影响模块/文件>
-修复方向：<修改位置+约束>
-依赖/关联文档：<refs 编号列表>
+Diagnosis Conclusion: <one-sentence root cause>
+Root Cause File: <file name + line number>
+Trigger Chain: <brief call chain>
+Impact Scope: <affected modules/files>
+Fix Direction: <modification location + constraints>
+Dependencies/Related Documents: <refs list>
 ```

@@ -153,11 +153,11 @@ pub enum TokenWindow {
 impl TokenWindow {
     pub fn label(&self) -> String {
         match self {
-            TokenWindow::Today => "今日".to_string(),
-            TokenWindow::Last3Days => "近3天".to_string(),
-            TokenWindow::Last7Days => "近7天".to_string(),
-            TokenWindow::LastNDays(n) => format!("近{}天", n),
-            TokenWindow::All => "汇总".to_string(),
+            TokenWindow::Today => "Today".to_string(),
+            TokenWindow::Last3Days => "Last 3 Days".to_string(),
+            TokenWindow::Last7Days => "Last 7 Days".to_string(),
+            TokenWindow::LastNDays(n) => format!("Last {} Days", n),
+            TokenWindow::All => "All Time".to_string(),
         }
     }
 }
@@ -239,7 +239,7 @@ pub fn recalculate_all(working_dir: &Path) -> Result<(), String> {
     let path_lock = STORAGE_PATH.lock().map_err(|e| e.to_string())?;
     let storage_path = match path_lock.as_ref() {
         Some(p) => Path::new(p).to_path_buf(),
-        None => return Err("token_tracker 未初始化".to_string()),
+        None => return Err("token_tracker not initialized".to_string()),
     };
     drop(path_lock);
 

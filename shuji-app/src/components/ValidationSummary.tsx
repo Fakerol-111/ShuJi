@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { ValidationReport } from '../types';
 
 interface Props {
@@ -6,11 +7,13 @@ interface Props {
 }
 
 export function ValidationSummary({ report, loading }: Props) {
+  const { t } = useTranslation();
+
   if (loading) {
     return (
       <div className="validation-summary validation-summary--loading">
         <span className="validation-summary__icon">⏳</span>
-        <span>验证加载中…</span>
+        <span>{t('validation.validating')}</span>
       </div>
     );
   }
@@ -19,7 +22,7 @@ export function ValidationSummary({ report, loading }: Props) {
     return (
       <div className="validation-summary validation-summary--empty">
         <span className="validation-summary__icon">—</span>
-        <span>暂无验证报告</span>
+        <span>{t('validation.noReport')}</span>
       </div>
     );
   }
@@ -35,14 +38,14 @@ export function ValidationSummary({ report, loading }: Props) {
         {report.overall_pass ? '✓' : '✗'}
       </span>
       <span className="validation-summary__status">
-        {report.overall_pass ? '验证通过' : '验证未通过'}
+        {report.overall_pass ? t('validation.passed') : t('validation.failed')}
       </span>
       <span className="validation-summary__detail">
-        {passCount}/{report.checks.length} 项通过
+        {t('validation.passCount', { pass: passCount, total: report.checks.length })}
         {failCount > 0 && (
           <span className="validation-summary__fail-names">
             {' '}
-            — 失败: {report.checks.filter((c) => !c.pass).map((c) => c.name).join(', ')}
+            — {t('validation.failedItems')}: {report.checks.filter((c) => !c.pass).map((c) => c.name).join(', ')}
           </span>
         )}
       </span>

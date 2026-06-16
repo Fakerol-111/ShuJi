@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import DocTree from './DocTree';
 import TokenPanel from './TokenPanel';
 import ContextPanel from './ContextPanel';
@@ -5,17 +6,13 @@ import CheckpointPanel from './CheckpointPanel';
 import AuditPanel from './AuditPanel';
 import type { ActivitySelection } from './ActivityBar';
 
-const headerLabel: Record<string, string> = {
-  files: '架阁目录',
-  stats: '度支',
-  context: '文脉',
-  archives: '存档',
-  audit: '朝报',
+const headerKey: Record<string, string> = {
+  files: 'sidebar.directory',
+  stats: 'sidebar.tokens',
+  context: 'sidebar.context',
+  archives: 'sidebar.checkpoints',
+  audit: 'sidebar.audit',
 };
-
-function getHeader(mode: Exclude<ActivitySelection, null>): string {
-  return headerLabel[mode] || mode;
-}
 
 function panel(
   mode: Exclude<ActivitySelection, null>,
@@ -55,10 +52,11 @@ export default function Sidebar({
   onDocSelect,
   onShowDiff,
 }: SidebarProps) {
+  const { t } = useTranslation();
   return (
     <aside className="w-60 bg-surface-parchment border-r border-fold shrink-0 flex flex-col min-h-0">
       <div className="h-9 px-3 border-b border-fold flex items-center font-display text-ui font-semibold text-ink-700">
-        {getHeader(mode)}
+        {t(headerKey[mode] || mode, headerKey[mode] || mode)}
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
         {panel(mode, projectDir, selectedDoc, onDocSelect, onShowDiff)}

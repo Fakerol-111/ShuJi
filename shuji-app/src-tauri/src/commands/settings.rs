@@ -367,7 +367,7 @@ pub async fn get_model_preset() -> Result<String, String> {
 pub async fn set_model_preset(preset: String) -> Result<(), String> {
     if !["economy", "balanced", "quality", "custom"].contains(&preset.as_str()) {
         return Err(friendly_error(format!(
-            "无效预设: {}。可选: economy (经济), balanced (均衡), quality (质量)",
+            "invalid preset: {}. Options: economy, balanced, quality",
             preset
         )));
     }
@@ -498,7 +498,10 @@ pub async fn check_api_connection(
     match result {
         Ok(Ok(_response)) => Ok("ok".into()),
         Ok(Err(e)) => Err(friendly_error(e)),
-        Err(_) => Err("连接超时（10 秒），请检查 API URL 和网络连接".to_string()),
+        Err(_) => Err(
+            "connection timed out (10s), please check the API URL and network connection"
+                .to_string(),
+        ),
     }
 }
 
@@ -521,7 +524,7 @@ pub async fn get_workflow_preset(
         .lock()
         .await
         .clone()
-        .ok_or("没有打开的项目")?;
+        .ok_or("no open project")?;
     let path = workflow_preset_path(&dir);
     match tokio::fs::read_to_string(&path).await {
         Ok(content) => {
@@ -540,7 +543,7 @@ pub async fn set_workflow_preset(
 ) -> Result<(), String> {
     if !matches!(preset.as_str(), "full" | "standard" | "fast" | "audit") {
         return Err(format!(
-            "无效的预设: {}（可选: full, standard, fast, audit）",
+            "invalid preset: {} (options: full, standard, fast, audit)",
             preset
         ));
     }
@@ -549,7 +552,7 @@ pub async fn set_workflow_preset(
         .lock()
         .await
         .clone()
-        .ok_or("没有打开的项目")?;
+        .ok_or("no open project")?;
     let path = workflow_preset_path(&dir);
     if let Some(parent) = path.parent() {
         tokio::fs::create_dir_all(parent)
@@ -576,14 +579,14 @@ pub async fn get_workflow_config(
 ) -> Result<serde_json::Value, String> {
     Ok(serde_json::json!({
         "deprecated": true,
-        "message": "Workflow 配置已被 Pipeline 管道引擎取代。内阁现在自主规划执行步骤。"
+        "message": "Workflow configuration has been replaced by the Pipeline engine. 内阁 now plans execution steps autonomously."
     }))
 }
 
 /// Save workflow config to the project.
 #[tauri::command]
 pub async fn set_workflow_config() -> Result<String, String> {
-    Err("Workflow 配置已被 Pipeline 管道引擎取代，不再支持手动配置。".to_string())
+    Err("Workflow configuration has been replaced by the Pipeline engine, manual configuration is no longer supported.".to_string())
 }
 
 // ── Soul management ─────────────────────────────────────────────────
@@ -605,7 +608,7 @@ pub async fn get_soul_content(
         .lock()
         .await
         .clone()
-        .ok_or("没有打开的项目")?;
+        .ok_or("no open project")?;
     let path = soul_path(&dir);
     if path.exists() {
         tokio::fs::read_to_string(&path)
@@ -626,7 +629,7 @@ pub async fn clear_soul(
         .lock()
         .await
         .clone()
-        .ok_or("没有打开的项目")?;
+        .ok_or("no open project")?;
     let path = soul_path(&dir);
     let default = include_str!("../agent/neige/soul.md");
     if let Some(parent) = path.parent() {

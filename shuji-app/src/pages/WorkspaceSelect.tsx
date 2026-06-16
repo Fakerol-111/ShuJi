@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { open } from '@tauri-apps/plugin-dialog';
 import { formatError } from '../utils/error';
 import { loadProject, getRecentDirs, getConfig, createDemoProject } from '../api';
@@ -8,6 +9,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 
 export default function WorkspaceSelect() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [recentDirs, setRecentDirs] = useState<string[]>([]);
   const [dirPath, setDirPath] = useState('');
@@ -25,10 +27,10 @@ export default function WorkspaceSelect() {
           return;
         }
       })
-      .catch((e) => console.error('读取配置失败:', e));
+      .catch((e) => console.error(t('common.error'), e));
     getRecentDirs()
       .then(setRecentDirs)
-      .catch((e) => console.error('读取最近目录失败:', e));
+      .catch((e) => console.error(t('common.error'), e));
   }, []);
 
   const handleBrowse = async () => {
@@ -36,7 +38,7 @@ export default function WorkspaceSelect() {
       const selected = await open({
         directory: true,
         multiple: false,
-        title: '选择工作目录',
+        title: t('workspace.chooseDir'),
       });
       if (selected) setDirPath(selected);
     } catch {
@@ -47,7 +49,7 @@ export default function WorkspaceSelect() {
   const handleOpen = async (dir?: string) => {
     const path = dir || dirPath.trim();
     if (!path) {
-      setError('请选择工作目录');
+      setError(t('workspace.pleaseSelectDir'));
       return;
     }
     setLoading(true);
@@ -69,8 +71,8 @@ export default function WorkspaceSelect() {
           <div className="flex justify-center mb-3">
             <SealLogo size={40} />
           </div>
-          <h1 className="font-display text-display font-bold text-ink-900 mb-2">枢机</h1>
-          <p className="text-body text-ink-600">三省六部制自动化软件开发系统</p>
+          <h1 className="font-display text-display font-bold text-ink-900 mb-2">{t('app.name')}</h1>
+          <p className="text-body text-ink-600">{t('app.subtitle')}</p>
         </div>
 
         {/* ── Quick-start for new users ── */}
@@ -92,7 +94,7 @@ export default function WorkspaceSelect() {
             }
           }}
         >
-          {loading ? '创建中...' : '体验枢机 — 5 分钟上手'}
+          {loading ? t('workspace.creating') : t('workspace.experienceShuji')}
         </Button>
 
         {/* ── Mock demo (no API key needed) ── */}
@@ -115,7 +117,7 @@ export default function WorkspaceSelect() {
             }
           }}
         >
-          {loading ? '创建中...' : '⚡ 离线体验（无需 API 密钥）'}
+          {loading ? t('workspace.creating') : t('workspace.offlineExperience')}
         </Button>
 
         <div className="relative mb-4">
@@ -123,13 +125,13 @@ export default function WorkspaceSelect() {
             <div className="w-full border-t border-fold" />
           </div>
           <div className="relative flex justify-center text-ui">
-            <span className="bg-surface-elevated px-2 text-ink-400">或打开已有项目</span>
+            <span className="bg-surface-elevated px-2 text-ink-400">{t('workspace.orOpenExisting')}</span>
           </div>
         </div>
 
         <div className="mb-4">
           <label className="block text-ui font-medium text-ink-500 mb-1 tracking-wide">
-            工作目录
+            {t('workspace.workingDir')}
           </label>
           <div className="flex gap-2">
             <input
@@ -137,21 +139,21 @@ export default function WorkspaceSelect() {
               type="text"
               value={dirPath}
               onChange={(e) => setDirPath(e.target.value)}
-              placeholder="选择一个文件夹..."
+              placeholder={t('workspace.selectFolder')}
               className="flex-1 px-3 py-2 border border-fold bg-surface-parchment rounded-lg text-body font-mono text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-vermillion focus:ring-1 focus:ring-vermillion/30"
             />
             <button
               onClick={handleBrowse}
               className="px-3 py-2 border border-fold rounded-lg text-ink-600 hover:bg-ink-100 text-ui transition-colors"
             >
-              浏览
+              {t('workspace.browse')}
             </button>
             <button
               onClick={() => handleOpen()}
               disabled={loading}
               className="px-4 py-2 bg-ink-900 text-ink-50 rounded-lg hover:bg-ink-800 disabled:opacity-40 text-ui transition-colors"
             >
-              {loading ? '打开中...' : '打开'}
+              {loading ? t('workspace.opening') : t('workspace.openDir')}
             </button>
           </div>
         </div>
@@ -159,7 +161,7 @@ export default function WorkspaceSelect() {
         {recentDirs.length > 0 && (
           <div>
             <label className="block text-ui font-medium text-ink-400 mb-1 tracking-wide">
-              最近目录
+              {t('workspace.recentDirs')}
             </label>
             <div className="space-y-0.5">
               {recentDirs.map((dir, i) => (

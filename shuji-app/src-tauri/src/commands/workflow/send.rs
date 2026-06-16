@@ -37,7 +37,7 @@ pub async fn send_message(
         let project_opt = state.current_project.lock().await;
         let p = project_opt
             .as_ref()
-            .ok_or_else(|| friendly_error("没有加载项目"))?;
+            .ok_or_else(|| friendly_error("no open project"))?;
         p.working_dir.clone()
     };
 
@@ -156,34 +156,40 @@ pub async fn send_message(
             // Emit result to emperor
             let msg = match &result {
                 crate::pipeline::PipelineResult::Complete { ref runtime } => {
-                    format!("✅ 管道执行完成：{}", runtime.plan.summary)
+                    format!("✅ Pipeline execution complete: {}", runtime.plan.summary)
                 }
                 crate::pipeline::PipelineResult::AwaitingUserInput {
                     step_id, question, ..
                 } => {
-                    format!("⏳ 管道等待用户输入（步骤 {}）：{}", step_id, question)
+                    format!(
+                        "⏳ Pipeline waiting for user input (step {}): {}",
+                        step_id, question
+                    )
                 }
                 crate::pipeline::PipelineResult::AwaitingApproval {
                     doc_id, step_id, ..
                 } => {
-                    format!("⏳ 管道等待审批（步骤 {}，文档 {}）", step_id, doc_id)
+                    format!(
+                        "⏳ Pipeline waiting for approval (step {}, doc {})",
+                        step_id, doc_id
+                    )
                 }
                 crate::pipeline::PipelineResult::StepFailed {
                     step_id, reason, ..
                 } => {
-                    format!("❌ 管道步骤 {} 执行失败：{}", step_id, reason)
+                    format!("❌ Pipeline step {} failed: {}", step_id, reason)
                 }
                 crate::pipeline::PipelineResult::Aborted { .. } => {
                     crate::pipeline::PlanRuntime::cleanup(project_dir).await;
-                    "🛑 管道执行已中止".to_string()
+                    "🛑 Pipeline execution aborted".to_string()
                 }
                 crate::pipeline::PipelineResult::Deadlock { .. } => {
-                    "❌ 管道死锁：所有剩余步骤的依赖无法满足。".to_string()
+                    "❌ Pipeline deadlock: remaining steps have unmet dependencies.".to_string()
                 }
             };
 
             // Emit pipeline result to frontend
-            let _ = system.emperor_tx.try_send(ChatMessage::new("系统", &msg));
+            let _ = system.emperor_tx.try_send(ChatMessage::new("System", &msg));
             log_console!("[pipeline] result: {}", msg);
 
             return Ok(msg);
@@ -319,7 +325,7 @@ pub async fn send_message(
     let sys_lock = state.actor_system.lock().await;
     let system = sys_lock
         .as_ref()
-        .ok_or_else(|| friendly_error("Actor 系统未初始化"))?;
+        .ok_or_else(|| friendly_error("actor system not initialized"))?;
 
     {
         let wd = Path::new(&p_working_dir);
@@ -343,7 +349,7 @@ pub async fn send_message(
         .send(&Role::Neige, ActorMessage::new(message, RouteMsgType::Task))
         .map_err(friendly_error)?;
 
-    Ok("已接收".to_string())
+    Ok("received".to_string())
 }
 
 /// Independent discussion with Cabinet — does NOT modify project state.
@@ -362,21 +368,21 @@ pub async fn discuss_with_cabinet(
         let project_opt = state.current_project.lock().await;
         let p = match project_opt.as_ref() {
             Some(p) => p,
-            None => return Err(friendly_error("没有加载项目")),
+            None => return Err(friendly_error("no open project")),
         };
         (
             p.working_dir.clone(),
             format!(
-                r#"━━ 项目目标 ━━
+                r#"━━ Project Goal ━━
 {}
 
-━━ 当前阶段 ━━
+━━ Current Phase ━━
 {}
 
-━━ 项目里程碑 ━━
+━━ Milestones ━━
 {}
 
-━━ 对话记录(近期) ━━
+━━ Recent Conversation ━━
 {}"#,
                 p.goal, p.summary, p.task, p.talk,
             ),
@@ -396,7 +402,7 @@ pub async fn discuss_with_cabinet(
     let input = AgentInput {
         role: Role::Neige,
         task_description: format!(
-            "（以下为当前项目状态，供参考）\n{}\n\n━━ 皇帝与你讨论 ━━\n{}",
+            "(Current project state for reference)\n{}\n\n━━ Emperor Discussion ━━\n{}",
             project_context, message,
         ),
         context_messages: vec![],

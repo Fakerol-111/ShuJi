@@ -609,7 +609,7 @@ fn test_gate_blocks_unapproved_ref() {
     );
     let err_msg = gate_result.unwrap_err();
     assert!(
-        err_msg.contains("尚在待皇帝御批"),
+        err_msg.contains("awaiting emperor approval"),
         "Error should mention pending approval: {}",
         err_msg
     );
@@ -712,7 +712,7 @@ fn test_gate_blocks_rejected_ref() {
     let gate_result = block_on(check_doc_refs_approved_for_route(root, dsgn_doc_id));
     assert!(gate_result.is_err(), "Gate should block rejected ref");
     assert!(
-        gate_result.unwrap_err().contains("被驳回"),
+        gate_result.unwrap_err().contains("rejected"),
         "Error should mention rejection"
     );
 }

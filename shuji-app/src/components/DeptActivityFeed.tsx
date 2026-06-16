@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDeptEvents } from '../hooks/useDeptEvents';
 import DeptActivityCard from './DeptActivityCard';
 import type { DeptLogEntry } from '../types';
@@ -18,13 +19,14 @@ function dedupeEntries(entries: DeptLogEntry[]): DeptLogEntry[] {
 }
 
 export default function DeptActivityFeed({ onDocClick }: DeptActivityFeedProps) {
+  const { t } = useTranslation();
   const [showAll, setShowAll] = useState(false);
   const { logEntries } = useDeptEvents();
 
   const deduped = dedupeEntries(logEntries);
 
   if (deduped.length === 0) {
-    return <div className="px-3 py-4 text-center text-caption text-ink-400">暂无部门动态</div>;
+    return <div className="px-3 py-4 text-center text-caption text-ink-400">{t('deptActivity.noActivity')}</div>;
   }
 
   const visible = showAll ? deduped : deduped.slice(-MAX_VISIBLE);
@@ -37,7 +39,7 @@ export default function DeptActivityFeed({ onDocClick }: DeptActivityFeedProps) 
           onClick={() => setShowAll(true)}
           className="w-full px-3 py-1.5 text-[10px] text-ink-400 hover:text-ink-600 text-center transition-colors"
         >
-          展开较早的 {hidden} 条记录
+          {t('deptActivity.showEarlier', { count: hidden })}
         </button>
       )}
       {visible.map((entry) => (

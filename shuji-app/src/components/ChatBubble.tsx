@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -15,6 +16,7 @@ export default function ChatBubble({
   onOption: (key: string, supplement?: string) => void;
   onRetry?: (text: string, ts: string) => void;
 }) {
+  const { t } = useTranslation();
   const isEmperor = msg.role === '皇帝';
   const isFailed = msg.status === 'failed';
   const meta = getDeptMeta(msg.role);
@@ -27,9 +29,9 @@ export default function ChatBubble({
             <div className="text-right text-caption text-ink-500 mb-1">
               <span className="inline-flex items-center gap-1">
                 <span className="inline-flex w-4 h-4 items-center justify-center rounded-sm border border-vermillion/50 text-vermillion text-[10px] font-display leading-none">
-                  御
+                  {t('chat.emperor')}
                 </span>
-                圣旨
+                {t('chat.imperialEdict')}
               </span>
             </div>
             <div
@@ -42,12 +44,12 @@ export default function ChatBubble({
               <p className="whitespace-pre-wrap break-words overflow-hidden">{msg.content}</p>
               {isFailed && onRetry && (
                 <div className="flex items-center gap-2 mt-2 pt-2 border-t border-vermillion/20">
-                  <span className="text-caption text-vermillion">发送失败</span>
+                  <span className="text-caption text-vermillion">{t('chat.sendFailed')}</span>
                   <button
                     onClick={() => onRetry(msg.content, msg.timestamp)}
                     className="text-caption font-semibold px-2 py-0.5 rounded bg-vermillion text-white hover:bg-vermillion-dark"
                   >
-                    重试
+                    {t('chat.retry')}
                   </button>
                 </div>
               )}
@@ -61,7 +63,7 @@ export default function ChatBubble({
                 <span className="font-display text-ui font-semibold" style={{ color: meta.color }}>
                   {msg.role}
                 </span>
-                <span className="text-caption text-ink-400">回奏</span>
+                <span className="text-caption text-ink-400">{t('chat.reply')}</span>
               </div>
             )}
             <div
@@ -108,6 +110,7 @@ function OptionGroup({
   options: ChatOption[];
   onOption: (key: string, supplement?: string) => void;
 }) {
+  const { t } = useTranslation();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [supplement, setSupplement] = useState('');
 
@@ -123,7 +126,7 @@ function OptionGroup({
         <textarea
           className="w-full border border-fold rounded px-3 py-2 text-body resize-none bg-surface-elevated text-ink-900 focus:outline-none focus:border-vermillion"
           rows={3}
-          placeholder="在此补充御批..."
+          placeholder={t('chat.addNote')}
           value={supplement}
           onChange={(e) => setSupplement(e.target.value)}
         />
@@ -132,7 +135,7 @@ function OptionGroup({
             onClick={() => onOption(selectedKey, supplement)}
             className="bg-vermillion text-white text-ui font-bold px-4 py-1.5 rounded-lg hover:bg-vermillion-dark transition-colors"
           >
-            遵旨
+            {t('common.confirm')}
           </button>
           <button
             onClick={() => {
@@ -141,7 +144,7 @@ function OptionGroup({
             }}
             className="text-ui text-ink-500 px-3 py-1.5 hover:text-ink-700"
           >
-            作罢
+            {t('chat.dismissed')}
           </button>
         </div>
       </div>

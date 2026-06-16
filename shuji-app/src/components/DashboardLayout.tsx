@@ -1,4 +1,5 @@
 import { type ReactNode, useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DeptEventsProvider } from '../hooks/useDeptEvents';
 import { SealLogo } from './SealLogo';
 import ActivityBar from './ActivityBar';
@@ -66,6 +67,7 @@ export default function DashboardLayout({
   picker,
   demoTour,
 }: Props) {
+  const { t } = useTranslation();
   const [artifactWidth, setArtifactWidth] = useState(loadArtifactWidth);
   const dragRef = useRef(false);
   const startXRef = useRef(0);
@@ -116,7 +118,7 @@ export default function DashboardLayout({
             {headerLeft ?? (
               <>
                 <h1 className="font-display text-base font-semibold text-ink-50 truncate">
-                  {project?.name || '枢机'}
+                  {project?.name || t('app.name')}
                 </h1>
                 <span className="text-caption text-ink-500 font-mono truncate max-w-[520px]">
                   {project?.working_dir}

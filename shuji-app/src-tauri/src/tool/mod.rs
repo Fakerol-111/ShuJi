@@ -46,8 +46,8 @@ pub struct ToolContext {
     pub model: Option<String>,
     /// Fast mailbox senders for interrupting departments immediately.
     pub fast_txs: Option<crate::FastTxMap>,
-    /// 部门信道映射（尚书省 assign_task 使用）
+    /// Department channel map (used by Shangshuling assign_task)
     pub peers: Option<HashMap<Role, mpsc::UnboundedSender<ActorMessage>>>,
-    /// 文移图引用（尚书省 assign_task 记录边时使用）
+    /// Workflow graph reference (used by Shangshuling assign_task to record edges)
     pub workflow_graph: Option<Arc<tokio::sync::Mutex<WorkflowGraph>>>,
 }

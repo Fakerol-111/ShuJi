@@ -23,7 +23,7 @@ pub async fn run_lint(working_dir: &Path) -> CheckResult {
                 return CheckResult {
                     name: "lint".into(),
                     pass: true,
-                    summary: "package.json 无 lint script，跳过 lint".to_string(),
+                    summary: "package.json has no lint script, skipping lint".to_string(),
                     details: serde_json::json!({"skipped": true, "reason": "no_lint_script"}),
                 };
             }
@@ -34,7 +34,7 @@ pub async fn run_lint(working_dir: &Path) -> CheckResult {
                 return CheckResult {
                     name: "lint".into(),
                     pass: true,
-                    summary: "ruff 未安装，跳过 lint".to_string(),
+                    summary: "ruff not installed, skipping lint".to_string(),
                     details: serde_json::json!({"skipped": true, "reason": "ruff_not_found", "warning": true}),
                 };
             }
@@ -44,7 +44,7 @@ pub async fn run_lint(working_dir: &Path) -> CheckResult {
             return CheckResult {
                 name: "lint".into(),
                 pass: true,
-                summary: format!("不支持的项目类型 {}，跳过 lint", project_type),
+                summary: format!("Unsupported project type {}, skipping lint", project_type),
                 details: serde_json::json!({"skipped": true}),
             };
         }
@@ -54,7 +54,7 @@ pub async fn run_lint(working_dir: &Path) -> CheckResult {
         return CheckResult {
             name: "lint".into(),
             pass: true,
-            summary: "lint 已跳过".to_string(),
+            summary: "lint skipped".to_string(),
             details: serde_json::json!({"skipped": true}),
         };
     }
@@ -79,9 +79,9 @@ pub async fn run_lint(working_dir: &Path) -> CheckResult {
                 name: "lint".into(),
                 pass,
                 summary: if pass {
-                    "lint 通过".to_string()
+                    "lint passed".to_string()
                 } else {
-                    format!("lint 失败 (exit={}, errors={})", exit_code, error_count)
+                    format!("lint failed (exit={}, errors={})", exit_code, error_count)
                 },
                 details: serde_json::json!({
                     "exit_code": exit_code,
@@ -95,7 +95,7 @@ pub async fn run_lint(working_dir: &Path) -> CheckResult {
         Err(e) => CheckResult {
             name: "lint".into(),
             pass: false,
-            summary: format!("lint 执行失败: {}", e),
+            summary: format!("lint execution failed: {}", e),
             details: serde_json::json!({"error": e}),
         },
     }

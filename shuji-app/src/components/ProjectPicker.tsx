@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 interface ProjectPickerProps {
   recentDirs: string[];
   pickerPath: string;
@@ -10,6 +12,7 @@ interface ProjectPickerProps {
 }
 
 export default function ProjectPicker(props: ProjectPickerProps) {
+  const { t } = useTranslation();
   const {
     recentDirs,
     pickerPath,
@@ -29,8 +32,8 @@ export default function ProjectPicker(props: ProjectPickerProps) {
         className="bg-white rounded-xl shadow-2xl border border-ink-200 w-full max-w-md p-6 mx-4"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-bold text-ink-900 mb-4">加载项目</h2>
-        <label className="block text-xs font-medium text-ink-500 mb-1">工作目录</label>
+        <h2 className="text-lg font-bold text-ink-900 mb-4">{t('workspace.openProject')}</h2>
+        <label className="block text-xs font-medium text-ink-500 mb-1">{t('workspace.workingDir')}</label>
         <div className="flex gap-2 mb-3">
           <input
             value={pickerPath}
@@ -38,19 +41,19 @@ export default function ProjectPicker(props: ProjectPickerProps) {
             onKeyDown={(e) => {
               if (e.key === 'Enter') onLoad();
             }}
-            placeholder="选择一个文件夹..."
+            placeholder={t('workspace.selectFolder')}
             className="flex-1 px-3 py-2 border border-ink-200 bg-ink-50 rounded-lg text-sm font-mono text-ink-800 focus:outline-none focus:border-ink-500"
           />
           <button
             onClick={onBrowse}
             className="px-3 py-2 border border-ink-200 rounded-lg text-ink-600 hover:bg-ink-100 text-sm"
           >
-            浏览
+            {t('workspace.browse')}
           </button>
         </div>
         {recentDirs.length > 0 && (
           <div className="mb-3">
-            <div className="text-xs text-ink-400 mb-1">最近</div>
+            <div className="text-xs text-ink-400 mb-1">{t('workspace.recentDirs')}</div>
             <div className="space-y-0.5 max-h-32 overflow-y-auto">
               {recentDirs.map((d, i) => (
                 <button
@@ -74,14 +77,14 @@ export default function ProjectPicker(props: ProjectPickerProps) {
             onClick={onClose}
             className="px-4 py-2 text-sm text-ink-500 hover:text-ink-700 border border-ink-200 rounded-lg"
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             onClick={() => onLoad()}
             disabled={pickerLoading}
             className="px-4 py-2 text-sm bg-ink-900 text-white rounded-lg hover:bg-ink-800 disabled:opacity-40"
           >
-            {pickerLoading ? '加载中...' : '打开'}
+            {pickerLoading ? t('common.loading') : t('workspace.openDir')}
           </button>
         </div>
       </div>

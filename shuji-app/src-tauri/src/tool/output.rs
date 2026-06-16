@@ -52,7 +52,7 @@ impl ToolOutput {
         let mut o = Self::new(true, operation);
         o.path = Some(path.to_string());
         o.message = Some(format!(
-            "共 {} 字节。内容如下：\n{}",
+            "Total {} bytes. Content:\n{}",
             content.len(),
             content
         ));

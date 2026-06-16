@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Tabs } from './ui/Tabs';
 import CommandBar from './CommandBar';
 import DeptCardRail from './DeptCardRail';
@@ -62,6 +63,7 @@ export default function AgentStreamPanel({
   onOpenProject,
   endRef,
 }: AgentStreamPanelProps) {
+  const { t } = useTranslation();
   const { latestLogs, logEntries } = useDeptEvents();
   const [selectedDept, setSelectedDept] = useState<string | null>(null);
   const [pinDept, setPinDept] = useState(false);
@@ -121,11 +123,11 @@ export default function AgentStreamPanel({
               className="flex-1 flex flex-col min-w-0 stage-edict"
             >
               <div className="border-b border-fold bg-surface-elevated shrink-0 px-4 py-2 flex items-center justify-between">
-                <span className="font-display text-ui font-semibold text-ink-800">拟旨殿</span>
+                <span className="font-display text-ui font-semibold text-ink-800">{t('inspector.backToDuty')}</span>
                 <Tabs
                   tabs={[
-                    { key: 'decision', label: '决策' },
-                    { key: 'discuss', label: '廷议' },
+                    { key: 'decision', label: t('inspector.decision') },
+                    { key: 'discuss', label: t('inspector.discussion') },
                   ]}
                   activeKey={tab}
                   onChange={(k) => setTab(k as Tab)}
@@ -205,7 +207,7 @@ export default function AgentStreamPanel({
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center text-body text-ink-400">
-          请先开卷
+          {t('inspector.pleaseOpen')}
         </div>
       )}
     </div>

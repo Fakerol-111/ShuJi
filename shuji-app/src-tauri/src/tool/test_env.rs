@@ -28,18 +28,22 @@ pub async fn tool_setup_test_env(working_dir: &Path, args: &serde_json::Value) -
                 let timeout = std::time::Duration::from_secs(600);
                 match execute_with_timeout(shell, &shell_args, cmd, working_dir, timeout).await {
                     Ok(o) if o.status.success() => {
-                        ToolOutput::success("setup_test_env", "", "cargo fetch 完成")
+                        ToolOutput::success("setup_test_env", "", "cargo fetch completed")
                     }
                     Ok(o) => ToolOutput::error(
                         "setup_test_env",
                         "",
                         "fetch_failed",
-                        &format!("cargo fetch 失败 exit={}", o.status.code().unwrap_or(-1)),
+                        &format!("cargo fetch failed exit={}", o.status.code().unwrap_or(-1)),
                     ),
                     Err(e) => ToolOutput::error("setup_test_env", "", "exec_error", &e),
                 }
             } else {
-                ToolOutput::success("setup_test_env", "", "rust 环境就绪 (Cargo.lock 已存在)")
+                ToolOutput::success(
+                    "setup_test_env",
+                    "",
+                    "rust environment ready (Cargo.lock exists)",
+                )
             }
         }
         "node" => {
@@ -47,20 +51,20 @@ pub async fn tool_setup_test_env(working_dir: &Path, args: &serde_json::Value) -
             let has_node_modules = working_dir.join("node_modules").exists();
 
             if has_node_modules && !force {
-                return ToolOutput::success("setup_test_env", "", "node_modules 已存在");
+                return ToolOutput::success("setup_test_env", "", "node_modules already exists");
             }
 
             let cmd = if has_lock { "npm ci" } else { "npm install" };
             let timeout = std::time::Duration::from_secs(600);
             match execute_with_timeout(shell, &shell_args, cmd, working_dir, timeout).await {
                 Ok(o) if o.status.success() => {
-                    ToolOutput::success("setup_test_env", "", &format!("{} 完成", cmd))
+                    ToolOutput::success("setup_test_env", "", &format!("{} completed", cmd))
                 }
                 Ok(o) => ToolOutput::error(
                     "setup_test_env",
                     "",
                     "install_failed",
-                    &format!("{} 失败 exit={}", cmd, o.status.code().unwrap_or(-1)),
+                    &format!("{} failed exit={}", cmd, o.status.code().unwrap_or(-1)),
                 ),
                 Err(e) => ToolOutput::error("setup_test_env", "", "exec_error", &e),
             }
@@ -74,7 +78,7 @@ pub async fn tool_setup_test_env(working_dir: &Path, args: &serde_json::Value) -
             };
 
             if venv_bin.exists() && !force {
-                return ToolOutput::success("setup_test_env", "", ".venv 已存在");
+                return ToolOutput::success("setup_test_env", "", ".venv already exists");
             }
 
             // Create venv
@@ -86,7 +90,10 @@ pub async fn tool_setup_test_env(working_dir: &Path, args: &serde_json::Value) -
                         "setup_test_env",
                         "",
                         "venv_failed",
-                        &format!("python -m venv 失败 exit={}", o.status.code().unwrap_or(-1)),
+                        &format!(
+                            "python -m venv failed exit={}",
+                            o.status.code().unwrap_or(-1)
+                        ),
                     );
                 }
                 Err(e) => {
@@ -105,7 +112,7 @@ pub async fn tool_setup_test_env(working_dir: &Path, args: &serde_json::Value) -
             match execute_with_timeout(shell, &shell_args, pip_install, working_dir, timeout).await
             {
                 Ok(o) if o.status.success() => {
-                    ToolOutput::success("setup_test_env", "", "python venv 创建完成 + pip install")
+                    ToolOutput::success("setup_test_env", "", "python venv created + pip install")
                 }
                 Ok(_) => {
                     // Try with [dev] extra
@@ -126,12 +133,12 @@ pub async fn tool_setup_test_env(working_dir: &Path, args: &serde_json::Value) -
                         Ok(o) if o.status.success() => ToolOutput::success(
                             "setup_test_env",
                             "",
-                            "python venv 创建完成 + pip install -e .[dev]",
+                            "python venv created + pip install -e .[dev]",
                         ),
                         Ok(_) => ToolOutput::success(
                             "setup_test_env",
                             "",
-                            "python venv 创建完成 (pip install 跳过或失败，不影响环境)",
+                            "python venv created (pip install skipped or failed, environment unaffected)",
                         ),
                         Err(e) => ToolOutput::error("setup_test_env", "", "exec_error", &e),
                     }
@@ -168,14 +175,14 @@ pub fn setup_test_env_tool_def() -> crate::api::client::ToolDefinition {
         function: crate::api::client::ToolFunction {
             name: "setup_test_env".into(),
             description:
-                "搭建项目测试环境（创建 venv / npm install / cargo fetch）。force=true 时强制重建。"
+                "Set up the project test environment (create venv / npm install / cargo fetch). force=true forces recreation even if it already exists."
                     .into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "force": {
                         "type": "boolean",
-                        "description": "默认 false。true 时即使环境已存在也重建"
+                        "description": "Default false. When true, recreate the environment even if it already exists"
                     }
                 }
             }),

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cancelProcessing } from '../api';
 import ChatBubble from './ChatBubble';
 import ChatInput from './ChatInput';
@@ -42,6 +43,7 @@ export default function ChatPanel(props: ChatPanelProps) {
     chatInputRef,
   } = props;
   const [toast, setToast] = useState('');
+  const { t } = useTranslation();
   const { activeDepts } = useDeptEvents();
   const isProcessing = activeDeptsCount > 0;
 
@@ -53,9 +55,9 @@ export default function ChatPanel(props: ChatPanelProps) {
   const handleCancel = async () => {
     try {
       await cancelProcessing();
-      showToast('已叫停诸司');
+      showToast(t('chat.stopAllDepts'));
     } catch {
-      showToast('叫停失败');
+      showToast(t('common.error'));
     }
   };
 
@@ -81,14 +83,14 @@ export default function ChatPanel(props: ChatPanelProps) {
             onClick={handleCancel}
             className="text-ui px-3 py-1.5 font-medium text-ink-600 hover:text-vermillion hover:bg-vermillion-light rounded-lg transition-colors"
           >
-            叫停诸司
+            {t('chat.stopAllDepts')}
           </button>
         </div>
         <ChatInput
           ref={chatInputRef}
           onSend={onSend}
           disabled={isProcessing}
-          placeholder={isProcessing ? '诸司处理中…' : '拟旨…'}
+          placeholder={isProcessing ? t('chat.processing') : t('chat.inputPlaceholder')}
         />
       </>
     );
@@ -101,7 +103,7 @@ export default function ChatPanel(props: ChatPanelProps) {
             onClick={onCancelDiscuss}
             className="text-ui px-3 py-1.5 font-medium text-vermillion hover:bg-vermillion-light rounded-lg transition-colors"
           >
-            叫停讨论
+            {t('common.cancel')}
           </button>
         </div>
       )}
@@ -120,11 +122,11 @@ export default function ChatPanel(props: ChatPanelProps) {
             }}
             className="w-full px-3 py-2 text-ui font-medium text-gold bg-gold-light hover:bg-gold-light/80 border border-vermillion/20 rounded-lg transition-colors"
           >
-            将此事转为正式敕命
+            {t('chat.send')}
           </button>
         </div>
       )}
-      <ChatInput onSend={onDiscuss} disabled={discussing} placeholder="廷议…" />
+      <ChatInput onSend={onDiscuss} disabled={discussing} placeholder={t('chat.discussing')} />
     </>
   );
 }
@@ -144,6 +146,7 @@ function MessageList({
   thinking?: boolean;
   activeDepts?: string[];
 }) {
+  const { t } = useTranslation();
   const activeDept = activeDepts && activeDepts.length > 0 ? activeDepts[activeDepts.length - 1] : null;
 
   return (
@@ -156,7 +159,7 @@ function MessageList({
           <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-gold/10 to-transparent" />
           <div className="flex items-center gap-2 relative">
             {activeDept && <DeptGlyph deptKey={activeDept} size={16} stroke="#8B7355" />}
-            <span className="text-ui text-ink-600 font-display">诸司处理中…</span>
+            <span className="text-ui text-ink-600 font-display">{t('chat.processing')}</span>
           </div>
         </div>
       )}
@@ -170,9 +173,10 @@ function messageKey(msg: ChatMessage, index: number) {
 }
 
 function PlanCard({ info }: { info: PlanInfo }) {
+  const { t } = useTranslation();
   return (
     <div className="shrink-0 mx-4 mt-3 bg-surface-parchment border border-fold rounded-lg px-3 py-2">
-      <div className="font-display text-caption text-ink-600 font-semibold mb-1">工部计划</div>
+      <div className="font-display text-caption text-ink-600 font-semibold mb-1">{t('chat.gongbuPlan')}</div>
       <div className="space-y-0.5">
         {info.batches.map((b, i) => (
           <div key={i} className="flex items-center gap-1.5 text-caption font-mono">

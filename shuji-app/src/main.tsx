@@ -8,6 +8,7 @@ import SetupPage from './pages/SetupPage';
 import SettingsPage from './pages/SettingsPage';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { getCodeTheme, getFontSize } from './constants';
+import './i18n/config';
 import './styles/globals.css';
 
 // Apply saved code theme and font size

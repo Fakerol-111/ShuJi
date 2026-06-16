@@ -31,7 +31,7 @@ pub fn truncate_tool_result_by_name(name: &str, content: &str) -> String {
     if content.len() > limit {
         let head: String = content.chars().take(limit).collect();
         format!(
-            "{}...\n[截断：显示前 {} 字符，共 {} 字符。如需继续，请缩小范围后重试 (truncated: true)]",
+            "{}...\n[Truncated: showing first {} of {} chars. To continue, narrow your search and retry (truncated: true)]",
             head,
             limit,
             content.len()
@@ -82,7 +82,7 @@ pub async fn execute_named_tool(
             // P0-2: find_document is deprecated — redirect to read_document
             let id = args["id"].as_str().unwrap_or("");
             ToolOutput::success_raw("find_document",
-                &format!("find_document 已弃用。请改用 read_document(id=\"{}\")——一次调用即可查找+读取。", id))
+                &format!("find_document is deprecated. Use read_document(id=\"{}\") instead — it finds + reads in one call.", id))
         }
         "read_document" => documents::tool_read_document(working_dir, args).await,
         "search_text" => tool_search_text(working_dir, args).await,
@@ -108,15 +108,16 @@ pub async fn execute_named_tool(
                 handle_route_to(args, dept)
             }
         }
-        "route" => {
-            ToolOutput::success_raw("route", "请调用 route_to 工具，不要输出文本 route 标签。")
-        }
+        "route" => ToolOutput::success_raw(
+            "route",
+            "Please use the route_to tool instead of outputting a raw route tag.",
+        ),
         "init_checklist" => tool_init_checklist(args, working_dir).await,
         "update_checklist_item" => tool_update_checklist_item(args, working_dir).await,
         "add_violation" => tool_add_violation(args, working_dir).await,
         "request_reauth" => tool_request_reauth(args, working_dir).await,
         "request_decision" => tool_request_decision(args).await,
-        _ => ToolOutput::error("unknown_tool", name, "unknown_tool", "未知工具"),
+        _ => ToolOutput::error("unknown_tool", name, "unknown_tool", "Unknown tool"),
     };
     // P2-2: Invalidate read cache after write operations
     match name {
@@ -147,7 +148,12 @@ pub async fn execute_named_tool(
 fn handle_route_to(args: &serde_json::Value, dept: &str) -> String {
     let to_name = args["to"].as_str().unwrap_or("");
     if to_name.is_empty() {
-        return ToolOutput::error("route_to", "", "missing_target", "缺少目标部门（to 参数）");
+        return ToolOutput::error(
+            "route_to",
+            "",
+            "missing_target",
+            "Missing target department (to parameter)",
+        );
     }
     let subject = args["subject"].as_str().unwrap_or("");
     if subject.is_empty() {
@@ -155,7 +161,7 @@ fn handle_route_to(args: &serde_json::Value, dept: &str) -> String {
             "route_to",
             "",
             "missing_subject",
-            "缺少文档 ID（subject 参数）",
+            "Missing document ID (subject parameter)",
         );
     }
     let _type = args["type"].as_str().unwrap_or("task");
@@ -164,14 +170,17 @@ fn handle_route_to(args: &serde_json::Value, dept: &str) -> String {
             "route_to",
             "",
             "invalid_type",
-            &format!("无效的路由类型: {}，必须是 task/replace/interrupt", _type),
+            &format!(
+                "Invalid route type: {}, must be task/replace/interrupt",
+                _type
+            ),
         );
     }
     let _ = dept;
     ToolOutput::success(
         "route_to",
         "",
-        &format!("路由到 {}（{}）：{}", to_name, _type, subject),
+        &format!("Route to {} ({}): {}", to_name, _type, subject),
     )
 }
 
@@ -181,7 +190,7 @@ fn handle_route_to(args: &serde_json::Value, dept: &str) -> String {
 pub async fn tool_summarize_logs(working_dir: &Path, args: &serde_json::Value) -> String {
     let log_path = working_dir.join(".shuji").join("logs").join("activity.log");
     if !log_path.exists() {
-        return ToolOutput::success_raw("summarize_logs", "暂无日志记录");
+        return ToolOutput::success_raw("summarize_logs", "No log entries yet");
     }
 
     let content = match tokio::fs::read_to_string(&log_path).await {
@@ -208,12 +217,12 @@ pub async fn tool_summarize_logs(working_dir: &Path, args: &serde_json::Value) -
     }
 
     if entries.is_empty() {
-        return ToolOutput::success_raw("summarize_logs", "暂无日志记录");
+        return ToolOutput::success_raw("summarize_logs", "No log entries yet");
     }
 
     let mut result = Vec::new();
     result.push(format!(
-        "共 {} 条日志记录（文件共 {} 行，自第 {} 行开始）：",
+        "{} log entries (file has {} lines, starting from line {}):",
         entries.len(),
         total_lines,
         since
@@ -238,13 +247,13 @@ pub fn summarize_logs_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "summarize_logs".into(),
-            description: "读取 activity.log 日志，可按行号增量读取".into(),
+            description: "Read activity.log; can incrementally read by line number".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "since": {
                         "type": "integer",
-                        "description": "起始行号（从 0 开始），不传则从开头读"
+                        "description": "Starting line number (0-based), omit to read from the beginning"
                     }
                 }
             }),
@@ -260,13 +269,13 @@ pub fn request_decision_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "request_decision".into(),
-            description: "当需要皇帝决策时调用。传入选项列表供皇帝选择。必须在选项前附上上下文说明为什么需要决策。".into(),
+            description: "Call when the emperor's decision is needed. Pass a list of options for the emperor to choose from. Must include context before the options explaining why a decision is needed.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "options": {
                         "type": "array",
-                        "description": "供皇帝选择的选项列表（至少 1 项）",
+                        "description": "List of options for the emperor to choose from (at least 1)",
                         "items": {"type": "string"},
                         "minItems": 1
                     }
@@ -280,11 +289,18 @@ pub fn request_decision_tool_def() -> crate::api::client::ToolDefinition {
 pub async fn tool_request_decision(args: &serde_json::Value) -> String {
     let options = match args["options"].as_array() {
         Some(arr) if !arr.is_empty() => arr,
-        _ => return ToolOutput::error("request_decision", "", "empty_options", "options 不能为空"),
+        _ => {
+            return ToolOutput::error(
+                "request_decision",
+                "",
+                "empty_options",
+                "options cannot be empty",
+            )
+        }
     };
-    let mut msg = "【等待皇帝决策】请选择一项：\n".to_string();
+    let mut msg = "[Waiting for emperor's decision] Please choose one:\n".to_string();
     for (i, opt) in options.iter().enumerate() {
-        let text = opt.as_str().unwrap_or("(无效选项)");
+        let text = opt.as_str().unwrap_or("(invalid option)");
         msg.push_str(&format!("{}. {}\n", i + 1, text));
     }
     ToolOutput::success_raw("request_decision", &msg.trim())

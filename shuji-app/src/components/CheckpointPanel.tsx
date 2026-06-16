@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { listCheckpoints, restoreCheckpoint } from '../api';
 import { DEPT_META_BY_KEY } from '../constants';
 import { formatError } from '../utils/error';
@@ -9,14 +10,17 @@ interface RestoreConfirm {
   desc: string;
 }
 
-function roleLabel(role: string): string {
-  return DEPT_META_BY_KEY[role]?.label || role;
+function roleLabel(role: string, lang: string): string {
+  const meta = DEPT_META_BY_KEY[role];
+  if (meta) return lang === 'en' ? meta.labelEn : meta.label;
+  return role;
 }
 
-function formatTime(ts: string): string {
+function formatTime(ts: string, lang: string): string {
   try {
     const d = new Date(ts);
-    return d.toLocaleString('zh-CN', {
+    const locale = lang === 'en' ? 'en-US' : 'zh-CN';
+    return d.toLocaleString(locale, {
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
@@ -28,6 +32,8 @@ function formatTime(ts: string): string {
 }
 
 export default function CheckpointPanel() {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language?.startsWith('en') ? 'en' : 'zh';
   const [entries, setEntries] = useState<CheckpointEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +76,7 @@ export default function CheckpointPanel() {
   // ── Loading state ──
   if (loading && entries.length === 0) {
     return (
-      <div className="flex items-center justify-center h-32 text-xs text-ink-400">加载中...</div>
+      <div className="flex items-center justify-center h-32 text-xs text-ink-400">{t('common.loading')}</div>
     );
   }
 
@@ -82,7 +88,7 @@ export default function CheckpointPanel() {
           {error}
         </div>
         <button onClick={fetch} className="mt-2 text-xs text-ink-500 hover:text-ink-700 underline">
-          重试
+          {t('common.retry')}
         </button>
       </div>
     );
@@ -92,13 +98,13 @@ export default function CheckpointPanel() {
     <div className="flex flex-col h-full relative">
       {/* Header */}
       <div className="h-9 px-3 border-b border-ink-200 flex items-center justify-between bg-ink-50 shrink-0">
-        <span className="text-xs font-semibold text-ink-700">存档</span>
+        <span className="text-xs font-semibold text-ink-700">{t('checkpoint.title')}</span>
         <button
           onClick={fetch}
           className="text-[11px] text-ink-400 hover:text-ink-600"
-          title="刷新"
+          title={t('common.refresh')}
         >
-          刷新
+          {t('common.refresh')}
         </button>
       </div>
 
@@ -113,7 +119,7 @@ export default function CheckpointPanel() {
       <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
         {/* Empty state */}
         {entries.length === 0 && !loading && (
-          <div className="text-xs text-ink-400 text-center py-8">暂无存档</div>
+          <div className="text-xs text-ink-400 text-center py-8">{t('checkpoint.noCheckpoints')}</div>
         )}
 
         {/* Checkpoint list */}
@@ -123,8 +129,8 @@ export default function CheckpointPanel() {
             className="border border-ink-200 rounded p-2.5 text-xs space-y-1 hover:border-ink-300 transition-colors"
           >
             <div className="flex items-center justify-between">
-              <span className="font-medium text-ink-700">{roleLabel(entry.role)}</span>
-              <span className="text-[10px] text-ink-400">{formatTime(entry.ts)}</span>
+              <span className="font-medium text-ink-700">{roleLabel(entry.role, lang)}</span>
+              <span className="text-[10px] text-ink-400">{formatTime(entry.ts, lang)}</span>
             </div>
             <div className="text-ink-600 truncate" title={entry.description}>
               {entry.description}
@@ -136,7 +142,7 @@ export default function CheckpointPanel() {
                 disabled={restoring}
                 className="text-[10px] px-2 py-0.5 rounded border border-ink-300 text-ink-600 hover:bg-ink-100 hover:border-ink-400 disabled:opacity-40 transition-colors"
               >
-                恢复
+                {t('common.restore')}
               </button>
             </div>
           </div>
@@ -147,16 +153,17 @@ export default function CheckpointPanel() {
       {confirm && (
         <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl mx-4 p-4 max-w-sm w-full">
-            <h3 className="text-sm font-semibold text-ink-800 mb-2">确认恢复</h3>
+            <h3 className="text-sm font-semibold text-ink-800 mb-2">{t('checkpoint.confirmRestore')}</h3>
             <p className="text-xs text-ink-600 mb-3 leading-relaxed">
-              将执行 git checkout 到{' '}
-              <code className="bg-ink-100 px-1 rounded">{confirm.commit.slice(0, 7)}</code>（
-              {confirm.desc}）。
+              {t('checkpoint.restoreToCommit', {
+                commit: confirm.commit.slice(0, 7),
+                desc: confirm.desc,
+              })}
             </p>
             <ul className="text-xs text-ink-500 space-y-1 mb-4 list-disc list-inside">
-              <li>工作区将回到该存档点的状态（detached HEAD）</li>
-              <li>未提交的变更将被 git stash 暂存</li>
-              <li>可在之后通过 git stash pop 取回</li>
+              <li>{t('checkpoint.restoreWarning1')}</li>
+              <li>{t('checkpoint.restoreWarning2')}</li>
+              <li>{t('checkpoint.restoreWarning3')}</li>
             </ul>
             <div className="flex justify-end gap-2">
               <button
@@ -164,14 +171,14 @@ export default function CheckpointPanel() {
                 disabled={restoring}
                 className="px-3 py-1.5 text-xs rounded border border-ink-300 text-ink-600 hover:bg-ink-50 disabled:opacity-40"
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleRestore}
                 disabled={restoring}
                 className="px-3 py-1.5 text-xs rounded bg-vermillion text-white hover:bg-vermillion-dark disabled:opacity-40"
               >
-                {restoring ? '恢复中...' : '确认恢复'}
+                {restoring ? t('checkpoint.restoring') : t('checkpoint.confirmRestore')}
               </button>
             </div>
           </div>

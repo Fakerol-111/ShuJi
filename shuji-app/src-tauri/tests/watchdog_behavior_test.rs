@@ -173,13 +173,13 @@ async fn test_watchdog_same_tool_triggers_intervention() {
     // 验证 session 的 tool result 中包含 watchdog [干预] 提示
     let tool_text = extract_tool_results_text(&session);
     assert!(
-        tool_text.contains("[干预]"),
-        "same-tool watchdog 应在第 3 次重复后注入 [干预] 提示。tool results: {}",
+        tool_text.contains("[Intervention]"),
+        "same-tool watchdog should inject [Intervention] after 3rd repetition. tool results: {}",
         tool_text
     );
     assert!(
         tool_text.contains("read_file"),
-        "干预提示应包含工具名。tool results: {}",
+        "Intervention hint should contain tool name. tool results: {}",
         tool_text
     );
 }
@@ -230,8 +230,8 @@ async fn test_watchdog_consecutive_errors_stops_agent() {
     // 验证结果是 Stopped（含终止信息）
     let text = result.into_text();
     assert!(
-        text.contains("连续出错") || text.contains("终止"),
-        "watchdog 应在 3 次连续错误后终止。输出: {}",
+        text.contains("terminating"),
+        "watchdog should terminate after 3 consecutive errors. Output: {}",
         text
     );
 }
@@ -293,13 +293,13 @@ async fn test_watchdog_delete_create_cycle_triggers_intervention() {
     // 验证 tool result 中包含 delete-create 循环的 [干预] 提示
     let tool_text = extract_tool_results_text(&session);
     assert!(
-        tool_text.contains("[干预]"),
-        "delete-create 循环 2 次后应注入 [干预] 提示。tool results: {}",
+        tool_text.contains("[Intervention]"),
+        "delete-create cycle should inject [Intervention] after 2 cycles. tool results: {}",
         tool_text
     );
     assert!(
-        tool_text.contains("循环") || tool_text.contains("delete"),
-        "干预提示应提及循环。tool results: {}",
+        tool_text.contains("delete"),
+        "Intervention hint should mention the cycle. tool results: {}",
         tool_text
     );
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   getAuditTimeline,
   getDocumentLineage,
@@ -11,15 +12,6 @@ import type { TimelineData, LineageNode, TraceResult } from '../types';
 import { formatError } from '../utils/error';
 import { DocCard, LineageTree, docIdToPath } from './audit/shared';
 
-const EVENT_LABELS: Record<string, string> = {
-  create_document: '创建文档',
-  modify_document: '修改文档',
-  append_document: '追加文档',
-  set_document_status: '状态变更',
-  cancel_agent: '中断部门',
-  checkpoint: '存档',
-  milestone: '里程碑',
-};
 const EVENT_COLORS: Record<string, string> = {
   create_document: 'text-jade',
   modify_document: 'text-azure',
@@ -32,14 +24,6 @@ const EVENT_COLORS: Record<string, string> = {
 
 type SubTab = 'timeline' | 'lineage' | 'trace' | 'report' | 'dashboard';
 
-const TABS: { key: SubTab; label: string }[] = [
-  { key: 'timeline', label: '时间线' },
-  { key: 'lineage', label: '谱系' },
-  { key: 'trace', label: '追溯' },
-  { key: 'report', label: '报告' },
-  { key: 'dashboard', label: '看板' },
-];
-
 export default function AuditPanel({
   projectDir,
   onDocSelect,
@@ -49,6 +33,7 @@ export default function AuditPanel({
   onDocSelect?: (path: string) => void;
   onShowDiff?: (path: string) => void;
 }) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<SubTab>('timeline');
   const [data, setData] = useState<TimelineData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,6 +49,14 @@ export default function AuditPanel({
   const [traceLoading, setTraceLoading] = useState(false);
   const [verification, setVerification] = useState<VerificationReport | null>(null);
   const [verifying, setVerifying] = useState(false);
+
+  const TABS: { key: SubTab; label: string }[] = [
+    { key: 'timeline', label: t('audit.timeline') },
+    { key: 'lineage', label: t('audit.lineage') },
+    { key: 'trace', label: t('audit.trace') },
+    { key: 'report', label: t('audit.report') },
+    { key: 'dashboard', label: t('audit.dashboard') },
+  ];
 
   // Re-fetch when project changes — projectDir acts as a refresh key
   useEffect(() => {
@@ -129,7 +122,7 @@ export default function AuditPanel({
       .then(setReport)
       .catch((e) => {
         console.error('生成交付报告失败', e);
-        setReport('(加载失败)');
+        setReport(t('audit.loadFailed'));
       })
       .finally(() => setReportLoading(false));
   }
@@ -154,14 +147,14 @@ export default function AuditPanel({
           <div className="px-2 py-1 border-b border-fold/50">
             <input
               type="text"
-              placeholder="搜索事件/角色/文档..."
+              placeholder={t('audit.searchPlaceholder')}
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               className="w-full px-2 py-1 text-caption rounded bg-ink-100 border border-fold text-ink-700 placeholder-ink-300 outline-none"
             />
           </div>
           {loading ? (
-            <div className="p-4 text-body text-ink-400 text-center mt-8">载入中…</div>
+            <div className="p-4 text-body text-ink-400 text-center mt-8">{t('common.loading')}</div>
           ) : error ? (
             <div className="p-4">
               <div className="rounded-lg bg-vermillion/10 border border-vermillion/20 px-3 py-2 text-caption text-vermillion">
@@ -169,7 +162,7 @@ export default function AuditPanel({
               </div>
             </div>
           ) : !data || data.entries.length === 0 ? (
-            <div className="p-4 text-body text-ink-400 text-center mt-8">尚无朝报记录</div>
+            <div className="p-4 text-body text-ink-400 text-center mt-8">{t('audit.noGazette')}</div>
           ) : (
             (() => {
               const filtered = searchText
@@ -184,8 +177,8 @@ export default function AuditPanel({
                   <div className="px-3 py-1.5 border-b border-fold space-y-0.5">
                     <div className="text-caption text-ink-500">
                       {searchText
-                        ? `${filtered.length} / ${data.summary.total_events} 条`
-                        : `共 ${data.summary.total_events} 条记录`}
+                        ? `${filtered.length} / ${data.summary.total_events} ${t('audit.entries')}`
+                        : `${t('audit.totalEntries')} ${data.summary.total_events}`}
                     </div>
                     <div className="flex flex-wrap gap-1">
                       {data.summary.by_event.slice(0, 5).map(([evt, count]) => (
@@ -193,7 +186,7 @@ export default function AuditPanel({
                           key={evt}
                           className="px-1.5 py-0.5 rounded bg-ink-100 text-caption text-ink-600"
                         >
-                          {EVENT_LABELS[evt] || evt} {count}
+                          {t(`audit.${evt}`)} {count}
                         </span>
                       ))}
                     </div>
@@ -210,7 +203,7 @@ export default function AuditPanel({
                         >
                           <div className="flex items-center gap-1.5 text-caption">
                             <span className={`font-mono ${color}`}>
-                              {EVENT_LABELS[entry.event] || entry.event}
+                              {t(`audit.${entry.event}`)}
                             </span>
                             <span className="text-ink-400">{entry.role}</span>
                             {entry.doc_id && (
@@ -226,7 +219,7 @@ export default function AuditPanel({
                                 onClick={() => handleShowDiff(entry.doc_id!)}
                                 className="text-[10px] text-ink-400 hover:text-ink-600 underline"
                               >
-                                在中心栏查看 diff
+                                {t('audit.viewDiffInCenter')}
                               </button>
                             </div>
                           )}
@@ -248,7 +241,7 @@ export default function AuditPanel({
           <div className="flex gap-1">
             <input
               type="text"
-              placeholder="文档 ID（如 dsgn_003）"
+              placeholder={t('audit.lineagePlaceholder')}
               value={lineageDocId}
               onChange={(e) => setLineageDocId(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearchLineage()}
@@ -258,12 +251,12 @@ export default function AuditPanel({
               onClick={handleSearchLineage}
               className="px-2 py-1 rounded bg-ink-700 text-white text-caption hover:bg-ink-600"
             >
-              查询
+              {t('audit.query')}
             </button>
           </div>
-          {lineageLoading && <div className="text-caption text-ink-400">载入中...</div>}
+          {lineageLoading && <div className="text-caption text-ink-400">{t('common.loading')}</div>}
           {lineage === null && !lineageLoading && (
-            <div className="text-caption text-ink-300">输入文档 ID 查看谱系树</div>
+            <div className="text-caption text-ink-300">{t('audit.lineageHint')}</div>
           )}
           {lineage && <LineageTree node={lineage} depth={0} />}
         </div>
@@ -275,7 +268,7 @@ export default function AuditPanel({
           <div className="flex gap-1">
             <input
               type="text"
-              placeholder="输入文档 ID（如 dsgn_003 / plan_005）"
+              placeholder={t('audit.tracePlaceholder')}
               value={traceDocId}
               onChange={(e) => setTraceDocId(e.target.value)}
               onKeyDown={(e) => {
@@ -287,25 +280,25 @@ export default function AuditPanel({
               onClick={handleTrace}
               className="px-2 py-1 rounded bg-ink-700 text-white text-caption hover:bg-ink-600"
             >
-              追溯
+              {t('audit.trace')}
             </button>
           </div>
-          {traceLoading && <div className="text-caption text-ink-400">查询中...</div>}
+          {traceLoading && <div className="text-caption text-ink-400">{t('common.loading')}</div>}
           {traceResult && (
             <div className="space-y-3">
               {traceResult.target && (
                 <div>
-                  <div className="text-caption font-semibold text-ink-700 mb-1">当前文档</div>
+                  <div className="text-caption font-semibold text-ink-700 mb-1">{t('audit.currentDoc')}</div>
                   <DocCard node={traceResult.target} onDocSelect={onDocSelect} />
                 </div>
               )}
               {!traceResult.target && (
-                <div className="text-caption text-ink-300">未找到文档 {traceDocId}</div>
+                <div className="text-caption text-ink-300">{t('audit.docNotFound', { id: traceDocId })}</div>
               )}
               {traceResult.upstream.length > 0 && (
                 <div>
                   <div className="text-caption font-semibold text-ink-700 mb-1">
-                    引用此文档（{traceResult.upstream.length}）
+                    {t('audit.referencedBy', { count: traceResult.upstream.length })}
                   </div>
                   <div className="space-y-1">
                     {traceResult.upstream.map((node, i) => (
@@ -317,7 +310,7 @@ export default function AuditPanel({
               {traceResult.downstream.length > 0 && (
                 <div>
                   <div className="text-caption font-semibold text-ink-700 mb-1">
-                    此文档引用（{traceResult.downstream.length}）
+                    {t('audit.references', { count: traceResult.downstream.length })}
                   </div>
                   <div className="space-y-1">
                     {traceResult.downstream.map((node, i) => (
@@ -329,7 +322,7 @@ export default function AuditPanel({
               {traceResult.upstream.length === 0 &&
                 traceResult.downstream.length === 0 &&
                 traceResult.target && (
-                  <div className="text-caption text-ink-300">此文档无上下游引用关系</div>
+                  <div className="text-caption text-ink-300">{t('audit.noRelations')}</div>
                 )}
             </div>
           )}
@@ -344,10 +337,10 @@ export default function AuditPanel({
               onClick={handleLoadReport}
               className="px-3 py-1.5 rounded bg-ink-700 text-white text-caption hover:bg-ink-600"
             >
-              生成交付报告
+              {t('audit.generateReport')}
             </button>
           )}
-          {reportLoading && <div className="text-caption text-ink-400">生成中...</div>}
+          {reportLoading && <div className="text-caption text-ink-400">{t('common.loading')}</div>}
           {report && (
             <div className="text-caption text-ink-700 whitespace-pre-wrap font-mono text-[11px] leading-relaxed">
               {report}
@@ -361,59 +354,59 @@ export default function AuditPanel({
         <div className="p-3 space-y-3 flex-1 overflow-y-auto min-h-0">
           {/* ── Audit Integrity Check ── */}
           <div className="rounded border border-fold p-2 space-y-1">
-            <div className="text-caption font-semibold text-ink-700">审计完整性验证</div>
+            <div className="text-caption font-semibold text-ink-700">{t('audit.verifyChain')}</div>
             {!verification && !verifying && (
               <button
                 onClick={handleVerifyTrail}
                 className="px-2 py-1 rounded bg-ink-700 text-white text-caption hover:bg-ink-600 text-[10px]"
               >
-                验证审计链完整性
+                {t('audit.verifyChain')}
               </button>
             )}
-            {verifying && <div className="text-caption text-ink-400">验证中...</div>}
+            {verifying && <div className="text-caption text-ink-400">{t('common.loading')}</div>}
             {verification && (
               <div className="space-y-1">
                 <div
                   className={`text-caption ${verification.chain_intact ? 'text-jade' : 'text-vermillion'}`}
                 >
-                  {verification.chain_intact ? '✓ 链完整' : '✗ 发现篡改'}
+                  {verification.chain_intact ? t('audit.chainIntact') : t('audit.chainTampered')}
                 </div>
                 <div className="text-[10px] text-ink-500">
-                  共 {verification.total_entries} 条
+                  {t('audit.totalEntries')} {verification.total_entries}
                   {verification.pre_chain_entries > 0 &&
-                    `（升级前 ${verification.pre_chain_entries} 条无哈希链）`}
+                    ` (${t('audit.preChainEntries', { count: verification.pre_chain_entries })})`}
                 </div>
                 {verification.broken_links.length > 0 && (
                   <div className="text-[10px] text-vermillion">
-                    断裂位置: 第 {verification.broken_links.map((b) => b.seq).join(', ')} 条
+                    {t('audit.brokenLinks')}: {verification.broken_links.map((b) => b.seq).join(', ')}
                   </div>
                 )}
                 <div className="text-[9px] text-ink-300 font-mono break-all">
-                  last_hash: {verification.last_entry_hash.slice(0, 16)}...
+                  {t('audit.lastHash')}: {verification.last_entry_hash.slice(0, 16)}...
                 </div>
               </div>
             )}
           </div>
           {loading ? (
-            <div className="text-caption text-ink-400">载入中...</div>
+            <div className="text-caption text-ink-400">{t('common.loading')}</div>
           ) : !data ? (
-            <div className="text-caption text-ink-300">尚无数据</div>
+            <div className="text-caption text-ink-300">{t('common.noData')}</div>
           ) : (
             <>
               <div className="rounded border border-fold p-2 space-y-1">
-                <div className="text-caption font-semibold text-ink-700">事件统计</div>
-                <div className="text-[10px] text-ink-500">总计 {data.summary.total_events} 条</div>
+                <div className="text-caption font-semibold text-ink-700">{t('audit.eventStats')}</div>
+                <div className="text-[10px] text-ink-500">{t('audit.totalEntries')} {data.summary.total_events}</div>
                 <div className="grid grid-cols-2 gap-1 mt-1">
                   {data.summary.by_event.slice(0, 6).map(([evt, count]) => (
                     <div key={evt} className="flex justify-between text-caption">
-                      <span className="text-ink-500">{EVENT_LABELS[evt] || evt}</span>
+                      <span className="text-ink-500">{t(`audit.${evt}`)}</span>
                       <span className="text-ink-700 font-mono">{count}</span>
                     </div>
                   ))}
                 </div>
               </div>
               <div className="rounded border border-fold p-2 space-y-1">
-                <div className="text-caption font-semibold text-ink-700">部门活跃</div>
+                <div className="text-caption font-semibold text-ink-700">{t('audit.deptActivity')}</div>
                 <div className="space-y-1">
                   {data.summary.by_role.slice(0, 8).map(([role, count]) => {
                     const maxCount = data.summary.by_role[0]?.[1] || 1;
@@ -435,7 +428,7 @@ export default function AuditPanel({
                 </div>
               </div>
               <div className="rounded border border-fold p-2 space-y-1">
-                <div className="text-caption font-semibold text-ink-700">事件分布</div>
+                <div className="text-caption font-semibold text-ink-700">{t('audit.eventDistribution')}</div>
                 <div className="space-y-1">
                   {data.summary.by_event.map(([evt, count]) => {
                     const maxCount = data.summary.by_event[0]?.[1] || 1;
@@ -454,7 +447,7 @@ export default function AuditPanel({
                     return (
                       <div key={evt} className="flex items-center gap-2">
                         <span className="text-caption text-ink-500 w-20 truncate">
-                          {EVENT_LABELS[evt] || evt}
+                          {t(`audit.${evt}`)}
                         </span>
                         <div className="flex-1 h-3 rounded bg-ink-100 overflow-hidden">
                           <div

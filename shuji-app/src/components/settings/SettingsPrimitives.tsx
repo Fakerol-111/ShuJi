@@ -1,4 +1,5 @@
 import type { ReactNode, InputHTMLAttributes, ButtonHTMLAttributes } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 
@@ -203,9 +204,12 @@ export function SettingsToggle({
   checked,
   onChange,
   label,
-  onLabel = '开启',
-  offLabel = '关闭',
+  onLabel,
+  offLabel,
 }: SettingsToggleProps) {
+  const { t } = useTranslation();
+  const onText = onLabel || t('settingsToggle.on');
+  const offText = offLabel || t('settingsToggle.off');
   return (
     <label className="flex items-center gap-3 py-1">
       <span className="text-xs font-medium text-ink-700">{label}</span>
@@ -224,7 +228,7 @@ export function SettingsToggle({
           }`}
         />
       </button>
-      <span className="text-xs text-ink-600">{checked ? onLabel : offLabel}</span>
+      <span className="text-xs text-ink-600">{checked ? onText : offText}</span>
     </label>
   );
 }

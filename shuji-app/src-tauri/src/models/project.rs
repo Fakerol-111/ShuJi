@@ -81,7 +81,7 @@ impl Project {
         let lines: Vec<&str> = self.talk.lines().collect();
         if lines.len() > 12 {
             let summary = if self.task.is_empty() {
-                "项目进行中"
+                "Project in progress"
             } else {
                 let last = self.task.lines().last().unwrap_or("项目进行中");
                 last.trim_start_matches(|c: char| {
@@ -89,7 +89,7 @@ impl Project {
                 })
             };
             let kept = lines[lines.len().saturating_sub(8)..].join("\n");
-            self.talk = format!("【前期概要】{}\n---\n{}", summary, kept);
+            self.talk = format!("[Previous Summary] {}\n---\n{}", summary, kept);
         }
     }
 
@@ -144,12 +144,12 @@ pub enum OverallStatus {
 impl OverallStatus {
     pub fn label(&self) -> &str {
         match self {
-            OverallStatus::NotStarted => "整体方案：未开始",
-            OverallStatus::Designing => "整体方案：设计中",
-            OverallStatus::Reviewing => "整体方案：审查中",
-            OverallStatus::PendingApproval => "整体方案：待皇帝审批",
-            OverallStatus::Rejected => "整体方案：审查发现问题",
-            OverallStatus::Approved => "整体方案：已批准",
+            OverallStatus::NotStarted => "Overall: Not Started",
+            OverallStatus::Designing => "Overall: Designing",
+            OverallStatus::Reviewing => "Overall: Reviewing",
+            OverallStatus::PendingApproval => "Overall: Pending Emperor Approval",
+            OverallStatus::Rejected => "Overall: Issues Found in Review",
+            OverallStatus::Approved => "Overall: Approved",
         }
     }
 }
@@ -174,12 +174,16 @@ pub enum PhaseDesignStatus {
 impl PhaseDesignStatus {
     pub fn label(&self, phase: u32) -> String {
         match self {
-            PhaseDesignStatus::NotStarted => format!("阶段{}设计：未开始", phase),
-            PhaseDesignStatus::Designing => format!("阶段{}设计：设计中", phase),
-            PhaseDesignStatus::Reviewing => format!("阶段{}设计：审查中", phase),
-            PhaseDesignStatus::PendingApproval => format!("阶段{}设计：待皇帝审批", phase),
-            PhaseDesignStatus::Rejected => format!("阶段{}设计：审查发现问题", phase),
-            PhaseDesignStatus::Approved => format!("阶段{}设计：已批准", phase),
+            PhaseDesignStatus::NotStarted => format!("Phase {} Design: Not Started", phase),
+            PhaseDesignStatus::Designing => format!("Phase {} Design: Designing", phase),
+            PhaseDesignStatus::Reviewing => format!("Phase {} Design: Reviewing", phase),
+            PhaseDesignStatus::PendingApproval => {
+                format!("Phase {} Design: Pending Emperor Approval", phase)
+            }
+            PhaseDesignStatus::Rejected => {
+                format!("Phase {} Design: Issues Found in Review", phase)
+            }
+            PhaseDesignStatus::Approved => format!("Phase {} Design: Approved", phase),
         }
     }
 }
@@ -201,16 +205,20 @@ pub enum PhaseExecutionStatus {
 impl PhaseExecutionStatus {
     pub fn label(&self, phase: u32) -> String {
         match self {
-            PhaseExecutionStatus::NotStarted => format!("阶段{}执行：未开始", phase),
-            PhaseExecutionStatus::TaskBreakdown => format!("阶段{}执行：吏部拆解任务", phase),
-            PhaseExecutionStatus::Testing => format!("阶段{}执行：兵部测试", phase),
-            PhaseExecutionStatus::Implementing => format!("阶段{}执行：工部编码", phase),
-            PhaseExecutionStatus::Checking => format!("阶段{}执行：刑部检查", phase),
-            PhaseExecutionStatus::Standards => format!("阶段{}执行：礼部检查", phase),
-            PhaseExecutionStatus::Logging => format!("阶段{}执行：户部记录", phase),
-            PhaseExecutionStatus::Blocked { .. } => format!("阶段{}执行：阻塞", phase),
-            PhaseExecutionStatus::MinorIssue => format!("阶段{}执行：轻微问题", phase),
-            PhaseExecutionStatus::Completed => format!("阶段{}执行：已完成", phase),
+            PhaseExecutionStatus::NotStarted => format!("Phase {} Execution: Not Started", phase),
+            PhaseExecutionStatus::TaskBreakdown => {
+                format!("Phase {} Execution: Task Breakdown", phase)
+            }
+            PhaseExecutionStatus::Testing => format!("Phase {} Execution: Testing", phase),
+            PhaseExecutionStatus::Implementing => format!("Phase {} Execution: Coding", phase),
+            PhaseExecutionStatus::Checking => format!("Phase {} Execution: Checking", phase),
+            PhaseExecutionStatus::Standards => {
+                format!("Phase {} Execution: Standards Check", phase)
+            }
+            PhaseExecutionStatus::Logging => format!("Phase {} Execution: Logging", phase),
+            PhaseExecutionStatus::Blocked { .. } => format!("Phase {} Execution: Blocked", phase),
+            PhaseExecutionStatus::MinorIssue => format!("Phase {} Execution: Minor Issue", phase),
+            PhaseExecutionStatus::Completed => format!("Phase {} Execution: Completed", phase),
         }
     }
 }

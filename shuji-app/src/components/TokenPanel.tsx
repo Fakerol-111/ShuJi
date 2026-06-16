@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getTokenStats, refreshPricing } from '../api';
 import type { TokenUsage } from '../api';
 import { formatError } from '../utils/error';
@@ -7,8 +8,9 @@ import { getDeptMeta, DEPT_ORDER } from '../constants';
 type Currency = 'usd' | 'cny';
 
 export default function TokenPanel() {
+  const { t } = useTranslation();
   const [stats, setStats] = useState<Record<string, Record<string, TokenUsage>> | null>(null);
-  const [windowName, setWindowName] = useState('汇总');
+  const [windowName, setWindowName] = useState<string>(t('duty.summary'));
   const [error, setError] = useState('');
   const [currency, setCurrency] = useState<Currency>('usd');
   const [refreshing, setRefreshing] = useState(false);
@@ -44,7 +46,7 @@ export default function TokenPanel() {
   return (
     <div className="h-full overflow-y-auto p-3 bg-ink-50">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-bold text-ink-800">度支</h3>
+        <h3 className="text-xs font-bold text-ink-800">{t('token.title')}</h3>
         <div className="flex items-center gap-2">
           {/* Currency toggle */}
           <div className="flex text-[10px] border border-ink-300 rounded overflow-hidden">
@@ -66,13 +68,13 @@ export default function TokenPanel() {
             disabled={refreshing}
             className="text-[10px] text-ink-400 hover:text-ink-700 disabled:opacity-50"
           >
-            {refreshing ? '刷新中...' : '刷新价格'}
+            {refreshing ? t('common.loading') : t('token.refreshPrices')}
           </button>
         </div>
       </div>
       {stats && Object.keys(stats).length > 0 && (
         <div className="flex gap-1 mb-3 flex-wrap">
-          {['今日', '近3日', '近7日', '汇总']
+          {[t('token.today'), t('token.last3Days'), t('token.last7Days'), t('duty.summary')]
             .filter((w) => stats[w])
             .map((w) => (
               <button
@@ -87,7 +89,7 @@ export default function TokenPanel() {
       )}
       {error && <p className="text-xs text-vermillion mb-2">{error}</p>}
       {!stats || Object.keys(stats).length === 0 ? (
-        <p className="text-xs text-ink-400">暂无数据</p>
+        <p className="text-xs text-ink-400">{t('common.noData')}</p>
       ) : (
         <div className="space-y-4">
           {Object.entries(current)
@@ -121,10 +123,10 @@ export default function TokenPanel() {
                     />
                   </div>
                   <div className="flex justify-between text-[9px] text-ink-400 mt-0.5">
-                    <span>调用 {usage.call_count} 次</span>
+                    <span>{t('token.callCount', { count: usage.call_count })}</span>
                     <span>
-                      缓存命中 {(usage.cached_prompt_tokens ?? 0).toLocaleString()} | 缓存未命中{' '}
-                      {(usage.uncached_prompt_tokens ?? 0).toLocaleString()} | 输出{' '}
+                      {t('token.cacheHit')} {(usage.cached_prompt_tokens ?? 0).toLocaleString()} | {t('token.cacheMiss')}{' '}
+                      {(usage.uncached_prompt_tokens ?? 0).toLocaleString()} | {t('token.output')}{' '}
                       {usage.completion_tokens.toLocaleString()}
                     </span>
                   </div>

@@ -78,7 +78,7 @@ pub async fn append(working_dir: &Path, event: &str, role: &str, doc_id: &str, d
     let path = working_dir.join(".shuji").join("audit.jsonl");
     if let Some(parent) = path.parent() {
         if let Err(e) = tokio::fs::create_dir_all(parent).await {
-            log_console!("[audit] 创建目录失败: {}", e);
+            log_console!("[audit] failed to create directory: {}", e);
         }
     }
 
@@ -119,15 +119,15 @@ pub async fn append(working_dir: &Path, event: &str, role: &str, doc_id: &str, d
         {
             Ok(mut f) => {
                 if let Err(e) = f.write_all(format!("{}\n", json).as_bytes()).await {
-                    log_console!("[audit] 写入 audit.jsonl 失败: {}", e);
+                    log_console!("[audit] failed to write audit.jsonl: {}", e);
                 }
             }
             Err(e) => {
-                log_console!("[audit] 打开 audit.jsonl 失败: {}", e);
+                log_console!("[audit] failed to open audit.jsonl: {}", e);
             }
         }
     } else {
-        log_console!("[audit] 序列化审计条目失败");
+        log_console!("[audit] failed to serialize audit entry");
     }
 }
 
@@ -405,28 +405,28 @@ pub async fn init_checklist(working_dir: &Path, category: &str) -> String {
         "spec" => vec![
             ChecklistItem {
                 id: "spec-001".into(),
-                description: "所有公共函数有文档注释".into(),
+                description: "All public functions have doc comments".into(),
                 category: category.into(),
                 status: "pending".into(),
                 note: String::new(),
             },
             ChecklistItem {
                 id: "spec-002".into(),
-                description: "命名符合 Rust 命名规范（snake_case / CamelCase）".into(),
+                description: "Naming follows Rust conventions (snake_case / CamelCase)".into(),
                 category: category.into(),
                 status: "pending".into(),
                 note: String::new(),
             },
             ChecklistItem {
                 id: "spec-003".into(),
-                description: "无未使用的导入或变量".into(),
+                description: "No unused imports or variables".into(),
                 category: category.into(),
                 status: "pending".into(),
                 note: String::new(),
             },
             ChecklistItem {
                 id: "spec-004".into(),
-                description: "错误处理完整（无 unwrap/expect 滥用）".into(),
+                description: "Error handling complete (no unwrap/expect abuse)".into(),
                 category: category.into(),
                 status: "pending".into(),
                 note: String::new(),
@@ -435,21 +435,21 @@ pub async fn init_checklist(working_dir: &Path, category: &str) -> String {
         "test" => vec![
             ChecklistItem {
                 id: "test-001".into(),
-                description: "所有公共函数有对应测试".into(),
+                description: "All public functions have corresponding tests".into(),
                 category: category.into(),
                 status: "pending".into(),
                 note: String::new(),
             },
             ChecklistItem {
                 id: "test-002".into(),
-                description: "测试覆盖边界条件".into(),
+                description: "Tests cover edge cases".into(),
                 category: category.into(),
                 status: "pending".into(),
                 note: String::new(),
             },
             ChecklistItem {
                 id: "test-003".into(),
-                description: "测试可独立运行（无共享可变状态）".into(),
+                description: "Tests can run independently (no shared mutable state)".into(),
                 category: category.into(),
                 status: "pending".into(),
                 note: String::new(),
@@ -457,7 +457,7 @@ pub async fn init_checklist(working_dir: &Path, category: &str) -> String {
         ],
         _ => vec![ChecklistItem {
             id: "gen-001".into(),
-            description: format!("审计类别：{}", category),
+            description: format!("Audit category: {}", category),
             category: category.into(),
             status: "pending".into(),
             note: String::new(),
@@ -466,7 +466,7 @@ pub async fn init_checklist(working_dir: &Path, category: &str) -> String {
     let count = items.len();
     let checklist = Checklist { items };
     save_checklist(working_dir, &checklist).await;
-    format!("已创建 {} 条检查项", count)
+    format!("Created {} checklist items", count)
 }
 
 /// Update a single checklist item's status and note.
@@ -483,9 +483,9 @@ pub async fn update_checklist_item(
             item.note = note.to_string();
         }
         save_checklist(working_dir, &checklist).await;
-        Ok(format!("检查项 {} 已标记为 {}", id, status))
+        Ok(format!("Checklist item {} marked as {}", id, status))
     } else {
-        Err(format!("检查项 {} 不存在", id))
+        Err(format!("Checklist item {} not found", id))
     }
 }
 
@@ -569,9 +569,9 @@ pub async fn update_violation_status(
             }
         }
         let _ = tokio::fs::write(&path, &content).await;
-        Ok(format!("违规记录已更新为 {}", new_status))
+        Ok(format!("Violation record updated to {}", new_status))
     } else {
-        Err(format!("未找到匹配的违规记录 (ts={})", ts))
+        Err(format!("No matching violation record found (ts={})", ts))
     }
 }
 
@@ -594,12 +594,12 @@ pub async fn request_reauth(working_dir: &Path, subject: &str, reason: &str) -> 
     append(
         working_dir,
         "reauth_request",
-        "系统",
+        "system",
         subject,
-        &format!("请求复验: {}", reason),
+        &format!("Requesting re-audit: {}", reason),
     )
     .await;
-    format!("已提交复验请求：{} ({})", subject, reason)
+    format!("Re-audit request submitted: {} ({})", subject, reason)
 }
 
 /// Check if there's a pending re-auth request and clear it.
@@ -768,7 +768,7 @@ fn stage_for_type(doc_type: &str) -> String {
 pub async fn generate_report(working_dir: &Path) -> String {
     let entries = read_all(working_dir).await;
     if entries.is_empty() {
-        return "## 交付报告\n\n尚无审计记录。\n".to_string();
+        return "## Delivery Report\n\nNo audit records yet.\n".to_string();
     }
 
     use std::collections::HashMap;
@@ -788,36 +788,36 @@ pub async fn generate_report(working_dir: &Path) -> String {
     let last = entries.last().unwrap();
 
     let mut report = String::new();
-    report.push_str("## 交付报告\n\n");
-    report.push_str(&format!("**工起**: {}\n\n", first.ts));
-    report.push_str(&format!("**工讫**: {}\n\n", last.ts));
-    report.push_str(&format!("**事件总数**: {}\n\n", entries.len()));
+    report.push_str("## Delivery Report\n\n");
+    report.push_str(&format!("**Start**: {}\n\n", first.ts));
+    report.push_str(&format!("**End**: {}\n\n", last.ts));
+    report.push_str(&format!("**Total Events**: {}\n\n", entries.len()));
 
     let mut by_event_vec: Vec<_> = by_event.into_iter().collect();
     let mut by_role_vec: Vec<_> = by_role.into_iter().collect();
     by_event_vec.sort_by_key(|b| std::cmp::Reverse(b.1));
     by_role_vec.sort_by_key(|b| std::cmp::Reverse(b.1));
 
-    report.push_str("### 事件统计\n\n");
-    report.push_str("| 事件 | 次数 |\n|------|------|\n");
+    report.push_str("### Event Summary\n\n");
+    report.push_str("| Event | Count |\n|------|------|\n");
     for (evt, count) in &by_event_vec {
         let label = match evt.as_str() {
-            "create_document" => "创建文档",
-            "set_document_status" => "文档状态变更",
-            "checkpoint" => "存档",
-            "milestone" => "里程碑",
+            "create_document" => "Create Document",
+            "set_document_status" => "Document Status Change",
+            "checkpoint" => "Checkpoint",
+            "milestone" => "Milestone",
             _ => evt,
         };
         report.push_str(&format!("| {} | {} |\n", label, count));
     }
 
-    report.push_str("\n### 部门活跃\n\n");
-    report.push_str("| 部门 | 操作次数 |\n|------|----------|\n");
+    report.push_str("\n### Department Activity\n\n");
+    report.push_str("| Department | Operations |\n|------|----------|\n");
     for (role, count) in &by_role_vec {
         report.push_str(&format!("| {} | {} |\n", role, count));
     }
 
-    report.push_str("\n### 文档产出\n\n");
+    report.push_str("\n### Document Output\n\n");
     for doc in &docs_created {
         report.push_str(&format!("- `{}` — {}\n", doc.doc_id, doc.detail));
     }

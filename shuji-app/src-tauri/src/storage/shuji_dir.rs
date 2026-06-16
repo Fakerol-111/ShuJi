@@ -67,7 +67,7 @@ impl ShujiDir {
             .output()
             .await?;
         if !init.status.success() {
-            anyhow::bail!("git init 失败: {}", String::from_utf8_lossy(&init.stderr));
+            anyhow::bail!("git init failed: {}", String::from_utf8_lossy(&init.stderr));
         }
 
         // Set local user config so commits work without global git config
@@ -86,7 +86,7 @@ impl ShujiDir {
             .output()
             .await?;
         if !set_name.status.success() || !set_email.status.success() {
-            anyhow::bail!("设置 git user config 失败");
+            anyhow::bail!("setting git user config failed");
         }
 
         // Initial commit so HEAD exists (required by git diff-index --cached --quiet HEAD)
@@ -105,7 +105,7 @@ impl ShujiDir {
             .await?;
         if !initial.status.success() {
             anyhow::bail!(
-                "git 初始提交失败: {}",
+                "git initial commit failed: {}",
                 String::from_utf8_lossy(&initial.stderr)
             );
         }
@@ -168,32 +168,33 @@ impl ShujiDir {
         let has_rejected_review = reviews.iter().any(|r| r.contains("_reject"));
 
         if has_overall && has_phase1 && has_approved_review {
-            project.summary = "整体方案已批准，阶段1设计完成，待执行".into();
+            project.summary =
+                "Overall plan approved, Phase 1 design complete, awaiting execution".into();
         } else if has_overall && has_approved_review {
-            project.summary = "整体方案审查通过，待皇帝批准".into();
+            project.summary = "Overall plan reviewed and passed, pending emperor approval".into();
         } else if has_overall && has_rejected_review {
-            project.summary = "整体方案审查发现问题，退回修改中".into();
+            project.summary = "Overall plan review found issues, returning for revision".into();
         } else if has_overall {
-            project.summary = "整体方案设计中".into();
+            project.summary = "Overall plan being designed".into();
         } else {
-            project.summary = "项目已打开，尚未开始".into();
+            project.summary = "Project opened, not yet started".into();
         }
 
         // 3. Reconstruct task milestones from review files
         for review in &reviews {
             let milestone = if review.contains("overall_design") {
                 if review.contains("_agree") {
-                    "[已恢复] 整体方案审查通过".to_string()
+                    "[Restored] Overall plan review passed".to_string()
                 } else if review.contains("_reject") {
-                    "[已恢复] 整体方案审查发现问题".to_string()
+                    "[Restored] Overall plan review found issues".to_string()
                 } else {
-                    format!("[已恢复] 审查报告: {}", review)
+                    format!("[Restored] Review report: {}", review)
                 }
             } else if review.contains("phase_1") {
                 if review.contains("_agree") {
-                    "[已恢复] 阶段1审查通过".to_string()
+                    "[Restored] Phase 1 review passed".to_string()
                 } else {
-                    format!("[已恢复] 阶段1审查: {}", review)
+                    format!("[Restored] Phase 1 review: {}", review)
                 }
             } else {
                 continue;
@@ -209,11 +210,11 @@ impl ShujiDir {
         if !project.resume.is_empty() {
             // Keep existing resume (was saved before close)
         } else if has_phase1 && has_approved_review {
-            project.resume = "阶段设计已完成，待执行或执行中".into();
+            project.resume = "Phase design complete, awaiting or in execution".into();
         }
 
         // 5. Add a talk entry noting this is a restored session
-        project.append_talk("系统 > 项目已恢复，以下为从文件系统重建的历史记录");
+        project.append_talk("System > Project restored, following entries rebuilt from filesystem");
 
         Ok(())
     }

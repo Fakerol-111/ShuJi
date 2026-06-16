@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { listShujiTree, generateDeliveryReport } from '../api';
 import type { ShujiEntry } from '../api';
 import type { PlanInfo, Project } from '../types';
@@ -21,6 +22,7 @@ export default function ProjectOverview({
   onOpenProject,
   onDocSelect,
 }: ProjectOverviewProps) {
+  const { t } = useTranslation();
   const [latestDocs, setLatestDocs] = useState<ShujiEntry[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -63,15 +65,15 @@ export default function ProjectOverview({
     return (
       <div className="h-full flex items-center justify-center surface-paper">
         <div className="text-center max-w-md">
-          <p className="text-ink-600 text-body mb-2">尚未开卷</p>
+          <p className="text-ink-600 text-body mb-2">{t('projectOverview.noProject')}</p>
           <p className="text-ui text-ink-500 mb-6 leading-relaxed">
-            体验枢机：打开工作目录，拟旨下诏，驱动各部门协同运作。
+            {t('chat.idleDescription')}
           </p>
           <button
             onClick={onOpenProject}
             className="px-5 py-2 bg-ink-900 text-ink-50 text-ui rounded-lg hover:bg-ink-800 transition-colors"
           >
-            打开项目
+            {t('workspace.openProject')}
           </button>
         </div>
       </div>
@@ -89,10 +91,10 @@ export default function ProjectOverview({
 
         <section className="mb-6">
           <h3 className="font-display text-ui text-ink-600 font-semibold title-rule-gold mb-3">
-            当值诸司
+            {t('projectOverview.activeDepts')}
           </h3>
           {activeDepts.length === 0 ? (
-            <p className="text-body text-ink-400">暂无活跃部门</p>
+            <p className="text-body text-ink-400">{t('projectOverview.noActiveDepts')}</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {activeDepts.map((dept) => (
@@ -115,14 +117,14 @@ export default function ProjectOverview({
 
         <section className="mb-6">
           <h3 className="font-display text-ui text-ink-600 font-semibold title-rule-gold mb-3">
-            最新牍文
+            {t('projectOverview.latestDocs')}
           </h3>
           {docsLoading ? (
-            <p className="text-body text-ink-400">开卷中…</p>
+            <p className="text-body text-ink-400">{t('common.loading')}</p>
           ) : error ? (
             <p className="text-body text-vermillion">{error}</p>
           ) : latestDocs.length === 0 ? (
-            <p className="text-body text-ink-400">架阁尚无新牍</p>
+            <p className="text-body text-ink-400">{t('projectOverview.noDocs')}</p>
           ) : (
             <div className="space-y-1">
               {latestDocs.map((doc) => (
@@ -143,7 +145,7 @@ export default function ProjectOverview({
         {planInfo && total > 0 && (
           <section>
             <h3 className="font-display text-ui text-ink-600 font-semibold title-rule-gold mb-3">
-              工部计划: {done}/{total}
+              {t('projectOverview.gongbuPlan', { done, total })}
             </h3>
             <div className="w-full h-2 bg-ink-200 rounded-full overflow-hidden mb-2">
               <div
@@ -170,7 +172,7 @@ export default function ProjectOverview({
             disabled={reportLoading}
             className="px-4 py-2 bg-ink-900 text-ink-50 text-ui rounded-lg hover:bg-ink-800 transition-colors disabled:opacity-50"
           >
-            {reportLoading ? '生成中…' : '生成交付报告'}
+            {reportLoading ? t('common.loading') : t('projectOverview.generateReport')}
           </button>
           {report && (
             <div className="mt-3 p-3 rounded-lg bg-ink-100/50 border border-fold text-caption font-mono whitespace-pre-wrap text-ink-700 max-h-64 overflow-y-auto">

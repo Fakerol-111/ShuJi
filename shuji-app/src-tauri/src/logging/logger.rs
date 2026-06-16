@@ -97,7 +97,7 @@ impl Logger {
 
     /// Log a state transition.
     pub async fn log_transition(&self, summary: &str) {
-        self.append("系统", summary).await;
+        self.append("system", summary).await;
     }
 
     /// Log an agent execution result.
@@ -107,7 +107,7 @@ impl Logger {
 
     /// Log a cross-department routing event.
     pub async fn log_route(&self, from: &str, to: &str, subject: &str) {
-        self.append(from, &format!("路由到 {}: {}", to, subject))
+        self.append(from, &format!("routed to {}: {}", to, subject))
             .await;
     }
 }

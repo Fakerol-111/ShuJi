@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   CODE_THEMES,
   FONT_SIZE_TIERS,
@@ -10,8 +11,20 @@ import {
 import { SettingsSection, SettingsChip, SettingsHint } from './SettingsPrimitives';
 
 export default function AppearanceTab() {
-  const [codeTheme, setCodeThemeLocal] = useState(getCodeTheme);
-  const [fontSize, setFontSizeLocal] = useState(getFontSize);
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language?.startsWith('en') ? 'en' : 'zh';
+  const fontSize = getFontSize();
+  const codeTheme = getCodeTheme();
+
+  const setFontSizeLocal = (key: string) => {
+    persistFontSize(key);
+    document.documentElement.dataset.fontSize = key;
+  };
+
+  const setCodeThemeLocal = (key: string) => {
+    persistCodeTheme(key);
+    document.documentElement.dataset.codeTheme = key;
+  };
 
   useEffect(() => {
     document.documentElement.dataset.fontSize = fontSize;
@@ -23,7 +36,7 @@ export default function AppearanceTab() {
 
   return (
     <div className="space-y-6">
-      <SettingsSection title="字体大小" description="修改即时生效，无需保存。">
+      <SettingsSection title={t('settings.fontSize')} description={t('common.save')}>
         <div className="flex gap-2 flex-wrap">
           {Object.entries(FONT_SIZE_TIERS).map(([key, tier]) => (
             <SettingsChip
@@ -35,16 +48,16 @@ export default function AppearanceTab() {
               }}
               title={tier.description}
             >
-              {tier.label}
+              {lang === 'en' ? tier.labelEn : tier.label}
             </SettingsChip>
           ))}
         </div>
         <SettingsHint>
-          {FONT_SIZE_TIERS[fontSize as keyof typeof FONT_SIZE_TIERS]?.description}
+          {lang === 'en' ? FONT_SIZE_TIERS[fontSize as keyof typeof FONT_SIZE_TIERS]?.descriptionEn : FONT_SIZE_TIERS[fontSize as keyof typeof FONT_SIZE_TIERS]?.description}
         </SettingsHint>
       </SettingsSection>
 
-      <SettingsSection title="代码主题" description="修改即时生效，无需保存。" divider>
+      <SettingsSection title={t('settings.codeTheme')} description={t('common.save')} divider>
         <div className="flex gap-2 flex-wrap">
           {Object.entries(CODE_THEMES).map(([key, theme]) => (
             <SettingsChip
@@ -61,14 +74,13 @@ export default function AppearanceTab() {
         </div>
       </SettingsSection>
 
-      <SettingsSection title="关于枢机" divider>
+      <SettingsSection title={t('settings.about')} divider>
         <div className="text-sm text-ink-700 space-y-2 leading-relaxed">
           <p>
-            <span className="font-medium text-ink-900">版本</span> 0.1.0 — 预览版
+            <span className="font-medium text-ink-900">{t('settings.about')}</span> {t('settings.version')} — Preview
           </p>
           <p>
-            基于三省六部制的自动化软件开发系统。每个部门是一个 LLM
-            agent，通过角色分工和文档化通信，模拟从需求分析到编码测试的完整软件工程流程。
+            {t('settings.aboutDescription')}
           </p>
         </div>
       </SettingsSection>

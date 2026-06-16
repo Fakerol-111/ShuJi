@@ -69,10 +69,10 @@ pub async fn validate_delivery(
     crate::audit::append(
         working_dir,
         "validate_delivery",
-        "系统",
+        "system",
         &report.ts,
         &format!(
-            "验证 {}: overall_pass={} ({} checks)",
+            "Validation {}: overall_pass={} ({} checks)",
             report.project_type,
             report.overall_pass,
             report.checks.len()
@@ -116,7 +116,10 @@ async fn run_contract_diff_gate(working_dir: &Path, ctrt_id: &str) -> CheckResul
         return CheckResult {
             name: "contract_api".into(),
             pass: true,
-            summary: format!("契约 {} 不存在，跳过契约检查", ctrt_id),
+            summary: format!(
+                "Contract {} does not exist, skipping contract check",
+                ctrt_id
+            ),
             details: serde_json::json!({"skipped": true, "reason": "contract_not_found"}),
         };
     }
@@ -125,7 +128,7 @@ async fn run_contract_diff_gate(working_dir: &Path, ctrt_id: &str) -> CheckResul
     CheckResult {
         name: "contract_api".into(),
         pass: true,
-        summary: format!("契约 {} 存在", ctrt_id),
+        summary: format!("Contract {} exists", ctrt_id),
         details: serde_json::json!({"ctrt_id": ctrt_id, "phase1": true}),
     }
 }
@@ -145,7 +148,7 @@ async fn run_lint_gate(working_dir: &Path, _config: &ValidateConfig) -> CheckRes
         return CheckResult {
             name: "lint".into(),
             pass: true,
-            summary: format!("不支持的项目类型 {}，跳过 lint", project_type),
+            summary: format!("Unsupported project type {}, skipping lint", project_type),
             details: serde_json::json!({"skipped": true}),
         };
     }
@@ -172,9 +175,9 @@ async fn run_lint_gate(working_dir: &Path, _config: &ValidateConfig) -> CheckRes
                 name: "lint".into(),
                 pass,
                 summary: if pass {
-                    "lint 通过".to_string()
+                    "lint passed".to_string()
                 } else {
-                    format!("lint 失败 (exit={})", exit_code)
+                    format!("lint failed (exit={})", exit_code)
                 },
                 details: serde_json::json!({
                     "exit_code": exit_code,
@@ -186,7 +189,7 @@ async fn run_lint_gate(working_dir: &Path, _config: &ValidateConfig) -> CheckRes
         Err(e) => CheckResult {
             name: "lint".into(),
             pass: false,
-            summary: format!("lint 执行失败: {}", e),
+            summary: format!("lint execution failed: {}", e),
             details: serde_json::json!({"error": e}),
         },
     }
@@ -197,14 +200,14 @@ async fn persist_report(working_dir: &Path, report: &ValidationReport) -> Result
     let dir = working_dir.join(".shuji").join("validate");
     tokio::fs::create_dir_all(&dir)
         .await
-        .map_err(|e| format!("创建 validate 目录失败: {}", e))?;
+        .map_err(|e| format!("failed to create validate directory: {}", e))?;
 
     let path = dir.join("latest.json");
-    let content =
-        serde_json::to_string_pretty(report).map_err(|e| format!("序列化报告失败: {}", e))?;
+    let content = serde_json::to_string_pretty(report)
+        .map_err(|e| format!("failed to serialize report: {}", e))?;
     tokio::fs::write(&path, &content)
         .await
-        .map_err(|e| format!("写入报告失败: {}", e))?;
+        .map_err(|e| format!("failed to write report: {}", e))?;
 
     Ok(())
 }

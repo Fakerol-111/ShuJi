@@ -3,6 +3,7 @@
  * Manages demo project creation, auto-send, tour, and completion summary.
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createDemoProject, getRoundMetrics, runMockWorkflow } from '../api';
 import { formatError } from '../utils/error';
 
@@ -23,12 +24,15 @@ export function useDemoFlow(
   setTab?: (tab: 'decision' | 'discuss') => void,
   setMessages?: (msgs: any[] | ((prev: any[]) => any[])) => void
 ) {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language?.startsWith('en') ? 'en' : 'zh';
   const [showDemoTour, setShowDemoTour] = useState(false);
   const [demoCreating, setDemoCreating] = useState(false);
   const [demoStartTime, setDemoStartTime] = useState<number | null>(null);
   const [demoSummary, setDemoSummary] = useState<DemoSummary | null>(null);
   const [mockScenario, setMockScenario] = useState<string | null>(null);
   const summaryShownRef = useRef(false);
+  const demoMsg = t('demo.demoMessage');
 
   // ── Demo flow: auto-send from WorkspaceSelect ──────────────
   useEffect(() => {
@@ -42,7 +46,7 @@ export function useDemoFlow(
       setMockScenario(scenario);
       setDemoStartTime(Date.now());
       // Offline mock mode: load pre-recorded scenario instead of calling real API
-      const userMsg = '修复 calc.py 中的 power 和 factorial 函数中的 bug，确保所有测试通过';
+      const userMsg = demoMsg;
       if (project.working_dir && setMessages) {
         runMockWorkflow(project.working_dir, scenario)
           .then((msgs) => {
@@ -72,7 +76,7 @@ export function useDemoFlow(
       return;
     }
     setDemoStartTime(Date.now());
-    handleSend('修复 calc.py 中的 power 和 factorial 函数中的 bug，确保所有测试通过');
+    handleSend(demoMsg);
   }, [project, handleSend]);
 
   // ── Demo flow: show guided tour after auto-send ────────────
@@ -95,11 +99,14 @@ export function useDemoFlow(
     const elapsed = Math.round((Date.now() - demoStartTime) / 1000);
     const minutes = Math.floor(elapsed / 60);
     const seconds = elapsed % 60;
+    const elapsedStr = lang === 'en'
+      ? `${minutes}m ${seconds}s`
+      : `${minutes}分${seconds}秒`;
 
     getRoundMetrics()
       .then((metrics) => {
         setDemoSummary({
-          elapsed: `${minutes}分${seconds}秒`,
+          elapsed: elapsedStr,
           tokens: metrics?.total_tokens || 0,
           cached: metrics?.cached_prompt_tokens || 0,
           uncached: metrics?.uncached_prompt_tokens || 0,
@@ -107,7 +114,7 @@ export function useDemoFlow(
       })
       .catch(() => {
         setDemoSummary({
-          elapsed: `${minutes}分${seconds}秒`,
+          elapsed: elapsedStr,
           tokens: 0,
           cached: 0,
           uncached: 0,
@@ -124,7 +131,7 @@ export function useDemoFlow(
       resetDiscuss();
       sessionStorage.removeItem('shuji_chat');
       if (setTab) setTab('decision');
-      handleSend('修复 calc.py 中的 power 和 factorial 函数中的 bug，确保所有测试通过');
+      handleSend(demoMsg);
     } catch (e) {
       // Error is surfaced through loadProjectIntoState or caller
       console.error(formatError(e));

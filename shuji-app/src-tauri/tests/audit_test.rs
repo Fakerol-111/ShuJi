@@ -324,11 +324,11 @@ fn test_generate_report_with_entries() {
 
     let report = block_on(audit::generate_report(dir.path()));
 
-    // Should contain Chinese labels
-    assert!(report.contains("交付报告"));
-    assert!(report.contains("事件总数"));
-    assert!(report.contains("创建文档")); // create_document localized
-    assert!(report.contains("文档状态变更")); // set_document_status localized
+    // Should contain English labels
+    assert!(report.contains("Delivery Report"));
+    assert!(report.contains("Event Summary"));
+    assert!(report.contains("Create Document")); // create_document localized
+    assert!(report.contains("Document Status Change")); // set_document_status localized
 
     // Should list document outputs
     assert!(report.contains("dsgn_001"));
@@ -342,7 +342,7 @@ fn test_generate_report_with_entries() {
 fn test_generate_report_empty() {
     let dir = create_audit_dir();
     let report = block_on(audit::generate_report(dir.path()));
-    assert!(report.contains("尚无审计记录"));
+    assert!(report.contains("No audit records yet"));
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -480,7 +480,7 @@ fn test_checklist_init_load() {
     let dir = create_audit_dir();
 
     let msg = block_on(audit::init_checklist(dir.path(), "spec"));
-    assert!(msg.contains("检查项"));
+    assert!(msg.contains("checklist items"));
 
     let checklist = block_on(audit::load_checklist(dir.path()));
     assert_eq!(checklist.items.len(), 4);

@@ -52,10 +52,10 @@ pub async fn read_shuji_doc(project_dir: String, path: String) -> Result<ShujiDo
         .await
         .map_err(friendly_error)?;
     if !target_canon.starts_with(&root_canon) {
-        return Err(friendly_error("路径越界"));
+        return Err(friendly_error("path out of bounds"));
     }
     if target_canon.is_dir() {
-        return Err(friendly_error("不能读取目录"));
+        return Err(friendly_error("cannot read a directory"));
     }
 
     let content = tokio::fs::read_to_string(&target_canon)
@@ -150,7 +150,7 @@ async fn git_show(root: &Path, rel: &Path) -> Option<String> {
 fn safe_project_path(path: &str) -> Result<PathBuf, String> {
     let rel = Path::new(path);
     if rel.is_absolute() {
-        return Err("非法路径".to_string());
+        return Err("illegal path".to_string());
     }
     if rel.components().any(|c| {
         matches!(
@@ -158,7 +158,7 @@ fn safe_project_path(path: &str) -> Result<PathBuf, String> {
             Component::ParentDir | Component::RootDir | Component::Prefix(_)
         )
     }) {
-        return Err("非法路径".to_string());
+        return Err("illegal path".to_string());
     }
     Ok(rel.components().collect())
 }
@@ -197,7 +197,7 @@ fn collect_entries(root: &Path, dir: &Path, depth: usize) -> Result<Vec<ShujiEnt
             entries.push(ShujiEntry {
                 name,
                 path: rel,
-                type_label: "目录".to_string(),
+                type_label: "Directory".to_string(),
                 is_dir: true,
                 children,
             });
@@ -289,17 +289,17 @@ fn infer_label(path: &Path, rel: &str) -> String {
         let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
         let prefix = name.split('_').next().unwrap_or("");
         return match prefix {
-            "dsgn" => "方案设计",
-            "plan" => "阶段规划",
-            "pdsg" => "阶段设计",
-            "ddtl" => "详细设计",
-            "revw" => "审查",
-            "ctrt" => "契约",
-            "rprt" => "报告",
-            "task" => "任务",
-            "reqs" => "需求",
-            "anls" => "分析",
-            _ => "枢机文档",
+            "dsgn" => "Design Plan",
+            "plan" => "Phase Plan",
+            "pdsg" => "Phase Design",
+            "ddtl" => "Detailed Design",
+            "revw" => "Review",
+            "ctrt" => "Contract",
+            "rprt" => "Report",
+            "task" => "Task",
+            "reqs" => "Requirements",
+            "anls" => "Analysis",
+            _ => "ShuJi Document",
         }
         .to_string();
     }
@@ -323,7 +323,7 @@ fn infer_label(path: &Path, rel: &str) -> String {
         "py" => "Python",
         "svg" => "SVG",
         "env" => "Env",
-        _ => "文本",
+        _ => "Text",
     }
     .to_string()
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getRoundMetrics, getWorkflowState } from '../api';
 import { getDeptMeta } from '../constants';
 import { docIdToPath } from '../utils/docPath';
@@ -18,41 +19,48 @@ export interface CommandBarProps {
   onOpenGraph?: () => void;
 }
 
-const PROFILE_LABELS: Record<string, string> = {
-  greenfield_standard: '新功能',
-  brownfield_optimize: '存量优化',
-  bugfix: '缺陷修复',
-  demo: '快速原型',
+// Icon mapping by English status code
+const STATUS_ICONS: Record<string, string> = {
+  NotStarted: '○',
+  Designing: '●',
+  Reviewing: '●',
+  PendingApproval: '⚑',
+  Rejected: '✗',
+  Approved: '✓',
+  TaskBreakdown: '●',
+  Testing: '●',
+  Implementing: '●',
+  Checking: '●',
+  Standards: '●',
+  Completed: '✓',
+  Logging: '●',
+  MinorIssue: '●',
 };
 
-const STAGE_LABELS: Record<string, string> = {
-  init: '初始化',
-  expand: '需求展开',
-  design: '方案设计',
-  analysis: '代码分析',
-  plan: '方案规划',
-  review: '审查',
-  approval: '批复',
-  execution: '执行',
-  summary: '汇总',
-  done: '完成',
-};
-
-function stageLabel(id: string): string {
-  return STAGE_LABELS[id] || id;
+function statusIcon(status: string): string {
+  return STATUS_ICONS[status] || '●';
 }
 
-function profileLabel(id: string): string {
-  return PROFILE_LABELS[id] || id;
-}
-
-function statusDisplay(shortLabel: string): string {
-  const icons: Record<string, string> = {
-    未开始: '○', 设计: '●', 审查: '●', 待批: '⚑', 驳回: '✗',
-    批准: '✓', 拆解: '●', 测试: '●', 编码: '●', 验证: '●',
-    规范: '●', 完成: '✓', 记录: '●', 问题: '●',
+// Translation key lookup for status codes
+function statusTKey(status: string): string {
+  const map: Record<string, string> = {
+    NotStarted: 'workflow.notStarted',
+    Designing: 'workflowStatus.designing',
+    Reviewing: 'workflowStatus.reviewing',
+    PendingApproval: 'workflow.pendingApproval',
+    Rejected: 'workflow.rejected',
+    Approved: 'workflow.approved',
+    TaskBreakdown: 'workflowStatus.taskBreakdown',
+    Testing: 'workflowStatus.testing',
+    Implementing: 'workflowStatus.implementing',
+    Checking: 'workflowStatus.checking',
+    Standards: 'workflowStatus.standards',
+    Completed: 'workflow.complete',
+    Logging: 'workflowStatus.logging',
+    MinorIssue: 'workflowStatus.minorIssue',
+    Blocked: 'workflow.blocked',
   };
-  return `${icons[shortLabel] || '●'} ${shortLabel}`;
+  return map[status] || status;
 }
 
 function statusColor(status: string): string {
@@ -60,23 +68,6 @@ function statusColor(status: string): string {
   if (status === 'NotStarted') return 'text-ink-300';
   if (['PendingApproval', 'Rejected'].includes(status)) return 'text-vermillion';
   return 'text-gold';
-}
-
-function designShortLabel(status: string): string {
-  const map: Record<string, string> = {
-    NotStarted: '未开始', Designing: '设计', Reviewing: '审查',
-    PendingApproval: '待批', Rejected: '驳回', Approved: '批准',
-  };
-  return map[status] || status;
-}
-
-function execShortLabel(status: string): string {
-  const map: Record<string, string> = {
-    NotStarted: '未开始', TaskBreakdown: '拆解', Testing: '测试',
-    Implementing: '编码', Checking: '验证', Standards: '规范',
-    Logging: '记录', MinorIssue: '问题', Completed: '完成',
-  };
-  return map[status] || status;
 }
 
 function isBlocked(status: string): boolean {
@@ -114,10 +105,42 @@ export default function CommandBar({
   onSelectDoc,
   onPendingClick,
 }: CommandBarProps) {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language?.startsWith('en') ? 'en' : 'zh';
   const [expanded, setExpanded] = useState(() => loadWorkflowExpanded());
   const [roundMetrics, setRoundMetrics] = useState<RoundMetrics | null>(null);
   const [elapsed, setElapsed] = useState('');
   const [wfState, setWfState] = useState<WFState | null>(null);
+
+  // Profile label mapping
+  const profileLabels: Record<string, string> = {
+    greenfield_standard: t('workflow.newFeature'),
+    brownfield_optimize: t('workflow.existingOptimization'),
+    bugfix: t('workflow.bugfix'),
+    demo: t('workflow.quickPrototype'),
+  };
+
+  function profileLabel(id: string): string {
+    return profileLabels[id] || id;
+  }
+
+  // Stage label mapping
+  const stageLabels: Record<string, string> = {
+    init: t('workflow.initialize'),
+    expand: t('workflow.expandRequirements'),
+    design: t('workflow.design'),
+    analysis: t('workflow.codeAnalysis'),
+    plan: t('workflow.planning'),
+    review: t('workflow.review'),
+    approval: t('workflow.approval'),
+    execution: t('workflow.execution'),
+    summary: t('workflow.summary'),
+    done: t('workflow.complete'),
+  };
+
+  function stageLabel(id: string): string {
+    return stageLabels[id] || id;
+  }
 
   useEffect(() => {
     const load = () => {
@@ -174,7 +197,7 @@ export default function CommandBar({
   if (isEmpty) {
     return (
       <div className="h-10 flex items-center px-4 border-b border-fold bg-surface-paper command-bar-glow">
-        <span className="text-caption text-ink-500 font-display">尚未启奏 — 拟旨下诏以驱动诸司</span>
+        <span className="text-caption text-ink-500 font-display">{t('commandBar.idle')}</span>
       </div>
     );
   }
@@ -220,7 +243,9 @@ export default function CommandBar({
         {activeMeta && (
           <span className="flex items-center gap-1.5 shrink-0">
             <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse shrink-0" />
-            <span className="text-ui font-display text-ink-700">{activeMeta.shortLabel}</span>
+            <span className="text-ui font-display text-ink-700">
+              {lang === 'en' ? activeMeta.shortLabelEn : activeMeta.shortLabel}
+            </span>
           </span>
         )}
 
@@ -241,7 +266,7 @@ export default function CommandBar({
             <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
             </svg>
-            朱批 {pendingApprovals.length}
+            {t('document.pendingApproval')} {pendingApprovals.length}
           </button>
         )}
 
@@ -256,7 +281,7 @@ export default function CommandBar({
             }}
             className="text-caption text-ink-400 hover:text-ink-600 shrink-0"
           >
-            {expanded ? '收起' : '详情'}
+            {expanded ? t('commandBar.collapse') : t('commandBar.details')}
           </button>
         )}
       </div>
@@ -270,7 +295,7 @@ export default function CommandBar({
           {wfState && (
             <div className="pt-1.5 pb-1">
               <div className="flex items-center gap-2 mb-1 text-ink-500 font-medium">
-                <span>工作流</span>
+                <span>{t('commandBar.workflow')}</span>
                 <span className="text-caption px-1 rounded bg-ink-100/50">{wfState.governance}</span>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
@@ -301,13 +326,13 @@ export default function CommandBar({
                     : String(eObj);
                 return (
                   <div key={phase.index} className="flex items-center gap-2">
-                    <span className="font-mono text-ink-400 w-14 shrink-0">阶段{phase.index}</span>
+                    <span className="font-mono text-ink-400 w-14 shrink-0">{t('commandBar.phase')}{phase.index}</span>
                     <span className={`${statusColor(dStatus)} ${isBlocked(dStatus) ? 'font-medium' : ''}`}>
-                      {statusDisplay(designShortLabel(dStatus))}
+                      {statusIcon(dStatus)} {t(statusTKey(dStatus), dStatus)}
                     </span>
                     <span className="text-ink-300 mx-0.5">|</span>
                     <span className={eIsBlocked ? 'text-vermillion font-medium' : statusColor(eStr)}>
-                      {eIsBlocked ? '⚑ 阻塞' : statusDisplay(execShortLabel(eStr))}
+                      {eIsBlocked ? `${statusIcon('Blocked')} ${t('workflow.blocked')}` : `${statusIcon(eStr)} ${t(statusTKey(eStr), eStr)}`}
                     </span>
                   </div>
                 );

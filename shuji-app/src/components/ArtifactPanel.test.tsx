@@ -38,7 +38,7 @@ describe('ArtifactPanel', () => {
 
   it('shows empty state when no tabs and no pending approvals', () => {
     render(<ArtifactPanel {...baseProps} />);
-    expect(screen.getByText('点击文档引用或阶段详情以预览')).toBeTruthy();
+    expect(screen.getByText('请先开卷')).toBeTruthy();
   });
 
   it('shows approval prompt when pending approvals exist', () => {

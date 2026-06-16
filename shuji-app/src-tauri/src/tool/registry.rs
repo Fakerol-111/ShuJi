@@ -22,7 +22,7 @@ pub fn doc_inspect_tools() -> Vec<ToolDefinition> {
 /// Code-oriented inspection tools: for agents that read/modify source files.
 pub fn code_inspect_tools() -> Vec<ToolDefinition> {
     vec![
-        crate::tool::read_file_tool_def("读取文件内容"),
+        crate::tool::read_file_tool_def("Read file content"),
         crate::tool::list_dir_tree_tool_def(),
         crate::tool::search_text_tool_def(),
     ]
@@ -43,11 +43,11 @@ pub fn inspect_tools() -> Vec<ToolDefinition> {
 
 // ── Write tool groups ────────────────────────────────────────
 
-/// File write tools for code agents (工部/刑部): create, apply_patch, delete, rename.
+/// File write tools for code agents (Gongbushangshu/Xingbushangshu): create, apply_patch, delete, rename.
 /// Intentionally excludes modify_file and append_file — use apply_patch for all edits.
 pub fn file_write_tools_for_code() -> Vec<ToolDefinition> {
     vec![
-        crate::tool::create_file_tool_def("写入新文件"),
+        crate::tool::create_file_tool_def("Write new file"),
         crate::tool::edit_file_tool_def(),
         crate::tool::apply_patch_tool_def(),
         crate::tool::delete_file_tool_def(),
@@ -58,7 +58,7 @@ pub fn file_write_tools_for_code() -> Vec<ToolDefinition> {
 /// Full file write tools (legacy, for non-code agents that still need modify/append).
 pub fn file_write_tools() -> Vec<ToolDefinition> {
     vec![
-        crate::tool::create_file_tool_def("写入新文件"),
+        crate::tool::create_file_tool_def("Write new file"),
         crate::tool::edit_file_tool_def(),
         crate::tool::apply_patch_tool_def(),
         crate::tool::modify_file_tool_def(),
@@ -80,10 +80,10 @@ pub fn document_tools() -> Vec<ToolDefinition> {
 
 /// Command execution tool.
 pub fn execute_command_tool() -> Vec<ToolDefinition> {
-    vec![crate::tool::execute_command_tool_def("执行命令")]
+    vec![crate::tool::execute_command_tool_def("Execute command")]
 }
 
-/// Run tests tool (工部专用 — 封装测试命令防拼错).
+/// Run tests tool (Gongbushangshu-specific — wraps test commands to prevent typos).
 pub fn run_tests_tool() -> Vec<ToolDefinition> {
     vec![crate::tool::run_tests_tool_def()]
 }
@@ -100,7 +100,7 @@ pub fn route_tool() -> ToolDefinition {
         function: crate::api::client::ToolFunction {
             name: "route_to".into(),
             description:
-                "向其他部门发送任务。type: task=新任务, replace=中断并替换, interrupt=仅中断。"
+                "Send tasks to other departments. type: task=new task, replace=interrupt and replace, interrupt=interrupt only."
                     .into(),
             parameters: serde_json::json!({
                 "type": "object",
@@ -115,7 +115,7 @@ pub fn route_tool() -> ToolDefinition {
                     },
                     "subject": {
                         "type": "string",
-                        "description": "文档ID（如 task_5）"
+                        "description": "Document ID (e.g. task_5)"
                     }
                 },
                 "required": ["to", "type", "subject"]
@@ -129,7 +129,7 @@ pub fn cancel_agent_tool() -> ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "cancel_agent".into(),
-            description: "中断指定部门当前操作。可中断: 中书令、门下侍中、尚书令、吏部、兵部、工部、刑部、礼部。不可中断内阁。".into(),
+            description: "Interrupt a department's current operation. Interruptible: Zhongshuling, Menxiashizhong, Shangshuling, Libushangshu, Bingbushangshu, Gongbushangshu, Xingbushangshu, Liburshangshu. Cannot interrupt Neige.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -150,18 +150,19 @@ pub fn submit_batch_plan_tool() -> ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "submit_plan".into(),
-            description: "将任务拆分为多个批次执行。每批1-2个目标。".into(),
+            description: "Split a task into multiple batches for execution. 1-2 goals per batch."
+                .into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "batches": {
                         "type": "array",
-                        "description": "批次列表",
+                        "description": "List of batches",
                         "items": {
                             "type": "object",
                             "properties": {
-                                "name": {"type": "string", "description": "批次简短名称"},
-                                "goal": {"type": "string", "description": "本批要完成的目标，一句话"}
+                                "name": {"type": "string", "description": "Short batch name"},
+                                "goal": {"type": "string", "description": "Goal for this batch, one sentence"}
                             },
                             "required": ["name", "goal"]
                         }
@@ -179,7 +180,7 @@ pub fn complete_task_tool() -> ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "complete_task".into(),
-            description: "标记当前批次任务完成，推进到下一批。所有批次完成后引擎自动处理。".into(),
+            description: "Mark the current batch task as complete, advancing to the next batch. When all batches are done, the engine handles it automatically.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {}
@@ -193,13 +194,13 @@ pub fn expand_requirements_tool() -> ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "expand_requirements".into(),
-            description: "唤起需求展开 sub-agent。需先 create_document(type=\"task\") 创建任务文档，再传入 task_id。返回需求文档ID。".into(),
+            description: "Invoke the requirements expansion sub-agent. First create a task document with create_document(type=\"task\"), then pass the task_id. Returns the requirements document ID.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "task_id": {
                         "type": "string",
-                        "description": "包含皇帝需求原文的 task 文档 ID（如 task_5）"
+                        "description": "Task document ID containing the emperor's original requirements (e.g. task_5)"
                     }
                 },
                 "required": ["task_id"]
@@ -213,13 +214,13 @@ pub fn survey_codebase_tool() -> ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "survey_codebase".into(),
-            description: "唤起代码库勘察 sub-agent。扫描目标仓库结构生成分析文档。只需传入任务描述。返回分析文档ID（anls_xxx）。".into(),
+            description: "Invoke the codebase survey sub-agent. Scans the target repository structure and generates an analysis document. Just pass a task description. Returns the analysis document ID (anls_xxx).".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "task_description": {
                         "type": "string",
-                        "description": "任务描述，告知 sub-agent 勘察的重点方向和关注点"
+                        "description": "Task description telling the sub-agent which areas to focus on during the survey"
                     }
                 },
                 "required": ["task_description"]
@@ -233,22 +234,22 @@ pub fn create_skill_tool() -> ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "create_skill".into(),
-            description: "创建自定义技能文件到 .shuji/skills/。用于固化重复出现的工作流模式。"
+            description: "Create a custom skill file in .shuji/skills/. Used to solidify recurring workflow patterns."
                 .into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "name": {
                         "type": "string",
-                        "description": "技能标识符（如 workflow_custom），不含 .md"
+                        "description": "Skill identifier (e.g. workflow_custom), without .md suffix"
                     },
                     "description": {
                         "type": "string",
-                        "description": "一句话描述（≤50字符）"
+                        "description": "One-line description (≤50 chars)"
                     },
                     "content": {
                         "type": "string",
-                        "description": "Markdown 格式的完整技能指令"
+                        "description": "Full skill instructions in Markdown format"
                     }
                 },
                 "required": ["name", "description", "content"]
@@ -262,18 +263,18 @@ pub fn update_soul_tool() -> ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "update_soul".into(),
-            description: "向 soul 文件写入一条经验/教训/偏好。每次一条。".into(),
+            description: "Write one entry of experience/lesson/preference to the soul file. One entry per call.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "content": {
                         "type": "string",
-                        "description": "内容，格式: [场景] 描述。≤500字符。"
+                        "description": "Content in format: [context] description. ≤500 chars."
                     },
                     "section": {
                         "type": "string",
                         "enum": ["经验", "教训", "偏好"],
-                        "description": "写入章节: 经验/教训/偏好。不指定则追加到末尾。"
+                        "description": "Section to write to: experience/lesson/preference. If omitted, appends to the end."
                     }
                 },
                 "required": ["content"]
@@ -282,19 +283,19 @@ pub fn update_soul_tool() -> ToolDefinition {
     }
 }
 
-/// 内阁提交管道可执行计划。调用后内阁退出调度循环，由 PipelineEngine 接管执行。
+/// Neige submits a pipeline-executable plan. After submission, Neige exits the dispatch loop and PipelineEngine takes over execution.
 pub fn submit_pipeline_plan_tool() -> ToolDefinition {
     crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "submit_pipeline_plan".into(),
-            description: "提交机器可执行的动态任务计划。计划提交后由管道引擎自动按步骤执行，内阁不再参与每步调度。仅在任务需要全自动执行时使用——如果应先向皇帝提问，先问再提交计划。".into(),
+            description: "Submit a machine-executable dynamic task plan. After submission, the pipeline engine automatically executes steps sequentially; Neige no longer participates in each step's dispatch. Only use when the task needs fully automatic execution — if you should ask the emperor first, ask before submitting the plan.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "plan_json": {
                         "type": "string",
-                        "description": "完整 JSON 计划字符串。格式: {\"plan_id\":\"plan-YYYYMMDD-NNN\",\"summary\":\"...\",\"estimated_complexity\":\"low|medium|high\",\"steps\":[...]}"
+                        "description": "Complete JSON plan string. Format: {\"plan_id\":\"plan-YYYYMMDD-NNN\",\"summary\":\"...\",\"estimated_complexity\":\"low|medium|high\",\"steps\":[...]}"
                     }
                 },
                 "required": ["plan_json"]
@@ -303,16 +304,16 @@ pub fn submit_pipeline_plan_tool() -> ToolDefinition {
     }
 }
 
-/// 尚书省向六部分派任务。阻塞等待目标部门完成执行后返回。
-/// 每次调用只分派一个部门，尚书省根据执行结果自行决定下一步。
+/// Shangshuling assigns tasks to the six ministries. Blocks until the target department completes execution and returns.
+/// Only dispatches one department per call; Shangshuling decides the next step based on the result.
 pub fn assign_task_tool() -> ToolDefinition {
     crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "assign_task".into(),
-            description: "向指定部门分派任务，等待其完成后返回执行结果。\
-            根据返回结果判断下一步——测试不过则打回工部，全部通过则推进到下一部门。\
-            每次仅分派一个部门，后续部门根据结果自行决定。"
+            description: "Assign a task to a specified department and wait for the execution result.\
+            Based on the result, decide the next step — if tests fail, send back to Gongbushangshu; if all pass, proceed to the next department.\
+            Only dispatches one department per call; subsequent departments are decided based on the result."
                 .into(),
             parameters: serde_json::json!({
                 "type": "object",
@@ -320,11 +321,11 @@ pub fn assign_task_tool() -> ToolDefinition {
                     "to": {
                         "type": "string",
                         "enum": ["吏部", "兵部", "工部", "刑部", "礼部"],
-                        "description": "目标部门。注意：内阁/中书令/门下侍中由内阁直接调度，不由尚书省管。"
+                        "description": "Target department. Note: Neige/Zhongshuling/Menxiashizhong are dispatched directly by Neige, not by Shangshuling."
                     },
                     "task": {
                         "type": "string",
-                        "description": "任务描述，告知该部门需要完成什么工作"
+                        "description": "Task description telling the department what work needs to be done"
                     }
                 },
                 "required": ["to", "task"]
@@ -333,28 +334,28 @@ pub fn assign_task_tool() -> ToolDefinition {
     }
 }
 
-/// 内阁修改当前管道计划（异常唤醒时使用）。
+/// Neige modifies the currently executing pipeline plan (used when waking from an exception).
 pub fn update_pipeline_plan_tool() -> ToolDefinition {
     crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "update_pipeline_plan".into(),
-            description: "修改当前执行中的管道计划。可插入/跳过/替换步骤、修改失败策略。修改后管道引擎会自动重新加载并继续执行。".into(),
+            description: "Modify the currently executing pipeline plan. Can insert/skip/replace steps or modify failure strategies. After modification, the pipeline engine automatically reloads and continues execution.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "action": {
                         "type": "string",
                         "enum": ["insert_after", "skip", "replace"],
-                        "description": "操作类型: insert_after(在某步骤后插入新步骤), skip(跳过步骤), replace(替换整个计划)"
+                        "description": "Action type: insert_after(insert new step after a step), skip(skip step), replace(replace entire plan)"
                     },
                     "step_id": {
                         "type": "string",
-                        "description": "目标步骤 ID"
+                        "description": "Target step ID"
                     },
                     "data": {
                         "type": "string",
-                        "description": "操作数据: insert_after/skip 时为 JSON step 对象; replace 时为完整的新 plan_json"
+                        "description": "Action data: insert_after/skip takes a JSON step object; replace takes a complete new plan_json"
                     }
                 },
                 "required": ["action", "data"]
@@ -363,7 +364,7 @@ pub fn update_pipeline_plan_tool() -> ToolDefinition {
     }
 }
 
-// ── Audit tools (礼部/尚书令) ────────────────────────────────
+// ── Audit tools (Liburshangshu/Shangshuling) ────────────────────────────────
 
 pub fn audit_checklist_tools() -> Vec<ToolDefinition> {
     vec![
@@ -371,7 +372,7 @@ pub fn audit_checklist_tools() -> Vec<ToolDefinition> {
             tool_type: "function".into(),
             function: crate::api::client::ToolFunction {
                 name: "init_checklist".into(),
-                description: "初始化审计检查清单，按类别生成标准检查项。类别: spec/test/general。"
+                description: "Initialize an audit checklist, generating standard check items by category. Categories: spec/test/general."
                     .into(),
                 parameters: serde_json::json!({
                     "type": "object",
@@ -379,7 +380,7 @@ pub fn audit_checklist_tools() -> Vec<ToolDefinition> {
                         "category": {
                             "type": "string",
                             "enum": ["spec", "test", "general"],
-                            "description": "检查类别"
+                            "description": "Checklist category"
                         }
                     },
                     "required": ["category"]
@@ -390,13 +391,13 @@ pub fn audit_checklist_tools() -> Vec<ToolDefinition> {
             tool_type: "function".into(),
             function: crate::api::client::ToolFunction {
                 name: "update_checklist_item".into(),
-                description: "更新审计检查项状态（pass/fail/na）。".into(),
+                description: "Update audit checklist item status (pass/fail/na).".into(),
                 parameters: serde_json::json!({
                     "type": "object",
                     "properties": {
-                        "id": {"type": "string", "description": "检查项 ID，如 spec-001"},
-                        "status": {"type": "string", "enum": ["pass", "fail", "na"], "description": "新状态"},
-                        "note": {"type": "string", "description": "备注说明（可选）"}
+                        "id": {"type": "string", "description": "Checklist item ID, e.g. spec-001"},
+                        "status": {"type": "string", "enum": ["pass", "fail", "na"], "description": "New status"},
+                        "note": {"type": "string", "description": "Optional note"}
                     },
                     "required": ["id", "status"]
                 }),
@@ -406,14 +407,14 @@ pub fn audit_checklist_tools() -> Vec<ToolDefinition> {
             tool_type: "function".into(),
             function: crate::api::client::ToolFunction {
                 name: "add_violation".into(),
-                description: "记录一条审计违规。".into(),
+                description: "Record an audit violation.".into(),
                 parameters: serde_json::json!({
                     "type": "object",
                     "properties": {
-                        "severity": {"type": "string", "enum": ["error", "warning", "info"], "description": "严重程度"},
-                        "rule_id": {"type": "string", "description": "规则 ID，如 spec-001"},
-                        "location": {"type": "string", "description": "违规位置，文件路径或行号"},
-                        "description": {"type": "string", "description": "违规描述"}
+                        "severity": {"type": "string", "enum": ["error", "warning", "info"], "description": "Severity level"},
+                        "rule_id": {"type": "string", "description": "Rule ID, e.g. spec-001"},
+                        "location": {"type": "string", "description": "Violation location, file path or line number"},
+                        "description": {"type": "string", "description": "Violation description"}
                     },
                     "required": ["rule_id", "description"]
                 }),
@@ -428,17 +429,17 @@ pub fn reauth_tool() -> Vec<ToolDefinition> {
         function: crate::api::client::ToolFunction {
             name: "request_reauth".into(),
             description:
-                "请求礼部对指定文档重新审计。会自动路由到目标部门。修复完成后由尚书令/刑部调用。"
+                "Request Liburshangshu to re-audit a specified document. Automatically routes to the target department. Called by Shangshuling/Xingbushangshu after fixes are complete."
                     .into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "subject": {"type": "string", "description": "需要复验的文档 ID"},
-                    "reason": {"type": "string", "description": "复验原因"},
+                    "subject": {"type": "string", "description": "Document ID to re-audit"},
+                    "reason": {"type": "string", "description": "Reason for re-audit"},
                     "to": {
                         "type": "string",
                         "enum": ["礼部"],
-                        "description": "目标部门（默认礼部）"
+                        "description": "Target department (default: Liburshangshu)"
                     }
                 },
                 "required": ["subject", "reason"]

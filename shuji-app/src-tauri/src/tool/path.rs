@@ -14,13 +14,13 @@ pub async fn resolve_scoped_path(root: &Path, rel: &str) -> Result<PathBuf, Stri
     // This handles Windows `\\?\` prefix, symlinks, and path normalization.
     let canon_root = tokio::fs::canonicalize(root)
         .await
-        .map_err(|e| format!("项目根目录解析失败: {}", e))?;
+        .map_err(|e| format!("project root resolution failed: {}", e))?;
 
     let rel_path = Path::new(rel);
 
     // Block absolute paths
     if rel_path.is_absolute() {
-        return Err(format!("禁止使用绝对路径: {}", rel));
+        return Err(format!("absolute paths forbidden: {}", rel));
     }
 
     // Block .. traversal (use path components, not string match)
@@ -28,13 +28,13 @@ pub async fn resolve_scoped_path(root: &Path, rel: &str) -> Result<PathBuf, Stri
         .components()
         .any(|c| c == std::path::Component::ParentDir)
     {
-        return Err(format!("禁止使用父目录跳转: {}", rel));
+        return Err(format!("parent directory traversal forbidden: {}", rel));
     }
 
     // Block Windows drive-letter / UNC prefix paths (C:, \\server, etc.)
     for comp in rel_path.components() {
         if matches!(comp, std::path::Component::Prefix(_)) {
-            return Err(format!("禁止使用盘符或 UNC 路径: {}", rel));
+            return Err(format!("drive letter or UNC path forbidden: {}", rel));
         }
     }
 
@@ -44,11 +44,11 @@ pub async fn resolve_scoped_path(root: &Path, rel: &str) -> Result<PathBuf, Stri
     if candidate.exists() {
         let canon = tokio::fs::canonicalize(&candidate)
             .await
-            .map_err(|e| format!("路径解析失败 {}: {}", rel, e))?;
+            .map_err(|e| format!("path resolution failed {}: {}", rel, e))?;
 
         if !canon.starts_with(&canon_root) {
             return Err(format!(
-                "路径越界: {} 解析到 {}，不在项目目录内",
+                "path out of bounds: {} resolves to {}, not within project directory",
                 rel,
                 canon.display()
             ));
@@ -61,15 +61,18 @@ pub async fn resolve_scoped_path(root: &Path, rel: &str) -> Result<PathBuf, Stri
         if parent.exists() {
             let canon_parent = tokio::fs::canonicalize(parent)
                 .await
-                .map_err(|e| format!("父目录解析失败 {}: {}", rel, e))?;
+                .map_err(|e| format!("parent directory resolution failed {}: {}", rel, e))?;
 
             if !canon_parent.starts_with(&canon_root) {
-                return Err(format!("路径越界: {} 的父目录不在项目目录内", rel,));
+                return Err(format!(
+                    "path out of bounds: parent directory of {} is not within project directory",
+                    rel,
+                ));
             }
 
             let filename = candidate
                 .file_name()
-                .ok_or_else(|| format!("无效文件名: {}", rel))?;
+                .ok_or_else(|| format!("invalid filename: {}", rel))?;
 
             return Ok(canon_parent.join(filename));
         }
@@ -82,13 +85,13 @@ pub async fn resolve_scoped_path(root: &Path, rel: &str) -> Result<PathBuf, Stri
         if ancestor.exists() {
             let canon_ancestor = tokio::fs::canonicalize(ancestor)
                 .await
-                .map_err(|e| format!("父目录解析失败 {}: {}", rel, e))?;
+                .map_err(|e| format!("parent resolution failed {}: {}", rel, e))?;
             if !canon_ancestor.starts_with(&canon_root) {
-                return Err(format!("路径越界: {}", rel));
+                return Err(format!("path out of bounds: {}", rel));
             }
             let suffix = candidate
                 .strip_prefix(ancestor)
-                .map_err(|_| format!("路径解析内部错误: {}", rel))?;
+                .map_err(|_| format!("path resolution internal error: {}", rel))?;
             return Ok(canon_ancestor.join(suffix));
         }
     }
@@ -103,31 +106,31 @@ pub async fn resolve_scoped_path(root: &Path, rel: &str) -> Result<PathBuf, Stri
 /// Command blocklist: (keyword, reason) tuples for `check_safe_command`.
 /// System-level commands that are dangerous in any project context.
 pub const SYSTEM_BLOCKS: &[(&str, &str)] = &[
-    ("format", "禁止格式化磁盘"),
-    ("mkfs", "禁止格式化磁盘"),
-    ("fdisk", "禁止修改分区表"),
-    ("diskpart", "禁止修改磁盘分区"),
-    ("shutdown", "禁止关闭/重启系统"),
-    ("reboot", "禁止关闭/重启系统"),
-    ("restart-computer", "禁止重启系统"),
-    ("stop-computer", "禁止关闭系统"),
-    ("poweroff", "禁止关闭系统"),
-    ("halt", "禁止关闭系统"),
-    ("sudo", "禁止使用sudo提权"),
-    ("runas", "禁止提权运行"),
-    ("takeown", "禁止夺取文件所有权"),
-    ("reg delete", "禁止修改注册表"),
-    ("reg add", "禁止修改注册表"),
-    ("sc delete", "禁止删除服务"),
-    ("net user", "禁止管理用户账户"),
-    ("net localgroup", "禁止管理用户组"),
-    ("cacls", "禁止修改文件权限"),
-    ("wget", "禁止远程下载执行"),
-    ("powershell -enc", "禁止编码执行PowerShell"),
-    ("certutil -urlcache", "禁止远程下载"),
-    ("bitsadmin /transfer", "禁止远程下载"),
-    ("mshta", "禁止执行MSHTA脚本"),
-    ("npm install -g", "禁止全局安装"),
+    ("format", "formatting disk forbidden"),
+    ("mkfs", "formatting disk forbidden"),
+    ("fdisk", "modifying partition table forbidden"),
+    ("diskpart", "modifying disk partitions forbidden"),
+    ("shutdown", "shutdown/reboot system forbidden"),
+    ("reboot", "shutdown/reboot system forbidden"),
+    ("restart-computer", "reboot system forbidden"),
+    ("stop-computer", "shutdown system forbidden"),
+    ("poweroff", "shutdown system forbidden"),
+    ("halt", "shutdown system forbidden"),
+    ("sudo", "sudo privilege escalation forbidden"),
+    ("runas", "elevated execution forbidden"),
+    ("takeown", "taking file ownership forbidden"),
+    ("reg delete", "modifying registry forbidden"),
+    ("reg add", "modifying registry forbidden"),
+    ("sc delete", "deleting services forbidden"),
+    ("net user", "managing user accounts forbidden"),
+    ("net localgroup", "managing user groups forbidden"),
+    ("cacls", "modifying file permissions forbidden"),
+    ("wget", "remote download/execution forbidden"),
+    ("powershell -enc", "encoded PowerShell execution forbidden"),
+    ("certutil -urlcache", "remote download forbidden"),
+    ("bitsadmin /transfer", "remote download forbidden"),
+    ("mshta", "MSHTA script execution forbidden"),
+    ("npm install -g", "global install forbidden"),
 ];
 
 /// Path escape patterns: strings that indicate an attempt to access

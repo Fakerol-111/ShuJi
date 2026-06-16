@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { readDocumentDiff } from '../../api';
 import type { LineageNode, ChainNode } from '../../types';
 
 // ── DiffViewer ───────────────────────────────────────────────
 
 export function DiffViewer({ filename }: { filename: string }) {
+  const { t } = useTranslation();
   const [patch, setPatch] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -16,7 +18,7 @@ export function DiffViewer({ filename }: { filename: string }) {
         .then(setPatch)
         .catch((e) => {
           console.error('加载 diff 失败', e);
-          setPatch('(加载失败)');
+          setPatch(t('audit.loadFailed'));
         })
         .finally(() => setLoading(false));
     }
@@ -28,11 +30,11 @@ export function DiffViewer({ filename }: { filename: string }) {
         onClick={() => setOpen(!open)}
         className="text-[10px] text-ink-400 hover:text-ink-600 underline"
       >
-        {open ? '收起 diff' : '查看 diff'}
+        {open ? t('audit.collapseDiff') : t('audit.viewDiff')}
       </button>
       {open && (
         <pre className="mt-1 p-1.5 rounded bg-ink-100 text-[10px] font-mono leading-tight overflow-x-auto max-h-40 overflow-y-auto whitespace-pre">
-          {loading ? '载入中...' : patch || '(无内容)'}
+          {loading ? t('common.loading') : patch || t('audit.noContent')}
         </pre>
       )}
     </div>
@@ -41,13 +43,6 @@ export function DiffViewer({ filename }: { filename: string }) {
 
 // ── DocCard ──────────────────────────────────────────────────
 
-const STAGE_LABELS: Record<string, string> = {
-  reqs: '需求',
-  design: '设计',
-  plan: '计划',
-  contract: '契约',
-  other: '其他',
-};
 const STAGE_COLORS: Record<string, string> = {
   reqs: 'text-jade bg-jade/10',
   design: 'text-azure bg-azure/10',
@@ -81,6 +76,14 @@ export function DocCard({
   node: ChainNode;
   onDocSelect?: (path: string) => void;
 }) {
+  const { t } = useTranslation();
+  const stageLabels: Record<string, string> = {
+    reqs: t('auditExtra.stageReqs'),
+    design: t('auditExtra.stageDesign'),
+    plan: t('auditExtra.stagePlan'),
+    contract: t('auditExtra.stageContract'),
+    other: t('auditExtra.stageOther'),
+  };
   const colorClass = STAGE_COLORS[node.stage] || 'text-ink-400 bg-ink-100';
   return (
     <div
@@ -89,7 +92,7 @@ export function DocCard({
     >
       <div className="flex items-center gap-1.5 text-caption">
         <span className={`px-1 rounded text-[10px] font-mono ${colorClass}`}>
-          {STAGE_LABELS[node.stage] || node.doc_type}
+          {stageLabels[node.stage] || node.doc_type}
         </span>
         <span className="text-ink-700 font-mono text-[11px]">{node.id}</span>
         <span className="text-ink-400">{node.author}</span>

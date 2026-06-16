@@ -120,10 +120,10 @@ impl Agent for GongbuShangshuAgent {
         let has_plan = self.plan.lock().unwrap().is_some();
         if has_plan {
             session.set_reasoning(false);
-            log_console!("[工部] 执行阶段：关闭 reasoning，不限制 max_tokens");
+            log_console!("[工部] execute phase: reasoning disabled, max_tokens unlimited");
         } else {
             session.set_reasoning(true);
-            log_console!("[工部] 规划阶段：开启 reasoning，不限制 max_tokens");
+            log_console!("[工部] planning phase: reasoning enabled, max_tokens unlimited");
         }
 
         // Track and consume fresh_batch flag atomically
@@ -158,7 +158,7 @@ impl Agent for GongbuShangshuAgent {
 
         if has_plan {
             if plan_complete {
-                session.inject("所有批次任务已完成。请创建报告文档并路由回尚书令。");
+                session.inject("All batches completed. Please create a report document and route back to 尚书令.");
             } else {
                 if let Some(mut ctx) =
                     crate::api::session::PersistedContext::load_from(&working_dir, &role_name).await
@@ -168,7 +168,7 @@ impl Agent for GongbuShangshuAgent {
                     if is_fresh {
                         if let (Some(ref name), Some(ref goal)) = (batch_name, batch_goal) {
                             msgs.push(serde_json::json!({"role": "user", "content": format!(
-                                "当前批次（{}/{}）：{} — {}。请完成本批任务，完成后调用 complete_task。",
+                                "Current batch ({}/{}): {} — {}. Complete this batch, then call complete_task.",
                                 plan_current + 1, plan_total, name, goal,
                             )}));
                             log_console!(
@@ -242,7 +242,7 @@ impl Agent for GongbuShangshuAgent {
                         {
                             let guard = plan_ref.lock().unwrap();
                             if guard.is_some() {
-                                return r#"{"ok":false,"message":"计划已存在。请使用 complete_task 推进批次，不要重复提交计划。"}"#.to_string();
+                                return r#"{"ok":false,"message":"A plan already exists. Use complete_task to advance batches, do not resubmit a plan."}"#.to_string();
                             }
                         }
                         let batches: Vec<PlanBatch> = match args.get("batches") {
@@ -250,7 +250,7 @@ impl Agent for GongbuShangshuAgent {
                             None => vec![],
                         };
                         if batches.is_empty() {
-                            return r#"{"ok":false,"message":"batches 参数为空或格式错误"}"#
+                            return r#"{"ok":false,"message":"batches parameter is empty or malformed"}"#
                                 .to_string();
                         }
                         let count = batches.len();
@@ -261,28 +261,28 @@ impl Agent for GongbuShangshuAgent {
                             "[工部] submit_plan: {} batches — force-stopping controller",
                             count
                         );
-                        serde_json::json!({"ok":true,"message":format!("计划已提交：{} 个批次。请等待系统推进到第一个批次。", count)}).to_string()
+                        serde_json::json!({"ok":true,"message":format!("Plan submitted: {} batches. Waiting for system to advance to the first batch.", count)}).to_string()
                     }
                     "complete_task" => {
                         let mut guard = plan_ref.lock().unwrap();
                         match *guard {
                             Some(ref mut plan) => {
                                 if plan.complete {
-                                    return r#"{"ok":false,"message":"所有批次已完成，请写报告并路由"}"#.to_string();
+                                    return r#"{"ok":false,"message":"All batches completed. Write a report and route."}"#.to_string();
                                 }
                                 let all_done = plan.advance();
                                 if all_done {
                                     force_stop_clone.store(true, Ordering::SeqCst);
                                     log_console!("[工部] complete_task: all batches done");
-                                    r#"{"ok":true,"message":"所有批次已完成。请创建报告并路由回尚书令。"}"#.to_string()
+                                    r#"{"ok":true,"message":"All batches completed. Create a report and route back to 尚书令."}"#.to_string()
                                 } else {
                                     force_stop_clone.store(true, Ordering::SeqCst);
                                     log_console!("[工部] complete_task: batch {}/{} done — force-stopping",
                                         plan.current, plan.batches.len());
-                                    serde_json::json!({"ok":true,"message":format!("第 {} 批完成，已推进到第 {} 批。请等待系统注入下一批次上下文。", plan.current, plan.current + 1)}).to_string()
+                                    serde_json::json!({"ok":true,"message":format!("Batch {} completed, advanced to batch {}. Waiting for system to inject next batch context.", plan.current, plan.current + 1)}).to_string()
                                 }
                             }
-                            None => r#"{"ok":false,"message":"没有活跃计划。如需分批，先调用 submit_plan。"}"#.to_string(),
+                            None => r#"{"ok":false,"message":"No active plan. To batch, call submit_plan first."}"#.to_string(),
                         }
                     }
                     _ => {
@@ -326,7 +326,8 @@ impl Agent for GongbuShangshuAgent {
         let plan_guard = self.plan.lock().unwrap();
         match *plan_guard {
             Some(ref p) if !p.complete => LoopDecision::Continue(
-                "请继续完成当前批次任务。完成后调用 complete_task。".to_string(),
+                "Please continue with the current batch task. Call complete_task when done."
+                    .to_string(),
             ),
             _ => LoopDecision::Done,
         }

@@ -43,7 +43,7 @@ fn demo_plan(plan_id: &str, summary: &str) -> PipelinePlan {
         steps: vec![
             PlanStep {
                 step_id: "init".into(),
-                description: "初始化环境".into(),
+                description: "init environment".into(),
                 action: "self_execute".into(),
                 action_params: serde_json::json!({"handler": "noop"}),
                 depends_on: vec![],
@@ -53,7 +53,7 @@ fn demo_plan(plan_id: &str, summary: &str) -> PipelinePlan {
             },
             PlanStep {
                 step_id: "gongbu".into(),
-                description: "工部编码".into(),
+                description: "Works Ministry coding".into(),
                 action: "route_to".into(),
                 action_params: serde_json::json!({"target": "尚书令", "task": summary}),
                 depends_on: vec!["init".into()],
@@ -63,7 +63,7 @@ fn demo_plan(plan_id: &str, summary: &str) -> PipelinePlan {
             },
             PlanStep {
                 step_id: "xingbu".into(),
-                description: "刑部测试".into(),
+                description: "Justice Ministry testing".into(),
                 action: "route_to".into(),
                 action_params: serde_json::json!({"target": "尚书令", "task": format!("验证: {}", summary)}),
                 depends_on: vec!["gongbu".into()],
@@ -73,7 +73,7 @@ fn demo_plan(plan_id: &str, summary: &str) -> PipelinePlan {
             },
             PlanStep {
                 step_id: "validate".into(),
-                description: "机械验证".into(),
+                description: "automated validation".into(),
                 action: "self_execute".into(),
                 action_params: serde_json::json!({"handler": "validate_delivery", "run_lint": false}),
                 depends_on: vec!["xingbu".into()],
@@ -94,7 +94,7 @@ fn greenfield_standard_plan(plan_id: &str, summary: &str) -> PipelinePlan {
         steps: vec![
             PlanStep {
                 step_id: "expand".into(),
-                description: "需求展开".into(),
+                description: "expand requirements".into(),
                 action: "route_to".into(),
                 action_params: serde_json::json!({"target": "内阁", "task": "expand_requirements"}),
                 depends_on: vec![],
@@ -104,7 +104,7 @@ fn greenfield_standard_plan(plan_id: &str, summary: &str) -> PipelinePlan {
             },
             PlanStep {
                 step_id: "design".into(),
-                description: "方案设计".into(),
+                description: "solution design".into(),
                 action: "route_to".into(),
                 action_params: serde_json::json!({"target": "中书令", "task": summary}),
                 depends_on: vec!["expand".into()],
@@ -114,9 +114,9 @@ fn greenfield_standard_plan(plan_id: &str, summary: &str) -> PipelinePlan {
             },
             PlanStep {
                 step_id: "review".into(),
-                description: "方案审查".into(),
+                description: "design review".into(),
                 action: "route_to".into(),
-                action_params: serde_json::json!({"target": "门下侍中", "task": "审查方案"}),
+                action_params: serde_json::json!({"target": "门下侍中", "task": "review design"}),
                 depends_on: vec!["design".into()],
                 require_approval: false,
                 on_failure: "wake_cabinet".into(),
@@ -124,7 +124,7 @@ fn greenfield_standard_plan(plan_id: &str, summary: &str) -> PipelinePlan {
             },
             PlanStep {
                 step_id: "approval".into(),
-                description: "皇帝审批".into(),
+                description: "emperor approval".into(),
                 action: "approval_gate".into(),
                 action_params: serde_json::json!({"doc_id": "plan_main"}),
                 depends_on: vec!["review".into()],
@@ -134,7 +134,7 @@ fn greenfield_standard_plan(plan_id: &str, summary: &str) -> PipelinePlan {
             },
             PlanStep {
                 step_id: "execution".into(),
-                description: "尚书省执行".into(),
+                description: "executor dispatch".into(),
                 action: "route_to".into(),
                 action_params: serde_json::json!({"target": "尚书令", "task": summary}),
                 depends_on: vec!["approval".into()],
@@ -144,7 +144,7 @@ fn greenfield_standard_plan(plan_id: &str, summary: &str) -> PipelinePlan {
             },
             PlanStep {
                 step_id: "validate".into(),
-                description: "机械验证".into(),
+                description: "automated validation".into(),
                 action: "self_execute".into(),
                 action_params: serde_json::json!({"handler": "validate_delivery", "run_lint": true}),
                 depends_on: vec!["execution".into()],
@@ -154,9 +154,9 @@ fn greenfield_standard_plan(plan_id: &str, summary: &str) -> PipelinePlan {
             },
             PlanStep {
                 step_id: "summary".into(),
-                description: "汇总报告".into(),
+                description: "summary report".into(),
                 action: "route_to".into(),
-                action_params: serde_json::json!({"target": "内阁", "task": "生成摘要"}),
+                action_params: serde_json::json!({"target": "内阁", "task": "generate summary"}),
                 depends_on: vec!["validate".into()],
                 require_approval: false,
                 on_failure: "wake_cabinet".into(),
@@ -175,9 +175,9 @@ fn bugfix_plan(plan_id: &str, summary: &str) -> PipelinePlan {
         steps: vec![
             PlanStep {
                 step_id: "diagnose".into(),
-                description: "诊断".into(),
+                description: "diagnose".into(),
                 action: "route_to".into(),
-                action_params: serde_json::json!({"target": "中书令", "task": format!("诊断: {}", summary)}),
+                action_params: serde_json::json!({"target": "中书令", "task": format!("Diagnose: {}", summary)}),
                 depends_on: vec![],
                 require_approval: false,
                 on_failure: "wake_cabinet".into(),
@@ -185,7 +185,7 @@ fn bugfix_plan(plan_id: &str, summary: &str) -> PipelinePlan {
             },
             PlanStep {
                 step_id: "shangshuling".into(),
-                description: "尚书省执行修复".into(),
+                description: "executor dispatch fix".into(),
                 action: "route_to".into(),
                 action_params: serde_json::json!({"target": "尚书令", "task": summary}),
                 depends_on: vec!["diagnose".into()],
@@ -195,7 +195,7 @@ fn bugfix_plan(plan_id: &str, summary: &str) -> PipelinePlan {
             },
             PlanStep {
                 step_id: "validate".into(),
-                description: "验证修复".into(),
+                description: "validate fix".into(),
                 action: "self_execute".into(),
                 action_params: serde_json::json!({"handler": "validate_delivery", "run_lint": false}),
                 depends_on: vec!["shangshuling".into()],

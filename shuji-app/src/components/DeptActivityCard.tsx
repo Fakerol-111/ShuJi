@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { getDeptMeta } from '../constants';
 import { extractDocPath, stripActionPrefix, classifyDeptAction } from '../utils/deptLog';
 import type { DeptLogEntry } from '../types';
@@ -14,10 +15,12 @@ interface DeptActivityCardProps {
 }
 
 export default function DeptActivityCard({ entry, onDocClick }: DeptActivityCardProps) {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language?.startsWith('en') ? 'en' : 'zh';
   const meta = getDeptMeta(entry.dept);
   const actionClass = classifyDeptAction(entry);
   const borderColor = ACTION_CLASS_COLORS[actionClass] || meta?.color || '#8B7355';
-  const label = meta?.shortLabel || entry.dept;
+  const label = meta ? (lang === 'en' ? meta.shortLabelEn : meta.shortLabel) : entry.dept;
   const docPath = extractDocPath(entry);
 
   return (
@@ -42,7 +45,7 @@ export default function DeptActivityCard({ entry, onDocClick }: DeptActivityCard
             onClick={() => onDocClick(docPath)}
             className="text-caption text-gold hover:text-gold-dark mt-0.5 transition-opacity font-mono"
           >
-            查看 → {docPath.split('/').pop()}
+            {t('deptActivity.viewDoc')} → {docPath.split('/').pop()}
           </button>
         )}
       </div>

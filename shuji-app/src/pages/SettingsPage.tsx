@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { formatError } from '../utils/error';
 import {
   getConfig,
@@ -60,18 +61,12 @@ function initRoleConfigs(cfg: Record<string, RoleEndpoint>) {
   return { defaultCfg: def, overrides, useDefault };
 }
 
-const CATEGORY_LABELS: Record<SettingsCategory, string> = {
-  service: '服务配置',
-  context: '上下文窗口',
-  soul: '灵魂管理',
-  appearance: '外观',
-};
-
 interface SettingsPageProps {
   onClose?: () => void;
 }
 
 export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>('service');
 
@@ -228,7 +223,7 @@ export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
       await setModelPreset(modelPreset).catch((e) => {
         console.error('设置模型预设失败', e);
         setHealthStatus('fail');
-        setHealthMsg(`设置预设失败: ${formatError(e)}`);
+        setHealthMsg(`${t('common.error')}: ${formatError(e)}`);
       });
 
       const ctxRoles: Record<string, ContextRoleForm> = {};
@@ -250,7 +245,7 @@ export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
         intent_override: null,
       });
 
-      setSavedMsg('已保存');
+      setSavedMsg(t('common.saved'));
       setTimeout(() => setSavedMsg(''), 2000);
 
       setHealthStatus('checking');
@@ -323,9 +318,9 @@ export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
   const healthDisplay = () => {
     if (healthStatus === 'idle') return null;
     if (healthStatus === 'checking')
-      return <span className="text-xs text-ink-300">⏳ 探测 API 连接中...</span>;
-    if (healthStatus === 'ok') return <span className="text-xs text-jade-light">✔ 连接成功</span>;
-    return <span className="text-xs text-vermillion-light">✘ 连接失败: {healthMsg}</span>;
+      return <span className="text-xs text-ink-300">{t('common.loading')}</span>;
+    if (healthStatus === 'ok') return <span className="text-xs text-jade-light">{t('setup.connectionSuccess')}</span>;
+    return <span className="text-xs text-vermillion-light">{t('setup.connectionFailed')}: {healthMsg}</span>;
   };
 
   return (
@@ -337,9 +332,9 @@ export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
             onClick={() => (onClose ? onClose() : navigate('/project'))}
             className="text-sm text-ink-300 hover:text-ink-50 transition-colors"
           >
-            ← {onClose ? '关闭' : '返回项目'}
+            ← {onClose ? t('common.close') : t('settings.backToProject')}
           </button>
-          <h1 className="font-display text-base font-semibold text-ink-50">枢机 · 设置</h1>
+          <h1 className="font-display text-base font-semibold text-ink-50">{t('settings.title')}</h1>
         </div>
       </header>
 
@@ -350,7 +345,7 @@ export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
           <div className="max-w-2xl mx-auto px-6 py-8">
             <header className="mb-8 pb-4 border-b border-border-fold">
               <h2 className="font-display text-title font-semibold text-ink-900">
-                {CATEGORY_LABELS[activeCategory]}
+                {t('settings.' + (activeCategory === 'context' ? 'contextWindow' : activeCategory === 'soul' ? 'soulManagement' : activeCategory === 'service' ? 'serviceConfig' : activeCategory))}
               </h2>
             </header>
             {renderContent()}
@@ -361,10 +356,10 @@ export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
       {/* ── Footer bar ── */}
       <div className="bg-ink-900 border-t border-ink-700 shrink-0 h-12 px-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <SettingsSaveButton onClick={handleSave}>保存所有更改</SettingsSaveButton>
+          <SettingsSaveButton onClick={handleSave}>{t('common.saveAll')}</SettingsSaveButton>
           {savedMsg && (
             <span
-              className={`text-sm ${savedMsg === '已保存' ? 'text-jade-light' : 'text-vermillion-light'}`}
+              className={`text-sm ${savedMsg === t('common.saved') ? 'text-jade-light' : 'text-vermillion-light'}`}
             >
               {savedMsg}
             </span>

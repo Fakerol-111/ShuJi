@@ -10,17 +10,17 @@ pub(crate) async fn next_id(working_dir: &Path) -> Result<u64, String> {
     tokio::task::spawn_blocking(move || {
         let _lock = COUNTER_LOCK
             .lock()
-            .map_err(|e| format!("计数器锁失败: {}", e))?;
+            .map_err(|e| format!("Counter lock failed: {}", e))?;
         let current: u64 = std::fs::read_to_string(&counter_path)
             .ok()
             .and_then(|s| s.trim().parse().ok())
             .unwrap_or(1);
         std::fs::write(&counter_path, (current + 1).to_string())
-            .map_err(|e| format!("计数器写入失败: {}", e))?;
+            .map_err(|e| format!("Counter write failed: {}", e))?;
         Ok(current)
     })
     .await
-    .map_err(|_| "后台任务异常: next_id".to_string())?
+    .map_err(|_| "Background task failure: next_id".to_string())?
 }
 
 /// ── YAML frontmatter helpers ───────────────────────────────────────
@@ -38,10 +38,10 @@ pub(crate) struct DocMeta {
 pub(crate) fn parse_doc(content: &str) -> Result<(DocMeta, &str), String> {
     let body = content
         .strip_prefix("---\n")
-        .ok_or_else(|| "缺少 YAML frontmatter 起始标记".to_string())?;
+        .ok_or_else(|| "Missing YAML frontmatter start marker".to_string())?;
     let end = body
         .find("\n---")
-        .ok_or_else(|| "缺少 YAML frontmatter 结束标记".to_string())?;
+        .ok_or_else(|| "Missing YAML frontmatter end marker".to_string())?;
     let header = &body[..end];
     let body_text = body[end + 4..].trim_start();
 
@@ -70,7 +70,7 @@ pub(crate) fn parse_doc(content: &str) -> Result<(DocMeta, &str), String> {
     }
 
     if id.is_empty() {
-        return Err("文档缺少 id 字段".to_string());
+        return Err("Document missing id field".to_string());
     }
 
     Ok((
@@ -189,13 +189,13 @@ pub(super) async fn resolve_doc_path(working_dir: &Path, id: &str) -> Result<Pat
     if type_prefix == "rprt" {
         find_rprt_path(working_dir, id)
             .await
-            .ok_or_else(|| format!("文档 {} 不存在", id))
+            .ok_or_else(|| format!("Document {} not found", id))
     } else if MUST_APPROVE_TYPES.contains(&type_prefix) {
         let dir = type_to_dir(type_prefix);
         let rel_path = format!(".shuji/{}/{}.md", dir, id);
         resolve_scoped_path(working_dir, &rel_path)
             .await
-            .map_err(|e| format!("路径错误: {}", e))
+            .map_err(|e| format!("Path error: {}", e))
     } else {
         let dir = type_to_dir(type_prefix);
         let rel_path = if dir.is_empty() {
@@ -205,6 +205,6 @@ pub(super) async fn resolve_doc_path(working_dir: &Path, id: &str) -> Result<Pat
         };
         resolve_scoped_path(working_dir, &rel_path)
             .await
-            .map_err(|e| format!("路径错误: {}", e))
+            .map_err(|e| format!("Path error: {}", e))
     }
 }

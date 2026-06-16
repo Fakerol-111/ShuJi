@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { API_URL_PRESETS, MODEL_PRESETS } from '../../constants/presets';
 
 interface RoleFormState {
@@ -39,21 +40,22 @@ export default function ApiSettingsTab({
   onApplyDefaultToAll,
   onApplyRoleToOthers,
 }: ApiSettingsTabProps) {
+  const { t } = useTranslation();
   const customCount = roleList.filter((r) => !(useDefault[r.key] ?? true)).length;
 
   return (
     <div className="space-y-3">
       {/* ── Default role ── */}
       <div className="space-y-1.5 pb-2 border-b border-ink-700">
-        <span className="text-[11px] font-semibold text-ink-300">默认（全局）</span>
+        <span className="text-[11px] font-semibold text-ink-300">{t('common.default')}</span>
         <ConfigInput
-          label="API 密钥"
+          label={t('setup.apiKey')}
           type="password"
           value={defaultCfg.api_key}
           onChange={(v) => setDefaultCfg({ ...defaultCfg, api_key: v })}
         />
         <ConfigInput
-          label="API URL"
+          label={t('setup.apiUrl')}
           value={defaultCfg.api_url}
           onChange={(v) => setDefaultCfg({ ...defaultCfg, api_url: v })}
         />
@@ -88,9 +90,9 @@ export default function ApiSettingsTab({
       {/* ── Per-role overrides ── */}
       <div className="space-y-0.5">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-[11px] font-semibold text-ink-300">各角色覆盖</span>
+          <span className="text-[11px] font-semibold text-ink-300">{t('settings.apiRoleOverrides')}</span>
           <span className="text-[10px] text-ink-500">
-            {customCount}/{roleList.length} 个使用自定义
+            {t('settings.customCount', { count: customCount, total: roleList.length })}
           </span>
         </div>
 
@@ -100,7 +102,7 @@ export default function ApiSettingsTab({
             onClick={onApplyDefaultToAll}
             className="w-full text-[10px] px-2 py-1 mb-1 rounded bg-ink-800 text-ink-400 hover:bg-ink-700 hover:text-ink-200 transition-colors"
           >
-            全部恢复默认
+            {t('common.restoreDefault')}
           </button>
         )}
 
@@ -114,7 +116,7 @@ export default function ApiSettingsTab({
               ? 'DeepSeek'
               : effective.api_url.includes('openai.com')
                 ? 'OpenAI'
-                : '自定义';
+                : t('common.custom');
           return (
             <div key={r.key} className="border border-ink-800 rounded">
               <button
@@ -132,7 +134,7 @@ export default function ApiSettingsTab({
                     onChange={() => toggleDefault(r.key)}
                     className="accent-ink-500"
                   />
-                  <span className="text-[10px] text-ink-500 whitespace-nowrap">使用默认</span>
+                  <span className="text-[10px] text-ink-500 whitespace-nowrap">{t('common.useDefault')}</span>
                 </label>
                 <span className="flex-1 text-left">{r.label}</span>
                 <span className="text-[10px] text-ink-500 italic">{provider}</span>
@@ -141,20 +143,20 @@ export default function ApiSettingsTab({
                 <div className="px-2 pb-2 space-y-1">
                   {usingDefault ? (
                     <div className="text-[10px] text-ink-500 italic px-1 py-2">
-                      使用默认配置（{defaultCfg.model || '未设置'}）
+                      {t('settings.usingDefaultConfig', { model: defaultCfg.model || t('setup.notSet') })}
                       <br />
-                      取消勾选"使用默认"可单独设置
+                      {t('settings.uncheckToCustomize')}
                     </div>
                   ) : (
                     <>
                       <ConfigInput
-                        label="API 密钥"
+                        label={t('setup.apiKey')}
                         type="password"
                         value={overrides[r.key]?.api_key ?? ''}
                         onChange={(v) => setOverride(r.key, 'api_key', v)}
                       />
                       <ConfigInput
-                        label="API URL"
+                        label={t('setup.apiUrl')}
                         value={overrides[r.key]?.api_url ?? ''}
                         onChange={(v) => setOverride(r.key, 'api_url', v)}
                       />
@@ -167,7 +169,7 @@ export default function ApiSettingsTab({
                         onClick={() => onApplyRoleToOthers(r.key)}
                         className="w-full text-[10px] px-2 py-1 mt-1 rounded bg-blue-900/30 text-blue-400 hover:bg-blue-900/50 transition-colors"
                       >
-                        应用到所有其他角色
+                        {t('common.applyToAll')}
                       </button>
                     </>
                   )}
@@ -216,11 +218,12 @@ function ModelSuggestions({
   model: string;
   onSelect: (model: string) => void;
 }) {
+  const { t } = useTranslation();
   const suggestions = MODEL_PRESETS[url];
   if (suggestions && suggestions.length > 0) {
     return (
       <label className="block">
-        <span className="text-[10px] text-ink-500">模型</span>
+        <span className="text-[10px] text-ink-500">{t('setup.model')}</span>
         <div className="flex gap-1 flex-wrap mt-0.5">
           {suggestions.map((m) => (
             <button
@@ -239,5 +242,5 @@ function ModelSuggestions({
       </label>
     );
   }
-  return <ConfigInput label="模型" value={model} onChange={onSelect} />;
+  return <ConfigInput label={t('setup.model')} value={model} onChange={onSelect} />;
 }

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getTokenStats, getRoundMetrics } from '../api';
 import { useDeptEvents } from '../hooks/useDeptEvents';
 import { getDeptMeta, DEPT_META_LIST } from '../constants';
 import DeptStatusPanel from './DeptStatusPanel';
 
 export default function DutyBar() {
+  const { t } = useTranslation();
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [tokenExpanded, setTokenExpanded] = useState(false);
   const { activeDepts, latestLogs } = useDeptEvents();
@@ -62,10 +64,10 @@ export default function DutyBar() {
       <div className="h-7 bg-ink-900 border-t border-ink-800 flex items-center px-2 text-caption gap-0">
         <div className="flex items-center gap-1 min-w-0 shrink-0">
           <span className="text-gold/60 text-caption font-serif font-semibold tracking-wider mr-0.5">
-            值事
+            {t('duty.title')}
           </span>
           {deptArray.length === 0 ? (
-            <span className="text-ink-500 italic text-caption">诸司无事</span>
+            <span className="text-ink-500 italic text-caption">{t('activityBar.allQuiet')}</span>
           ) : (
             deptArray.map((dept) => {
               const meta = getDeptMeta(dept);
@@ -99,7 +101,7 @@ export default function DutyBar() {
         <div className="ml-auto flex items-center gap-2 text-caption font-mono text-ink-500 shrink-0">
           {hasActive && round.started_at > 0 && (
             <>
-              <span className="text-gold/60">输出</span>
+              <span className="text-gold/60">{t('duty.output')}</span>
               <span className="text-ink-300">{formatToken(tokenCompletion)}</span>
             </>
           )}
@@ -117,10 +119,10 @@ export default function DutyBar() {
         <button
           onClick={() => setTokenExpanded((v) => !v)}
           className="ml-2 pl-2 border-l border-ink-800 flex items-center gap-1 text-caption text-ink-500 hover:text-ink-300 font-mono shrink-0"
-          title="度支明细"
+          title={t('duty.tokens')}
         >
           <span>{tokenExpanded ? '▾' : '▸'}</span>
-          度支
+          {t('duty.tokens')}
         </button>
 
         <button
@@ -128,20 +130,20 @@ export default function DutyBar() {
           className="ml-2 pl-2 border-l border-ink-800 flex items-center gap-1 text-caption text-ink-500 hover:text-ink-300 font-mono shrink-0"
         >
           <span>{logsExpanded ? '▾' : '▸'}</span>
-          日志
+          {t('duty.logs')}
         </button>
       </div>
 
       {tokenExpanded && (
         <div className="max-h-32 overflow-y-auto bg-ink-950 px-3 py-1.5 border-t border-ink-800">
           <div className="flex items-center gap-3 text-caption font-mono text-ink-500">
-            <span className="text-jade/80">输入缓存命中</span>
+            <span className="text-jade/80">{t('duty.cacheHit')}</span>
             <span className="text-ink-300">{formatToken(tokenCached)}</span>
             <span className="text-ink-700">|</span>
-            <span className="text-ink-400">输入缓存未命中</span>
+            <span className="text-ink-400">{t('token.cacheMiss')}</span>
             <span className="text-ink-300">{formatToken(tokenPrompt - tokenCached)}</span>
             <span className="text-ink-700">|</span>
-            <span className="text-gold/60">输出</span>
+            <span className="text-gold/60">{t('duty.output')}</span>
             <span className="text-ink-300">{formatToken(tokenCompletion)}</span>
             {tokenCost !== null && (
               <>

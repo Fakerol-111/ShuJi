@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -23,13 +24,14 @@ interface DocPreviewProps {
 type ViewMode = 'content' | 'diff' | 'lineage';
 
 const REJECTION_REASONS = [
-  { label: '缺少 API 定义', value: '缺少 API 定义' },
-  { label: '缺少测试策略', value: '缺少测试策略' },
-  { label: '范围过大需拆分', value: '范围过大需拆分' },
-  { label: '自定义', value: '' },
+  { labelKey: 'docPreview.reasonNoApi', value: '缺少 API 定义' },
+  { labelKey: 'docPreview.reasonNoTest', value: '缺少测试策略' },
+  { labelKey: 'docPreview.reasonTooBroad', value: '范围过大需拆分' },
+  { labelKey: 'docPreview.reasonCustom', value: '' },
 ];
 
 export default function DocPreview({ projectDir, docPath, initialTab, onClose }: DocPreviewProps) {
+  const { t } = useTranslation();
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -98,7 +100,7 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
       try {
         await sendMessage(msg);
       } catch (e) {
-        setApprovalError(`已朱批但未通知内阁：${formatError(e)}。您可以手动发送消息继续`);
+        setApprovalError(t('docPreview.approvalNotifyFailed', { error: formatError(e) }));
         // Still refresh the doc to show updated status
         const doc = await readShujiDoc(projectDir, docPath);
         setContent(doc.content);
@@ -119,7 +121,7 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
     }
   };
 
-  if (loading) return <div className="p-6 text-body text-ink-400">开卷中…</div>;
+  if (loading) return <div className="p-6 text-body text-ink-400">{t('docPreview.loading')}</div>;
   if (error) return <div className="p-6 text-body text-vermillion">{error}</div>;
 
   return (
@@ -138,7 +140,7 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
             <button
               onClick={onClose}
               className="shrink-0 w-5 h-5 flex items-center justify-center rounded text-caption text-ink-400 hover:text-ink-900 hover:bg-ink-200/60 transition-colors"
-              title="关闭"
+              title={t('common.close')}
             >
               ✕
             </button>
@@ -155,7 +157,7 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
                 : 'border-transparent text-ink-400 hover:text-ink-600'
             }`}
           >
-            全文
+            {t('document.fullText')}
           </button>
           {diffData?.has_previous && (
             <button
@@ -166,7 +168,7 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
                   : 'border-transparent text-ink-400 hover:text-ink-600'
               }`}
             >
-              差异
+              {t('document.diff')}
               <span className="ml-1.5 text-caption text-ink-400">
                 {diffData ? `+${diffData.added}/-${diffData.removed}` : ''}
               </span>
@@ -181,7 +183,7 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
                   : 'border-transparent text-ink-400 hover:text-ink-600'
               }`}
             >
-              血缘
+              {t('document.lineage')}
             </button>
           )}
         </div>
@@ -191,8 +193,8 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
           <div className="mb-4 rounded-xl border border-vermillion/30 bg-surface-elevated p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-display text-sm font-bold text-ink-900">待陛下朱批</h3>
-                <p className="text-caption text-ink-600 mt-0.5">此文档需皇帝御批后方可继续执行</p>
+                <h3 className="font-display text-sm font-bold text-ink-900">{t('document.pendingApproval')}</h3>
+                <p className="text-caption text-ink-600 mt-0.5">{t('document.approvalRequired')}</p>
               </div>
               <div className="flex gap-2">
                 <button
@@ -200,21 +202,21 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
                   disabled={approving}
                   className="bg-jade hover:bg-jade/80 text-white text-ui font-bold px-4 py-2 rounded-lg transition disabled:opacity-50"
                 >
-                  {approving ? '处理中...' : '准奏'}
+                  {approving ? t('common.loading') : t('document.approve')}
                 </button>
                 <button
                   onClick={() => handleApproval('rejected')}
                   disabled={approving}
                   className="bg-vermillion hover:bg-vermillion-dark text-white text-ui font-bold px-4 py-2 rounded-lg transition disabled:opacity-50"
                 >
-                  封还
+                  {t('document.reject')}
                 </button>
               </div>
             </div>
             <div className="mt-2 flex gap-2">
               <input
                 type="text"
-                placeholder="御批备注（可选）..."
+                placeholder={t('document.imperialNote')}
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 className="flex-1 px-3 py-1.5 border border-fold rounded-lg text-body bg-surface-parchment"
@@ -225,11 +227,11 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
                 className="px-2 py-1.5 border border-fold rounded-lg text-caption bg-surface-parchment text-ink-600"
               >
                 <option value="" disabled>
-                  驳回模板
+                  {t('document.rejectionTemplate')}
                 </option>
                 {REJECTION_REASONS.map((r) => (
                   <option key={r.value || '__custom'} value={r.value}>
-                    {r.label}
+                    {t(r.labelKey)}
                   </option>
                 ))}
               </select>
@@ -240,23 +242,23 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
 
         {viewMode === 'lineage' ? (
           lineageLoading ? (
-            <div className="p-6 text-body text-ink-400">追溯血缘中…</div>
+            <div className="p-6 text-body text-ink-400">{t('docPreview.loadingLineage')}</div>
           ) : lineage ? (
             <LineageTree node={lineage} depth={0} />
           ) : (
-            <div className="p-6 text-body text-ink-400 text-center">无血缘信息</div>
+            <div className="p-6 text-body text-ink-400 text-center">{t('docPreview.noLineage')}</div>
           )
         ) : viewMode === 'diff' && diffData ? (
           <DiffView diff={diffData.diff} />
         ) : diffLoading ? (
-          <div className="p-6 text-body text-ink-400">加载差异中…</div>
+          <div className="p-6 text-body text-ink-400">{t('docPreview.loadingDiff')}</div>
         ) : (
           <>
             {isShujiMarkdown && parsed.meta && <FrontmatterCard meta={parsed.meta} />}
             {isMarkdown ? (
               <article className="prose prose-shuji max-w-none">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {(isShujiMarkdown ? parsed.body : content) || '_文件为空_'}
+                  {(isShujiMarkdown ? parsed.body : content) || t('docPreview.fileEmpty')}
                 </ReactMarkdown>
               </article>
             ) : (
@@ -270,8 +272,9 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
 }
 
 function DiffView({ diff }: { diff: string }) {
+  const { t } = useTranslation();
   if (!diff) {
-    return <div className="p-6 text-body text-ink-400 text-center">无差异内容</div>;
+    return <div className="p-6 text-body text-ink-400 text-center">{t('docPreview.noDiff')}</div>;
   }
 
   const lines = diff.split('\n');
@@ -314,7 +317,7 @@ function DiffView({ diff }: { diff: string }) {
               return (
                 <tr key={i} style={{ backgroundColor: bgColor }}>
                   <td className="pl-4 pr-6 whitespace-pre align-top" style={{ color: textColor }}>
-                    {line || ' '}
+                    {line || ' '}
                   </td>
                 </tr>
               );
@@ -327,7 +330,8 @@ function DiffView({ diff }: { diff: string }) {
 }
 
 function CodePreview({ content, path }: { content: string; path: string }) {
-  const lines = (content || '文件为空').split(/\r?\n/);
+  const { t } = useTranslation();
+  const lines = (content || t('docPreview.fileEmpty')).split(/\r?\n/);
   const language = languageName(path);
 
   return (
@@ -384,7 +388,7 @@ function CodePreview({ content, path }: { content: string; path: string }) {
                   className="pl-4 pr-6 whitespace-pre align-top"
                   style={{ color: 'var(--code-text)' }}
                 >
-                  {line || ' '}
+                  {line || ' '}
                 </td>
               </tr>
             ))}
@@ -431,17 +435,18 @@ function fileGlyph(path: string) {
 }
 
 function FrontmatterCard({ meta }: { meta: Record<string, string> }) {
+  const { t } = useTranslation();
   const labels: Record<string, string> = {
     id: 'ID',
-    type: '类型',
-    author: '作者',
-    timestamp: '时间',
-    refs: '引用',
-    status: '状态',
+    type: t('document.type'),
+    author: t('document.author'),
+    timestamp: t('document.time'),
+    refs: t('document.refs'),
+    status: t('document.status'),
   };
   return (
     <Card variant="parchment" className="mb-5 border-l-vermillion border-l-[3px] p-4">
-      <div className="font-display text-ui text-ink-600 font-semibold mb-2">票拟</div>
+      <div className="font-display text-ui text-ink-600 font-semibold mb-2">{t('document.ticket')}</div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {Object.entries(meta).map(([key, value]) => {
           const statusColor =

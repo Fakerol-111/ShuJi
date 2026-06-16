@@ -1,7 +1,7 @@
 //! `run_lint` tool: runs project-appropriate linter and returns structured output.
 //!
 //! Shared implementation with `validate::lint` — this is the tool interface
-//! that agents (工部, 礼部) can invoke during execution.
+//! that agents (Gongbushangshu, Liburshangshu) can invoke during execution.
 
 use std::path::Path;
 
@@ -70,7 +70,7 @@ pub async fn tool_run_lint(working_dir: &Path, args: &serde_json::Value) -> Stri
                 ToolOutput::success(
                     "run_lint",
                     "",
-                    &format!("lint 通过 (warnings={})", warning_count),
+                    &format!("lint passed (warnings={})", warning_count),
                 )
             } else {
                 ToolOutput::error(
@@ -78,7 +78,7 @@ pub async fn tool_run_lint(working_dir: &Path, args: &serde_json::Value) -> Stri
                     "",
                     "lint_failed",
                     &format!(
-                        "lint 失败 exit={} errors={} warnings={}",
+                        "lint failed exit={} errors={} warnings={}",
                         exit_code, error_count, warning_count
                     ),
                 )
@@ -126,13 +126,13 @@ pub fn run_lint_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "run_lint".into(),
-            description: "运行当前项目的 lint 检查（clippy / ruff / npm run lint），返回 pass/fail 结果。strict=true 时 warning 也算 fail。".into(),
+            description: "Run lint checks for the current project (clippy / ruff / npm run lint), returns pass/fail result. When strict=true, warnings also count as failure.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "strict": {
                         "type": "boolean",
-                        "description": "默认 false。true 时 warnings 也算失败"
+                        "description": "Default false. When true, warnings are also considered failure"
                     }
                 }
             }),

@@ -1,7 +1,7 @@
-//! 尚书省特殊工具：向六部分派任务并等待回复。
+//! Shangshuling special tools: assign tasks to the six ministries and wait for replies.
 //!
-//! `assign_task` 是尚书省的核心调度工具。它向目标部门发送 ActorMessage，
-//! 通过 reply_to 通道阻塞等待执行结果，并在 workflow graph 中记录边。
+//! `assign_task` is Shangshuling's core dispatch tool. It sends an ActorMessage to the target department,
+//! blocks via the reply_to channel for the execution result, and records edges in the workflow graph.
 
 use crate::actor::ActorMessage;
 use crate::api::control::RouteMsgType;
@@ -9,7 +9,7 @@ use crate::models::role::Role;
 use crate::tool::ToolContext;
 use tokio::sync::mpsc;
 
-/// 尚书省特殊工具分发器。匹配到 assign_task 则处理，否则返回 None。
+/// Shangshuling special tool dispatcher. Processes assign_task if matched, otherwise returns None.
 pub async fn tool_handle_shangshuling_special(
     name: &str,
     args: &serde_json::Value,
@@ -21,15 +21,15 @@ pub async fn tool_handle_shangshuling_special(
     }
 }
 
-/// 向目标部门分派任务，阻塞等待完成，返回执行结果。
+/// Assign a task to the target department, block until completion, return execution result.
 ///
-/// 流程：
-/// 1. 验证目标部门和任务描述
-/// 2. 从 ctx.peers 获取目标部门的 Actor 信道
-/// 3. 创建 reply_to 通道等待回复
-/// 4. 发送 ActorMessage，记录文移图边
-/// 5. 阻塞等待部门完成
-/// 6. 返回结构化结果（含部门产出内容）
+/// Flow:
+/// 1. Validate target department and task description
+/// 2. Get target department's Actor channel from ctx.peers
+/// 3. Create reply_to channel to wait for reply
+/// 4. Send ActorMessage, record workflow graph edge
+/// 5. Block until department completes
+/// 6. Return structured result (including department output)
 async fn tool_assign_task(args: &serde_json::Value, ctx: &ToolContext) -> String {
     let target_name = args["to"].as_str().unwrap_or("");
     let task = args["task"].as_str().unwrap_or("");
@@ -38,7 +38,7 @@ async fn tool_assign_task(args: &serde_json::Value, ctx: &ToolContext) -> String
         return serde_json::json!({
             "ok": false,
             "operation": "assign_task",
-            "message": "缺少目标部门（to 参数)",
+            "message": "Missing target department (to parameter)",
             "error_code": "missing_target"
         })
         .to_string();
@@ -47,7 +47,7 @@ async fn tool_assign_task(args: &serde_json::Value, ctx: &ToolContext) -> String
         return serde_json::json!({
             "ok": false,
             "operation": "assign_task",
-            "message": "缺少任务描述（task 参数)",
+            "message": "Missing task description (task parameter)",
             "error_code": "missing_task"
         })
         .to_string();
@@ -59,7 +59,7 @@ async fn tool_assign_task(args: &serde_json::Value, ctx: &ToolContext) -> String
             return serde_json::json!({
                 "ok": false,
                 "operation": "assign_task",
-                "message": format!("未知部门: {}", target_name),
+                "message": format!("Unknown department: {}", target_name),
                 "error_code": "unknown_department"
             })
             .to_string();
@@ -72,7 +72,7 @@ async fn tool_assign_task(args: &serde_json::Value, ctx: &ToolContext) -> String
             return serde_json::json!({
                 "ok": false,
                 "operation": "assign_task",
-                "message": "调度系统未初始化（peers 不可用）",
+                "message": "Dispatch system not initialized (peers unavailable)",
                 "error_code": "no_peers"
             })
             .to_string();
@@ -85,14 +85,14 @@ async fn tool_assign_task(args: &serde_json::Value, ctx: &ToolContext) -> String
             return serde_json::json!({
                 "ok": false,
                 "operation": "assign_task",
-                "message": format!("找不到 {} 的信道", target_name),
+                "message": format!("Cannot find channel for {}", target_name),
                 "error_code": "channel_not_found"
             })
             .to_string();
         }
     };
 
-    // 创建回复通道
+    // Create reply channel
     let (output_tx, mut output_rx) = mpsc::unbounded_channel::<String>();
 
     let msg = ActorMessage {
@@ -103,16 +103,16 @@ async fn tool_assign_task(args: &serde_json::Value, ctx: &ToolContext) -> String
     };
 
     log_console!(
-        "[shangshuling] assign_task: {} ← 分派任务: {}",
+        "[shangshuling] assign_task: {} <- assigned task: {}",
         target_name,
         task.chars().take(60).collect::<String>()
     );
 
-    // ── 文移图：记录尚书省 → 目标部门边 ──
+    // Workflow graph: record edge from Shangshuling -> target department
     if let Some(ref graph_lock) = ctx.workflow_graph {
         let mut g = graph_lock.lock().await;
         let step_id = format!("assign_{}", role.name());
-        g.add_edge("尚书令", target_name, &step_id, task);
+        g.add_edge("Shangshuling", target_name, &step_id, task);
         g.mark_active(target_name);
         let _ = g.save_to(&ctx.working_dir).await;
     }
@@ -121,23 +121,23 @@ async fn tool_assign_task(args: &serde_json::Value, ctx: &ToolContext) -> String
         return serde_json::json!({
             "ok": false,
             "operation": "assign_task",
-            "message": format!("发送消息到 {} 失败: {}", target_name, e),
+            "message": format!("Failed to send message to {}: {}", target_name, e),
             "error_code": "send_failed"
         })
         .to_string();
     }
 
-    // 等待部门完成
+    // Wait for department to complete
     match output_rx.recv().await {
         Some(output) => {
             let preview = output.chars().take(200).collect::<String>();
             log_console!(
-                "[shangshuling] assign_task: {} 完成: {}",
+                "[shangshuling] assign_task: {} completed: {}",
                 target_name,
                 preview
             );
 
-            // ── 文移图：标记完成 ──
+            // Workflow graph: mark completed
             if let Some(ref graph_lock) = ctx.workflow_graph {
                 let mut g = graph_lock.lock().await;
                 g.mark_completed(target_name);
@@ -148,17 +148,20 @@ async fn tool_assign_task(args: &serde_json::Value, ctx: &ToolContext) -> String
                 "ok": true,
                 "operation": "assign_task",
                 "department": target_name,
-                "message": format!("{} 任务完成", target_name),
+                "message": format!("{} task completed", target_name),
                 "result": output
             })
             .to_string()
         }
         None => {
-            log_console!("[shangshuling] assign_task: {} 信道意外关闭", target_name);
+            log_console!(
+                "[shangshuling] assign_task: {} channel unexpectedly closed",
+                target_name
+            );
             serde_json::json!({
                 "ok": false,
                 "operation": "assign_task",
-                "message": format!("{} 执行过程中信道意外关闭", target_name),
+                "message": format!("{} channel unexpectedly closed during execution", target_name),
                 "error_code": "channel_closed"
             })
             .to_string()

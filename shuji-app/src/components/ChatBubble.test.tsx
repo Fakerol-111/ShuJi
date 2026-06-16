@@ -118,7 +118,7 @@ describe('ChatBubble', () => {
     await user.click(screen.getByText('C. 补充御批'));
     // Should show textarea + 遵旨 + 作罢 buttons
     expect(screen.getByPlaceholderText('在此补充御批...')).toBeTruthy();
-    expect(screen.getByText('遵旨')).toBeTruthy();
+    expect(screen.getByText('确认')).toBeTruthy();
     expect(screen.getByText('作罢')).toBeTruthy();
   });
 
@@ -128,7 +128,7 @@ describe('ChatBubble', () => {
     render(<ChatBubble msg={msgWithOptions()} onOption={onOption} />);
     await user.click(screen.getByText('C. 补充御批'));
     await user.type(screen.getByPlaceholderText('在此补充御批...'), '务必在一个月内完成');
-    await user.click(screen.getByText('遵旨'));
+    await user.click(screen.getByText('确认'));
     expect(onOption).toHaveBeenCalledWith('C', '务必在一个月内完成');
   });
 

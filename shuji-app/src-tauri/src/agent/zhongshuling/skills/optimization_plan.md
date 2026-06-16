@@ -1,67 +1,67 @@
-# 优化方案
+# Optimization Plan
 
-基于代码分析报告产出分步优化方案时使用此模式。它连接"代码看起来是什么样的"和"如何让它变得更好"之间的鸿沟。
+Use this mode to produce a step-by-step optimization plan based on a code analysis report. It bridges the gap between "what the code looks like" and "how to make it better".
 
-## 何时使用
+## When to Use
 
-- 你有一份完成的代码分析（anls 文档），需要规划优化
-- 任务要求提供具体的性能改进方案
-- `workflow_optimize` 任务到达，带有可基于的分析
+- You have a completed code analysis (anls document) and need to plan optimizations
+- The task requires a specific performance improvement plan
+- A `workflow_optimize` task arrives with an analysis to base work on
 
-## 前置条件
+## Prerequisites
 
-- 一份分析文档（anls）或对目标代码的等效理解
-- 明确的优化目标（速度、内存、I/O、代码质量）
+- An analysis document (anls) or equivalent understanding of the target code
+- Clear optimization goals (speed, memory, I/O, code quality)
 
-## 工作方法
+## Work Method
 
-1. 读取任务中引用的分析文档
-2. 识别优化目标：
-   - 热点路径（最频繁执行的代码）
-   - 瓶颈（算法、I/O、分配）
-   - 低垂果实（风险最小的快速成果）
-3. 优先级排序：影响 vs 风险 vs 工作量
-4. 通过 `create_document(type="plan")` 创建优化方案
-5. 通过 `append_document` 分块填充
+1. Read the analysis document referenced in the task
+2. Identify optimization targets:
+   - Hot paths (most frequently executed code)
+   - Bottlenecks (algorithm, I/O, allocation)
+   - Low-hanging fruit (quick wins with minimal risk)
+3. Prioritize: impact vs risk vs effort
+4. Create an optimization plan via `create_document(type="plan")`
+5. Fill in chunks via `append_document`
 
-## 方案结构
+## Plan Structure
 
-方案文档（`.shuji/designs/`）必须包含：
-- **基线**：当前状态摘要（来自分析）
-- **目标**：具体、可衡量的目标（如"将端点延迟从 800ms 降至 200ms"）
-- **优化步骤**：有序列表，每步包含：
-  - 目标文件/函数
-  - 变更内容
-  - 预期影响
-  - 风险等级（低/中/高）
-- **验证**：如何衡量每步的成功
-- **回滚方案**：如果优化导致问题，如何恢复
+The plan document (`.shuji/designs/`) must contain:
+- **Baseline**: Current state summary (from analysis)
+- **Goal**: Specific, measurable targets (e.g., "reduce endpoint latency from 800ms to 200ms")
+- **Optimization steps**: Ordered list, each step containing:
+  - Target file/function
+  - What to change
+  - Expected impact
+  - Risk level (low/medium/high)
+- **Validation**: How to measure the success of each step
+- **Rollback plan**: How to revert if optimization causes issues
 
-## 风险管理
+## Risk Management
 
-- 最低风险的优化优先
-- 每步应可独立验证
-- 标记任何改变公开 API 行为的步骤
-- 如果某一步需要架构变更，注明 `workflow_refactor` 可能更合适
+- Lowest-risk optimizations first
+- Each step should be independently verifiable
+- Flag any step that changes public API behavior
+- If a step requires architecture change, note that `workflow_refactor` may be more appropriate
 
-## 路由
+## Routing
 
-- 方案完成 → 报告回去；路由取决于调用方工作流
+- Plan complete -> Report back; routing depends on the caller's workflow
 
-## 规则
+## Rules
 
-- 不实现优化——这是纯规划
-- 每步必须足够具体，工部无需猜测即可执行
-- 仅使用可衡量的目标——"让它更快"不是目标
+- Do not implement optimizations — this is pure planning
+- Each step must be specific enough for the Ministry of Works to execute without guessing
+- Use only measurable goals — "make it faster" is not a goal
 
-## 输出块
+## Output Block
 
-每次优化规划结束时，输出以下结构化摘要：
+At the end of each optimization plan, output the following structured summary:
 
 ```
-优化结论：<优化方向一句话>
-优化步骤数：<N>
-最高风险项：<风险描述，无则写"无">
-依赖/关联文档：<refs 编号列表>
-下一步路由：<目标部门，文档ID>
+Optimization Conclusion: <one-sentence optimization direction>
+Number of Optimization Steps: <N>
+Highest Risk Item: <risk description, or "None">
+Dependencies/Related Documents: <refs list>
+Next Route: <target department, document ID>
 ```

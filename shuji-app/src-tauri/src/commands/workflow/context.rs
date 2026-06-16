@@ -107,12 +107,12 @@ pub async fn compact_context(state: State<'_, AppState>, role: String) -> Result
         .lock()
         .await
         .clone()
-        .ok_or_else(|| friendly_error("没有加载项目"))?;
+        .ok_or_else(|| friendly_error("no open project"))?;
     let working_dir = std::path::Path::new(&dir);
 
     if crate::round_metrics::is_active(&role) {
         return Err(friendly_error(format!(
-            "角色 {} 正在执行中，请等待完成后再压缩",
+            "role {} is currently executing, please wait for completion before compacting",
             role
         )));
     }
@@ -121,7 +121,7 @@ pub async fn compact_context(state: State<'_, AppState>, role: String) -> Result
         let mut compacting = state.compacting_roles.lock().await;
         if !compacting.insert(role.clone()) {
             return Err(friendly_error(format!(
-                "角色 {} 正在被压缩中，请勿重复操作",
+                "role {} is already being compacted, please do not repeat the operation",
                 role
             )));
         }
@@ -150,7 +150,7 @@ async fn compact_impl(
 
     let mut ctx = PersistedContext::load_from(working_dir, role)
         .await
-        .ok_or_else(|| friendly_error(format!("角色 {} 没有找到上下文文件", role)))?;
+        .ok_or_else(|| friendly_error(format!("no context file found for role {}", role)))?;
 
     let thresholds = state
         .runtime_config
@@ -171,12 +171,15 @@ async fn compact_impl(
 
     if ep.api_key.is_empty() {
         return Err(friendly_error(format!(
-            "角色 {} 未配置 API 密钥，请在设置中配置",
+            "role {} has no API key configured, please configure in settings",
             role
         )));
     }
     if ep.api_url.is_empty() {
-        return Err(friendly_error(format!("角色 {} 未配置 API URL", role)));
+        return Err(friendly_error(format!(
+            "role {} has no API URL configured",
+            role
+        )));
     }
 
     let client = AnthropicClient::new(ep.api_key, ep.api_url);
@@ -204,12 +207,12 @@ async fn compact_impl(
     if performed {
         log_console!("[compact:manual] compaction completed for {}", role);
         Ok(format!(
-            "压缩完成（角色: {}，原始 {} tokens → 摘要 + {} 条最近消息）",
+            "Compaction complete (role: {}, original {} tokens -> summary + {} recent messages)",
             role, total_tokens, thresholds.keep_recent_count,
         ))
     } else {
         Err(friendly_error(format!(
-            "角色 {} 压缩失败——API 调用未返回有效摘要。请检查 API 配置后重试",
+            "Compaction failed for role {} -- API call did not return a valid summary. Please check API config and retry",
             role
         )))
     }

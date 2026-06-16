@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getWorkflowState } from '../api';
 import { docIdToPath } from '../utils/docPath';
 import type {
@@ -18,6 +19,55 @@ interface WorkflowStatusProps {
   onSelectDoc: (docPath: string) => void;
   collapsible?: boolean;
   defaultCollapsed?: boolean;
+}
+
+const STATUS_ICONS: Record<string, string> = {
+  NotStarted: '○',
+  Designing: '●',
+  Reviewing: '●',
+  PendingApproval: '⚑',
+  Rejected: '✗',
+  Approved: '✓',
+  TaskBreakdown: '●',
+  Testing: '●',
+  Implementing: '●',
+  Checking: '●',
+  Standards: '●',
+  Completed: '✓',
+  Logging: '●',
+  MinorIssue: '●',
+};
+
+function statusTKey(status: string): string {
+  const map: Record<string, string> = {
+    NotStarted: 'workflow.notStarted',
+    Designing: 'workflowStatus.designing',
+    Reviewing: 'workflowStatus.reviewing',
+    PendingApproval: 'workflow.pendingApproval',
+    Rejected: 'workflow.rejected',
+    Approved: 'workflow.approved',
+    TaskBreakdown: 'workflowStatus.taskBreakdown',
+    Testing: 'workflowStatus.testing',
+    Implementing: 'workflowStatus.implementing',
+    Checking: 'workflowStatus.checking',
+    Standards: 'workflowStatus.standards',
+    Completed: 'workflow.complete',
+    Logging: 'workflowStatus.logging',
+    MinorIssue: 'workflowStatus.minorIssue',
+    Blocked: 'workflow.blocked',
+  };
+  return map[status] || status;
+}
+
+function statusColor(status: string): string {
+  if (['Approved', 'Completed'].includes(status)) return 'text-jade';
+  if (status === 'NotStarted') return 'text-ink-300';
+  if (['PendingApproval', 'Rejected'].includes(status)) return 'text-vermillion';
+  return 'text-gold';
+}
+
+function isBlocked(status: string): boolean {
+  return status === 'PendingApproval' || status === 'Rejected';
 }
 
 const STORAGE_UI_KEY = 'shuji_ui_prefs';
@@ -44,96 +94,6 @@ function saveWorkflowCollapsed(collapsed: boolean) {
   } catch {}
 }
 
-// ── Profile display names ──────────────────────────────────────
-
-const PROFILE_LABELS: Record<string, string> = {
-  greenfield_standard: '新功能',
-  brownfield_optimize: '存量优化',
-  bugfix: '缺陷修复',
-  demo: '快速原型',
-};
-
-const STAGE_LABELS: Record<string, string> = {
-  init: '初始化',
-  expand: '需求展开',
-  design: '方案设计',
-  analysis: '代码分析',
-  plan: '方案规划',
-  review: '审查',
-  approval: '批复',
-  execution: '执行',
-  summary: '汇总',
-  done: '完成',
-};
-
-function stageLabel(id: string): string {
-  return STAGE_LABELS[id] || id;
-}
-
-function profileLabel(id: string): string {
-  return PROFILE_LABELS[id] || id;
-}
-
-// ── Color tokens mapped to status ───────────────────────────
-
-function statusDisplay(shortLabel: string): string {
-  const icons: Record<string, string> = {
-    未开始: '○',
-    设计: '●',
-    审查: '●',
-    待批: '⚑',
-    驳回: '✗',
-    批准: '✓',
-    拆解: '●',
-    测试: '●',
-    编码: '●',
-    验证: '●',
-    规范: '●',
-    完成: '✓',
-    记录: '●',
-    问题: '●',
-  };
-  return `${icons[shortLabel] || '●'} ${shortLabel}`;
-}
-
-function statusColor(status: string): string {
-  if (['Approved', 'Completed'].includes(status)) return 'text-jade';
-  if (status === 'NotStarted') return 'text-ink-300';
-  if (['PendingApproval', 'Rejected'].includes(status)) return 'text-vermillion';
-  return 'text-gold';
-}
-
-function designShortLabel(status: string): string {
-  const map: Record<string, string> = {
-    NotStarted: '未开始',
-    Designing: '设计',
-    Reviewing: '审查',
-    PendingApproval: '待批',
-    Rejected: '驳回',
-    Approved: '批准',
-  };
-  return map[status] || status;
-}
-
-function execShortLabel(status: string): string {
-  const map: Record<string, string> = {
-    NotStarted: '未开始',
-    TaskBreakdown: '拆解',
-    Testing: '测试',
-    Implementing: '编码',
-    Checking: '验证',
-    Standards: '规范',
-    Logging: '记录',
-    MinorIssue: '问题',
-    Completed: '完成',
-  };
-  return map[status] || status;
-}
-
-function isBlocked(status: string): boolean {
-  return status === 'PendingApproval' || status === 'Rejected';
-}
-
 export default function WorkflowStatus({
   phaseCount,
   phases,
@@ -145,6 +105,7 @@ export default function WorkflowStatus({
   collapsible,
   defaultCollapsed,
 }: WorkflowStatusProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(() => loadWorkflowExpanded(defaultCollapsed));
   const [wfState, setWfState] = useState<WFState | null>(null);
 
@@ -179,7 +140,7 @@ export default function WorkflowStatus({
   if (pendingApprovals.length > 0) {
     for (const docId of pendingApprovals.slice(0, 2)) {
       blockers.push({
-        type: '朱批',
+        type: t('document.pendingApproval'),
         text: docId,
         onClick: () => onSelectDoc(docIdToPath(docId)),
       });
@@ -188,23 +149,23 @@ export default function WorkflowStatus({
 
   if (activeDepts.length > 0) {
     blockers.push({
-      type: '执行',
-      text: activeDepts.join('、'),
+      type: t('workflow.execution'),
+      text: activeDepts.join(t('workflowStatus.join')),
     });
   }
 
   if (planInfo && !planInfo.complete && planInfo.batches.length > 0) {
     const ndone = planInfo.batches.filter((b) => b.status === 'done').length;
     blockers.push({
-      type: '工部',
-      text: `计划 ${ndone}/${planInfo.batches.length}`,
+      type: t('inspector.gongbuBatch'),
+      text: `${t('workflow.planning')} ${ndone}/${planInfo.batches.length}`,
     });
   }
 
   if (phases.length === 0 && !wfState) {
     return (
       <div className="bg-surface-paper border-b border-fold shrink-0 px-4 py-1.5">
-        <span className="text-caption text-ink-400">尚未启动流程</span>
+        <span className="text-caption text-ink-400">{t('workflow.notStarted')}</span>
       </div>
     );
   }
@@ -230,14 +191,14 @@ export default function WorkflowStatus({
         {/* Workflow profile badge */}
         {wfState && (
           <span className="text-caption px-1.5 py-[1px] rounded-full border border-ink-300 text-ink-500 bg-ink-100/30 whitespace-nowrap">
-            {profileLabel(wfState.profile_id)}
+            {t(`workflow.${wfState.profile_id === 'greenfield_standard' ? 'newFeature' : wfState.profile_id === 'brownfield_optimize' ? 'existingOptimization' : wfState.profile_id === 'bugfix' ? 'bugfix' : wfState.profile_id === 'demo' ? 'quickPrototype' : wfState.profile_id}`)}
           </span>
         )}
 
         {/* Current stage badge */}
         {wfState && wfState.current_stage !== 'init' && (
           <span className="text-caption px-1.5 py-[1px] rounded-full border border-gold/30 text-gold-700 bg-gold/8 whitespace-nowrap">
-            {stageLabel(wfState.current_stage)}
+            {t(`workflow.${wfState.current_stage}`)}
           </span>
         )}
 
@@ -249,9 +210,9 @@ export default function WorkflowStatus({
               onClick={b.onClick}
               className={[
                 'text-caption px-1.5 py-[1px] rounded-full border flex items-center gap-1 whitespace-nowrap',
-                b.type === '朱批'
+                b.type === t('document.pendingApproval')
                   ? 'border-vermillion/30 text-vermillion bg-vermillion/8 hover:bg-vermillion/15'
-                  : b.type === '执行'
+                  : b.type === t('workflow.execution')
                     ? 'border-gold/30 text-gold-700 bg-gold/8'
                     : 'border-ink-200 text-ink-500 bg-ink-100/50',
                 b.onClick ? 'cursor-pointer' : 'cursor-default',
@@ -259,15 +220,15 @@ export default function WorkflowStatus({
                 .filter(Boolean)
                 .join(' ')}
             >
-              {b.type === '朱批' && (
+              {b.type === t('document.pendingApproval') && (
                 <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
                 </svg>
               )}
-              {b.type === '执行' && (
+              {b.type === t('workflow.execution') && (
                 <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse inline-block shrink-0" />
               )}
-              {b.type === '工部' && (
+              {b.type === t('inspector.gongbuBatch') && (
                 <svg
                   className="w-3 h-3 shrink-0"
                   viewBox="0 0 24 24"
@@ -288,9 +249,9 @@ export default function WorkflowStatus({
 
           {blockers.length === 0 &&
             (overall === 'Approved' && phases.every((p) => p.execution === 'Completed') ? (
-              <span className="text-caption text-jade">所有阶段已完成</span>
+              <span className="text-caption text-jade">{t('workflow.allPhasesComplete')}</span>
             ) : (
-              <span className="text-caption text-ink-400">流程运行中</span>
+              <span className="text-caption text-ink-400">{t('common.inProgress')}</span>
             ))}
         </div>
 
@@ -306,7 +267,7 @@ export default function WorkflowStatus({
             }
             className="text-caption text-ink-400 hover:text-ink-600 shrink-0"
           >
-            {expanded ? '收起' : '详情'}
+            {expanded ? t('commandBar.collapse') : t('commandBar.details')}
           </button>
         )}
       </div>
@@ -318,16 +279,16 @@ export default function WorkflowStatus({
           {wfState && (
             <div className="pt-1.5 pb-1">
               <div className="flex items-center gap-2 mb-1 text-ink-500 font-medium">
-                <span>工作流</span>
+                <span>{t('commandBar.workflow')}</span>
                 <span className="text-caption px-1 rounded bg-ink-100/50">{wfState.governance}</span>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="px-2 py-0.5 rounded-full border border-ink-200 text-ink-500">
-                  {profileLabel(wfState.profile_id)}
+                  {t(`workflow.${wfState.profile_id === 'greenfield_standard' ? 'newFeature' : wfState.profile_id === 'brownfield_optimize' ? 'existingOptimization' : wfState.profile_id === 'bugfix' ? 'bugfix' : wfState.profile_id === 'demo' ? 'quickPrototype' : wfState.profile_id}`)}
                 </span>
                 <span className="text-ink-300">→</span>
                 <span className="px-2 py-0.5 rounded-full border border-gold/30 text-gold-700 bg-gold/8">
-                  {stageLabel(wfState.current_stage)}
+                  {t(`workflow.${wfState.current_stage}`)}
                 </span>
                 <span className="text-ink-300 mx-1 text-caption">
                   ({wfState.execution_chain_id})
@@ -350,17 +311,19 @@ export default function WorkflowStatus({
                     : String(eObj);
                 return (
                   <div key={phase.index} className="flex items-center gap-2">
-                    <span className="font-mono text-ink-400 w-14 shrink-0">阶段{phase.index}</span>
+                    <span className="font-mono text-ink-400 w-14 shrink-0">{t('commandBar.phase')}{phase.index}</span>
                     <span
                       className={`${statusColor(dStatus)} ${isBlocked(dStatus) ? 'font-medium' : ''}`}
                     >
-                      {statusDisplay(designShortLabel(dStatus))}
+                      {STATUS_ICONS[dStatus] || '●'} {t(statusTKey(dStatus), dStatus)}
                     </span>
                     <span className="text-ink-300 mx-0.5">|</span>
                     <span
                       className={eIsBlocked ? 'text-vermillion font-medium' : statusColor(eStr)}
                     >
-                      {eIsBlocked ? `⚑ 阻塞` : statusDisplay(execShortLabel(eStr))}
+                      {eIsBlocked
+                        ? `${STATUS_ICONS['Blocked'] || '⚑'} ${t('workflow.blocked')}`
+                        : `${STATUS_ICONS[eStr] || '●'} ${t(statusTKey(eStr), eStr)}`}
                     </span>
                   </div>
                 );

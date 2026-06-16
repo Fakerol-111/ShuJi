@@ -1,68 +1,68 @@
-# 影响评估
+# Impact Assessment
 
-评估提议变更的影响范围——哪些文件、模块和行为会受影响。这是风险分析工具，不是设计工具。
+Assess the impact scope of a proposed change — which files, modules, and behaviors will be affected. This is a risk analysis tool, not a design tool.
 
-## 何时使用
+## When to Use
 
-- 重大重构前，理解会触及哪些内容
-- 皇帝或内阁问"如果我们改变 X，会影响到什么"
-- 诊断确定修复方案后，评估修复的波及范围
-- 合并跨模块变更前
+- Before a major refactor, to understand what will be touched
+- The Emperor or Cabinet asks "if we change X, what will be affected"
+- After diagnosis determines a fix, to assess the blast radius of the fix
+- Before merging cross-module changes
 
-## 前置条件
+## Prerequisites
 
-- 一项提议变更：可以是设计文档、缺陷诊断、优化方案或直接请求
-- 对当前代码结构的理解（阅读分析文档或源代码）
+- A proposed change: can be a design document, defect diagnosis, optimization plan, or direct request
+- Understanding of the current code structure (read analysis documents or source code)
 
-## 工作方法
+## Work Method
 
-1. 读取提议的变更（设计、诊断、优化方案或任务描述）
-2. 识别变更点——哪些文件/函数将被修改
-3. 对每个变更点，追溯：
-   - 调用者：什么依赖此函数/签名
-   - 被调用者：此函数依赖什么
-   - 数据影响：哪些数据结构变更，以及什么读写它们
-   - API 影响：任何公开 API 或契约变更
-   - 测试影响：哪些测试需要更新
-4. 通过 `create_document(type="anls")` 创建影响报告
-5. 通过 `append_document` 分块填充
+1. Read the proposed change (design, diagnosis, optimization plan, or task description)
+2. Identify change points — which files/functions will be modified
+3. For each change point, trace:
+   - Callers: What depends on this function/signature
+   - Callees: What this function depends on
+   - Data impact: Which data structures change, and what reads/writes them
+   - API impact: Any public API or contract changes
+   - Test impact: Which tests need updating
+4. Create an impact report via `create_document(type="anls")`
+5. Fill in chunks via `append_document`
 
-## 报告结构
+## Report Structure
 
-影响报告（`.shuji/analysis/`）必须包含：
-- **变更摘要**：提议的内容，一段话
-- **直接影响**：将被修改的文件/函数
-- **波及效应**：依赖变更代码的文件（调用者、导入者）
-- **API/契约影响**：任何公开签名变更及迁移说明
-- **测试影响**：将破坏或需要更新的现有测试
-- **风险评估**：低/中/高，含具体风险因素
-- **缓解措施**：推荐的变更顺序以最小化风险
+The impact report (`.shuji/analysis/`) must contain:
+- **Change Summary**: What is proposed, one paragraph
+- **Direct Impact**: Files/functions that will be modified
+- **Ripple Effects**: Files that depend on the changed code (callers, importers)
+- **API/Contract Impact**: Any public signature changes with migration notes
+- **Test Impact**: Existing tests that will break or need updating
+- **Risk Assessment**: Low/medium/high, with specific risk factors
+- **Mitigation Measures**: Recommended change order to minimize risk
 
-## 依赖追溯
+## Dependency Tracing
 
-- 使用项目的导入/依赖结构
-- 从变更点出发向外扩展
-- 将不确定的影响标记为"需要验证"而非猜测
+- Use the project's import/dependency structure
+- Work outward from the change point
+- Mark uncertain impacts as "needs verification" rather than guessing
 
-## 路由
+## Routing
 
-- 评估完成 → 报告回去；路由取决于调用方工作流
+- Assessment complete -> Report back; routing depends on the caller's workflow
 
-## 规则
+## Rules
 
-- 从代码中追溯实际依赖，而非假设
-- 显式标记不确定性——不要把猜测当作事实
-- 如果波及范围意外之大，推荐更小的第一步
+- Trace actual dependencies from code, not assumptions
+- Explicitly mark uncertainty — do not present guesses as facts
+- If ripple effects are unexpectedly large, recommend a smaller first step
 
-## 输出块
+## Output Block
 
-每次影响评估结束时，输出以下结构化摘要：
+At the end of each impact assessment, output the following structured summary:
 
 ```
-评估结论：<影响范围一句话>
-直接影响文件数：<N>
-波及文件数：<N>
-API/契约变更：<有/无>
-风险等级：<低/中/高>
-依赖/关联文档：<refs 编号列表>
+Assessment Conclusion: <one-sentence impact scope>
+Directly Affected Files: <N>
+Ripple Effect Files: <N>
+API/Contract Changes: <Yes/No>
+Risk Level: <Low/Medium/High>
+Dependencies/Related Documents: <refs list>
 ```

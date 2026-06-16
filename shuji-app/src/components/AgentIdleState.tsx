@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { listShujiTree } from '../api';
 import { SealLogo } from './SealLogo';
 import type { ShujiEntry } from '../api';
@@ -34,6 +35,7 @@ export default function AgentIdleState({
 }: AgentIdleStateProps) {
   const [latestDocs, setLatestDocs] = useState<ShujiEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (!project?.working_dir) return;
@@ -54,16 +56,16 @@ export default function AgentIdleState({
     return (
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="text-center max-w-md">
-          <p className="text-ink-600 text-body mb-2">尚未开卷</p>
+          <p className="text-ink-600 text-body mb-2">{t('chat.noProject')}</p>
           <p className="text-ui text-ink-500 mb-6 leading-relaxed">
-            体验枢机：打开工作目录，拟旨下诏，驱动各部门协同运作。
+            {t('chat.idleDescription')}
           </p>
           {onOpenProject && (
             <button
               onClick={onOpenProject}
               className="px-5 py-2 bg-ink-900 text-ink-50 text-ui rounded-lg hover:bg-ink-800 transition-colors"
             >
-              打开项目
+              {t('workspace.openProject')}
             </button>
           )}
         </div>
@@ -89,7 +91,7 @@ export default function AgentIdleState({
 
         {/* 敕令示例 */}
         <div>
-          <h3 className="text-ui font-semibold text-ink-700 mb-2 title-rule-gold">敕令示例</h3>
+          <h3 className="text-ui font-semibold text-ink-700 mb-2 title-rule-gold">{t('chat.edictExamples')}</h3>
           <div className="flex flex-col gap-1.5">
             {EXAMPLES.map((text) => (
               <button
@@ -107,7 +109,7 @@ export default function AgentIdleState({
         {/* 最近牍章 */}
         {!loading && latestDocs.length > 0 && (
           <div>
-            <h3 className="text-ui font-semibold text-ink-700 mb-2 title-rule-gold">最近牍章</h3>
+            <h3 className="text-ui font-semibold text-ink-700 mb-2 title-rule-gold">{t('chat.recentDocuments')}</h3>
             <div className="flex flex-wrap gap-2">
               {latestDocs.map((doc) => {
                 const typeColor = DOC_TYPE_COLORS[doc.type_label] || '#8B7355';
@@ -133,7 +135,7 @@ export default function AgentIdleState({
         )}
 
         {loading && (
-          <p className="text-caption text-ink-400 text-center">开卷中…</p>
+          <p className="text-caption text-ink-400 text-center">{t('common.loading')}</p>
         )}
       </div>
     </div>

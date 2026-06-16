@@ -35,7 +35,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
                     crate::agent::neige::NeigeAgent::clear_paused_session(&ctx.working_dir).await;
                     paused_for_decision = false;
                 }
-                log_dept(&ctx, &role_name, "收到中断信号");
+                log_dept(&ctx, &role_name, "interrupt signal received");
                 // 清空信箱：中断后所有历史消息都已过时
                 while ctx.rx.try_recv().is_ok() {}
                 continue;
@@ -47,7 +47,11 @@ pub async fn run_actor(mut ctx: ActorContext) {
                     paused_for_decision = false;
                 }
                 pending_replace = Some(msg.subject.clone());
-                log_dept(&ctx, &role_name, &format!("收到替换指令: {}", msg.subject));
+                log_dept(
+                    &ctx,
+                    &role_name,
+                    &format!("replace instruction received: {}", msg.subject),
+                );
                 // 不 continue！直接 fall through 到执行逻辑，
                 // 让 pending_replace 立即生效
             }
@@ -98,7 +102,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
         crate::round_metrics::mark_active(&role_name);
 
         // ── Execute (with plan loop for 工部尚书) ────
-        log_dept(&ctx, &role_name, "开始处理");
+        log_dept(&ctx, &role_name, "started processing");
 
         let mut exec_iterations: u32 = 0;
         let mut last_plan_current: Option<usize> = None;
@@ -141,8 +145,8 @@ pub async fn run_actor(mut ctx: ActorContext) {
             if fast_cancel.load(Ordering::SeqCst) {
                 log_console!("[actor] {}: breaking exec loop (fast interrupt)", role_name);
                 if let Err(e) = ctx.emperor_tx.try_send(ChatMessage::new(
-                    "系统",
-                    &format!("{} 已被皇帝中断", role_name),
+                    "System",
+                    &format!("{} has been interrupted by the Emperor", role_name),
                 )) {
                     log_console!("[actor] emperor_tx full (interrupt): {}", e);
                 }
@@ -168,9 +172,9 @@ pub async fn run_actor(mut ctx: ActorContext) {
                 log_console!("[actor] {}: plan loop exceeded {} iterations without batch progress, forcing exit",
                     role_name, max_exec_iterations);
                 if let Err(e) = ctx.emperor_tx.try_send(ChatMessage::new(
-                    "系统",
+                    "System",
                     &format!(
-                        "{} 计划循环超过次数限制（同一批次内 {} 轮未推进），请重新路由",
+                        "{} plan loop exceeded iteration limit ({} rounds without batch progress in same batch), please re-route",
                         role_name, max_exec_iterations
                     ),
                 )) {
@@ -197,7 +201,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
 
             let step_result = {
                 let preview: String = content.chars().take(60).collect();
-                log_console!("[actor] {} ← 开始执行: {}", role_name, preview);
+                log_console!("[actor] {} ← started executing: {}", role_name, preview);
                 ctx.agent.execute(&input).await
             };
 
@@ -207,7 +211,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
                 .await
                 .is_none()
             {
-                log_console!("[actor] checkpoint save_final 失败 ({})", role_name);
+                log_console!("[actor] checkpoint save_final failed ({})", role_name);
             }
 
             match step_result {
@@ -221,7 +225,10 @@ pub async fn run_actor(mut ctx: ActorContext) {
 
                     let milestone = format!("{} | {}", role_name, summary);
                     if let Err(e) = ctx.milestone_tx.try_send(milestone) {
-                        log_console!("[actor] milestone_tx.try_send 失败 (执行完成): {}", e);
+                        log_console!(
+                            "[actor] milestone_tx.try_send failed (execution complete): {}",
+                            e
+                        );
                     }
                     if let Ok(mut shared) = ctx.shared_context.lock() {
                         shared.insert(ctx.role, output.content.clone());
@@ -235,7 +242,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
                         }
                         // Emit content to emperor (even when paired with route_to),
                         // but suppress purely internal routing notifications
-                        if !output.content.starts_with("已路由") {
+                        if !output.content.starts_with("routed to") {
                             self::emit_to_emperor(&ctx.emperor_tx, ctx.role, &output.content);
                         }
 
@@ -262,12 +269,12 @@ pub async fn run_actor(mut ctx: ActorContext) {
                                     );
                                     engine.save().await.ok();
 
-                                    // 文移图：预填充管道计划的所有 planned 边
+                                    // Pre-fill all pipeline plan edges on the workflow graph
                                     engine.preview_pipeline_on_graph().await;
 
                                     // Emit plan summary
                                     let plan_msg = format!(
-                                        "📋 管道计划已提交：{}（{} 步骤）",
+                                        "Pipeline plan submitted: {} ({} steps)",
                                         engine.runtime.plan.summary,
                                         engine.runtime.plan.steps.len(),
                                     );
@@ -284,16 +291,15 @@ pub async fn run_actor(mut ctx: ActorContext) {
                                                 &ctx.emperor_tx,
                                                 ctx.role,
                                                 &format!(
-                                                "✅ 管道计划「{}」已全部执行完毕，正在生成摘要…",
+                                                "Pipeline plan \"{}\" fully executed, generating summary...",
                                                 runtime.plan.summary),
                                             );
                                             crate::pipeline::PlanRuntime::cleanup(&ctx.project_dir)
                                                 .await;
 
-                                            // ── 唤醒内阁：汇报管道执行成果 ──
+                                            // ── Wake 内阁: report pipeline execution results ──
                                             let summary_task = format!(
-                                                "管道计划「{}」已全部执行完毕。请查阅各部门产出的文档和报告，\
-                                                向皇帝呈现一份完整的任务摘要，说明完成了哪些工作、产出了什么成果。",
+                                                "Pipeline plan \"{}\" has been fully executed. Please review documents and reports produced by all departments, and present a complete task summary to the Emperor, explaining what was accomplished and what output was produced.",
                                                 runtime.plan.summary);
                                             let summary_input = AgentInput {
                                                 role: ctx.role,
@@ -337,7 +343,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
                                                 &ctx.emperor_tx,
                                                 ctx.role,
                                                 &format!(
-                                                    "⏳ 管道等待用户输入（步骤 {}）：\n{}",
+                                                    "Pipeline waiting for user input (step {}):\n{}",
                                                     step_id, question
                                                 ),
                                             );
@@ -351,7 +357,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
                                                 &ctx.emperor_tx,
                                                 ctx.role,
                                                 &format!(
-                                                    "⏳ 管道等待审批（步骤 {}，文档 {}）",
+                                                    "Pipeline waiting for approval (step {}, doc {})",
                                                     step_id, doc_id
                                                 ),
                                             );
@@ -365,7 +371,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
                                                 &ctx.emperor_tx,
                                                 ctx.role,
                                                 &format!(
-                                                    "❌ 管道步骤 {} 执行失败：{}",
+                                                    "Pipeline step {} failed: {}",
                                                     step_id, reason
                                                 ),
                                             );
@@ -374,14 +380,14 @@ pub async fn run_actor(mut ctx: ActorContext) {
                                             self::emit_to_emperor(
                                                 &ctx.emperor_tx,
                                                 ctx.role,
-                                                "🛑 管道执行已中止",
+                                                "Pipeline execution aborted",
                                             );
                                             crate::pipeline::PlanRuntime::cleanup(&ctx.project_dir)
                                                 .await;
                                         }
                                         crate::pipeline::PipelineResult::Deadlock { .. } => {
                                             self::emit_to_emperor(&ctx.emperor_tx, ctx.role,
-                                                "❌ 管道死锁：所有剩余步骤的依赖无法满足，请检查计划。");
+                                                "Pipeline deadlock: remaining steps have unmet dependencies. Please review the plan.");
                                         }
                                     }
                                 }
@@ -454,27 +460,30 @@ pub async fn run_actor(mut ctx: ActorContext) {
                                 ctx_msg.matches("[x]").count() + ctx_msg.matches("[X]").count();
                             let total = done + ctx_msg.matches("[ ]").count();
                             let plan_action = if total > 0 {
-                                format!("执行计划：{}/{} 完成", done, total)
+                                format!("Plan: {}/{} complete", done, total)
                             } else {
-                                "执行计划已输出".to_string()
+                                "Plan output".to_string()
                             };
                             if let Err(e) = ctx
                                 .dept_log_tx
                                 .try_send(DeptLogEntry::new(&role_name, &plan_action))
                             {
-                                log_console!("[actor] dept_log_tx.try_send 失败 (计划): {}", e);
+                                log_console!("[actor] dept_log_tx.try_send failed (plan): {}", e);
                             }
                             if let Err(e) = ctx
                                 .dept_log_tx
-                                .try_send(DeptLogEntry::with_detail(&role_name, "计划", &ctx_msg))
+                                .try_send(DeptLogEntry::with_detail(&role_name, "plan", &ctx_msg))
                             {
-                                log_console!("[actor] dept_log_tx.try_send 失败 (计划详情): {}", e);
+                                log_console!(
+                                    "[actor] dept_log_tx.try_send failed (plan detail): {}",
+                                    e
+                                );
                             }
                             if let Err(e) = ctx
                                 .milestone_tx
                                 .try_send(format!("{} | {}", role_name, plan_action))
                             {
-                                log_console!("[actor] milestone_tx.send 失败 (计划): {}", e);
+                                log_console!("[actor] milestone_tx.send failed (plan): {}", e);
                             }
                             // Emit structured plan progress for frontend card
                             let plan_json = ctx.agent.plan_display();
@@ -505,11 +514,13 @@ pub async fn run_actor(mut ctx: ActorContext) {
                     }
                 }
                 Err(e) => {
-                    let err_msg = format!("执行错误: {}", e);
+                    let err_msg = format!("execution error: {}", e);
                     ctx.logger.log_agent(ctx.role, &err_msg).await;
                     log_dept(&ctx, &role_name, &format!("❌ {}", err_msg));
                     if ctx.role == Role::Neige {
-                        let _ = ctx.emperor_tx.try_send(ChatMessage::new("系统", &err_msg));
+                        let _ = ctx
+                            .emperor_tx
+                            .try_send(ChatMessage::new("System", &err_msg));
                     } else {
                         fallback_to_dispatcher(&ctx, &role_name, &e.to_string()).await;
                     }
@@ -527,7 +538,7 @@ pub async fn run_actor(mut ctx: ActorContext) {
 const MAX_FAILURE_RETRIES: u32 = 3;
 
 fn is_failure_fallback(content: &str) -> bool {
-    content.trim_start().starts_with("[失败回退")
+    content.trim_start().starts_with("[failure fallback")
 }
 
 fn reset_failure_retry(ctx: &ActorContext) {
@@ -539,8 +550,12 @@ fn reset_failure_retry(ctx: &ActorContext) {
 async fn fallback_to_dispatcher(ctx: &ActorContext, role_name: &str, error: &str) {
     if ctx.role == Role::Shangshuling {
         let _ = ctx.emperor_tx.try_send(ChatMessage::new(
-            "系统",
-            &format!("{} 执行失败，无法自回退。错误: {}", ctx.role.name(), error),
+            "System",
+            &format!(
+                "{} execution failed, cannot self-fallback. Error: {}",
+                ctx.role.name(),
+                error
+            ),
         ));
         return;
     }
@@ -553,9 +568,9 @@ async fn fallback_to_dispatcher(ctx: &ActorContext, role_name: &str, error: &str
         }
         Err(_) => {
             let _ = ctx.emperor_tx.try_send(ChatMessage::new(
-                "系统",
+                "System",
                 &format!(
-                    "{} 执行失败，且无法记录重试次数。错误: {}",
+                    "{} execution failed, and retry count could not be recorded. Error: {}",
                     ctx.role.name(),
                     error
                 ),
@@ -566,22 +581,26 @@ async fn fallback_to_dispatcher(ctx: &ActorContext, role_name: &str, error: &str
 
     if retry_count > MAX_FAILURE_RETRIES {
         if let Err(e) = ctx.emperor_tx.try_send(ChatMessage::new(
-            "系统",
+            "System",
             &format!(
-                "{} 执行失败，已重试 {} 次仍未解决。最后错误: {}\n请人工介入。",
+                "{} execution failed after {} retries. Last error: {}\nManual intervention required.",
                 ctx.role.name(),
                 MAX_FAILURE_RETRIES,
                 error,
             ),
         )) {
-            log_console!("[actor] emperor_tx.try_send 失败 (重试耗尽): {}", e);
+            log_console!("[actor] emperor_tx.try_send failed (retries exhausted): {}", e);
         }
-        log_dept(ctx, role_name, "失败回退次数耗尽，已上报");
+        log_dept(
+            ctx,
+            role_name,
+            "failure fallback retries exhausted, reported",
+        );
         return;
     }
 
     let fallback_content = format!(
-        "[失败回退|retry={}/{}]\n部门: {}\n错误: {}\n请重新调度到合适的部门修复。",
+        "[failure fallback|retry={}/{}]\nDepartment: {}\nError: {}\nPlease re-route to an appropriate department to fix.",
         retry_count,
         MAX_FAILURE_RETRIES,
         ctx.role.name(),
@@ -595,16 +614,16 @@ async fn fallback_to_dispatcher(ctx: &ActorContext, role_name: &str, error: &str
                 ctx,
                 role_name,
                 &format!(
-                    "→ 回退到尚书令 (retry {}/{})",
+                    "→ fallback to 尚书令 (retry {}/{})",
                     retry_count, MAX_FAILURE_RETRIES
                 ),
             );
         }
         None => {
             let _ = ctx.emperor_tx.try_send(ChatMessage::new(
-                "系统",
+                "System",
                 &format!(
-                    "{} 执行失败且无法回退（找不到尚书令）: {}",
+                    "{} execution failed and cannot fallback (尚书令 not found): {}",
                     ctx.role.name(),
                     error
                 ),
@@ -625,7 +644,7 @@ fn emit_to_emperor(tx: &mpsc::Sender<ChatMessage>, role: Role, content: &str) {
     let mut msg = ChatMessage::new(role_name, &clean_content);
     msg.options = options;
     if let Err(e) = tx.try_send(msg) {
-        log_console!("[actor] emperor_tx.try_send 失败 ({}): {}", role_name, e);
+        log_console!("[actor] emperor_tx.try_send failed ({}): {}", role_name, e);
     }
 }
 
@@ -684,6 +703,6 @@ fn extract_attr(tag: &str, attr: &str) -> Option<String> {
 /// Emit a department log entry to the frontend status panel.
 pub(super) fn log_dept(ctx: &ActorContext, dept: &str, action: &str) {
     if let Err(e) = ctx.dept_log_tx.try_send(DeptLogEntry::new(dept, action)) {
-        log_console!("[actor] dept_log_tx.try_send 失败 ({}): {}", dept, e);
+        log_console!("[actor] dept_log_tx.try_send failed ({}): {}", dept, e);
     }
 }

@@ -7,7 +7,7 @@ use super::parse::{build_doc, now_iso, parse_doc, parse_refs, resolve_doc_path};
 /// Add a document ID to the pending approvals list.
 pub async fn add_pending_approval(working_dir: &Path, doc_id: &str) -> Result<(), String> {
     let path = working_dir.join(".shuji/pending_approvals.json");
-    let shuji_dir = path.parent().ok_or("路径错误")?;
+    let shuji_dir = path.parent().ok_or("Path error")?;
     let _ = tokio::fs::create_dir_all(shuji_dir).await;
     let mut list: Vec<String> = tokio::fs::read_to_string(&path)
         .await
@@ -17,8 +17,8 @@ pub async fn add_pending_approval(working_dir: &Path, doc_id: &str) -> Result<()
     if !list.contains(&doc_id.to_string()) {
         list.push(doc_id.to_string());
     }
-    let json =
-        serde_json::to_string(&list).map_err(|e| format!("序列化 pending_approvals 失败: {e}"))?;
+    let json = serde_json::to_string(&list)
+        .map_err(|e| format!("Serializing pending_approvals failed: {e}"))?;
     tokio::fs::write(&path, json)
         .await
         .map_err(|e| e.to_string())
@@ -33,8 +33,8 @@ pub async fn remove_pending_approval(working_dir: &Path, doc_id: &str) -> Result
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default();
     list.retain(|id| id != doc_id);
-    let json =
-        serde_json::to_string(&list).map_err(|e| format!("序列化 pending_approvals 失败: {e}"))?;
+    let json = serde_json::to_string(&list)
+        .map_err(|e| format!("Serializing pending_approvals failed: {e}"))?;
     tokio::fs::write(&path, json)
         .await
         .map_err(|e| e.to_string())
@@ -60,7 +60,7 @@ pub async fn tool_set_document_status(working_dir: &Path, args: &serde_json::Val
             "set_document_status",
             "",
             "empty_params",
-            "id 和 status 不能为空",
+            "id and status cannot be empty",
         );
     }
     if !matches!(new_status, "approved" | "rejected") {
@@ -68,7 +68,7 @@ pub async fn tool_set_document_status(working_dir: &Path, args: &serde_json::Val
             "set_document_status",
             id,
             "invalid_status",
-            "status 必须是 approved 或 rejected",
+            "status must be approved or rejected",
         );
     }
 
@@ -81,7 +81,7 @@ pub async fn tool_set_document_status(working_dir: &Path, args: &serde_json::Val
             "set_document_status",
             id,
             "not_found",
-            &format!("文档 {} 不存在", id),
+            &format!("Document {} does not exist", id),
         );
     }
 
@@ -102,7 +102,7 @@ pub async fn tool_set_document_status(working_dir: &Path, args: &serde_json::Val
             "set_document_status",
             id,
             "wrong_type",
-            "只有 plan 和 revw 类型文档可以设置审批状态",
+            "Only plan and revw document types can have approval status set",
         );
     }
 
@@ -115,11 +115,11 @@ pub async fn tool_set_document_status(working_dir: &Path, args: &serde_json::Val
         Ok(_) => {
             let _ = remove_pending_approval(working_dir, id).await;
             let detail = format!("status={}", new_status);
-            crate::audit::append(working_dir, "set_document_status", "皇帝", id, &detail).await;
+            crate::audit::append(working_dir, "set_document_status", "emperor", id, &detail).await;
             ToolOutput::success(
                 "set_document_status",
                 id,
-                &format!("文档 {} 状态已设为 {}", id, new_status),
+                &format!("Document {} status set to {}", id, new_status),
             )
         }
         Err(e) => ToolOutput::error("set_document_status", id, "write_error", &e.to_string()),
@@ -131,22 +131,22 @@ pub fn set_document_status_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "set_document_status".into(),
-            description: "设置文档审批状态（approved/rejected）。仅适用于 plan、revw 类型文档。调用后文档状态变更，下游部门可继续执行。".into(),
+            description: "Set document approval status (approved/rejected). Only applies to plan and revw document types. After status change, downstream departments may proceed.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "id": {
                         "type": "string",
-                        "description": "文档 ID，如 plan_5 或 revw_3"
+                        "description": "Document ID, e.g. plan_5 or revw_3"
                     },
                     "status": {
                         "type": "string",
                         "enum": ["approved", "rejected"],
-                        "description": "批准(approved)或驳回(rejected)"
+                        "description": "approved or rejected"
                     },
                     "emperor_note": {
                         "type": "string",
-                        "description": "皇帝御批备注（可选）"
+                        "description": "Emperor's note (optional)"
                     }
                 },
                 "required": ["id", "status"]
@@ -198,13 +198,13 @@ pub async fn check_doc_refs_approved_for_route(
                 if let Ok((ref_meta, _)) = parse_doc(&ref_content) {
                     if ref_meta.status == "in_review" {
                         return Err(format!(
-                            "文档 {} 引用了 {}，该文档尚在待皇帝御批中（status: in_review）。请先处理审批。",
+                            "Document {} references {}, which is still awaiting emperor approval (status: in_review). Please handle the approval first.",
                             subject_doc_id, ref_id
                         ));
                     }
                     if ref_meta.status == "rejected" {
                         return Err(format!(
-                            "文档 {} 引用了 {}，该文档已被驳回（status: rejected）。请先处理驳回意见。",
+                            "Document {} references {}, which has been rejected (status: rejected). Please address the rejection feedback first.",
                             subject_doc_id, ref_id
                         ));
                     }

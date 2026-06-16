@@ -20,10 +20,10 @@ pub async fn list_checkpoints(
         .lock()
         .await
         .clone()
-        .ok_or("没有打开的项目")?;
+        .ok_or("no open project")?;
     let dir_path = Path::new(&dir);
     let mut entries = load_index(dir_path).await;
-    // 按时间倒序（最新的在前）
+    // Sort by time descending (newest first)
     entries.reverse();
 
     if let Some(r) = role {
@@ -53,12 +53,12 @@ pub async fn restore_checkpoint(
     // 1. Find the checkpoint in the index
     let (role, _entry) = find_checkpoint(dir_path, &commit_hash)
         .await
-        .ok_or_else(|| format!("未找到 checkpoint: {}", commit_hash))?;
+        .ok_or_else(|| format!("checkpoint not found: {}", commit_hash))?;
 
     // 2. Load the session snapshot (before git checkout, so we can write it back after)
     let snapshot = load_snapshot(dir_path, &role, &commit_hash)
         .await
-        .ok_or_else(|| format!("无法加载 checkpoint 快照: {}", commit_hash))?;
+        .ok_or_else(|| format!("unable to load checkpoint snapshot: {}", commit_hash))?;
 
     // 3. Check for uncommitted changes in the isolated .shuji/.git repo
     let status = git_cmd(dir_path)
@@ -78,7 +78,7 @@ pub async fn restore_checkpoint(
             .map_err(friendly_error)?;
         if !stash.status.success() {
             return Err(format!(
-                "暂存变更失败: {}",
+                "stash changes failed: {}",
                 String::from_utf8_lossy(&stash.stderr)
             ));
         }
@@ -92,7 +92,7 @@ pub async fn restore_checkpoint(
         .map_err(friendly_error)?;
     if !checkout.status.success() {
         return Err(format!(
-            "恢复失败: {}",
+            "restore failed: {}",
             String::from_utf8_lossy(&checkout.stderr)
         ));
     }
@@ -108,12 +108,12 @@ pub async fn restore_checkpoint(
 
     let summary = if has_changes {
         format!(
-            "已恢复到 {}（detached HEAD）。上下文已回滚，未提交的变更已暂存（git stash pop 可恢复）。",
+            "Restored to {} (detached HEAD). Context rolled back, uncommitted changes stashed (git stash pop to recover).",
             &commit_hash[..8]
         )
     } else {
         format!(
-            "已恢复到 {}（detached HEAD）。上下文已回滚。",
+            "Restored to {} (detached HEAD). Context rolled back.",
             &commit_hash[..8]
         )
     };

@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 export interface TabInfo {
   path: string;
   label: string;
@@ -12,6 +14,7 @@ interface TabBarProps {
 }
 
 export default function TabBar({ tabs, activeIndex, onSelect, onClose }: TabBarProps) {
+  const { t } = useTranslation();
   if (tabs.length === 0) return null;
 
   return (
@@ -35,9 +38,9 @@ export default function TabBar({ tabs, activeIndex, onSelect, onClose }: TabBarP
               onClose(i);
             }}
             className="ml-1 w-3.5 h-3.5 flex items-center justify-center rounded text-[10px] opacity-0 group-hover:opacity-100 hover:bg-ink-200/60 hover:text-ink-900 transition-opacity text-ink-400"
-            title="关闭"
+            title={t('common.close')}
             role="button"
-            aria-label={`关闭 ${tab.label}`}
+            aria-label={`${t('common.close')} ${tab.label}`}
           >
             ✕
           </span>

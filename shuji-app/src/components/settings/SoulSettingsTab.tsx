@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { SettingsSection, SettingsAction, SettingsHint } from './SettingsPrimitives';
 
 interface SoulSettingsTabProps {
@@ -5,10 +6,11 @@ interface SoulSettingsTabProps {
 }
 
 export default function SoulSettingsTab({ setSavedMsg }: SoulSettingsTabProps) {
+  const { t } = useTranslation();
   return (
     <SettingsSection
-      title="Soul 管理"
-      description="内阁跨会话积累的经验、教训与偏好，存储于 .shuji/soul.md"
+      title={t('settings.soulManagement')}
+      description={t('settings.soulManagement') + ' — .shuji/soul.md'}
     >
       <div className="flex gap-2 flex-wrap">
         <SettingsAction
@@ -17,19 +19,19 @@ export default function SoulSettingsTab({ setSavedMsg }: SoulSettingsTabProps) {
               const { getSoulContent } = await import('../../api');
               const content = await getSoulContent();
               if (!content) {
-                setSavedMsg('soul 为空或不存在');
+                setSavedMsg(t('common.noData'));
                 setTimeout(() => setSavedMsg(''), 2000);
                 return;
               }
               await navigator.clipboard.writeText(content);
-              setSavedMsg('soul 已复制到剪贴板');
+              setSavedMsg(t('common.saved'));
               setTimeout(() => setSavedMsg(''), 2000);
             } catch (e) {
               setSavedMsg(String(e));
             }
           }}
         >
-          导出 soul（复制）
+          {t('common.export')}
         </SettingsAction>
         <SettingsAction
           variant="danger"
@@ -37,17 +39,17 @@ export default function SoulSettingsTab({ setSavedMsg }: SoulSettingsTabProps) {
             try {
               const { clearSoul } = await import('../../api');
               await clearSoul();
-              setSavedMsg('soul 已重置为默认');
+              setSavedMsg(t('common.saved'));
               setTimeout(() => setSavedMsg(''), 2000);
             } catch (e) {
               setSavedMsg(String(e));
             }
           }}
         >
-          清空 soul
+          {t('common.delete')}
         </SettingsAction>
       </div>
-      <SettingsHint>soul 超过 8KB 时将自动压缩。单条经验/教训/偏好不超过 500 字符。</SettingsHint>
+      <SettingsHint>{t('common.noData')}</SettingsHint>
     </SettingsSection>
   );
 }

@@ -1,6 +1,7 @@
 id: demo
 version: 1
 label: "快速原型"
+label_en: "Quick Prototype"
 cabinet_skill: workflow_demo
 execution_chain: brownfield_patch
 gates:

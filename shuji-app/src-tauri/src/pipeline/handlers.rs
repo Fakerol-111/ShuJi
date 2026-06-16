@@ -57,12 +57,12 @@ pub async fn run_self_execute(
             match crate::validate::delivery::validate_delivery(project_dir, &opts).await {
                 Ok(report) => {
                     let pass_str = if report.overall_pass {
-                        "通过"
+                        "passed"
                     } else {
-                        "失败"
+                        "failed"
                     };
                     let msg = format!(
-                        "验证{}: {} ({} checks)",
+                        "Validation{}: {} ({} checks)",
                         pass_str,
                         report.project_type,
                         report.checks.len()
@@ -77,7 +77,7 @@ pub async fn run_self_execute(
                     }
                 }
                 Err(e) => Ok(SelfExecuteOutcome::Failed {
-                    reason: format!("验证执行异常: {}", e),
+                    reason: format!("validation execution error: {}", e),
                 }),
             }
         }
@@ -85,7 +85,7 @@ pub async fn run_self_execute(
             message: "noop handler executed successfully".into(),
             artifact: None,
         }),
-        _ => Err(format!("未知的 self_execute handler: {}", handler)),
+        _ => Err(format!("unknown self_execute handler: {}", handler)),
     }
 }
 
@@ -111,7 +111,7 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         let result = run_self_execute("bogus", &serde_json::json!({}), tmp.path()).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("未知"));
+        assert!(result.unwrap_err().contains("unknown"));
     }
 
     #[tokio::test]

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { SettingsCategory } from '../../pages/SettingsPage';
 
 interface SettingsSidebarProps {
@@ -89,18 +90,19 @@ function PaletteIcon() {
   );
 }
 
-const NAV_ITEMS: { key: SettingsCategory; icon: () => ReactNode; label: string }[] = [
-  { key: 'service', icon: SlidersIcon, label: '服务配置' },
-  { key: 'context', icon: FileTextIcon, label: '上下文窗口' },
-  { key: 'soul', icon: StarIcon, label: '灵魂管理' },
-  { key: 'appearance', icon: PaletteIcon, label: '外观' },
+const NAV_ITEMS: { key: SettingsCategory; icon: () => ReactNode; labelKey: string }[] = [
+  { key: 'service', icon: SlidersIcon, labelKey: 'settings.serviceConfig' },
+  { key: 'context', icon: FileTextIcon, labelKey: 'settings.contextWindow' },
+  { key: 'soul', icon: StarIcon, labelKey: 'settings.soulManagement' },
+  { key: 'appearance', icon: PaletteIcon, labelKey: 'settings.appearance' },
 ];
 
 export default function SettingsSidebar({ activeCategory, onSelect }: SettingsSidebarProps) {
+  const { t } = useTranslation();
   return (
     <nav className="w-52 shrink-0 bg-surface-parchment border-r border-fold flex flex-col">
       <div className="h-9 px-4 border-b border-fold flex items-center font-display text-ui font-semibold text-ink-700">
-        设置
+        {t('common.edit')}
       </div>
       <div className="p-2 space-y-0.5 flex-1">
         {NAV_ITEMS.map((item) => {
@@ -117,7 +119,7 @@ export default function SettingsSidebar({ activeCategory, onSelect }: SettingsSi
               }`}
             >
               <Icon />
-              <span className="font-medium">{item.label}</span>
+              <span className="font-medium">{t(item.labelKey)}</span>
             </button>
           );
         })}

@@ -16,7 +16,12 @@ pub async fn tool_create_document(
 ) -> String {
     let doc_type = args["type"].as_str().unwrap_or("").to_string();
     if doc_type.is_empty() {
-        return ToolOutput::error("create_document", "", "empty_type", "文档类型不能为空");
+        return ToolOutput::error(
+            "create_document",
+            "",
+            "empty_type",
+            "Document type cannot be empty",
+        );
     }
     let valid_types = [
         "dsgn", "plan", "pdsg", "ddtl", "task", "ctrt", "rprt", "revw", "precepts", "anls", "reqs",
@@ -27,7 +32,7 @@ pub async fn tool_create_document(
             "",
             "invalid_type",
             &format!(
-                "无效文档类型: {}，支持的类型: {}",
+                "Invalid document type: {}, supported types: {}",
                 doc_type,
                 valid_types.join(", ")
             ),
@@ -102,7 +107,7 @@ pub async fn tool_create_document(
                 "create_document",
                 &doc_id,
                 &format!(
-                    "文档 {} 创建成功\n【重要】后续操作（append/modify/set-status/route）请使用此 ID: {}",
+                    "Document {} created successfully\n【Important】Use this ID for subsequent operations (append/modify/set-status/route): {}",
                     doc_id, doc_id
                 ),
             )
@@ -119,30 +124,35 @@ pub async fn tool_modify_document(
 ) -> String {
     let id = args["id"].as_str().unwrap_or("");
     if id.is_empty() {
-        return ToolOutput::error("modify_document", "", "empty_id", "文档 ID 不能为空");
+        return ToolOutput::error(
+            "modify_document",
+            "",
+            "empty_id",
+            "Document ID cannot be empty",
+        );
     }
 
     if let Some(old_text) = args["old_text"].as_str() {
-        if old_text.len() > 300 {
+        if old_text.len() > 3000 {
             return ToolOutput::error(
                 "modify_document",
                 id,
                 "content_too_long",
                 &format!(
-                    "old_text 过长（{} 字符），最大 300。请缩小匹配范围。",
+                    "old_text too long ({} chars), max 3000. Narrow your match range.",
                     old_text.len()
                 ),
             );
         }
     }
     if let Some(new_text) = args["new_text"].as_str() {
-        if new_text.len() > 300 {
+        if new_text.len() > 3000 {
             return ToolOutput::error(
                 "modify_document",
                 id,
                 "content_too_long",
                 &format!(
-                    "new_text 过长（{} 字符），最大 300。请分批修改或使用 append_document。",
+                    "new_text too long ({} chars), max 3000. Modify in batches or use append_document.",
                     new_text.len()
                 ),
             );
@@ -158,7 +168,7 @@ pub async fn tool_modify_document(
                     "modify_document",
                     id,
                     "not_found",
-                    &format!("文档 {} 不存在", id),
+                    &format!("Document {} does not exist", id),
                 )
             }
         }
@@ -179,7 +189,7 @@ pub async fn tool_modify_document(
             "modify_document",
             id,
             "not_found",
-            &format!("文档 {} 不存在", id),
+            &format!("Document {} does not exist", id),
         );
     }
 
@@ -196,14 +206,19 @@ pub async fn tool_modify_document(
     let new_body = if let Some(old_text) = args["old_text"].as_str() {
         let new_text = args["new_text"].as_str().unwrap_or("");
         if old_text.is_empty() {
-            return ToolOutput::error("modify_document", id, "empty_old_text", "old_text 不能为空");
+            return ToolOutput::error(
+                "modify_document",
+                id,
+                "empty_old_text",
+                "old_text cannot be empty",
+            );
         }
         if !body.contains(old_text) {
             return ToolOutput::error(
                 "modify_document",
                 id,
                 "not_found",
-                "未在文档正文中找到匹配的文本。请先 read_document 确认内容。",
+                "Could not find matching text in the document body. Use read_document to confirm the content.",
             );
         }
         body.replacen(old_text, new_text, 1)
@@ -223,7 +238,7 @@ pub async fn tool_modify_document(
             );
             crate::audit::append(working_dir, "modify_document", dept, id, &detail).await;
             crate::audit::save_diff(working_dir, id, "modify_document", body, &new_body).await;
-            ToolOutput::success("modify_document", id, "修改成功")
+            ToolOutput::success("modify_document", id, "Modified successfully")
         }
         Err(e) => ToolOutput::error("modify_document", id, "write_error", &e.to_string()),
     }
@@ -237,7 +252,12 @@ pub async fn tool_append_document(
 ) -> String {
     let id = args["id"].as_str().unwrap_or("");
     if id.is_empty() {
-        return ToolOutput::error("append_document", "", "empty_id", "文档 ID 不能为空");
+        return ToolOutput::error(
+            "append_document",
+            "",
+            "empty_id",
+            "Document ID cannot be empty",
+        );
     }
 
     let append_parts: Vec<String> = if let Some(parts) = args["contents"].as_array() {
@@ -246,7 +266,7 @@ pub async fn tool_append_document(
                 "append_document",
                 id,
                 "empty_contents",
-                "contents 数组不能为空",
+                "contents array cannot be empty",
             );
         }
         if parts.len() > 5 {
@@ -254,7 +274,7 @@ pub async fn tool_append_document(
                 "append_document",
                 id,
                 "too_many_contents",
-                "contents 最多 5 项，请分批调用",
+                "contents max 5 items, call in batches",
             );
         }
         for (i, part) in parts.iter().enumerate() {
@@ -264,16 +284,16 @@ pub async fn tool_append_document(
                     "append_document",
                     id,
                     "empty_content_item",
-                    &format!("contents[{}] 不能为空", i),
+                    &format!("contents[{}] cannot be empty", i),
                 );
             }
-            if text.len() > 2000 {
+            if text.len() > 6000 {
                 return ToolOutput::error(
                     "append_document",
                     id,
                     "content_too_long",
                     &format!(
-                        "contents[{}] 过长（{} 字符），最大 2000 字符。",
+                        "contents[{}] too long ({} chars), max 6000 chars.",
                         i,
                         text.len()
                     ),
@@ -291,16 +311,16 @@ pub async fn tool_append_document(
                 "append_document",
                 id,
                 "empty_content",
-                "请传入 content（单段）或 contents（批量）参数",
+                "Please pass content (single) or contents (batch) parameter",
             );
         }
-        if single.len() > 2000 {
+        if single.len() > 6000 {
             return ToolOutput::error(
                 "append_document",
                 id,
                 "content_too_long",
                 &format!(
-                    "追加内容过长（{} 字符），最大 2000 字符。请分批追加或使用 contents 数组。",
+                    "Content too long ({} chars), max 6000 chars. Append in batches or use contents array.",
                     single.len()
                 ),
             );
@@ -317,7 +337,7 @@ pub async fn tool_append_document(
                     "append_document",
                     id,
                     "not_found",
-                    &format!("文档 {} 不存在", id),
+                    &format!("Document {} does not exist", id),
                 )
             }
         }
@@ -338,7 +358,7 @@ pub async fn tool_append_document(
             "append_document",
             id,
             "not_found",
-            &format!("文档 {} 不存在", id),
+            &format!("Document {} does not exist", id),
         );
     }
 
@@ -372,7 +392,7 @@ pub async fn tool_append_document(
             let detail = format!("append_parts={}, total_chars={}", append_parts.len(), total);
             crate::audit::append(working_dir, "append_document", dept, id, &detail).await;
             crate::audit::save_diff(working_dir, id, "append_document", body, &new_body).await;
-            ToolOutput::success("append_document", id, "追加成功")
+            ToolOutput::success("append_document", id, "Appended successfully")
         }
         Err(e) => ToolOutput::error("append_document", id, "write_error", &e.to_string()),
     }
@@ -384,7 +404,7 @@ pub fn create_document_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "create_document".into(),
-            description: "创建新文档，系统自动分配 ID、生成 YAML 头部，返回文档 ID。".into(),
+            description: "Create a new document. The system auto-assigns an ID and generates a YAML header. Returns the document ID.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -396,7 +416,7 @@ pub fn create_document_tool_def() -> crate::api::client::ToolDefinition {
                     "refs": {
                         "type": "array",
                         "items": {"type": "integer"},
-                        "description": "引用的文档ID列表（整数，不带类型前缀）。无引用传 []"
+                        "description": "Referenced document IDs (integers, without type prefix). Pass [] for no references"
                     }
                 },
                 "required": ["type", "refs"]
@@ -410,23 +430,23 @@ pub fn modify_document_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "modify_document".into(),
-            description: "替换文档正文中的文本 (find+replace)。≤300字符。".into(),
+            description: "Replace text in a document body (find+replace). ≤3000 chars.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "id": {
                         "type": "string",
-                        "description": "文档 ID，如 dsgn_003"
+                        "description": "Document ID, e.g. dsgn_003"
                     },
                     "old_text": {
                         "type": "string",
-                        "description": "待替换文本（≤300字符）",
-                        "maxLength": 300
+                        "description": "Text to replace (≤3000 chars)",
+                        "maxLength": 3000
                     },
                     "new_text": {
                         "type": "string",
-                        "description": "新文本（≤300字符）",
-                        "maxLength": 300
+                        "description": "Replacement text (≤3000 chars)",
+                        "maxLength": 3000
                     }
                 },
                 "required": ["id", "old_text", "new_text"]
@@ -440,25 +460,25 @@ pub fn append_document_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "append_document".into(),
-            description: "追加内容到已有文档的正文末尾。每次追加一段（content ≤2000 字符），多段内容分多次调用。不要用 contents 数组——数组 JSON 在长内容下易截断。".into(),
+            description: "Append content to an existing document's body. content ≤6000 chars. For multi-part content, call multiple times. Do NOT use the contents array — array JSON is prone to truncation with long content.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "id": {
                         "type": "string",
-                        "description": "文档 ID，如 dsgn_003"
+                        "description": "Document ID, e.g. dsgn_003"
                     },
                     "content": {
                         "type": "string",
-                        "description": "追加内容（≤2000 字符）。多段请分多次调，不要用 contents 数组。",
-                        "maxLength": 2000
+                        "description": "Content to append (≤6000 chars). For multi-part content, call multiple times — do NOT use the contents array.",
+                        "maxLength": 6000
                     },
                     "contents": {
                         "type": "array",
-                        "description": "【不推荐】数组 JSON 在长内容下易被截断导致错误。请用单段 content 分多次调用。",
+                        "description": "[Not recommended] Array JSON is prone to truncation with long content. Use single content parameter with multiple calls instead.",
                         "items": {
                             "type": "string",
-                            "maxLength": 2000
+                            "maxLength": 6000
                         },
                         "maxItems": 5
                     }
@@ -476,7 +496,12 @@ pub fn append_document_tool_def() -> crate::api::client::ToolDefinition {
 pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) -> String {
     let id = args["id"].as_str().unwrap_or("");
     if id.is_empty() {
-        return ToolOutput::error("read_document", "", "empty_id", "文档 ID 不能为空");
+        return ToolOutput::error(
+            "read_document",
+            "",
+            "empty_id",
+            "Document ID cannot be empty",
+        );
     }
 
     let full = match resolve_doc_path(working_dir, id).await {
@@ -488,7 +513,7 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
             "read_document",
             id,
             "not_found",
-            &format!("文档 {} 不存在", id),
+            &format!("Document {} does not exist", id),
         );
     }
 
@@ -529,7 +554,7 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
     let display_body = if max_chars > 0 && extracted.len() > max_chars {
         let cutoff = extracted.floor_char_boundary(max_chars);
         format!(
-            "{}...\n\n[截断：显示前 {} 字符，共 {} 字符]",
+            "{}...\n\n[Truncated: showing first {} of {} chars]",
             &extracted[..cutoff],
             cutoff,
             extracted.len()
@@ -543,7 +568,7 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
         .unwrap_or(&full)
         .to_string_lossy();
     let meta_line = format!(
-        "📄 {} | 类型: {} | 作者: {} | 时间: {} | 状态: {} | refs: {}",
+        "{} | type: {} | author: {} | time: {} | status: {} | refs: {}",
         meta.id,
         meta.doc_type,
         meta.author,
@@ -557,11 +582,11 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
     );
     let result = if let Some(ref section) = target_section {
         format!(
-            "{}\n─── 章节 [{}] ───\n{}",
+            "{}\n--- Section [{}] ---\n{}",
             meta_line, section, display_body
         )
     } else {
-        format!("{}\n─── 正文 ───\n{}", meta_line, display_body)
+        format!("{}\n--- Body ---\n{}", meta_line, display_body)
     };
 
     ToolOutput::read_file("read_document", &rel_path, &result)
@@ -602,7 +627,7 @@ fn extract_section(body: &str, section_name: &str) -> Result<String, String> {
             .map(|l| l.trim())
             .collect();
         Err(format!(
-            "文档中未找到章节「{}」。\n可用章节（共 {} 个）：\n{}",
+            "Section \"{}\" not found in the document.\nAvailable sections ({} total):\n{}",
             section_name,
             available.len(),
             available.join("\n")
@@ -615,21 +640,21 @@ pub fn read_document_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "read_document".into(),
-            description: "首选读文档方式。按文档ID读取，返回 YAML 元信息 + 正文。默认截断 4000 字符（传 max_chars=0 禁用）。可选按 ## 章节提取。替代 find_document → read_file 两步。".into(),
+            description: "Preferred document reading method. Reads by document ID, returns YAML metadata + body. Default truncation at 4000 chars (pass max_chars=0 to disable). Optional ## section extraction. Replaces the two-step find_document -> read_file approach.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "id": {
                         "type": "string",
-                        "description": "文档 ID，如 dsgn_003, rprt_32, task_5"
+                        "description": "Document ID, e.g. dsgn_003, rprt_32, task_5"
                     },
                     "section": {
                         "type": "string",
-                        "description": "可选：按 ## 标题提取特定章节（如「签名」「数据操作」），不传则返回全文"
+                        "description": "Optional: extract a specific ## section by title (e.g. 'Signature', 'Data Operations'). Omit to return full body."
                     },
                     "max_chars": {
                         "type": "integer",
-                        "description": "可选：最大返回字符数，超出截断（以防超长文档撑爆上下文）"
+                        "description": "Optional: max characters to return; truncates beyond this (prevents oversized documents from blowing up context)"
                     }
                 },
                 "required": ["id"]
@@ -642,7 +667,12 @@ pub fn read_document_tool_def() -> crate::api::client::ToolDefinition {
 pub async fn tool_find_document(working_dir: &Path, args: &serde_json::Value) -> String {
     let id = args["id"].as_str().unwrap_or("");
     if id.is_empty() {
-        return ToolOutput::error("find_document", "", "empty_id", "文档 ID 不能为空");
+        return ToolOutput::error(
+            "find_document",
+            "",
+            "empty_id",
+            "Document ID cannot be empty",
+        );
     }
 
     let type_prefix = id.split('_').next().unwrap_or("");
@@ -657,7 +687,7 @@ pub async fn tool_find_document(working_dir: &Path, args: &serde_json::Value) ->
                 "find_document",
                 id,
                 "not_found",
-                &format!("文档 {} 不存在", id),
+                &format!("Document {} does not exist", id),
             ),
         }
     } else {
@@ -676,7 +706,7 @@ pub async fn tool_find_document(working_dir: &Path, args: &serde_json::Value) ->
                 "find_document",
                 id,
                 "not_found",
-                &format!("文档 {} 不存在", id),
+                &format!("Document {} does not exist", id),
             ),
             Err(e) => ToolOutput::error("find_document", id, "path_error", &e),
         }
@@ -688,13 +718,13 @@ pub fn find_document_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "find_document".into(),
-            description: "⚠️ 降级建议：除非 read_document 失败，否则勿用。read_document 已合并查找+读取+章节提取，一次调用即可。".into(),
+            description: "Deprecated: Do not use unless read_document fails. read_document combines find + read + section extraction in one call.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "id": {
                         "type": "string",
-                        "description": "文档 ID，如 rprt_32, dsgn_003, task_5"
+                        "description": "Document ID, e.g. rprt_32, dsgn_003, task_5"
                     }
                 },
                 "required": ["id"]

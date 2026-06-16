@@ -26,7 +26,7 @@ impl ZhongshulingAgent {
         let mut tools = crate::tool::registry::doc_inspect_tools();
         // read_file for reading source code and .shuji/ files (prompt references it)
         tools.push(crate::tool::read_file_tool_def(
-            "读取源文件和 .shuji/ 中的普通文件",
+            "read source files and .shuji/ regular files",
         ));
         tools.extend(crate::tool::registry::document_tools());
         // route_tool 已移除 —— PipelineEngine 负责调度
@@ -181,13 +181,13 @@ impl Agent for ZhongshulingAgent {
                             "[中书令] skill {} already loaded, prompting continue",
                             skill_name
                         );
-                        session.inject(&format!("[系统] 技能 {} 已在当前会话中。请直接继续执行该技能的指令，不要重复输出 <skill> 标签。", skill_name));
+                        session.inject(&format!("[System] Skill {} is already loaded in the current session. Please continue executing this skill's instructions without repeating the <skill> tag.", skill_name));
                         continue;
                     }
                     current_skill = skill_name.clone();
                     log_console!("[中书令] replace skill: {}", skill_name);
                     session.inject_skill(skill_name, Self::load_skill(skill_name));
-                    session.inject(&format!("[系统] 模式已切换为 {}。请立即按照该模式的指令开始设计工作，不要再输出 <skill> 标签。", skill_name));
+                    session.inject(&format!("[System] Mode switched to {}. Please immediately follow this mode's instructions for design work and do not output the <skill> tag again.", skill_name));
                     continue;
                 }
                 _ => break,

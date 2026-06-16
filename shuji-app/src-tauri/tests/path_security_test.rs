@@ -50,7 +50,7 @@ fn test_reject_parent_directory_traversal_unix() {
 
     // Unix 风格的父目录穿越应该被拒绝
     let result = resolve(root, "../etc/passwd");
-    common::assert_path_error_contains(&result, "禁止使用父目录跳转");
+    common::assert_path_error_contains(&result, "parent directory traversal forbidden");
 }
 
 #[test]
@@ -61,7 +61,7 @@ fn test_reject_parent_directory_traversal_windows() {
 
     // Windows 风格的父目录穿越应该被拒绝
     let result = resolve(root, "..\\Windows\\System32");
-    common::assert_path_error_contains(&result, "禁止使用父目录跳转");
+    common::assert_path_error_contains(&result, "parent directory traversal forbidden");
 }
 
 #[test]
@@ -71,7 +71,7 @@ fn test_reject_multiple_parent_traversal() {
 
     // 多层父目录穿越应该被拒绝
     let result = resolve(root, "../../../../../../etc/passwd");
-    common::assert_path_error_contains(&result, "禁止使用父目录跳转");
+    common::assert_path_error_contains(&result, "parent directory traversal forbidden");
 }
 
 #[test]
@@ -81,7 +81,7 @@ fn test_reject_hidden_parent_traversal() {
 
     // 隐藏在路径中间的父目录穿越应该被拒绝
     let result = resolve(root, "src/../../../etc/passwd");
-    common::assert_path_error_contains(&result, "禁止使用父目录跳转");
+    common::assert_path_error_contains(&result, "parent directory traversal forbidden");
 }
 
 #[test]
@@ -102,7 +102,7 @@ fn test_reject_absolute_path_windows() {
 
     // Windows 绝对路径应该被拒绝
     let result = resolve(root, "C:\\Windows\\System32\\cmd.exe");
-    common::assert_path_error_contains(&result, "禁止使用绝对路径");
+    common::assert_path_error_contains(&result, "absolute paths forbidden");
 }
 
 #[test]

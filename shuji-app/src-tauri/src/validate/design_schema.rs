@@ -13,7 +13,7 @@ pub fn validate_design_output_block(body: &str) -> Result<(), Vec<String>> {
     let block_start = match body.find("## 输出块") {
         Some(pos) => pos,
         None => {
-            errors.push("缺少 ## 输出块 章节".to_string());
+            errors.push("missing ## Output Block section".to_string());
             return Err(errors);
         }
     };
@@ -29,13 +29,13 @@ pub fn validate_design_output_block(body: &str) -> Result<(), Vec<String>> {
 
     // Check for required sections in the block content
     if !block_content.contains("conclusions") && !block_content.contains("结论") {
-        errors.push("输出块缺少 conclusions/结论 字段".to_string());
+        errors.push("output block missing conclusions field".to_string());
     }
     if !block_content.contains("pending_issues") && !block_content.contains("待处理") {
-        errors.push("输出块缺少 pending_issues/待处理 字段".to_string());
+        errors.push("output block missing pending_issues field".to_string());
     }
     if !block_content.contains("refs") && !block_content.contains("引用") {
-        errors.push("输出块缺少 refs/引用 字段".to_string());
+        errors.push("output block missing refs field".to_string());
     }
 
     if errors.is_empty() {
@@ -74,7 +74,7 @@ refs:
         let body = "# Design doc\n\nNo output block here.";
         let result = validate_design_output_block(body);
         assert!(result.is_err());
-        assert!(result.unwrap_err()[0].contains("缺少"));
+        assert!(result.unwrap_err()[0].contains("missing"));
     }
 
     #[test]

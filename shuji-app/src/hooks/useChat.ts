@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import {
   sendMessage,
@@ -13,9 +14,10 @@ import type { ChatMessage, PlanInfo } from '../types';
 export type Tab = 'decision' | 'discuss';
 
 export function useChat(initialMessages: ChatMessage[]) {
+  const { t } = useTranslation();
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [discussMsgs, setDiscussMsgs] = useState<ChatMessage[]>([
-    initialCabinetMessage('想讨论什么？我随时可以聊。'),
+    initialCabinetMessage(t('chat.welcomeDiscuss')),
   ]);
   const [discussing, setDiscussing] = useState(false);
   const [tab, setTab] = useState<Tab>('decision');
@@ -34,7 +36,7 @@ export function useChat(initialMessages: ChatMessage[]) {
       .then((hist) => {
         if (hist.length > 0) setMessages((prev) => mergeMessages(prev, hist));
       })
-      .catch((e) => setError(`读取聊天历史失败：${formatError(e)}`));
+      .catch((e) => setError(t('chat.loadHistoryFailed', { error: formatError(e) })));
   }, []);
 
   // Listen for real-time chat messages
@@ -107,12 +109,12 @@ export function useChat(initialMessages: ChatMessage[]) {
       const reply = await discussWithCabinet(text);
       // If cancelled while in flight, ignore the result
       if (discussCancelRef.current) {
-        setDiscussMsgs((prev) => [...prev, initialCabinetMessage('讨论已取消。')]);
+        setDiscussMsgs((prev) => [...prev, initialCabinetMessage(t('chat.discussCancelled'))]);
         return;
       }
       setDiscussMsgs((prev) => [...prev, reply]);
     } catch (e) {
-      setDiscussMsgs((prev) => [...prev, initialCabinetMessage(`讨论出错：${formatError(e)}`)]);
+      setDiscussMsgs((prev) => [...prev, initialCabinetMessage(t('chat.discussError', { error: formatError(e) }))]);
     } finally {
       setDiscussing(false);
       discussCancelRef.current = false;
@@ -124,11 +126,11 @@ export function useChat(initialMessages: ChatMessage[]) {
       discussCancelRef.current = true;
       setDiscussing(false);
       cancelDiscussApi().catch(() => {});
-      setDiscussMsgs((prev) => [...prev, initialCabinetMessage('讨论已取消。')]);
+      setDiscussMsgs((prev) => [...prev, initialCabinetMessage(t('chat.discussCancelled'))]);
     }
   }, [discussing]);
 
-  const resetDiscuss = () => setDiscussMsgs([initialCabinetMessage('想讨论什么？我随时可以聊。')]);
+  const resetDiscuss = () => setDiscussMsgs([initialCabinetMessage(t('chat.welcomeDiscuss'))]);
 
   return {
     messages,

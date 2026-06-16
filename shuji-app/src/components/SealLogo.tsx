@@ -1,8 +1,9 @@
 interface Props {
   size?: number;
+  ariaLabel?: string;
 }
 
-export function SealLogo({ size = 32 }: Props) {
+export function SealLogo({ size = 32, ariaLabel }: Props) {
   return (
     <svg
       width={size}
@@ -10,7 +11,7 @@ export function SealLogo({ size = 32 }: Props) {
       viewBox="0 0 40 40"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      aria-label="枢机印章"
+      aria-label={ariaLabel || 'ShuJi'}
     >
       <rect
         x="1"
