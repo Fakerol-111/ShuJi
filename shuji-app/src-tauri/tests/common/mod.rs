@@ -138,21 +138,10 @@ pub fn mock_truncated_response(
 
 /// Assert that a path is within the project root (for security tests).
 pub fn assert_path_within_root(root: &Path, resolved: &Path) {
-    // On Windows, canonicalize adds \\?\ prefix, so we need to normalize both paths
-    // for comparison. We'll use the non-canonicalized form for comparison.
-
-    // Get absolute paths without canonicalization
-    let abs_root = if root.is_absolute() {
-        root.to_path_buf()
-    } else {
-        std::env::current_dir().unwrap().join(root)
-    };
-
-    let abs_resolved = if resolved.is_absolute() {
-        resolved.to_path_buf()
-    } else {
-        std::env::current_dir().unwrap().join(resolved)
-    };
+    // On Windows, both root and resolved should be canonicalized before comparison
+    // because resolve_scoped_path canonicalizes existing paths (which resolves 8.3
+    // short names like RUNNER~1 → runneradmin), while root from tempfile retains
+    // the original TEMP env var format. Canonicalizing both ensures consistency.
 
     // Normalize by removing \\?\ prefix if present (Windows)
     let normalize = |p: std::path::PathBuf| -> std::path::PathBuf {
@@ -164,14 +153,27 @@ pub fn assert_path_within_root(root: &Path, resolved: &Path) {
         }
     };
 
-    let norm_root = normalize(abs_root);
-    let norm_resolved = normalize(abs_resolved);
+    // Canonicalize root to resolve 8.3 short names on Windows CI
+    let canon_root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+
+    // For resolved, canonicalize if the file exists (matches resolve_scoped_path behavior);
+    // otherwise strip the original root and reconstruct using canonicalized root
+    let canon_resolved = if resolved.exists() {
+        std::fs::canonicalize(resolved).unwrap_or_else(|_| resolved.to_path_buf())
+    } else if let Ok(rel) = resolved.strip_prefix(root) {
+        canon_root.join(rel)
+    } else {
+        resolved.to_path_buf()
+    };
+
+    let norm_root = normalize(canon_root.clone());
+    let norm_resolved = normalize(canon_resolved.clone());
 
     assert!(
         norm_resolved.starts_with(&norm_root),
         "Path {:?} is not within root {:?}",
         norm_resolved,
-        norm_root
+        norm_root,
     );
 }
 
