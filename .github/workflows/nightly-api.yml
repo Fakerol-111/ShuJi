@@ -10,6 +10,11 @@ on:
 jobs:
   expand-requirements:
     runs-on: ubuntu-latest
+    # secrets 不能用于 step 级 if:，须先提升到 job env
+    env:
+      DEFAULT_API_KEY: ${{ secrets.DEFAULT_API_KEY }}
+      DEFAULT_API_URL: ${{ secrets.DEFAULT_API_URL }}
+      DEFAULT_MODEL: ${{ secrets.DEFAULT_MODEL }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -17,10 +22,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
       - name: Create .env from GitHub Secrets
         run: |
-          echo "DEFAULT_API_KEY=${{ secrets.DEFAULT_API_KEY }}" > shuji-app/src-tauri/.env
-          echo "DEFAULT_API_URL=${{ secrets.DEFAULT_API_URL }}" >> shuji-app/src-tauri/.env
-          echo "DEFAULT_MODEL=${{ secrets.DEFAULT_MODEL }}" >> shuji-app/src-tauri/.env
+          echo "DEFAULT_API_KEY=${DEFAULT_API_KEY}" > shuji-app/src-tauri/.env
+          echo "DEFAULT_API_URL=${DEFAULT_API_URL}" >> shuji-app/src-tauri/.env
+          echo "DEFAULT_MODEL=${DEFAULT_MODEL}" >> shuji-app/src-tauri/.env
       - name: Run expand_requirements test
-        if: secrets.DEFAULT_API_KEY != ''
-        continue-on-error: false
+        if: env.DEFAULT_API_KEY != ''
         run: cd shuji-app/src-tauri && cargo test --test expand_requirements_test -- --nocapture
