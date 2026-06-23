@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { listen } from '@tauri-apps/api/event';
 import { getActiveRoles } from '../api';
 import type { DeptLogEntry, DeptStepEntry } from '../types';
+import { getDeptMeta } from '../constants';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -55,7 +56,9 @@ export function DeptEventsProvider({ children }: { children: ReactNode }) {
       const entry = event.payload;
       setLatestLogs((prev) => {
         const next = new Map(prev);
-        next.set(entry.dept, entry);
+        // Backend sends PascalCase role names, DutyBar looks up by Chinese label.
+        const deptLabel = getDeptMeta(entry.dept)?.label || entry.dept;
+        next.set(deptLabel, entry);
         return next;
       });
       setLogEntries((prev) => {

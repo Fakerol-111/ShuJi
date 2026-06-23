@@ -87,7 +87,9 @@ export default function DeptStatusPanel() {
                 <span
                   className={`w-1 h-1 rounded-full shrink-0 ${e.dept ? routeAccent : 'bg-gray-300'}`}
                 />
-                <span className="font-medium text-ink-500 shrink-0">{e.dept}</span>
+                <span className="font-medium text-ink-500 shrink-0">
+                  {getDeptMeta(e.dept)?.label || e.dept}
+                </span>
                 <span className="text-vermillion/70 shrink-0">→</span>
                 <span className="text-ink-500 truncate">{e.action.replace('→ ', '')}</span>
                 <span className="text-ink-400 ml-auto shrink-0">{e.ts}</span>
@@ -103,7 +105,9 @@ export default function DeptStatusPanel() {
               >
                 <div className="flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
-                  <span className="font-medium text-red-600 shrink-0">{e.dept}</span>
+                  <span className="font-medium text-red-600 shrink-0">
+                    {getDeptMeta(e.dept)?.label || e.dept}
+                  </span>
                   <span className="text-red-700 truncate flex-1">{e.action}</span>
                   <span className="text-ink-400 shrink-0">{e.ts}</span>
                 </div>
@@ -138,7 +142,9 @@ export default function DeptStatusPanel() {
                 }`}
               >
                 <div className="flex items-center gap-1.5">
-                  <span className={`font-medium ${txt} shrink-0`}>{e.dept}</span>
+                  <span className={`font-medium ${txt} shrink-0`}>
+                    {getDeptMeta(e.dept)?.label || e.dept}
+                  </span>
                   <span className="text-ink-600 truncate flex-1">{e.action}</span>
                   {hasDetail && <span className="text-ink-400 shrink-0">{open ? '▾' : '▸'}</span>}
                   <span className="text-ink-400 shrink-0">{e.ts}</span>
