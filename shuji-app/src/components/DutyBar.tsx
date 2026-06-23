@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getTokenStats, getRoundMetrics } from '../api';
 import { useDeptEvents } from '../hooks/useDeptEvents';
@@ -13,7 +13,7 @@ export default function DutyBar() {
   const deptArray =
     activeDepts.length > 0
       ? DEPT_META_LIST.filter(
-          (d) => activeDepts.includes(d.label) || activeDepts.includes(d.shortLabel)
+          (d) => activeDepts.some((name) => name.toLowerCase() === d.key)
         ).map((d) => d.label)
       : [];
 
@@ -28,7 +28,7 @@ export default function DutyBar() {
     const load = () => {
       getTokenStats()
         .then((stats) => {
-          const roles = Object.values(stats['汇总'] || {});
+          const roles = Object.values(stats['All Time'] || {});
           setTokenPrompt(roles.reduce((sum, u) => sum + u.prompt_tokens, 0));
           setTokenCached(roles.reduce((sum, u) => sum + (u.cached_prompt_tokens ?? 0), 0));
           setTokenCompletion(roles.reduce((sum, u) => sum + u.completion_tokens, 0));

@@ -10,7 +10,7 @@ type Currency = 'usd' | 'cny';
 export default function TokenPanel() {
   const { t } = useTranslation();
   const [stats, setStats] = useState<Record<string, Record<string, TokenUsage>> | null>(null);
-  const [windowName, setWindowName] = useState<string>(t('duty.summary'));
+  const [windowName, setWindowName] = useState<string>('All Time');
   const [error, setError] = useState('');
   const [currency, setCurrency] = useState<Currency>('usd');
   const [refreshing, setRefreshing] = useState(false);
@@ -74,15 +74,18 @@ export default function TokenPanel() {
       </div>
       {stats && Object.keys(stats).length > 0 && (
         <div className="flex gap-1 mb-3 flex-wrap">
-          {[t('token.today'), t('token.last3Days'), t('token.last7Days'), t('duty.summary')]
-            .filter((w) => stats[w])
+          {[{ key: 'Today', label: t('token.today') },
+              { key: 'Last 3 Days', label: t('token.last3Days') },
+              { key: 'Last 7 Days', label: t('token.last7Days') },
+              { key: 'All Time', label: t('duty.summary') }]
+            .filter((w) => stats[w.key])
             .map((w) => (
               <button
-                key={w}
-                onClick={() => setWindowName(w)}
-                className={`text-[10px] px-2 py-1 rounded ${windowName === w ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-500 hover:bg-ink-200'}`}
+                key={w.key}
+                onClick={() => setWindowName(w.key)}
+                className={`text-[10px] px-2 py-1 rounded ${windowName === w.key ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-500 hover:bg-ink-200'}`}
               >
-                {w}
+                {w.label}
               </button>
             ))}
         </div>
