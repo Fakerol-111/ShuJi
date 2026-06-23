@@ -21,6 +21,6 @@ jobs:
           echo "DEFAULT_API_URL=${{ secrets.DEFAULT_API_URL }}" >> shuji-app/src-tauri/.env
           echo "DEFAULT_MODEL=${{ secrets.DEFAULT_MODEL }}" >> shuji-app/src-tauri/.env
       - name: Run expand_requirements test
-        if: secrets.DEFAULT_API_KEY != ''
+        if: ${{ secrets.DEFAULT_API_KEY != '' }}
         continue-on-error: false
         run: cd shuji-app/src-tauri && cargo test --test expand_requirements_test -- --nocapture

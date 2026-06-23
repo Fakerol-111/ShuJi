@@ -1,41 +1,36 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getTokenStats, refreshPricing } from '../api';
+import { refreshPricing } from '../api';
+import { useUsageStats } from '../hooks/useUsageStats';
 import type { TokenUsage } from '../api';
-import { formatError } from '../utils/error';
 import { getDeptMeta, DEPT_ORDER } from '../constants';
 
 type Currency = 'usd' | 'cny';
 
 export default function TokenPanel() {
   const { t } = useTranslation();
-  const [stats, setStats] = useState<Record<string, Record<string, TokenUsage>> | null>(null);
+  const { tokenStats: stats, error: statsError, refresh, refreshTokenStats } = useUsageStats();
   const [windowName, setWindowName] = useState<string>('All Time');
   const [error, setError] = useState('');
   const [currency, setCurrency] = useState<Currency>('usd');
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = () => {
-    setError('');
-    getTokenStats()
-      .then(setStats)
-      .catch((e) => setError(formatError(e)));
-  };
+  useEffect(() => {
+    if (statsError) setError(statsError);
+  }, [statsError]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     setError('');
     try {
       await refreshPricing();
-      load();
+      await refreshTokenStats();
     } catch (e) {
-      setError(formatError(e));
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setRefreshing(false);
     }
   };
-
-  useEffect(load, []);
 
   const current = stats?.[windowName] || {};
   const maxTotal = Math.max(...Object.values(current).map((u) => u.total_tokens), 1);
@@ -69,6 +64,9 @@ export default function TokenPanel() {
             className="text-[10px] text-ink-400 hover:text-ink-700 disabled:opacity-50"
           >
             {refreshing ? t('common.loading') : t('token.refreshPrices')}
+          </button>
+          <button onClick={refresh} className="text-[10px] text-ink-400 hover:text-ink-700">
+            {t('common.refresh')}
           </button>
         </div>
       </div>

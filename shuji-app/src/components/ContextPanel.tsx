@@ -1,35 +1,26 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getContextStats, compactContext } from '../api';
-import type { ContextStats } from '../api';
+import { compactContext } from '../api';
+import { useUsageStats } from '../hooks/useUsageStats';
 import { getDeptMeta, DEPT_ORDER } from '../constants';
 import { formatError } from '../utils/error';
 
 export default function ContextPanel() {
   const { t } = useTranslation();
-  const [stats, setStats] = useState<Record<string, ContextStats> | null>(null);
+  const { contextStats: stats, error: statsError, refresh, refreshContextStats } = useUsageStats();
   const [error, setError] = useState('');
   const [compactingRole, setCompactingRole] = useState<string | null>(null);
   const [lastCompactMsg, setLastCompactMsg] = useState('');
 
-  const load = () => {
-    setError('');
-    getContextStats()
-      .then(setStats)
-      .catch((e) => setError(formatError(e)));
-  };
-
-  useEffect(load, []);
   useEffect(() => {
-    const id = setInterval(load, 10000);
-    return () => clearInterval(id);
-  }, []);
+    if (statsError) setError(statsError);
+  }, [statsError]);
 
   return (
     <div className="h-full overflow-y-auto p-3 bg-ink-50">
       <div className="flex items-center justify-between mb-1">
         <h3 className="text-xs font-bold text-ink-800">{t('context.contextWindow')}</h3>
-        <button onClick={load} className="text-[10px] text-ink-400 hover:text-ink-700">
+        <button onClick={refresh} className="text-[10px] text-ink-400 hover:text-ink-700">
           {t('common.refresh')}
         </button>
       </div>
@@ -90,8 +81,7 @@ export default function ContextPanel() {
                         try {
                           const msg = await compactContext(role);
                           setLastCompactMsg(msg);
-                          const newStats = await getContextStats();
-                          setStats(newStats);
+                          await refreshContextStats();
                         } catch (e) {
                           setError(formatError(e));
                         } finally {

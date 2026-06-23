@@ -1,6 +1,4 @@
 use std::collections::HashMap;
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
@@ -10,145 +8,22 @@ use crate::api::client::ToolDefinition;
 use crate::api::session::{Session, SessionSnapshot};
 use crate::config::RuntimeConfig;
 use crate::models::dept_step::{DeptStepEntry, DeptStepKind};
-use crate::models::role::Role;
 
-pub type ToolFuture = Pin<Box<dyn Future<Output = String> + Send + 'static>>;
+// ── Sub-modules ──────────────────────────────────────────────────────────────
+mod iterations;
+mod types;
 
-/// Callback for periodic checkpoint saves.
-/// Receives an owned SessionSnapshot (cloned inside the controller),
-/// so the async block does not borrow the caller's session.
-pub type CheckpointFn =
-    Box<dyn Fn(SessionSnapshot) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
+// ── Internal imports from sub-modules ───────────────────────────────────────
+use iterations::{is_read_tool, max_iterations_for_tools};
+use types::route_msg_type_from_str;
 
-/// Callback for mid-run context compaction.
-/// Takes the flat messages array and persists a compacted version to disk.
-/// Does NOT modify the in-memory session — the compressed context is loaded
-/// automatically on the next execute() call. This avoids disrupting the
-/// running conversation mid-turn.
-pub type CompactFn =
-    Box<dyn Fn(Vec<serde_json::Value>) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
+// ── Re-export public API (same as original `pub` items in control.rs) ───────
+pub use types::{
+    role_from_name, CheckpointFn, CompactFn, DeptStepCallback, RouteMsgType, RouteTo, RunResult,
+    ToolFuture,
+};
 
 const INTERRUPT_RESPONSE: &str = "\n\n[System] Current processing has been interrupted by 皇帝";
-
-/// Callback for real-time step events emitted during AgentController::run().
-/// Receives a DeptStepKind to emit for each iteration, thinking, tool call, etc.
-pub type DeptStepCallback = Box<dyn Fn(DeptStepKind) + Send + Sync>;
-
-/// Type of a cross-department routing message.
-#[derive(Debug, Clone, Copy)]
-pub enum RouteMsgType {
-    Task,
-    Replace,
-    Interrupt,
-}
-
-/// Structured routing instruction produced by the LLM calling `route_to`.
-#[derive(Debug, Clone)]
-pub struct RouteTo {
-    pub target: Role,
-    pub msg_type: RouteMsgType,
-    pub subject: String,
-    /// Optional inline payload for short instructions (bypasses document write).
-    pub payload: Option<String>,
-}
-
-/// Outcome of one AgentController::run() call.
-#[derive(Debug, Clone)]
-pub enum RunResult {
-    /// Agent completed normally (text-only response).
-    Done(String),
-    /// Agent issued a route_to instruction — forward the route.
-    Routed { text: String, route: RouteTo },
-    /// Agent was interrupted / force-stopped / consecutive errors.
-    Stopped(String),
-}
-
-impl RunResult {
-    /// Extract text regardless of variant.
-    pub fn text(&self) -> &str {
-        match self {
-            RunResult::Done(t) | RunResult::Stopped(t) => t,
-            RunResult::Routed { text, .. } => text,
-        }
-    }
-
-    /// Consume and return text.
-    pub fn into_text(self) -> String {
-        match self {
-            RunResult::Done(t) | RunResult::Stopped(t) => t,
-            RunResult::Routed { text, .. } => text,
-        }
-    }
-
-    /// Extract RouteTo if present.
-    pub fn into_route(self) -> Option<RouteTo> {
-        match self {
-            RunResult::Routed { route, .. } => Some(route),
-            _ => None,
-        }
-    }
-
-    /// Consume and return the legacy `(String, Option<RouteTo>)` tuple.
-    /// This is a migration helper — new code should match on the enum directly.
-    pub fn into_tuple(self) -> (String, Option<RouteTo>) {
-        match self {
-            RunResult::Done(text) => (text, None),
-            RunResult::Routed { text, route } => (text, Some(route)),
-            RunResult::Stopped(text) => (text, None),
-        }
-    }
-}
-
-fn route_msg_type_from_str(s: &str) -> Option<RouteMsgType> {
-    match s {
-        "task" => Some(RouteMsgType::Task),
-        "replace" => Some(RouteMsgType::Replace),
-        "interrupt" => Some(RouteMsgType::Interrupt),
-        _ => None,
-    }
-}
-
-pub fn role_from_name(s: &str) -> Option<Role> {
-    Role::from_name(s)
-}
-
-/// Check if a tool name is a read-only operation (safe to parallelize).
-fn is_read_tool(name: &str) -> bool {
-    matches!(
-        name,
-        "read_file"
-            | "read_document"
-            | "list_dir"
-            | "list_dir_tree"
-            | "find_document"
-            | "search_text"
-            | "summarize_logs"
-    )
-}
-
-/// Iteration budget based on tool set.
-fn max_iterations_for_tools(tools: &[ToolDefinition], config: &RuntimeConfig) -> usize {
-    let has_write_file = tools.iter().any(|t| {
-        matches!(
-            t.function.name.as_str(),
-            "create_file" | "modify_file" | "append_file" | "delete_file" | "rename_file"
-        )
-    });
-    let has_append_document = tools.iter().any(|t| {
-        matches!(
-            t.function.name.as_str(),
-            "append_document" | "modify_document"
-        )
-    });
-
-    if has_write_file {
-        config.tool_iterations.write_heavy
-    } else if has_append_document {
-        config.tool_iterations.document_heavy
-    } else {
-        config.tool_iterations.readonly
-    }
-}
 
 /// Control layer for tool-use agents.
 ///
@@ -197,7 +72,7 @@ impl AgentController {
     /// Register a handler for mid-run context compaction.
     /// `interval` controls how many tool-call iterations between compactions.
     /// The handler receives the flat session messages and persists a compressed
-    /// version to disk. The running session is NOT modified — the compressed
+    /// version to disk. The running session is NOT modified 鈥?the compressed
     /// context is loaded automatically on the next execute() call.
     /// Helps prevent unbounded context growth during long-running agent sessions.
     pub fn set_compact_handler(&mut self, handler: CompactFn, interval: u32) {
@@ -208,13 +83,13 @@ impl AgentController {
     /// Run the tool-iteration loop.
     ///
     /// 1. Call `session.step()` (one API round-trip)
-    /// 2. If tool calls → execute each via `tool_exec`, feed results back
-    /// 3. If text → return `RunResult::Done`
-    /// 4. If `cancel` is set → `interrupt()` and return `RunResult::Stopped`
+    /// 2. If tool calls 鈫?execute each via `tool_exec`, feed results back
+    /// 3. If text 鈫?return `RunResult::Done`
+    /// 4. If `cancel` is set 鈫?`interrupt()` and return `RunResult::Stopped`
     ///
     /// Route detection is output-driven: after executing a tool via `tool_exec`,
     /// the result JSON is checked for `operation == "route_to"`. This keeps the
-    /// dispatcher generic — any tool can signal a control-flow transition via
+    /// dispatcher generic 鈥?any tool can signal a control-flow transition via
     /// its output, not via pre-execution name matching.
     #[allow(clippy::too_many_arguments)]
     pub async fn run(
@@ -227,9 +102,9 @@ impl AgentController {
         config: &RuntimeConfig,
         fast_cancel: Option<&AtomicBool>,
     ) -> anyhow::Result<RunResult> {
-        let max_iter = max_iterations_for_tools(tools, config);
+        let max_iter = max_iterations_for_tools(tools, config, session.role());
         let mut last_text = String::new();
-        let mut consecutive_errors: u32 = 0;
+        let mut tool_error_map: HashMap<String, u32> = HashMap::new();
 
         // Watchdog trackers
         let mut last_tool_name = String::new();
@@ -239,20 +114,20 @@ impl AgentController {
         let mut read_without_write: u32 = 0;
 
         // Delete-create cycle tracking
-        // Maps path → cycle count. Incremented when create_file follows delete_file on same path.
+        // Maps path 鈫?cycle count. Incremented when create_file follows delete_file on same path.
         use std::collections::HashMap as HashMapColl;
         let mut delete_seen: HashMapColl<String, u32> = HashMapColl::new();
         let mut delete_create_cycles: HashMapColl<String, u32> = HashMapColl::new();
 
         for iter in 0..max_iter {
-            // ── Emit iteration step ──
+            // 鈹€鈹€ Emit iteration step 鈹€鈹€
             if let Some(ref emit) = self.step_emit {
                 emit(DeptStepKind::Iteration {
                     n: (iter + 1) as u32,
                 });
             }
 
-            // ── Interrupt / force-stop / fast-cancel check ──
+            // 鈹€鈹€ Interrupt / force-stop / fast-cancel check 鈹€鈹€
             if cancel.load(Ordering::SeqCst) {
                 self.interrupt(session).await;
                 let result = format!("{}{}", last_text, INTERRUPT_RESPONSE);
@@ -272,7 +147,7 @@ impl AgentController {
                 return Ok(RunResult::Stopped(result));
             }
 
-            // ── Periodic checkpoint ──
+            // 鈹€鈹€ Periodic checkpoint 鈹€鈹€
             if let Some(ref handler) = self.checkpoint_fn {
                 if config.checkpoint.interval_secs > 0
                     && self.last_checkpoint.elapsed()
@@ -284,8 +159,8 @@ impl AgentController {
                 }
             }
 
-            // ── Mid-run compaction: persist compressed context to disk ──
-            // Does NOT restore the session — the compressed version is loaded
+            // 鈹€鈹€ Mid-run compaction: persist compressed context to disk 鈹€鈹€
+            // Does NOT restore the session 鈥?the compressed version is loaded
             // on the next execute() call. This avoids disrupting the running
             // conversation while still reaping the token savings next turn.
             if let Some(ref handler) = self.compact_handler {
@@ -303,7 +178,7 @@ impl AgentController {
 
             let step_result = session.step().await?;
 
-            // ── Suspension point B: API just returned, don't process if cancelled ──
+            // 鈹€鈹€ Suspension point B: API just returned, don't process if cancelled 鈹€鈹€
             if cancel.load(Ordering::SeqCst) {
                 let result = if last_text.is_empty() {
                     "interrupted".to_string()
@@ -343,7 +218,7 @@ impl AgentController {
                         last_text.push_str(&text);
                     }
 
-                    // ── Emit thinking step ──
+                    // 鈹€鈹€ Emit thinking step 鈹€鈹€
                     if !text.is_empty() {
                         if let Some(ref emit) = self.step_emit {
                             emit(DeptStepKind::Thinking {
@@ -352,7 +227,7 @@ impl AgentController {
                         }
                     }
 
-                    // ── P2-1: Parallel read-only execution ─────────────
+                    // 鈹€鈹€ P2-1: Parallel read-only execution 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
                     // Execute all read tools concurrently, store results by index.
                     // Writes still execute serially below to avoid file contention.
                     let mut read_results: HashMap<usize, String> = HashMap::new();
@@ -375,7 +250,7 @@ impl AgentController {
                     }
 
                     for (idx, tc) in calls.iter().enumerate() {
-                        // ── Emit tool call step ──
+                        // 鈹€鈹€ Emit tool call step 鈹€鈹€
                         if let Some(ref emit) = self.step_emit {
                             emit(DeptStepKind::ToolCall {
                                 tool: tc.name.clone(),
@@ -383,7 +258,7 @@ impl AgentController {
                             });
                         }
 
-                        // ── Fast cancel check before each tool ──
+                        // 鈹€鈹€ Fast cancel check before each tool 鈹€鈹€
                         if fast_cancel.is_some_and(|f| f.load(Ordering::SeqCst)) {
                             self.interrupt(session).await;
                             // Feed remaining tool results to keep message state consistent
@@ -398,10 +273,10 @@ impl AgentController {
                             return Ok(RunResult::Stopped(result));
                         }
 
-                        // ── Same-tool watchdog ─────────────
+                        // 鈹€鈹€ Same-tool watchdog 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
                         // Extract key argument for similarity detection:
-                        // - file/command tools → "path" or "command"
-                        // - document tools → "id" (read_document, append_document, etc.)
+                        // - file/command tools 鈫?"path" or "command"
+                        // - document tools 鈫?"id" (read_document, append_document, etc.)
                         let key_arg = tc
                             .args
                             .get("path")
@@ -425,7 +300,7 @@ impl AgentController {
                             );
                         }
 
-                        // ── Execute tool (unified, no special-case intercept) ──
+                        // 鈹€鈹€ Execute tool (unified, no special-case intercept) 鈹€鈹€
                         // Use pre-computed result for reads (P2-1 parallel exec),
                         // execute writes serially to avoid file contention.
                         let result = if let Some(pre) = read_results.remove(&idx) {
@@ -434,7 +309,7 @@ impl AgentController {
                             tool_exec(&tc.name, &tc.args).await
                         };
 
-                        // ── Emit tool result step ──
+                        // 鈹€鈹€ Emit tool result step 鈹€鈹€
                         if let Some(ref emit) = self.step_emit {
                             let is_error = serde_json::from_str::<serde_json::Value>(&result)
                                 .ok()
@@ -449,7 +324,7 @@ impl AgentController {
                             });
                         }
 
-                        // ── Watchdog intervention hints ──
+                        // 鈹€鈹€ Watchdog intervention hints 鈹€鈹€
                         // Append corrective reminders to the tool result when
                         // the LLM is stuck in a loop. This is a closed-loop
                         // intervention: the LLM sees these as part of the tool
@@ -474,7 +349,7 @@ impl AgentController {
                             && read_without_write >= config.watchdog.read_without_write_warning
                         {
                             intervention_hints.push(format!(
-                                "⚠️ You have read files {} times without producing any output. Please check whether you need to create a file or modify code.",
+                                "鈿狅笍 You have read files {} times without producing any output. Please check whether you need to create a file or modify code.",
                                 read_without_write + 1,
                             ));
                         }
@@ -484,10 +359,10 @@ impl AgentController {
                             format!("\n\n[Intervention] {}", intervention_hints.join(" "))
                         };
 
-                        // ── Route detection (output-driven) ──
+                        // 鈹€鈹€ Route detection (output-driven) 鈹€鈹€
                         // Check the tool output for operation=="route_to" instead of
                         // matching tool names before execution. This keeps the dispatcher
-                        // generic — any tool can signal a control-flow transition.
+                        // generic 鈥?any tool can signal a control-flow transition.
                         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&result) {
                             if v["operation"].as_str() == Some("route_to") {
                                 let to_name = tc.args["to"].as_str().unwrap_or("");
@@ -516,7 +391,7 @@ impl AgentController {
 
                                 // Feed dummy results for remaining calls in this batch
                                 // so the assistant message's tool_calls are balanced with
-                                // tool_results — otherwise the next API request returns 400.
+                                // tool_results 鈥?otherwise the next API request returns 400.
                                 for remaining in &calls[idx + 1..] {
                                     session.feed_tool_result(
                                         &remaining.id,
@@ -561,7 +436,7 @@ impl AgentController {
                             }
                         }
 
-                        // ── Write/read tracking ───────────
+                        // 鈹€鈹€ Write/read tracking 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
                         let is_write = matches!(
                             tc.name.as_str(),
                             "create_file"
@@ -583,8 +458,8 @@ impl AgentController {
                             }
                         }
 
-                        // ── Delete-create cycle detection ─────
-                        // Track when delete_file(path) → create_file(path) repeats on the same path.
+                        // 鈹€鈹€ Delete-create cycle detection 鈹€鈹€鈹€鈹€鈹€
+                        // Track when delete_file(path) 鈫?create_file(path) repeats on the same path.
                         let key_path = tc.args.get("path").and_then(|v| v.as_str()).unwrap_or("");
                         if tc.name == "delete_file" && !key_path.is_empty() {
                             *delete_seen.entry(key_path.to_string()).or_insert(0) += 1;
@@ -599,7 +474,7 @@ impl AgentController {
                                     *cycle_count += 1;
                                     if *cycle_count >= config.watchdog.delete_create_warning_count {
                                         delete_cycle_hint = format!(
-                                            "\n\n[Intervention] You have executed {} delete → create cycles on the same file ({}). \
+                                            "\n\n[Intervention] You have executed {} delete 鈫?create cycles on the same file ({}). \
                                             For existing files that need local changes, use edit_file (search/replace). \
                                             For batch changes, use apply_patch. The delete+create pattern wastes tokens and can lose file history.",
                                             key_path, *cycle_count,
@@ -613,7 +488,7 @@ impl AgentController {
                             }
                         }
 
-                        // ── Progress note ─────────────────
+                        // 鈹€鈹€ Progress note 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
                         let mut notes = Vec::new();
                         if same_tool_count >= config.watchdog.same_tool_warning_count {
                             notes.push(format!("repeated tool {}", tc.name));
@@ -629,7 +504,7 @@ impl AgentController {
                             format!("\n\n[progress] {}", notes.join(", "))
                         };
 
-                        // ── Consecutive error tracking ────
+                        // 鈹€鈹€ Consecutive error tracking 鈹€鈹€鈹€鈹€
                         let is_error = serde_json::from_str::<serde_json::Value>(&result)
                             .ok()
                             .and_then(|v| v.get("ok").and_then(|o| o.as_bool()))
@@ -660,7 +535,13 @@ impl AgentController {
                         }
 
                         if is_error {
-                            consecutive_errors += 1;
+                            // Compute counts before mutable borrow of tool_error_map
+                            let prev_count = tool_error_map.get(&tc.name).copied().unwrap_or(0);
+                            let total_before: u32 = tool_error_map.values().sum();
+                            let err_count = prev_count + 1;
+                            let total_errors = total_before + 1;
+                            tool_error_map.insert(tc.name.clone(), err_count);
+
                             let first_line = result.lines().next().unwrap_or(&result);
                             let preview = if first_line.len() > 120 {
                                 let end = first_line.floor_char_boundary(120);
@@ -669,39 +550,70 @@ impl AgentController {
                                 first_line.to_string()
                             };
                             log_console!(
-                                "[control] tool error (consecutive #{}/{})",
-                                consecutive_errors,
-                                config.watchdog.max_consecutive_errors
+                                "[control] tool error (#{} total, #{}/{} for {})",
+                                total_errors,
+                                err_count,
+                                config.watchdog.max_consecutive_errors,
+                                tc.name
                             );
                             log_console!("  {}", preview);
 
-                            // ── Test stalemate detection ──────
+                            // 鈹€鈹€ P0-3: Early intervention at >=3 total errors 鈹€鈹€
+                            if total_errors >= 3
+                                && total_errors < config.watchdog.max_consecutive_errors
+                            {
+                                let error_tools: Vec<String> = tool_error_map
+                                    .iter()
+                                    .map(|(k, v)| format!("{}x {}", v, k))
+                                    .collect();
+                                let early_hint = format!(
+                                    "\n\n[Caution] tool calls have failed {} times ({}).                                     Before retrying, consider using read_file to verify state,                                     check parameter names, or try a different approach.",
+                                    total_errors,
+                                    error_tools.join(", "),
+                                );
+                                tool_content.push_str(&early_hint);
+                                log_console!(
+                                    "[control] P0-3 early intervention injected (total_errors={})",
+                                    total_errors
+                                );
+                            }
+
+                            // 鈹€鈹€ Test stalemate detection 鈹€鈹€
                             if tc.name == "run_tests"
-                                && consecutive_errors >= config.watchdog.test_stalemate_threshold
+                                && err_count >= config.watchdog.test_stalemate_threshold
                             {
                                 let stalemate_hint = format!(
-                                    "\n\n⚠️ Test stalemate detected: `run_tests` failed {} consecutive times. \
-                                     Suggestions: ① Check test code and implementation match the contract \
-                                     ② `read_file` to confirm current source content \
-                                     ③ Follow [playbook: test-red] systematic troubleshooting \
-                                     ④ If still unresolved, `wake_cabinet` for assistance",
-                                    consecutive_errors
+                                    "\n\n鈿狅笍 Test stalemate detected: `run_tests` failed {} consecutive times.                                      Suggestions: 鈶?Check test code and implementation match the contract                                      鈶?`read_file` to confirm current source content                                      鈶?Follow [playbook: test-red] systematic troubleshooting                                      鈶?If still unresolved, `wake_cabinet` for assistance",
+                                    err_count
                                 );
                                 tool_content.push_str(&stalemate_hint);
                                 log_console!(
                                     "[control] WATCHDOG: test stalemate detected (consecutive={})",
-                                    consecutive_errors
+                                    err_count
                                 );
                             }
 
-                            if consecutive_errors >= config.watchdog.max_consecutive_errors {
+                            // 鈹€鈹€ P0-2: Force-stop: check both per-tool and total 鈹€鈹€
+                            if err_count >= config.watchdog.max_consecutive_errors
+                                || total_errors
+                                    >= (config.watchdog.max_consecutive_errors as f32 * 1.5) as u32
+                            {
+                                let reason = if err_count >= config.watchdog.max_consecutive_errors
+                                {
+                                    format!("{} failed {} consecutive times", tc.name, err_count)
+                                } else {
+                                    format!("total {} errors across tools", total_errors)
+                                };
+                                let error_details: Vec<String> = tool_error_map
+                                    .iter()
+                                    .map(|(k, v)| format!("{}: {} errors", k, v))
+                                    .collect();
                                 last_text = format!(
-                                    "Tool failed {} consecutive times, terminating. Last error: {}",
-                                    config.watchdog.max_consecutive_errors, result
+                                    "Tool errors exceeded limit ({}). Terminating. Details: {}",
+                                    reason,
+                                    error_details.join("; "),
                                 );
-                                // Feed the current tool result before returning
                                 session.feed_tool_result(&tc.id, &tc.name, &tool_content);
-                                // Feed dummy results for remaining unprocessed tools
                                 for remaining in &calls[idx + 1..] {
                                     session.feed_tool_result(
                                         &remaining.id,
@@ -712,7 +624,7 @@ impl AgentController {
                                 return Ok(RunResult::Stopped(last_text));
                             }
                         } else {
-                            consecutive_errors = 0;
+                            tool_error_map.clear();
                         }
 
                         session.feed_tool_result(&tc.id, &tc.name, &tool_content);
@@ -721,7 +633,7 @@ impl AgentController {
             }
         }
 
-        // ── Max iterations reached ─────────────────────
+        // 鈹€鈹€ Max iterations reached 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
         log_console!("[control] tool-call limit ({}) reached", max_iter);
         let reason = if write_count == 0 && same_tool_count >= 3 {
             format!(
@@ -746,13 +658,13 @@ impl AgentController {
                 max_iter
             )
         };
-        // ── Graceful wrap-up: inject summary request, do one extra step ──
+        // 鈹€鈹€ Graceful wrap-up: inject summary request, do one extra step 鈹€鈹€
         // Instead of silently cutting off, give the LLM a chance to produce
         // a coherent wrap-up and route to its superior for authorization.
         session.set_reasoning(true);
         let wrap_up = format!(
             "\n\n---\n[System] Tool call limit reached ({} calls). {}. \
-             \nPlease immediately summarize the work completed and any difficulties encountered. If you need to continue, call route_to to route to 尚书令 explaining the reason and requesting further authorization. \
+             \nPlease immediately summarize the work completed and any difficulties encountered. If you need to continue, call route_to to route to 灏氫功浠?explaining the reason and requesting further authorization. \
              \nIf no routing is needed, directly output the work summary.\n---",
             max_iter, reason,
         );
@@ -762,7 +674,7 @@ impl AgentController {
             crate::api::session::StepResult::Text(t) => t,
             crate::api::session::StepResult::ToolCalls { calls, text } => {
                 let combined = text;
-                // Execute first tool call — check if it's a route_to
+                // Execute first tool call 鈥?check if it's a route_to
                 if let Some(tc) = calls.first() {
                     let result = tool_exec(&tc.name, &tc.args).await;
                     // Route detection (same logic as main loop)
@@ -799,7 +711,7 @@ impl AgentController {
                             }
                         }
                     }
-                    // Not a route — feed result for context
+                    // Not a route 鈥?feed result for context
                     session.feed_tool_result(&tc.id, &tc.name, &result);
                 }
                 combined
@@ -841,7 +753,7 @@ impl AgentController {
     /// Interrupt the current session.
     ///
     /// Save a snapshot of the current conversation state for
-    /// potential resume. Does NOT make an API call — the LLM
+    /// potential resume. Does NOT make an API call 鈥?the LLM
     /// acknowledges the interruption naturally on the next
     /// user message.
     pub async fn interrupt(&mut self, session: &mut Session) {
@@ -854,16 +766,16 @@ impl AgentController {
         if let Some(snap) = self.saved.take() {
             session.restore(&snap);
             session.inject(&format!(
-                "System: Previous operation was interrupted. 皇帝 has given a new instruction: {}",
+                "System: Previous operation was interrupted. 鐨囧笣 has given a new instruction: {}",
                 new_instruction
             ));
             log_console!("[control] restart_with: snapshot restored, new instruction injected");
         } else {
             log_console!(
-                "[control] restart_with: no saved snapshot — injecting as new instruction"
+                "[control] restart_with: no saved snapshot 鈥?injecting as new instruction"
             );
             session.inject(&format!(
-                "System: 皇帝 has given a new instruction, please start processing: {}",
+                "System: 鐨囧笣 has given a new instruction, please start processing: {}",
                 new_instruction
             ));
         }

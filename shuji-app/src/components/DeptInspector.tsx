@@ -253,13 +253,11 @@ function StepCard({ entry }: { entry: DeptStepEntry }) {
   }
 }
 
-/** Resolve department steps by trying label, shortLabel, and key variants. */
+/** Resolve department steps — keys are normalized to CN labels in useDeptEvents. */
 function resolveDeptSteps(deptSteps: Map<string, DeptStepEntry[]>, dept: string): DeptStepEntry[] {
   const meta = getDeptMeta(dept);
   if (!meta) return deptSteps.get(dept) || [];
-  return (
-    deptSteps.get(meta.label) || deptSteps.get(meta.shortLabel) || deptSteps.get(meta.key) || []
-  );
+  return deptSteps.get(meta.label) || [];
 }
 
 export default function DeptInspector({

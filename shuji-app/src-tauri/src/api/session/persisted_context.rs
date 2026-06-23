@@ -74,6 +74,7 @@ impl PersistedContext {
         if let Ok(json) = serde_json::to_string_pretty(&self) {
             let _ = tokio::fs::write(&tmp, &json).await;
             let _ = tokio::fs::rename(&tmp, &path).await;
+            crate::usage_notify::notify(role, crate::usage_notify::UsageUpdateKind::Context);
         }
     }
 

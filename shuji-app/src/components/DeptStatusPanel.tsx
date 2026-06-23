@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { formatError } from '../utils/error';
+import { normalizeDeptLogEntry } from '../utils/deptLog';
 import { getDeptLogs } from '../api';
 import { getDeptMeta } from '../constants';
 import { useDeptEvents } from '../hooks/useDeptEvents';
@@ -23,7 +24,9 @@ export default function DeptStatusPanel() {
   useEffect(() => {
     getDeptLogs()
       .then((hist) => {
-        if (hist.length > 0) setEntries(hist.slice(-MAX_ENTRIES));
+        if (hist.length > 0) {
+          setEntries(hist.slice(-MAX_ENTRIES).map(normalizeDeptLogEntry));
+        }
       })
       .catch((e) => console.error(formatError(e)));
   }, []);

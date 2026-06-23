@@ -8,6 +8,7 @@ import ChatPanel from './ChatPanel';
 import AgentIdleState from './AgentIdleState';
 import { getDeptMeta } from '../constants';
 import { useDeptEvents } from '../hooks/useDeptEvents';
+import { deptMatches, isDeptActive } from '../utils/deptLog';
 import type { Project, ChatMessage, PlanInfo } from '../types';
 import type { Tab } from '../hooks/useChat';
 import type { PhaseRuntime } from '../types';
@@ -195,8 +196,8 @@ export default function AgentStreamPanel({
                 <DeptInspector
                   dept={selectedDept}
                   mode="single"
-                  entries={logEntries.filter((e) => e.dept === selectedDept)}
-                  active={activeDepts.includes(selectedDept!)}
+                  entries={logEntries.filter((e) => deptMatches(e.dept, selectedDept!))}
+                  active={isDeptActive(selectedDept!, activeDepts)}
                   onBack={() => setSelectedDept(null)}
                   onDocClick={onSelectDoc}
                   planInfo={planInfo}

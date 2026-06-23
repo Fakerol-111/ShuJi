@@ -1,6 +1,7 @@
 import { type ReactNode, useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DeptEventsProvider } from '../hooks/useDeptEvents';
+import { UsageStatsProvider } from '../hooks/useUsageStats';
 import { SealLogo } from './SealLogo';
 import ActivityBar from './ActivityBar';
 import type { ActivitySelection } from './ActivityBar';
@@ -111,6 +112,7 @@ export default function DashboardLayout({
 
   return (
     <DeptEventsProvider>
+      <UsageStatsProvider>
       <div className="h-screen bg-surface-paper flex flex-col overflow-hidden">
         <header className="bg-ink-900 border-b border-gold/30 shrink-0 h-12 px-4 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
@@ -180,6 +182,7 @@ export default function DashboardLayout({
         {picker}
         {demoTour}
       </div>
+      </UsageStatsProvider>
     </DeptEventsProvider>
   );
 }

@@ -166,7 +166,7 @@ pub async fn verify_audit_trail(working_dir: &Path) -> Result<VerificationReport
 
     for entry in &entries {
         if entry.hash.is_empty() {
-            // Pre-upgrade entry — skip chain check
+            // Pre-upgrade entry �?skip chain check
             pre_chain += 1;
             continue;
         }
@@ -638,9 +638,9 @@ pub struct ChainNode {
 pub struct TraceResult {
     /// The document that was searched for.
     pub target: Option<ChainNode>,
-    /// Documents that the target references (downstream: target → refs).
+    /// Documents that the target references (downstream: target �?refs).
     pub downstream: Vec<ChainNode>,
-    /// Documents that reference the target (upstream: refs → target).
+    /// Documents that reference the target (upstream: refs �?target).
     pub upstream: Vec<ChainNode>,
 }
 
@@ -819,7 +819,7 @@ pub async fn generate_report(working_dir: &Path) -> String {
 
     report.push_str("\n### Document Output\n\n");
     for doc in &docs_created {
-        report.push_str(&format!("- `{}` — {}\n", doc.doc_id, doc.detail));
+        report.push_str(&format!("- `{}` �?{}\n", doc.doc_id, doc.detail));
     }
 
     report
@@ -840,7 +840,7 @@ pub struct RefIndexEntry {
     pub ref_by: Vec<String>,
 }
 
-/// Document type → directory mapping (mirrors documents.rs TYPE_TO_DIR).
+/// Document type �?directory mapping (mirrors documents.rs TYPE_TO_DIR).
 const TYPE_TO_DIR: &[(&str, &str)] = &[
     ("dsgn", "designs"),
     ("plan", "designs"),
@@ -924,7 +924,7 @@ impl RefIndex {
         );
     }
 
-    /// Get documents that reference `doc_id` (reverse refs — downstream impact).
+    /// Get documents that reference `doc_id` (reverse refs �?downstream impact).
     pub fn get_ref_by(&self, doc_id: &str) -> Vec<String> {
         self.entries
             .get(doc_id)
@@ -935,7 +935,7 @@ impl RefIndex {
     fn numeric_to_doc_id(num: u64) -> String {
         // Scan TYPE_TO_DIR to find which prefix maps the numeric ID.
         // Since we don't know the type from just the number, we return
-        // a placeholder — the index is keyed by full doc ID (type_num).
+        // a placeholder �?the index is keyed by full doc ID (type_num).
         // If the numeric ref doesn't resolve to a known entry, it's a
         // forward reference only.
         format!("ref_{}", num)
@@ -1037,4 +1037,21 @@ pub async fn sync_ref_index(working_dir: &Path, _doc_id: &str) {
     // incremental update can be implemented later.
     let index = build_ref_index(working_dir).await;
     index.save(working_dir).await;
+}
+
+/// Log a review conclusion event to the audit trail.
+/// Records structured review data for design quality feedback analysis.
+pub async fn log_review_conclusion(
+    working_dir: &Path,
+    doc_id: &str,
+    reviewer: &str,
+    conclusion: &str,
+    pass_count: u32,
+    total_count: u32,
+) {
+    let detail = format!(
+        "conclusion={}, pass_count={}, total_count={}",
+        conclusion, pass_count, total_count
+    );
+    append(working_dir, "review_conclusion", reviewer, doc_id, &detail).await;
 }

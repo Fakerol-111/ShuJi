@@ -324,6 +324,9 @@ export function getDeptMeta(key: string): DeptMeta | undefined {
   if (DEPT_SHORT_TO_LONG[key]) return DEPT_META[DEPT_SHORT_TO_LONG[key]];
   // Try full English key
   if (DEPT_META_BY_KEY[key]) return DEPT_META_BY_KEY[key];
+  // Try case-insensitive English key (backend sends "Zhongshuling", keys are lowercase)
+  const lowerKey = key.toLowerCase();
+  if (DEPT_META_BY_KEY[lowerKey]) return DEPT_META_BY_KEY[lowerKey];
   // Try abbreviated alias
   const resolved = DEPT_KEY_ALIASES[key];
   if (resolved) return DEPT_META_BY_KEY[resolved];
