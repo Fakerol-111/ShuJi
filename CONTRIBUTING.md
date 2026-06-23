@@ -14,7 +14,54 @@ npm run tauri build    # 生产构建
 
 环境要求：Node.js >= 18，Rust >= 1.70。
 
-更完整的架构说明见 [CLAUDE.md](CLAUDE.md)。
+新人请先读 [ONBOARDING.md](ONBOARDING.md)。更完整的架构说明见 [shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md) 与 [CLAUDE.md](CLAUDE.md)。
+
+## 仓库目录约定
+
+```
+ShuJi/                          # 仓库根
+├── ONBOARDING.md               # 新人文档索引（从这里开始）
+├── README.md                   # 项目介绍
+├── CONTRIBUTING.md             # 本文件
+├── CHANGELOG.md
+├── scripts/                    # 仓库级辅助脚本（非应用构建）
+├── assets/                     # 答辩、演示等非代码资产
+├── docs/                       # 仓库级：images/ 进 Git；其余默认本地草稿
+└── shuji-app/                  # 唯一主应用
+    ├── src/                    # React 前端
+    ├── src-tauri/src/          # Rust 后端
+    │   ├── actor/              # Actor 消息循环
+    │   ├── agent/              # 各部门 Agent（含 prompt.md、skills/）
+    │   ├── api/                # Session、AgentController、LLM 客户端
+    │   ├── tool/               # 工具注册与 dispatch
+    │   ├── commands/           # Tauri invoke 入口
+    │   ├── audit/              # 审计、血缘、diff
+    │   ├── pipeline/           # Pipeline 引擎
+    │   └── workflow/           # Workflow Profile
+    ├── src-tauri/tests/        # Rust 集成测试
+    └── docs/                   # 应用文档（架构、测试流程、研读计划）
+```
+
+### 新增内容应放哪里
+
+| 类型 | 路径 |
+|------|------|
+| Tauri 命令 | `shuji-app/src-tauri/src/commands/` |
+| 新 Agent | `shuji-app/src-tauri/src/agent/{角色}/`（至少 `mod.rs` + `prompt.md`） |
+| 新工具 | `shuji-app/src-tauri/src/tool/`，并在 `registry.rs` 注册 |
+| Rust 集成测试 | `shuji-app/src-tauri/tests/` |
+| React 页面 | `shuji-app/src/pages/` |
+| React 组件 | `shuji-app/src/components/`（通用 primitive → `components/ui/`） |
+| 前端 hook | `shuji-app/src/hooks/` |
+| 应用文档 | `shuji-app/docs/` |
+| README 截图 | `docs/images/` |
+| 一次性脚本 | `scripts/` |
+
+### 不要做的事
+
+- 不要在仓库根再建第二个应用目录
+- 不要把 `design/future-mailbox.md` 当成现行架构阅读
+- 不要向 Git 提交 `api_config.json`、`.env`、`config.local.toml`（含密钥或本机覆盖）
 
 ## 配置文件
 
@@ -147,7 +194,7 @@ npm test
 - **批量计划循环** — 工部大任务分批执行，批间轻量恢复
 - **审计系统** — JSONL 日志、文档血缘、diff、双向引用索引
 
-完整技术栈与文件布局见 [CLAUDE.md](CLAUDE.md#architecture)。
+完整技术栈与文件布局见 [CLAUDE.md](CLAUDE.md#architecture)；给人读的摘要见 [shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md)。
 
 ### Checkpoint 系统
 

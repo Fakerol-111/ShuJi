@@ -152,12 +152,42 @@ export default function ActivityBar({
     label: string;
     tooltip: string;
   }> = [
-    { id: 'files', icon: (a) => <FolderIcon active={a} />, label: t('activityBar.duty'), tooltip: t('activityBar.duty') },
-    { id: 'stats', icon: (a) => <ChartIcon active={a} />, label: t('activityBar.tokens'), tooltip: t('activityBar.tokens') },
-    { id: 'context', icon: (a) => <ScrollIcon active={a} />, label: t('activityBar.context'), tooltip: t('activityBar.context') },
-    { id: 'archives', icon: (a) => <ArchiveIcon active={a} />, label: t('activityBar.checkpoints'), tooltip: t('activityBar.checkpoints') },
-    { id: 'audit', icon: (a) => <NewspaperIcon active={a} />, label: t('activityBar.audit'), tooltip: t('activityBar.audit') },
-    { id: 'graph', icon: (a) => <GraphIcon active={a} />, label: t('activityBar.graph'), tooltip: t('activityBar.graph') },
+    {
+      id: 'files',
+      icon: (a) => <FolderIcon active={a} />,
+      label: t('activityBar.duty'),
+      tooltip: t('activityBar.duty'),
+    },
+    {
+      id: 'stats',
+      icon: (a) => <ChartIcon active={a} />,
+      label: t('activityBar.tokens'),
+      tooltip: t('activityBar.tokens'),
+    },
+    {
+      id: 'context',
+      icon: (a) => <ScrollIcon active={a} />,
+      label: t('activityBar.context'),
+      tooltip: t('activityBar.context'),
+    },
+    {
+      id: 'archives',
+      icon: (a) => <ArchiveIcon active={a} />,
+      label: t('activityBar.checkpoints'),
+      tooltip: t('activityBar.checkpoints'),
+    },
+    {
+      id: 'audit',
+      icon: (a) => <NewspaperIcon active={a} />,
+      label: t('activityBar.audit'),
+      tooltip: t('activityBar.audit'),
+    },
+    {
+      id: 'graph',
+      icon: (a) => <GraphIcon active={a} />,
+      label: t('activityBar.graph'),
+      tooltip: t('activityBar.graph'),
+    },
   ];
 
   return (
@@ -181,7 +211,11 @@ export default function ActivityBar({
             {hasBadge && (
               <span
                 className="absolute top-1 right-1.5 w-2 h-2 bg-gold rounded-full animate-pulse"
-                title={isEn ? `${pendingApprovalsCount} pending approval` : `${pendingApprovalsCount} 份朱批待批`}
+                title={
+                  isEn
+                    ? `${pendingApprovalsCount} pending approval`
+                    : `${pendingApprovalsCount} 份朱批待批`
+                }
               />
             )}
             <span className="absolute left-full ml-2 whitespace-nowrap bg-ink-800 text-ink-200 text-xs px-2 py-1 rounded border border-ink-700 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">

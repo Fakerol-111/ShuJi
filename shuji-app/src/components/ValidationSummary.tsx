@@ -34,9 +34,7 @@ export function ValidationSummary({ report, loading }: Props) {
     <div
       className={`validation-summary ${report.overall_pass ? 'validation-summary--pass' : 'validation-summary--fail'}`}
     >
-      <span className="validation-summary__icon">
-        {report.overall_pass ? '✓' : '✗'}
-      </span>
+      <span className="validation-summary__icon">{report.overall_pass ? '✓' : '✗'}</span>
       <span className="validation-summary__status">
         {report.overall_pass ? t('validation.passed') : t('validation.failed')}
       </span>
@@ -45,7 +43,11 @@ export function ValidationSummary({ report, loading }: Props) {
         {failCount > 0 && (
           <span className="validation-summary__fail-names">
             {' '}
-            — {t('validation.failedItems')}: {report.checks.filter((c) => !c.pass).map((c) => c.name).join(', ')}
+            — {t('validation.failedItems')}:{' '}
+            {report.checks
+              .filter((c) => !c.pass)
+              .map((c) => c.name)
+              .join(', ')}
           </span>
         )}
       </span>

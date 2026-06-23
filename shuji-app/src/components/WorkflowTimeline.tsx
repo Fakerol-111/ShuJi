@@ -191,7 +191,9 @@ export default function WorkflowStatus({
         {/* Workflow profile badge */}
         {wfState && (
           <span className="text-caption px-1.5 py-[1px] rounded-full border border-ink-300 text-ink-500 bg-ink-100/30 whitespace-nowrap">
-            {t(`workflow.${wfState.profile_id === 'greenfield_standard' ? 'newFeature' : wfState.profile_id === 'brownfield_optimize' ? 'existingOptimization' : wfState.profile_id === 'bugfix' ? 'bugfix' : wfState.profile_id === 'demo' ? 'quickPrototype' : wfState.profile_id}`)}
+            {t(
+              `workflow.${wfState.profile_id === 'greenfield_standard' ? 'newFeature' : wfState.profile_id === 'brownfield_optimize' ? 'existingOptimization' : wfState.profile_id === 'bugfix' ? 'bugfix' : wfState.profile_id === 'demo' ? 'quickPrototype' : wfState.profile_id}`
+            )}
           </span>
         )}
 
@@ -280,11 +282,15 @@ export default function WorkflowStatus({
             <div className="pt-1.5 pb-1">
               <div className="flex items-center gap-2 mb-1 text-ink-500 font-medium">
                 <span>{t('commandBar.workflow')}</span>
-                <span className="text-caption px-1 rounded bg-ink-100/50">{wfState.governance}</span>
+                <span className="text-caption px-1 rounded bg-ink-100/50">
+                  {wfState.governance}
+                </span>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="px-2 py-0.5 rounded-full border border-ink-200 text-ink-500">
-                  {t(`workflow.${wfState.profile_id === 'greenfield_standard' ? 'newFeature' : wfState.profile_id === 'brownfield_optimize' ? 'existingOptimization' : wfState.profile_id === 'bugfix' ? 'bugfix' : wfState.profile_id === 'demo' ? 'quickPrototype' : wfState.profile_id}`)}
+                  {t(
+                    `workflow.${wfState.profile_id === 'greenfield_standard' ? 'newFeature' : wfState.profile_id === 'brownfield_optimize' ? 'existingOptimization' : wfState.profile_id === 'bugfix' ? 'bugfix' : wfState.profile_id === 'demo' ? 'quickPrototype' : wfState.profile_id}`
+                  )}
                 </span>
                 <span className="text-ink-300">→</span>
                 <span className="px-2 py-0.5 rounded-full border border-gold/30 text-gold-700 bg-gold/8">
@@ -311,7 +317,10 @@ export default function WorkflowStatus({
                     : String(eObj);
                 return (
                   <div key={phase.index} className="flex items-center gap-2">
-                    <span className="font-mono text-ink-400 w-14 shrink-0">{t('commandBar.phase')}{phase.index}</span>
+                    <span className="font-mono text-ink-400 w-14 shrink-0">
+                      {t('commandBar.phase')}
+                      {phase.index}
+                    </span>
                     <span
                       className={`${statusColor(dStatus)} ${isBlocked(dStatus) ? 'font-medium' : ''}`}
                     >

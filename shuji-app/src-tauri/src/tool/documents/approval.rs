@@ -116,6 +116,10 @@ pub async fn tool_set_document_status(working_dir: &Path, args: &serde_json::Val
             let _ = remove_pending_approval(working_dir, id).await;
             let detail = format!("status={}", new_status);
             crate::audit::append(working_dir, "set_document_status", "emperor", id, &detail).await;
+
+            // 设计质量反馈：记录审核结论到审计跟踪
+            crate::audit::log_review_conclusion(working_dir, id, "emperor", &new_status, 0, 0)
+                .await;
             ToolOutput::success(
                 "set_document_status",
                 id,

@@ -1,7 +1,7 @@
-﻿import { useEffect, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getTokenStats, getRoundMetrics } from '../api';
 import { useDeptEvents } from '../hooks/useDeptEvents';
+import { useUsageStats } from '../hooks/useUsageStats';
 import { getDeptMeta, DEPT_META_LIST } from '../constants';
 import DeptStatusPanel from './DeptStatusPanel';
 
@@ -10,54 +10,35 @@ export default function DutyBar() {
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [tokenExpanded, setTokenExpanded] = useState(false);
   const { activeDepts, latestLogs } = useDeptEvents();
+  const { tokenStats, roundMetrics } = useUsageStats();
+  const [currency, setCurrency] = useState<'usd' | 'cny'>('usd');
+
   const deptArray =
     activeDepts.length > 0
-      ? DEPT_META_LIST.filter(
-          (d) => activeDepts.some((name) => name.toLowerCase() === d.key)
-        ).map((d) => d.label)
+      ? DEPT_META_LIST.filter((d) => activeDepts.includes(d.label)).map((d) => d.label)
       : [];
 
-  const [tokenPrompt, setTokenPrompt] = useState(0);
-  const [tokenCached, setTokenCached] = useState(0);
-  const [tokenCompletion, setTokenCompletion] = useState(0);
-  const [tokenCost, setTokenCost] = useState<string | null>(null);
-  const [currency, setCurrency] = useState<'usd' | 'cny'>('usd');
-  const [round, setRound] = useState({ started_at: 0 });
-
-  useEffect(() => {
-    const load = () => {
-      getTokenStats()
-        .then((stats) => {
-          const roles = Object.values(stats['All Time'] || {});
-          setTokenPrompt(roles.reduce((sum, u) => sum + u.prompt_tokens, 0));
-          setTokenCached(roles.reduce((sum, u) => sum + (u.cached_prompt_tokens ?? 0), 0));
-          setTokenCompletion(roles.reduce((sum, u) => sum + u.completion_tokens, 0));
-          const totalCost = roles.reduce(
-            (sum, u) =>
-              sum + (currency === 'cny' ? (u.estimated_cost_cny ?? 0) : (u.estimated_cost ?? 0)),
-            0
-          );
-          setTokenCost(totalCost > 0 ? totalCost.toFixed(3) : null);
-        })
-        .catch(() => {});
+  const { tokenPrompt, tokenCached, tokenCompletion, tokenCost } = useMemo(() => {
+    const roles = Object.values(tokenStats?.['All Time'] || {});
+    const prompt = roles.reduce((sum, u) => sum + u.prompt_tokens, 0);
+    const cached = roles.reduce((sum, u) => sum + (u.cached_prompt_tokens ?? 0), 0);
+    const completion = roles.reduce((sum, u) => sum + u.completion_tokens, 0);
+    const totalCost = roles.reduce(
+      (sum, u) =>
+        sum + (currency === 'cny' ? (u.estimated_cost_cny ?? 0) : (u.estimated_cost ?? 0)),
+      0
+    );
+    return {
+      tokenPrompt: prompt,
+      tokenCached: cached,
+      tokenCompletion: completion,
+      tokenCost: totalCost > 0 ? totalCost.toFixed(3) : null,
     };
-    load();
-    const timer = window.setInterval(load, 30000);
-    return () => clearInterval(timer);
-  }, [currency]);
-
-  useEffect(() => {
-    const load = () => {
-      getRoundMetrics()
-        .then((m) => { if (m) setRound({ started_at: m.started_at }); })
-        .catch(() => {});
-    };
-    load();
-    const timer = window.setInterval(load, 3000);
-    return () => clearInterval(timer);
-  }, []);
+  }, [tokenStats, currency]);
 
   const hasActive = activeDepts.length > 0;
+  const roundStarted = roundMetrics?.started_at ?? 0;
+  const roundCompletion = roundMetrics?.completion_tokens ?? 0;
 
   return (
     <div className="shrink-0">
@@ -99,10 +80,10 @@ export default function DutyBar() {
         </div>
 
         <div className="ml-auto flex items-center gap-2 text-caption font-mono text-ink-500 shrink-0">
-          {hasActive && round.started_at > 0 && (
+          {hasActive && roundStarted > 0 && (
             <>
               <span className="text-gold/60">{t('duty.output')}</span>
-              <span className="text-ink-300">{formatToken(tokenCompletion)}</span>
+              <span className="text-ink-300">{formatToken(roundCompletion)}</span>
             </>
           )}
           {tokenCost !== null && (

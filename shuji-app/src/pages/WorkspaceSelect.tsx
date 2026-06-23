@@ -125,7 +125,9 @@ export default function WorkspaceSelect() {
             <div className="w-full border-t border-fold" />
           </div>
           <div className="relative flex justify-center text-ui">
-            <span className="bg-surface-elevated px-2 text-ink-400">{t('workspace.orOpenExisting')}</span>
+            <span className="bg-surface-elevated px-2 text-ink-400">
+              {t('workspace.orOpenExisting')}
+            </span>
           </div>
         </div>
 

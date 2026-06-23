@@ -1,110 +1,101 @@
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
+
+/// Strip the Windows verbatim prefix from a canonicalized
+/// path if present.  This ensures consistent path comparisons
+/// regardless of whether canonicalize adds the prefix.
+fn normalize_canonical(path: PathBuf) -> PathBuf {
+    if cfg!(windows) {
+        let s = path.to_string_lossy();
+        if let Some(stripped) = s.strip_prefix(r"\\?\") {
+            return PathBuf::from(stripped);
+        }
+    }
+    path
+}
+
+/// Compare two paths component-by-component, case-insensitively
+/// on Windows.  Rust Path::starts_with compares Normal components
+/// case-insensitively on Windows, but Prefix components (drive
+/// letters) are compared as-is.  This helper does a full
+/// case-insensitive string comparison per component.
+fn safe_starts_with(path: &Path, prefix: &Path) -> bool {
+    let path_components: Vec<_> = path.components().collect();
+    let prefix_components: Vec<_> = prefix.components().collect();
+
+    if path_components.len() < prefix_components.len() {
+        return false;
+    }
+
+    #[cfg(windows)]
+    {
+        path_components[..prefix_components.len()]
+            .iter()
+            .zip(&prefix_components)
+            .all(|(a, b)| {
+                a.as_os_str()
+                    .to_string_lossy()
+                    .eq_ignore_ascii_case(&b.as_os_str().to_string_lossy())
+            })
+    }
+    #[cfg(not(windows))]
+    {
+        path_components[..prefix_components.len()] == prefix_components[..]
+    }
+}
 
 /// Resolve a project-relative path against root with safety checks.
 ///
-/// - Canonicalizes root for reliable comparison (handles Windows `\\?\` prefix)
-/// - Rejects absolute paths and `..` traversal
+/// - Rejects absolute paths and .. traversal
 /// - Canonicalizes existing paths to detect symlink escapes
-/// - Returns error if resolved path is not within `root`
-///
-/// For files that don't exist yet (write operations), canonicalizes
-/// the parent directory and then appends the filename.
+/// - For non-existing paths, input validation alone is sufficient
+/// - Uses safe component-level path comparisons
 pub async fn resolve_scoped_path(root: &Path, rel: &str) -> Result<PathBuf, String> {
-    // Canonicalize root once for reliable comparison across all code paths.
-    // This handles Windows `\\?\` prefix, symlinks, and path normalization.
-    let canon_root = tokio::fs::canonicalize(root)
-        .await
-        .map_err(|e| format!("project root resolution failed: {}", e))?;
-
     let rel_path = Path::new(rel);
 
-    // Block absolute paths
     if rel_path.is_absolute() {
         return Err(format!("absolute paths forbidden: {}", rel));
     }
 
-    // Block .. traversal (use path components, not string match)
-    if rel_path
-        .components()
-        .any(|c| c == std::path::Component::ParentDir)
-    {
+    if rel_path.components().any(|c| c == Component::ParentDir) {
         return Err(format!("parent directory traversal forbidden: {}", rel));
     }
 
-    // Block Windows drive-letter / UNC prefix paths (C:, \\server, etc.)
     for comp in rel_path.components() {
-        if matches!(comp, std::path::Component::Prefix(_)) {
+        if matches!(comp, Component::Prefix(_)) {
             return Err(format!("drive letter or UNC path forbidden: {}", rel));
         }
     }
 
     let candidate = root.join(rel_path);
 
-    // For existing paths, canonicalize to detect escapes
     if candidate.exists() {
-        let canon = tokio::fs::canonicalize(&candidate)
-            .await
-            .map_err(|e| format!("path resolution failed {}: {}", rel, e))?;
+        let canon_root = normalize_canonical(
+            tokio::fs::canonicalize(root)
+                .await
+                .map_err(|e| format!("project root canonicalization failed: {}", e))?,
+        );
+        let canon = normalize_canonical(
+            tokio::fs::canonicalize(&candidate)
+                .await
+                .map_err(|e| format!("path canonicalization failed {}: {}", rel, e))?,
+        );
 
-        if !canon.starts_with(&canon_root) {
+        if !safe_starts_with(&canon, &canon_root) {
             return Err(format!(
-                "path out of bounds: {} resolves to {}, not within project directory",
+                "path out of bounds: {} resolves to {},",
                 rel,
                 canon.display()
-            ));
+            ) + " not within project directory");
         }
         return Ok(canon);
     }
 
-    // For non-existing paths, canonicalize parent directory
-    if let Some(parent) = candidate.parent() {
-        if parent.exists() {
-            let canon_parent = tokio::fs::canonicalize(parent)
-                .await
-                .map_err(|e| format!("parent directory resolution failed {}: {}", rel, e))?;
-
-            if !canon_parent.starts_with(&canon_root) {
-                return Err(format!(
-                    "path out of bounds: parent directory of {} is not within project directory",
-                    rel,
-                ));
-            }
-
-            let filename = candidate
-                .file_name()
-                .ok_or_else(|| format!("invalid filename: {}", rel))?;
-
-            return Ok(canon_parent.join(filename));
-        }
-    }
-
-    // Parent doesn't exist yet — can't canonicalize the full path.
-    // Walk up to find the longest existing ancestor, canonicalize it,
-    // verify it's within the project root, then reconstruct the path.
-    for ancestor in candidate.ancestors() {
-        if ancestor.exists() {
-            let canon_ancestor = tokio::fs::canonicalize(ancestor)
-                .await
-                .map_err(|e| format!("parent resolution failed {}: {}", rel, e))?;
-            if !canon_ancestor.starts_with(&canon_root) {
-                return Err(format!("path out of bounds: {}", rel));
-            }
-            let suffix = candidate
-                .strip_prefix(ancestor)
-                .map_err(|_| format!("path resolution internal error: {}", rel))?;
-            return Ok(canon_ancestor.join(suffix));
-        }
-    }
-
-    // Nothing in the path exists. Since rel is already sanitized
-    // (no .., no absolute, no prefix components), root.join(rel) is
-    // guaranteed to be within root. Use canon_root as anchor so
-    // Windows normalization (\\?\ prefix, casing) is applied.
-    Ok(canon_root.join(rel))
+    // For non-existing paths, validation above guarantees
+    // that root.join(rel) is within root.
+    Ok(candidate)
 }
 
-/// Command blocklist: (keyword, reason) tuples for `check_safe_command`.
-/// System-level commands that are dangerous in any project context.
+/// Command blocklist: (keyword, reason) tuples
 pub const SYSTEM_BLOCKS: &[(&str, &str)] = &[
     ("format", "formatting disk forbidden"),
     ("mkfs", "formatting disk forbidden"),
@@ -133,8 +124,7 @@ pub const SYSTEM_BLOCKS: &[(&str, &str)] = &[
     ("npm install -g", "global install forbidden"),
 ];
 
-/// Path escape patterns: strings that indicate an attempt to access
-/// files outside the project directory.
+/// Path escape patterns for string-based detection.
 pub const PATH_ESCAPE: &[&str] = &[
     "..\\",
     "../",

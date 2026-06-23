@@ -114,7 +114,10 @@ export function useChat(initialMessages: ChatMessage[]) {
       }
       setDiscussMsgs((prev) => [...prev, reply]);
     } catch (e) {
-      setDiscussMsgs((prev) => [...prev, initialCabinetMessage(t('chat.discussError', { error: formatError(e) }))]);
+      setDiscussMsgs((prev) => [
+        ...prev,
+        initialCabinetMessage(t('chat.discussError', { error: formatError(e) })),
+      ]);
     } finally {
       setDiscussing(false);
       discussCancelRef.current = false;

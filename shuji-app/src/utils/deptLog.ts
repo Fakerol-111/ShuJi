@@ -1,5 +1,22 @@
 import { getDeptMeta } from '../constants';
-import type { DeptLogEntry } from '../types';
+import type { DeptLogEntry, DeptStepEntry } from '../types';
+
+/** Normalize any role identifier (EN key, PascalCase, CN label) to the canonical CN label. */
+export function normalizeDeptLabel(dept: string): string {
+  return getDeptMeta(dept)?.label ?? dept;
+}
+
+export function normalizeDeptLogEntry(entry: DeptLogEntry): DeptLogEntry {
+  return { ...entry, dept: normalizeDeptLabel(entry.dept) };
+}
+
+export function normalizeDeptStepEntry(entry: DeptStepEntry): DeptStepEntry {
+  return { ...entry, dept: normalizeDeptLabel(entry.dept) };
+}
+
+export function deptMatches(a: string, b: string): boolean {
+  return normalizeDeptLabel(a) === normalizeDeptLabel(b);
+}
 
 const DOC_PATH_RE = /\.shuji\/[\w./-]+\.md/;
 const ERROR_PREFIX = '❌';
@@ -33,10 +50,10 @@ export function stripActionPrefix(action: string): string {
 
 export function isDeptActive(deptLabel: string, activeDepts: string[]): boolean {
   const meta = getDeptMeta(deptLabel);
-  if (!meta) return activeDepts.includes(deptLabel);
-  return (
-    activeDepts.includes(meta.label) ||
-    activeDepts.includes(meta.shortLabel) ||
-    activeDepts.includes(meta.key)
-  );
+  if (!meta) return activeDepts.some((d) => deptMatches(d, deptLabel));
+  return activeDepts.some((d) => {
+    if (d === meta.label || d === meta.shortLabel || d === meta.key) return true;
+    const activeMeta = getDeptMeta(d);
+    return activeMeta?.key === meta.key;
+  });
 }

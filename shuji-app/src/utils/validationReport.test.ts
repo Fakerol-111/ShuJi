@@ -51,9 +51,7 @@ describe('ValidationReport parsing', () => {
       ts: '2026-06-13T12:00:00Z',
       project_type: 'rust',
       overall_pass: false,
-      checks: [
-        { name: 'tests', pass: false, summary: 'test failed', details: { failed: 1 } },
-      ],
+      checks: [{ name: 'tests', pass: false, summary: 'test failed', details: { failed: 1 } }],
       ctrt_id: null,
     };
     const allPass = failing.checks.every((c) => c.pass);

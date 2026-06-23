@@ -238,7 +238,14 @@ pub async fn tool_modify_document(
             );
             crate::audit::append(working_dir, "modify_document", dept, id, &detail).await;
             crate::audit::save_diff(working_dir, id, "modify_document", body, &new_body).await;
-            ToolOutput::success("modify_document", id, "Modified successfully")
+
+            // 设计文档质量提示：不阻塞创建，仅在内容不足时附加警告
+            let quality_hint = check_design_quality(&meta.doc_type, &new_body);
+            if let Some(hint) = quality_hint {
+                ToolOutput::success_with_warning("modify_document", id, "low_quality", &hint)
+            } else {
+                ToolOutput::success("modify_document", id, "Modified successfully")
+            }
         }
         Err(e) => ToolOutput::error("modify_document", id, "write_error", &e.to_string()),
     }
@@ -392,7 +399,14 @@ pub async fn tool_append_document(
             let detail = format!("append_parts={}, total_chars={}", append_parts.len(), total);
             crate::audit::append(working_dir, "append_document", dept, id, &detail).await;
             crate::audit::save_diff(working_dir, id, "append_document", body, &new_body).await;
-            ToolOutput::success("append_document", id, "Appended successfully")
+
+            // 设计文档质量提示：不阻塞创建，仅在内容不足时附加警告
+            let quality_hint = check_design_quality(&meta.doc_type, &new_body);
+            if let Some(hint) = quality_hint {
+                ToolOutput::success_with_warning("append_document", id, "low_quality", &hint)
+            } else {
+                ToolOutput::success("append_document", id, "Appended successfully")
+            }
         }
         Err(e) => ToolOutput::error("append_document", id, "write_error", &e.to_string()),
     }
@@ -731,4 +745,27 @@ pub fn find_document_tool_def() -> crate::api::client::ToolDefinition {
             }),
         },
     }
+}
+
+/// 检查设计文档的内容质量，返回缺失的关键内容警告（不阻塞流程）。
+/// 用于在 append_document/modify_document 中附加质量提示。
+fn check_design_quality(doc_type: &str, body: &str) -> Option<String> {
+    let must_have: &[&str] = match doc_type {
+        "dsgn" => &["架构", "模块", "接口", "约束"],
+        "plan" => &["阶段", "依赖"],
+        "pdsg" => &["接口", "合约", "模块"],
+        _ => return None,
+    };
+    let missing: Vec<&str> = must_have
+        .iter()
+        .filter(|kw| !body.contains(*kw))
+        .copied()
+        .collect();
+    if missing.len() >= must_have.len() / 2 {
+        return Some(format!(
+             "设计文档缺少以下关键内容：{}。一个完整的设计文档应包含：架构约束、模块边界、接口定义。",
+             missing.join("、"),
+         ));
+    }
+    None
 }

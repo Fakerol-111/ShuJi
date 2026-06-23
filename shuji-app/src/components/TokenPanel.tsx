@@ -1,41 +1,36 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getTokenStats, refreshPricing } from '../api';
+import { refreshPricing } from '../api';
+import { useUsageStats } from '../hooks/useUsageStats';
 import type { TokenUsage } from '../api';
-import { formatError } from '../utils/error';
 import { getDeptMeta, DEPT_ORDER } from '../constants';
 
 type Currency = 'usd' | 'cny';
 
 export default function TokenPanel() {
   const { t } = useTranslation();
-  const [stats, setStats] = useState<Record<string, Record<string, TokenUsage>> | null>(null);
+  const { tokenStats: stats, error: statsError, refresh, refreshTokenStats } = useUsageStats();
   const [windowName, setWindowName] = useState<string>('All Time');
   const [error, setError] = useState('');
   const [currency, setCurrency] = useState<Currency>('usd');
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = () => {
-    setError('');
-    getTokenStats()
-      .then(setStats)
-      .catch((e) => setError(formatError(e)));
-  };
+  useEffect(() => {
+    if (statsError) setError(statsError);
+  }, [statsError]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     setError('');
     try {
       await refreshPricing();
-      load();
+      await refreshTokenStats();
     } catch (e) {
-      setError(formatError(e));
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setRefreshing(false);
     }
   };
-
-  useEffect(load, []);
 
   const current = stats?.[windowName] || {};
   const maxTotal = Math.max(...Object.values(current).map((u) => u.total_tokens), 1);
@@ -70,14 +65,19 @@ export default function TokenPanel() {
           >
             {refreshing ? t('common.loading') : t('token.refreshPrices')}
           </button>
+          <button onClick={refresh} className="text-[10px] text-ink-400 hover:text-ink-700">
+            {t('common.refresh')}
+          </button>
         </div>
       </div>
       {stats && Object.keys(stats).length > 0 && (
         <div className="flex gap-1 mb-3 flex-wrap">
-          {[{ key: 'Today', label: t('token.today') },
-              { key: 'Last 3 Days', label: t('token.last3Days') },
-              { key: 'Last 7 Days', label: t('token.last7Days') },
-              { key: 'All Time', label: t('duty.summary') }]
+          {[
+            { key: 'Today', label: t('token.today') },
+            { key: 'Last 3 Days', label: t('token.last3Days') },
+            { key: 'Last 7 Days', label: t('token.last7Days') },
+            { key: 'All Time', label: t('duty.summary') },
+          ]
             .filter((w) => stats[w.key])
             .map((w) => (
               <button
@@ -128,9 +128,9 @@ export default function TokenPanel() {
                   <div className="flex justify-between text-[9px] text-ink-400 mt-0.5">
                     <span>{t('token.callCount', { count: usage.call_count })}</span>
                     <span>
-                      {t('token.cacheHit')} {(usage.cached_prompt_tokens ?? 0).toLocaleString()} | {t('token.cacheMiss')}{' '}
-                      {(usage.uncached_prompt_tokens ?? 0).toLocaleString()} | {t('token.output')}{' '}
-                      {usage.completion_tokens.toLocaleString()}
+                      {t('token.cacheHit')} {(usage.cached_prompt_tokens ?? 0).toLocaleString()} |{' '}
+                      {t('token.cacheMiss')} {(usage.uncached_prompt_tokens ?? 0).toLocaleString()}{' '}
+                      | {t('token.output')} {usage.completion_tokens.toLocaleString()}
                     </span>
                   </div>
                 </div>

@@ -137,8 +137,34 @@ impl Agent for MenxiaShizhongAgent {
             })
         };
 
-        let (mut result, mut route);
+        // ── 自动技能注入 ──
+        // 根据任务描述自动选择并注入匹配的审核技能 markdown
+        let task_lower = input.task_description.to_lowercase();
+        let initial_skill = if task_lower.contains("overall")
+            || task_lower.contains("整体")
+            || task_lower.contains("全局")
+            || task_lower.contains("architecture")
+        {
+            Some("review_overall")
+        } else if task_lower.contains("phase")
+            || task_lower.contains("阶段")
+            || task_lower.contains("详细")
+            || task_lower.contains("detail")
+        {
+            Some("review_phase")
+        } else {
+            None
+        };
+
         let mut current_skill = String::new();
+
+        if let Some(skill_name) = initial_skill {
+            log_console!("[门下侍中] auto-injecting skill: {}", skill_name);
+            session.inject_skill(skill_name, Self::load_skill(skill_name));
+            current_skill = skill_name.to_string();
+        }
+
+        let (mut result, mut route);
         loop {
             (result, route) = controller
                 .run(

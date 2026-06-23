@@ -162,7 +162,9 @@ export default function AuditPanel({
               </div>
             </div>
           ) : !data || data.entries.length === 0 ? (
-            <div className="p-4 text-body text-ink-400 text-center mt-8">{t('audit.noGazette')}</div>
+            <div className="p-4 text-body text-ink-400 text-center mt-8">
+              {t('audit.noGazette')}
+            </div>
           ) : (
             (() => {
               const filtered = searchText
@@ -288,12 +290,16 @@ export default function AuditPanel({
             <div className="space-y-3">
               {traceResult.target && (
                 <div>
-                  <div className="text-caption font-semibold text-ink-700 mb-1">{t('audit.currentDoc')}</div>
+                  <div className="text-caption font-semibold text-ink-700 mb-1">
+                    {t('audit.currentDoc')}
+                  </div>
                   <DocCard node={traceResult.target} onDocSelect={onDocSelect} />
                 </div>
               )}
               {!traceResult.target && (
-                <div className="text-caption text-ink-300">{t('audit.docNotFound', { id: traceDocId })}</div>
+                <div className="text-caption text-ink-300">
+                  {t('audit.docNotFound', { id: traceDocId })}
+                </div>
               )}
               {traceResult.upstream.length > 0 && (
                 <div>
@@ -378,7 +384,8 @@ export default function AuditPanel({
                 </div>
                 {verification.broken_links.length > 0 && (
                   <div className="text-[10px] text-vermillion">
-                    {t('audit.brokenLinks')}: {verification.broken_links.map((b) => b.seq).join(', ')}
+                    {t('audit.brokenLinks')}:{' '}
+                    {verification.broken_links.map((b) => b.seq).join(', ')}
                   </div>
                 )}
                 <div className="text-[9px] text-ink-300 font-mono break-all">
@@ -394,8 +401,12 @@ export default function AuditPanel({
           ) : (
             <>
               <div className="rounded border border-fold p-2 space-y-1">
-                <div className="text-caption font-semibold text-ink-700">{t('audit.eventStats')}</div>
-                <div className="text-[10px] text-ink-500">{t('audit.totalEntries')} {data.summary.total_events}</div>
+                <div className="text-caption font-semibold text-ink-700">
+                  {t('audit.eventStats')}
+                </div>
+                <div className="text-[10px] text-ink-500">
+                  {t('audit.totalEntries')} {data.summary.total_events}
+                </div>
                 <div className="grid grid-cols-2 gap-1 mt-1">
                   {data.summary.by_event.slice(0, 6).map(([evt, count]) => (
                     <div key={evt} className="flex justify-between text-caption">
@@ -406,7 +417,9 @@ export default function AuditPanel({
                 </div>
               </div>
               <div className="rounded border border-fold p-2 space-y-1">
-                <div className="text-caption font-semibold text-ink-700">{t('audit.deptActivity')}</div>
+                <div className="text-caption font-semibold text-ink-700">
+                  {t('audit.deptActivity')}
+                </div>
                 <div className="space-y-1">
                   {data.summary.by_role.slice(0, 8).map(([role, count]) => {
                     const maxCount = data.summary.by_role[0]?.[1] || 1;
@@ -428,7 +441,9 @@ export default function AuditPanel({
                 </div>
               </div>
               <div className="rounded border border-fold p-2 space-y-1">
-                <div className="text-caption font-semibold text-ink-700">{t('audit.eventDistribution')}</div>
+                <div className="text-caption font-semibold text-ink-700">
+                  {t('audit.eventDistribution')}
+                </div>
                 <div className="space-y-1">
                   {data.summary.by_event.map(([evt, count]) => {
                     const maxCount = data.summary.by_event[0]?.[1] || 1;

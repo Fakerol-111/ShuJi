@@ -148,8 +148,50 @@ impl Agent for ZhongshulingAgent {
             })
         };
 
-        let (mut result, mut route);
+        // ── 自动技能注入 ──
+        // 根据任务描述自动选择并注入匹配的技能 markdown，取代 LLM 主动加载 <skill> 标签
+        let task_lower = input.task_description.to_lowercase();
+        let initial_skill = if task_lower.contains("architecture") || task_lower.contains("overall")
+        {
+            Some("overall_design")
+        } else if task_lower.contains("phase")
+            && (task_lower.contains("plan") || task_lower.contains("分阶段"))
+        {
+            Some("phase_plan")
+        } else if task_lower.contains("detail")
+            || task_lower.contains("详细设计")
+            || task_lower.contains("详细")
+        {
+            Some("phase_design")
+        } else if task_lower.contains("analysis")
+            || task_lower.contains("分析")
+            || task_lower.contains("代码分析")
+        {
+            Some("code_analysis")
+        } else if task_lower.contains("diagnos")
+            || task_lower.contains("诊断")
+            || task_lower.contains("bug")
+            || task_lower.contains("故障")
+        {
+            Some("diagnosis")
+        } else if task_lower.contains("impact")
+            || task_lower.contains("影响评估")
+            || task_lower.contains("影响")
+        {
+            Some("impact_assessment")
+        } else {
+            None
+        };
+
         let mut current_skill = String::new();
+
+        if let Some(skill_name) = initial_skill {
+            log_console!("[中书令] auto-injecting skill: {}", skill_name);
+            session.inject_skill(skill_name, Self::load_skill(skill_name));
+            current_skill = skill_name.to_string();
+        }
+
+        let (mut result, mut route);
         loop {
             if self.cancel.load(std::sync::atomic::Ordering::SeqCst) {
                 log_console!("[中书令] interrupted in outer skill loop");

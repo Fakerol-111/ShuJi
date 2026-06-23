@@ -29,7 +29,8 @@ export default function DeptCard({
   const progress =
     showPlan && planInfo
       ? Math.round(
-          (planInfo.batches.filter((b) => b.status === 'done').length / planInfo.batches.length) * 100
+          (planInfo.batches.filter((b) => b.status === 'done').length / planInfo.batches.length) *
+            100
         )
       : 0;
 
@@ -50,12 +51,17 @@ export default function DeptCard({
       <div className="px-3 py-2.5">
         <div className="flex items-center gap-2">
           <DeptGlyph deptKey={meta.key} size={16} stroke={meta.color} />
-          <span className="text-ui font-display font-semibold text-ink-800 truncate">{displayLabel}</span>
+          <span className="text-ui font-display font-semibold text-ink-800 truncate">
+            {displayLabel}
+          </span>
           {isActive && (
             <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse shrink-0 ml-auto" />
           )}
           {hasError && (
-            <span className="w-1.5 h-1.5 rounded-full bg-vermillion shrink-0 ml-auto" title={t('common.error')} />
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-vermillion shrink-0 ml-auto"
+              title={t('common.error')}
+            />
           )}
         </div>
         {showPlan && (

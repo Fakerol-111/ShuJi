@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { extractDocPath, classifyDeptAction, stripActionPrefix, isDeptActive } from './deptLog';
+import {
+  extractDocPath,
+  classifyDeptAction,
+  stripActionPrefix,
+  isDeptActive,
+  normalizeDeptLabel,
+  deptMatches,
+} from './deptLog';
 import type { DeptLogEntry } from '../types';
 
 function entry(overrides: Partial<DeptLogEntry> = {}): DeptLogEntry {
@@ -80,11 +87,34 @@ describe('isDeptActive', () => {
     expect(isDeptActive('工部尚书', ['gongbushangshu'])).toBe(true);
   });
 
+  it('returns true when PascalCase backend role name matches', () => {
+    expect(isDeptActive('中书令', ['Zhongshuling'])).toBe(true);
+    expect(isDeptActive('工部尚书', ['Gongbushangshu'])).toBe(true);
+  });
+
   it('returns false when dept is not in activeDepts', () => {
     expect(isDeptActive('工部尚书', ['内阁'])).toBe(false);
   });
 
   it('returns false when activeDepts is empty', () => {
     expect(isDeptActive('工部尚书', [])).toBe(false);
+  });
+});
+
+describe('normalizeDeptLabel', () => {
+  it('maps PascalCase backend names to Chinese labels', () => {
+    expect(normalizeDeptLabel('Zhongshuling')).toBe('中书令');
+    expect(normalizeDeptLabel('Gongbushangshu')).toBe('工部尚书');
+    expect(normalizeDeptLabel('Neige')).toBe('内阁');
+  });
+
+  it('passes through unknown names', () => {
+    expect(normalizeDeptLabel('未知部门')).toBe('未知部门');
+  });
+});
+
+describe('deptMatches', () => {
+  it('matches Chinese label with PascalCase backend name', () => {
+    expect(deptMatches('中书令', 'Zhongshuling')).toBe(true);
   });
 });

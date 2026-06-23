@@ -147,7 +147,8 @@ function MessageList({
   activeDepts?: string[];
 }) {
   const { t } = useTranslation();
-  const activeDept = activeDepts && activeDepts.length > 0 ? activeDepts[activeDepts.length - 1] : null;
+  const activeDept =
+    activeDepts && activeDepts.length > 0 ? activeDepts[activeDepts.length - 1] : null;
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
@@ -176,7 +177,9 @@ function PlanCard({ info }: { info: PlanInfo }) {
   const { t } = useTranslation();
   return (
     <div className="shrink-0 mx-4 mt-3 bg-surface-parchment border border-fold rounded-lg px-3 py-2">
-      <div className="font-display text-caption text-ink-600 font-semibold mb-1">{t('chat.gongbuPlan')}</div>
+      <div className="font-display text-caption text-ink-600 font-semibold mb-1">
+        {t('chat.gongbuPlan')}
+      </div>
       <div className="space-y-0.5">
         {info.batches.map((b, i) => (
           <div key={i} className="flex items-center gap-1.5 text-caption font-mono">

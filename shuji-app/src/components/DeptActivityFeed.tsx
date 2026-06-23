@@ -26,7 +26,11 @@ export default function DeptActivityFeed({ onDocClick }: DeptActivityFeedProps) 
   const deduped = dedupeEntries(logEntries);
 
   if (deduped.length === 0) {
-    return <div className="px-3 py-4 text-center text-caption text-ink-400">{t('deptActivity.noActivity')}</div>;
+    return (
+      <div className="px-3 py-4 text-center text-caption text-ink-400">
+        {t('deptActivity.noActivity')}
+      </div>
+    );
   }
 
   const visible = showAll ? deduped : deduped.slice(-MAX_VISIBLE);

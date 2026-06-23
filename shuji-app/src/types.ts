@@ -206,6 +206,13 @@ export interface PlanInfo {
 }
 
 // Live round metrics (from get_round_metrics)
+export type UsageUpdateKind = 'token' | 'context';
+
+export interface UsageUpdate {
+  role: string;
+  kind: UsageUpdateKind;
+}
+
 export interface RoundMetrics {
   started_at: number;
   current_role: string;

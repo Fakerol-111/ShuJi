@@ -4,9 +4,7 @@ import { formatError, classifyError } from './error';
 describe('formatError', () => {
   it('maps 401 to API key invalid message', () => {
     expect(formatError('401 unauthorized')).toBe('API 密钥无效或已过期');
-    expect(formatError(new Error('Invalid API key'))).toBe(
-      'API 密钥无效或已过期'
-    );
+    expect(formatError(new Error('Invalid API key'))).toBe('API 密钥无效或已过期');
   });
 
   it('maps 403 to forbidden message', () => {
@@ -22,9 +20,7 @@ describe('formatError', () => {
   });
 
   it('maps connection errors', () => {
-    expect(formatError('Connection refused')).toBe(
-      '无法连接 API 服务器'
-    );
+    expect(formatError('Connection refused')).toBe('无法连接 API 服务器');
     expect(formatError('tcp connect error')).toBe('无法连接 API 服务器');
   });
 

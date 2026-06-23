@@ -43,7 +43,14 @@ function DeptInspectorHeader({
           onClick={onBack}
           className="text-ui text-ink-500 hover:text-vermillion transition-colors shrink-0 flex items-center gap-1"
         >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          >
             <polyline points="10,3 5,8 10,13" />
           </svg>
           {t('inspector.backToDuty')}
@@ -65,7 +72,11 @@ function DeptInspectorHeader({
                   : 'text-ink-400 bg-ink-100'
             }`}
           >
-            {hasError ? t('inspector.error') : active ? t('inspector.executing') : t('inspector.idle')}
+            {hasError
+              ? t('inspector.error')
+              : active
+                ? t('inspector.executing')
+                : t('inspector.idle')}
           </span>
         </div>
       </div>
@@ -145,9 +156,13 @@ function DeptInspectorFeed({
 function PlanInfoCard({ info }: { info: PlanInfo }) {
   const { t } = useTranslation();
   return (
-    <div className="shrink-0 mx-4 mt-3 bg-surface-parchment border border-fold rounded-xl px-3 py-2"
-      style={{ borderLeft: '3px solid var(--dept-gongbu)' }}>
-      <div className="font-display text-caption text-ink-600 font-semibold mb-1">{t('inspector.gongbuBatch')}</div>
+    <div
+      className="shrink-0 mx-4 mt-3 bg-surface-parchment border border-fold rounded-xl px-3 py-2"
+      style={{ borderLeft: '3px solid var(--dept-gongbu)' }}
+    >
+      <div className="font-display text-caption text-ink-600 font-semibold mb-1">
+        {t('inspector.gongbuBatch')}
+      </div>
       <div className="space-y-0.5">
         {info.batches.map((b, i) => (
           <div key={i} className="flex items-center gap-1.5 text-caption font-mono">
@@ -208,7 +223,13 @@ function StepCard({ entry }: { entry: DeptStepEntry }) {
         : '';
       return (
         <div className="flex items-start gap-2 py-0.5 px-2 rounded hover:bg-ink-100/20">
-          <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-ink-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <svg
+            className="w-3.5 h-3.5 shrink-0 mt-0.5 text-ink-400"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          >
             <circle cx="8" cy="8" r="6" />
             <line x1="8" y1="4" x2="8" y2="8" />
             <line x1="8" y1="8" x2="11" y2="10" />
@@ -225,7 +246,9 @@ function StepCard({ entry }: { entry: DeptStepEntry }) {
     case 'tool_result': {
       return (
         <div className="flex items-start gap-2 py-0.5 px-2 rounded">
-          <span className={`text-caption font-mono font-semibold shrink-0 mt-0.5 ${kind.ok ? 'text-jade' : 'text-vermillion'}`}>
+          <span
+            className={`text-caption font-mono font-semibold shrink-0 mt-0.5 ${kind.ok ? 'text-jade' : 'text-vermillion'}`}
+          >
             {kind.ok ? t('common.completed') : t('common.failed')}
           </span>
           <div className="min-w-0 flex-1">
@@ -253,13 +276,11 @@ function StepCard({ entry }: { entry: DeptStepEntry }) {
   }
 }
 
-/** Resolve department steps by trying label, shortLabel, and key variants. */
+/** Resolve department steps — keys are normalized to CN labels in useDeptEvents. */
 function resolveDeptSteps(deptSteps: Map<string, DeptStepEntry[]>, dept: string): DeptStepEntry[] {
   const meta = getDeptMeta(dept);
   if (!meta) return deptSteps.get(dept) || [];
-  return (
-    deptSteps.get(meta.label) || deptSteps.get(meta.shortLabel) || deptSteps.get(meta.key) || []
-  );
+  return deptSteps.get(meta.label) || [];
 }
 
 export default function DeptInspector({
@@ -293,7 +314,14 @@ export default function DeptInspector({
             onClick={onBack}
             className="text-ui text-ink-500 hover:text-vermillion transition-colors shrink-0 flex items-center gap-1"
           >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
               <polyline points="10,3 5,8 10,13" />
             </svg>
             {t('inspector.backToDuty')}

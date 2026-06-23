@@ -1,0 +1,12 @@
+﻿[build]
+# 限制并行编译任务数，防止 CPU/RAM 打满
+jobs = 4
+
+[profile.dev]
+# debug 产物去掉调试符号，大幅减小体积和 I/O 压力
+strip = "symbols"
+
+[profile.test]
+# test 二进制去掉调试符号
+strip = "symbols"
+incremental = true

@@ -319,8 +319,13 @@ export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
     if (healthStatus === 'idle') return null;
     if (healthStatus === 'checking')
       return <span className="text-xs text-ink-300">{t('common.loading')}</span>;
-    if (healthStatus === 'ok') return <span className="text-xs text-jade-light">{t('setup.connectionSuccess')}</span>;
-    return <span className="text-xs text-vermillion-light">{t('setup.connectionFailed')}: {healthMsg}</span>;
+    if (healthStatus === 'ok')
+      return <span className="text-xs text-jade-light">{t('setup.connectionSuccess')}</span>;
+    return (
+      <span className="text-xs text-vermillion-light">
+        {t('setup.connectionFailed')}: {healthMsg}
+      </span>
+    );
   };
 
   return (
@@ -334,7 +339,9 @@ export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
           >
             ← {onClose ? t('common.close') : t('settings.backToProject')}
           </button>
-          <h1 className="font-display text-base font-semibold text-ink-50">{t('settings.title')}</h1>
+          <h1 className="font-display text-base font-semibold text-ink-50">
+            {t('settings.title')}
+          </h1>
         </div>
       </header>
 
@@ -345,7 +352,16 @@ export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
           <div className="max-w-2xl mx-auto px-6 py-8">
             <header className="mb-8 pb-4 border-b border-border-fold">
               <h2 className="font-display text-title font-semibold text-ink-900">
-                {t('settings.' + (activeCategory === 'context' ? 'contextWindow' : activeCategory === 'soul' ? 'soulManagement' : activeCategory === 'service' ? 'serviceConfig' : activeCategory))}
+                {t(
+                  'settings.' +
+                    (activeCategory === 'context'
+                      ? 'contextWindow'
+                      : activeCategory === 'soul'
+                        ? 'soulManagement'
+                        : activeCategory === 'service'
+                          ? 'serviceConfig'
+                          : activeCategory)
+                )}
               </h2>
             </header>
             {renderContent()}
