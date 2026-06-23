@@ -113,75 +113,75 @@ export default function DashboardLayout({
   return (
     <DeptEventsProvider>
       <UsageStatsProvider>
-      <div className="h-screen bg-surface-paper flex flex-col overflow-hidden">
-        <header className="bg-ink-900 border-b border-gold/30 shrink-0 h-12 px-4 flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            <SealLogo size={20} />
-            {headerLeft ?? (
-              <>
-                <h1 className="font-display text-base font-semibold text-ink-50 truncate">
-                  {project?.name || t('app.name')}
-                </h1>
-                <span className="text-caption text-ink-500 font-mono truncate max-w-[520px]">
-                  {project?.working_dir}
-                </span>
-              </>
-            )}
-          </div>
-          <div className="flex items-center gap-2">{headerRight}</div>
-        </header>
+        <div className="h-screen bg-surface-paper flex flex-col overflow-hidden">
+          <header className="bg-ink-900 border-b border-gold/30 shrink-0 h-12 px-4 flex items-center justify-between">
+            <div className="flex items-center gap-3 min-w-0">
+              <SealLogo size={20} />
+              {headerLeft ?? (
+                <>
+                  <h1 className="font-display text-base font-semibold text-ink-50 truncate">
+                    {project?.name || t('app.name')}
+                  </h1>
+                  <span className="text-caption text-ink-500 font-mono truncate max-w-[520px]">
+                    {project?.working_dir}
+                  </span>
+                </>
+              )}
+            </div>
+            <div className="flex items-center gap-2">{headerRight}</div>
+          </header>
 
-        {error && (
-          <div className="px-4 py-2 bg-vermillion-light border-b border-vermillion/20 text-vermillion-dark text-ui shrink-0">
-            {error}
-            <button onClick={clearError} className="ml-2 font-bold">
-              &times;
-            </button>
-          </div>
-        )}
-
-        <div className="flex-1 flex min-h-0 overflow-hidden">
-          <ActivityBar
-            selected={activity}
-            onSelect={onActivity}
-            pendingApprovalsCount={pendingApprovalsCount}
-          />
-          {activity && activity !== 'graph' && project && (
-            <Sidebar
-              mode={activity}
-              projectDir={project.working_dir}
-              selectedDoc={activeDocPath}
-              onDocSelect={onDocSelect}
-              onShowDiff={onShowDiff}
-            />
+          {error && (
+            <div className="px-4 py-2 bg-vermillion-light border-b border-vermillion/20 text-vermillion-dark text-ui shrink-0">
+              {error}
+              <button onClick={clearError} className="ml-2 font-bold">
+                &times;
+              </button>
+            </div>
           )}
-          <div className="flex-1 flex min-h-0">
-            {activity === 'graph' ? (
-              <div className="flex-1 min-h-0">{artifactPanel}</div>
-            ) : (
-              <div className="flex-1 min-w-0 min-h-0 flex flex-col">{agentStream}</div>
-            )}
-            {activity !== 'graph' && artifactOpen && artifactPanel && (
-              <>
-                <div
-                  className="w-1 shrink-0 cursor-col-resize bg-fold hover:bg-gold/40 active:bg-gold/60 transition-colors"
-                  onMouseDown={onDragStart}
-                />
-                <aside
-                  className="shrink-0 flex flex-col min-h-0 min-w-0 bg-surface-paper overflow-hidden"
-                  style={{ width: artifactWidth }}
-                >
-                  {artifactPanel}
-                </aside>
-              </>
-            )}
-          </div>
-        </div>
 
-        <DutyBar />
-        {picker}
-        {demoTour}
-      </div>
+          <div className="flex-1 flex min-h-0 overflow-hidden">
+            <ActivityBar
+              selected={activity}
+              onSelect={onActivity}
+              pendingApprovalsCount={pendingApprovalsCount}
+            />
+            {activity && activity !== 'graph' && project && (
+              <Sidebar
+                mode={activity}
+                projectDir={project.working_dir}
+                selectedDoc={activeDocPath}
+                onDocSelect={onDocSelect}
+                onShowDiff={onShowDiff}
+              />
+            )}
+            <div className="flex-1 flex min-h-0">
+              {activity === 'graph' ? (
+                <div className="flex-1 min-h-0">{artifactPanel}</div>
+              ) : (
+                <div className="flex-1 min-w-0 min-h-0 flex flex-col">{agentStream}</div>
+              )}
+              {activity !== 'graph' && artifactOpen && artifactPanel && (
+                <>
+                  <div
+                    className="w-1 shrink-0 cursor-col-resize bg-fold hover:bg-gold/40 active:bg-gold/60 transition-colors"
+                    onMouseDown={onDragStart}
+                  />
+                  <aside
+                    className="shrink-0 flex flex-col min-h-0 min-w-0 bg-surface-paper overflow-hidden"
+                    style={{ width: artifactWidth }}
+                  >
+                    {artifactPanel}
+                  </aside>
+                </>
+              )}
+            </div>
+          </div>
+
+          <DutyBar />
+          {picker}
+          {demoTour}
+        </div>
       </UsageStatsProvider>
     </DeptEventsProvider>
   );

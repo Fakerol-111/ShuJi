@@ -310,58 +310,149 @@
   }
 
   /* ── Dept tint utilities ── */
-  .dept-tint-neige { background-color: color-mix(in srgb, var(--dept-neige) 6%, var(--color-surface-elevated)); }
-  .dept-tint-active-neige { background-color: color-mix(in srgb, var(--dept-neige) 10%, var(--color-surface-paper)); box-shadow: 0 0 var(--cockpit-glow-spread) color-mix(in srgb, var(--dept-neige) 15%, transparent); }
-  .dept-tint-zhongshuling { background-color: color-mix(in srgb, var(--dept-zhongshuling) 6%, var(--color-surface-elevated)); }
-  .dept-tint-active-zhongshuling { background-color: color-mix(in srgb, var(--dept-zhongshuling) 10%, var(--color-surface-paper)); box-shadow: 0 0 var(--cockpit-glow-spread) color-mix(in srgb, var(--dept-zhongshuling) 15%, transparent); }
-  .dept-tint-menxiashizhong { background-color: color-mix(in srgb, var(--dept-menxia) 6%, var(--color-surface-elevated)); }
-  .dept-tint-active-menxiashizhong { background-color: color-mix(in srgb, var(--dept-menxia) 10%, var(--color-surface-paper)); box-shadow: 0 0 var(--cockpit-glow-spread) color-mix(in srgb, var(--dept-menxia) 15%, transparent); }
-  .dept-tint-shangshuling { background-color: color-mix(in srgb, var(--dept-shangshu) 6%, var(--color-surface-elevated)); }
-  .dept-tint-active-shangshuling { background-color: color-mix(in srgb, var(--dept-shangshu) 10%, var(--color-surface-paper)); box-shadow: 0 0 var(--cockpit-glow-spread) color-mix(in srgb, var(--dept-shangshu) 15%, transparent); }
-  .dept-tint-libushangshu { background-color: color-mix(in srgb, var(--dept-libu) 6%, var(--color-surface-elevated)); }
-  .dept-tint-active-libushangshu { background-color: color-mix(in srgb, var(--dept-libu) 10%, var(--color-surface-paper)); box-shadow: 0 0 var(--cockpit-glow-spread) color-mix(in srgb, var(--dept-libu) 15%, transparent); }
-  .dept-tint-bingbushangshu { background-color: color-mix(in srgb, var(--dept-bingbu) 6%, var(--color-surface-elevated)); }
-  .dept-tint-active-bingbushangshu { background-color: color-mix(in srgb, var(--dept-bingbu) 10%, var(--color-surface-paper)); box-shadow: 0 0 var(--cockpit-glow-spread) color-mix(in srgb, var(--dept-bingbu) 15%, transparent); }
-  .dept-tint-gongbushangshu { background-color: color-mix(in srgb, var(--dept-gongbu) 6%, var(--color-surface-elevated)); }
-  .dept-tint-active-gongbushangshu { background-color: color-mix(in srgb, var(--dept-gongbu) 10%, var(--color-surface-paper)); box-shadow: 0 0 var(--cockpit-glow-spread) color-mix(in srgb, var(--dept-gongbu) 15%, transparent); }
-  .dept-tint-xingbushangshu { background-color: color-mix(in srgb, var(--dept-xingbu) 6%, var(--color-surface-elevated)); }
-  .dept-tint-active-xingbushangshu { background-color: color-mix(in srgb, var(--dept-xingbu) 10%, var(--color-surface-paper)); box-shadow: 0 0 var(--cockpit-glow-spread) color-mix(in srgb, var(--dept-xingbu) 15%, transparent); }
-  .dept-tint-liburshangshu { background-color: color-mix(in srgb, var(--dept-libu-li) 6%, var(--color-surface-elevated)); }
-  .dept-tint-active-liburshangshu { background-color: color-mix(in srgb, var(--dept-libu-li) 10%, var(--color-surface-paper)); box-shadow: 0 0 var(--cockpit-glow-spread) color-mix(in srgb, var(--dept-libu-li) 15%, transparent); }
+  .dept-tint-neige {
+    background-color: color-mix(in srgb, var(--dept-neige) 6%, var(--color-surface-elevated));
+  }
+  .dept-tint-active-neige {
+    background-color: color-mix(in srgb, var(--dept-neige) 10%, var(--color-surface-paper));
+    box-shadow: 0 0 var(--cockpit-glow-spread)
+      color-mix(in srgb, var(--dept-neige) 15%, transparent);
+  }
+  .dept-tint-zhongshuling {
+    background-color: color-mix(
+      in srgb,
+      var(--dept-zhongshuling) 6%,
+      var(--color-surface-elevated)
+    );
+  }
+  .dept-tint-active-zhongshuling {
+    background-color: color-mix(in srgb, var(--dept-zhongshuling) 10%, var(--color-surface-paper));
+    box-shadow: 0 0 var(--cockpit-glow-spread)
+      color-mix(in srgb, var(--dept-zhongshuling) 15%, transparent);
+  }
+  .dept-tint-menxiashizhong {
+    background-color: color-mix(in srgb, var(--dept-menxia) 6%, var(--color-surface-elevated));
+  }
+  .dept-tint-active-menxiashizhong {
+    background-color: color-mix(in srgb, var(--dept-menxia) 10%, var(--color-surface-paper));
+    box-shadow: 0 0 var(--cockpit-glow-spread)
+      color-mix(in srgb, var(--dept-menxia) 15%, transparent);
+  }
+  .dept-tint-shangshuling {
+    background-color: color-mix(in srgb, var(--dept-shangshu) 6%, var(--color-surface-elevated));
+  }
+  .dept-tint-active-shangshuling {
+    background-color: color-mix(in srgb, var(--dept-shangshu) 10%, var(--color-surface-paper));
+    box-shadow: 0 0 var(--cockpit-glow-spread)
+      color-mix(in srgb, var(--dept-shangshu) 15%, transparent);
+  }
+  .dept-tint-libushangshu {
+    background-color: color-mix(in srgb, var(--dept-libu) 6%, var(--color-surface-elevated));
+  }
+  .dept-tint-active-libushangshu {
+    background-color: color-mix(in srgb, var(--dept-libu) 10%, var(--color-surface-paper));
+    box-shadow: 0 0 var(--cockpit-glow-spread) color-mix(in srgb, var(--dept-libu) 15%, transparent);
+  }
+  .dept-tint-bingbushangshu {
+    background-color: color-mix(in srgb, var(--dept-bingbu) 6%, var(--color-surface-elevated));
+  }
+  .dept-tint-active-bingbushangshu {
+    background-color: color-mix(in srgb, var(--dept-bingbu) 10%, var(--color-surface-paper));
+    box-shadow: 0 0 var(--cockpit-glow-spread)
+      color-mix(in srgb, var(--dept-bingbu) 15%, transparent);
+  }
+  .dept-tint-gongbushangshu {
+    background-color: color-mix(in srgb, var(--dept-gongbu) 6%, var(--color-surface-elevated));
+  }
+  .dept-tint-active-gongbushangshu {
+    background-color: color-mix(in srgb, var(--dept-gongbu) 10%, var(--color-surface-paper));
+    box-shadow: 0 0 var(--cockpit-glow-spread)
+      color-mix(in srgb, var(--dept-gongbu) 15%, transparent);
+  }
+  .dept-tint-xingbushangshu {
+    background-color: color-mix(in srgb, var(--dept-xingbu) 6%, var(--color-surface-elevated));
+  }
+  .dept-tint-active-xingbushangshu {
+    background-color: color-mix(in srgb, var(--dept-xingbu) 10%, var(--color-surface-paper));
+    box-shadow: 0 0 var(--cockpit-glow-spread)
+      color-mix(in srgb, var(--dept-xingbu) 15%, transparent);
+  }
+  .dept-tint-liburshangshu {
+    background-color: color-mix(in srgb, var(--dept-libu-li) 6%, var(--color-surface-elevated));
+  }
+  .dept-tint-active-liburshangshu {
+    background-color: color-mix(in srgb, var(--dept-libu-li) 10%, var(--color-surface-paper));
+    box-shadow: 0 0 var(--cockpit-glow-spread)
+      color-mix(in srgb, var(--dept-libu-li) 15%, transparent);
+  }
 
   /* ── Stage inspect per-dept tint ── */
-  .stage-inspect[data-dept='neige'] { background-color: color-mix(in srgb, var(--dept-neige) 4%, var(--color-surface-paper)); }
-  .stage-inspect[data-dept='zhongshuling'] { background-color: color-mix(in srgb, var(--dept-zhongshuling) 4%, var(--color-surface-paper)); }
-  .stage-inspect[data-dept='menxiashizhong'] { background-color: color-mix(in srgb, var(--dept-menxia) 4%, var(--color-surface-paper)); }
-  .stage-inspect[data-dept='shangshuling'] { background-color: color-mix(in srgb, var(--dept-shangshu) 4%, var(--color-surface-paper)); }
-  .stage-inspect[data-dept='libushangshu'] { background-color: color-mix(in srgb, var(--dept-libu) 4%, var(--color-surface-paper)); }
-  .stage-inspect[data-dept='bingbushangshu'] { background-color: color-mix(in srgb, var(--dept-bingbu) 4%, var(--color-surface-paper)); }
-  .stage-inspect[data-dept='gongbushangshu'] { background-color: color-mix(in srgb, var(--dept-gongbu) 4%, var(--color-surface-paper)); }
-  .stage-inspect[data-dept='xingbushangshu'] { background-color: color-mix(in srgb, var(--dept-xingbu) 4%, var(--color-surface-paper)); }
-  .stage-inspect[data-dept='liburshangshu'] { background-color: color-mix(in srgb, var(--dept-libu-li) 4%, var(--color-surface-paper)); }
+  .stage-inspect[data-dept='neige'] {
+    background-color: color-mix(in srgb, var(--dept-neige) 4%, var(--color-surface-paper));
+  }
+  .stage-inspect[data-dept='zhongshuling'] {
+    background-color: color-mix(in srgb, var(--dept-zhongshuling) 4%, var(--color-surface-paper));
+  }
+  .stage-inspect[data-dept='menxiashizhong'] {
+    background-color: color-mix(in srgb, var(--dept-menxia) 4%, var(--color-surface-paper));
+  }
+  .stage-inspect[data-dept='shangshuling'] {
+    background-color: color-mix(in srgb, var(--dept-shangshu) 4%, var(--color-surface-paper));
+  }
+  .stage-inspect[data-dept='libushangshu'] {
+    background-color: color-mix(in srgb, var(--dept-libu) 4%, var(--color-surface-paper));
+  }
+  .stage-inspect[data-dept='bingbushangshu'] {
+    background-color: color-mix(in srgb, var(--dept-bingbu) 4%, var(--color-surface-paper));
+  }
+  .stage-inspect[data-dept='gongbushangshu'] {
+    background-color: color-mix(in srgb, var(--dept-gongbu) 4%, var(--color-surface-paper));
+  }
+  .stage-inspect[data-dept='xingbushangshu'] {
+    background-color: color-mix(in srgb, var(--dept-xingbu) 4%, var(--color-surface-paper));
+  }
+  .stage-inspect[data-dept='liburshangshu'] {
+    background-color: color-mix(in srgb, var(--dept-libu-li) 4%, var(--color-surface-paper));
+  }
 }
 
 @keyframes cockpit-fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 @keyframes stage-badge-pop {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .cockpit-fade-in,
   .animate-pulse,
   .stage-badge-pop,
-  [style*="transition"] {
+  [style*='transition'] {
     animation: none !important;
     transition: none !important;
   }

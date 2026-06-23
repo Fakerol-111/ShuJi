@@ -86,7 +86,9 @@ export default function HelpDrawer() {
           <div className="fixed right-0 top-0 bottom-0 z-50 w-[360px] bg-surface-paper shadow-xl border-l border-fold overflow-y-auto">
             <div className="px-5 py-4">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-display text-title font-bold text-ink-900">{t('helpDrawer.systemName')}</h2>
+                <h2 className="font-display text-title font-bold text-ink-900">
+                  {t('helpDrawer.systemName')}
+                </h2>
                 <button
                   onClick={() => setOpen(false)}
                   className="text-ink-400 hover:text-ink-600 text-lg leading-none"

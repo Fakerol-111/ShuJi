@@ -3,7 +3,13 @@ import { useTranslation } from 'react-i18next';
 import { getRoundMetrics, getWorkflowState } from '../api';
 import { getDeptMeta } from '../constants';
 import { docIdToPath } from '../utils/docPath';
-import type { RoundMetrics, PlanInfo, PhaseRuntime, PhaseExecutionStatus, WorkflowState as WFState } from '../types';
+import type {
+  RoundMetrics,
+  PlanInfo,
+  PhaseRuntime,
+  PhaseExecutionStatus,
+  WorkflowState as WFState,
+} from '../types';
 
 export interface CommandBarProps {
   totalStageCount: number;
@@ -250,9 +256,7 @@ export default function CommandBar({
         )}
 
         {/* Elapsed */}
-        {elapsed && (
-          <span className="text-caption text-ink-500 font-mono shrink-0">{elapsed}</span>
-        )}
+        {elapsed && <span className="text-caption text-ink-500 font-mono shrink-0">{elapsed}</span>}
 
         {/* Spacer */}
         <div className="flex-1 min-w-0" />
@@ -296,7 +300,9 @@ export default function CommandBar({
             <div className="pt-1.5 pb-1">
               <div className="flex items-center gap-2 mb-1 text-ink-500 font-medium">
                 <span>{t('commandBar.workflow')}</span>
-                <span className="text-caption px-1 rounded bg-ink-100/50">{wfState.governance}</span>
+                <span className="text-caption px-1 rounded bg-ink-100/50">
+                  {wfState.governance}
+                </span>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="px-2 py-0.5 rounded-full border border-ink-200 text-ink-500">
@@ -326,13 +332,22 @@ export default function CommandBar({
                     : String(eObj);
                 return (
                   <div key={phase.index} className="flex items-center gap-2">
-                    <span className="font-mono text-ink-400 w-14 shrink-0">{t('commandBar.phase')}{phase.index}</span>
-                    <span className={`${statusColor(dStatus)} ${isBlocked(dStatus) ? 'font-medium' : ''}`}>
+                    <span className="font-mono text-ink-400 w-14 shrink-0">
+                      {t('commandBar.phase')}
+                      {phase.index}
+                    </span>
+                    <span
+                      className={`${statusColor(dStatus)} ${isBlocked(dStatus) ? 'font-medium' : ''}`}
+                    >
                       {statusIcon(dStatus)} {t(statusTKey(dStatus), dStatus)}
                     </span>
                     <span className="text-ink-300 mx-0.5">|</span>
-                    <span className={eIsBlocked ? 'text-vermillion font-medium' : statusColor(eStr)}>
-                      {eIsBlocked ? `${statusIcon('Blocked')} ${t('workflow.blocked')}` : `${statusIcon(eStr)} ${t(statusTKey(eStr), eStr)}`}
+                    <span
+                      className={eIsBlocked ? 'text-vermillion font-medium' : statusColor(eStr)}
+                    >
+                      {eIsBlocked
+                        ? `${statusIcon('Blocked')} ${t('workflow.blocked')}`
+                        : `${statusIcon(eStr)} ${t(statusTKey(eStr), eStr)}`}
                     </span>
                   </div>
                 );

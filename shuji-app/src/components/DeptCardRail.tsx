@@ -97,7 +97,14 @@ export default function DeptCardRail({
           title={pinDept ? t('deptRail.pinFixed') : t('deptRail.followActive')}
         >
           <span className="flex items-center gap-2">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
               <path d="M10 2L14 6M6 10L2 14M11 3L13 5M9 1L15 7M12 8.5C12 11 9.5 13.5 8 14.5c-1.5-1-4-3.5-4-6C4 5.5 6 3.5 8 3.5s4 2 4 5z" />
               <circle cx="8" cy="8.5" r="1.5" />
             </svg>

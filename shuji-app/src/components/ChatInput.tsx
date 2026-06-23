@@ -24,7 +24,10 @@ const SLASH_COMMANDS: Record<string, { level: string; label: string }> = {
   '/detail': { level: '3', label: 'chat.commandLevelReview' },
 };
 
-export default forwardRef<ChatInputHandle, Props>(function ChatInput({ onSend, disabled, placeholder }, ref) {
+export default forwardRef<ChatInputHandle, Props>(function ChatInput(
+  { onSend, disabled, placeholder },
+  ref
+) {
   const { t } = useTranslation();
   const [text, setText] = useState('');
   const [toast, setToast] = useState('');

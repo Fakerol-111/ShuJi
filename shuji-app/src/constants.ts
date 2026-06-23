@@ -337,7 +337,13 @@ export function getDeptMeta(key: string): DeptMeta | undefined {
 export const DEPT_ORDER = DEPT_META_LIST.map((d) => d.label);
 
 /** 驾驶舱轨道分组 — 规划层 / 执行层 */
-export const DEPT_RAIL_GROUPS: { title: string; subtitle: string; titleEn: string; subtitleEn: string; labels: string[] }[] = [
+export const DEPT_RAIL_GROUPS: {
+  title: string;
+  subtitle: string;
+  titleEn: string;
+  subtitleEn: string;
+  labels: string[];
+}[] = [
   {
     title: '规划',
     subtitle: '三省',

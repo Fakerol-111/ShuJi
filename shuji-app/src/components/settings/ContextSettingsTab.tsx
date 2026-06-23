@@ -90,8 +90,8 @@ export default function ContextSettingsTab({
             >
               {usingDefault ? (
                 <SettingsMuted>
-                  {t('settings.default')}（{effective.token_threshold.toLocaleString()} tokens，{t('settings.keepRecentMessages')}{' '}
-                  {effective.keep_recent_count}）
+                  {t('settings.default')}（{effective.token_threshold.toLocaleString()} tokens，
+                  {t('settings.keepRecentMessages')} {effective.keep_recent_count}）
                   <br />
                   {t('common.useDefault')}
                 </SettingsMuted>

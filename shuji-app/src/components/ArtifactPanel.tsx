@@ -32,7 +32,9 @@ export default function ArtifactPanel({
   return (
     <div className="h-full flex flex-col min-h-0 min-w-0">
       <div className="shrink-0 flex items-center justify-between px-3 py-1.5 border-b border-fold bg-surface-parchment">
-        <span className="text-caption font-medium text-ink-600 font-display">{t('sidebar.directory')}</span>
+        <span className="text-caption font-medium text-ink-600 font-display">
+          {t('sidebar.directory')}
+        </span>
         <button
           onClick={onClosePanel}
           className="shrink-0 w-5 h-5 flex items-center justify-center rounded text-caption text-ink-400 hover:text-ink-900 hover:bg-ink-200/60 transition-colors"

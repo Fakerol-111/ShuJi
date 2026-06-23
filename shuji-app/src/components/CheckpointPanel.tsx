@@ -76,7 +76,9 @@ export default function CheckpointPanel() {
   // ── Loading state ──
   if (loading && entries.length === 0) {
     return (
-      <div className="flex items-center justify-center h-32 text-xs text-ink-400">{t('common.loading')}</div>
+      <div className="flex items-center justify-center h-32 text-xs text-ink-400">
+        {t('common.loading')}
+      </div>
     );
   }
 
@@ -119,7 +121,9 @@ export default function CheckpointPanel() {
       <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
         {/* Empty state */}
         {entries.length === 0 && !loading && (
-          <div className="text-xs text-ink-400 text-center py-8">{t('checkpoint.noCheckpoints')}</div>
+          <div className="text-xs text-ink-400 text-center py-8">
+            {t('checkpoint.noCheckpoints')}
+          </div>
         )}
 
         {/* Checkpoint list */}
@@ -153,7 +157,9 @@ export default function CheckpointPanel() {
       {confirm && (
         <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl mx-4 p-4 max-w-sm w-full">
-            <h3 className="text-sm font-semibold text-ink-800 mb-2">{t('checkpoint.confirmRestore')}</h3>
+            <h3 className="text-sm font-semibold text-ink-800 mb-2">
+              {t('checkpoint.confirmRestore')}
+            </h3>
             <p className="text-xs text-ink-600 mb-3 leading-relaxed">
               {t('checkpoint.restoreToCommit', {
                 commit: confirm.commit.slice(0, 7),

@@ -53,7 +53,9 @@ export default function AppearanceTab() {
           ))}
         </div>
         <SettingsHint>
-          {lang === 'en' ? FONT_SIZE_TIERS[fontSize as keyof typeof FONT_SIZE_TIERS]?.descriptionEn : FONT_SIZE_TIERS[fontSize as keyof typeof FONT_SIZE_TIERS]?.description}
+          {lang === 'en'
+            ? FONT_SIZE_TIERS[fontSize as keyof typeof FONT_SIZE_TIERS]?.descriptionEn
+            : FONT_SIZE_TIERS[fontSize as keyof typeof FONT_SIZE_TIERS]?.description}
         </SettingsHint>
       </SettingsSection>
 
@@ -77,11 +79,10 @@ export default function AppearanceTab() {
       <SettingsSection title={t('settings.about')} divider>
         <div className="text-sm text-ink-700 space-y-2 leading-relaxed">
           <p>
-            <span className="font-medium text-ink-900">{t('settings.about')}</span> {t('settings.version')} — Preview
+            <span className="font-medium text-ink-900">{t('settings.about')}</span>{' '}
+            {t('settings.version')} — Preview
           </p>
-          <p>
-            {t('settings.aboutDescription')}
-          </p>
+          <p>{t('settings.aboutDescription')}</p>
         </div>
       </SettingsSection>
     </div>

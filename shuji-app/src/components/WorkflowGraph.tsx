@@ -107,7 +107,9 @@ export default function WorkflowGraphView() {
   // ── SVG layout computation ──
   if (loading && !graph) {
     return (
-      <div className="h-full flex items-center justify-center text-ink-400">{t('workflowGraph.loading')}</div>
+      <div className="h-full flex items-center justify-center text-ink-400">
+        {t('workflowGraph.loading')}
+      </div>
     );
   }
 
@@ -146,12 +148,16 @@ export default function WorkflowGraphView() {
     <div className="h-full flex flex-col bg-surface-paper">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-2 border-b border-fold shrink-0">
-        <h2 className="font-display text-ui font-semibold text-ink-800">{t('workflowGraph.title')}</h2>
+        <h2 className="font-display text-ui font-semibold text-ink-800">
+          {t('workflowGraph.title')}
+        </h2>
         {graph && (
           <span className="text-caption text-ink-500">
             {t('workflowGraph.stats', { nodes: graph.nodes.length, edges: graph.edges.length })}
             {upperLayout && upperLayout.totalDuration !== '' && (
-              <span className="ml-2 text-ink-400">· {t('workflowGraph.durationPrefix')} {upperLayout.totalDuration}</span>
+              <span className="ml-2 text-ink-400">
+                · {t('workflowGraph.durationPrefix')} {upperLayout.totalDuration}
+              </span>
             )}
           </span>
         )}
@@ -170,15 +176,21 @@ export default function WorkflowGraphView() {
               }`}
             >
               <div className="text-xs font-semibold">{t('workflowGraph.current')}</div>
-              <div className="text-caption text-ink-500 truncate">{currentSession || t('workflowGraph.live')}</div>
+              <div className="text-caption text-ink-500 truncate">
+                {currentSession || t('workflowGraph.live')}
+              </div>
               {!activeArchive && (
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-jade animate-pulse ml-1" />
               )}
             </button>
           </div>
           <div className="px-3 py-2">
-            <div className="text-caption font-semibold text-ink-500 mb-1">{t('workflowGraph.history')}</div>
-            {archives.length === 0 && <p className="text-caption text-ink-400 italic">{t('workflowGraph.noArchives')}</p>}
+            <div className="text-caption font-semibold text-ink-500 mb-1">
+              {t('workflowGraph.history')}
+            </div>
+            {archives.length === 0 && (
+              <p className="text-caption text-ink-400 italic">{t('workflowGraph.noArchives')}</p>
+            )}
             {archives.map((a) => (
               <button
                 key={a.filename}
@@ -406,7 +418,9 @@ export default function WorkflowGraphView() {
                           <title>
                             {n.role}
                             {isMulti ? `#${n.instance}` : ''}
-                            {n.task_summary ? `\n${t('workflowGraph.task')}: ${n.task_summary}` : ''}
+                            {n.task_summary
+                              ? `\n${t('workflowGraph.task')}: ${n.task_summary}`
+                              : ''}
                             {n.created_at ? `\n${t('workflowGraph.start')}: ${n.created_at}` : ''}
                           </title>
                           <rect
@@ -470,7 +484,9 @@ export default function WorkflowGraphView() {
               )}
             </>
           ) : (
-            <div className="h-full flex items-center justify-center text-ink-400">{t('workflowGraph.noRecords')}</div>
+            <div className="h-full flex items-center justify-center text-ink-400">
+              {t('workflowGraph.noRecords')}
+            </div>
           )}
         </div>
       </div>

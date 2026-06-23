@@ -66,9 +66,7 @@ export default function ProjectOverview({
       <div className="h-full flex items-center justify-center surface-paper">
         <div className="text-center max-w-md">
           <p className="text-ink-600 text-body mb-2">{t('projectOverview.noProject')}</p>
-          <p className="text-ui text-ink-500 mb-6 leading-relaxed">
-            {t('chat.idleDescription')}
-          </p>
+          <p className="text-ui text-ink-500 mb-6 leading-relaxed">{t('chat.idleDescription')}</p>
           <button
             onClick={onOpenProject}
             className="px-5 py-2 bg-ink-900 text-ink-50 text-ui rounded-lg hover:bg-ink-800 transition-colors"

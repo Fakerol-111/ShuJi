@@ -193,7 +193,9 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
           <div className="mb-4 rounded-xl border border-vermillion/30 bg-surface-elevated p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-display text-sm font-bold text-ink-900">{t('document.pendingApproval')}</h3>
+                <h3 className="font-display text-sm font-bold text-ink-900">
+                  {t('document.pendingApproval')}
+                </h3>
                 <p className="text-caption text-ink-600 mt-0.5">{t('document.approvalRequired')}</p>
               </div>
               <div className="flex gap-2">
@@ -246,7 +248,9 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
           ) : lineage ? (
             <LineageTree node={lineage} depth={0} />
           ) : (
-            <div className="p-6 text-body text-ink-400 text-center">{t('docPreview.noLineage')}</div>
+            <div className="p-6 text-body text-ink-400 text-center">
+              {t('docPreview.noLineage')}
+            </div>
           )
         ) : viewMode === 'diff' && diffData ? (
           <DiffView diff={diffData.diff} />
@@ -446,7 +450,9 @@ function FrontmatterCard({ meta }: { meta: Record<string, string> }) {
   };
   return (
     <Card variant="parchment" className="mb-5 border-l-vermillion border-l-[3px] p-4">
-      <div className="font-display text-ui text-ink-600 font-semibold mb-2">{t('document.ticket')}</div>
+      <div className="font-display text-ui text-ink-600 font-semibold mb-2">
+        {t('document.ticket')}
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {Object.entries(meta).map(([key, value]) => {
           const statusColor =

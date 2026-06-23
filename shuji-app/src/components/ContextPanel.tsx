@@ -24,9 +24,7 @@ export default function ContextPanel() {
           {t('common.refresh')}
         </button>
       </div>
-      <p className="text-[9px] text-ink-400 mb-3">
-        {t('context.tokenNote')}
-      </p>
+      <p className="text-[9px] text-ink-400 mb-3">{t('context.tokenNote')}</p>
       {error && <p className="text-xs text-vermillion mb-2">{error}</p>}
       {!stats || Object.keys(stats).length === 0 ? (
         <p className="text-xs text-ink-400">{t('common.noData')}</p>
@@ -95,7 +93,9 @@ export default function ContextPanel() {
                           : 'border-ink-300 hover:bg-ink-100 text-ink-600'
                       }`}
                     >
-                      {compactingRole === role ? t('context.compressing') : t('context.compressNow')}
+                      {compactingRole === role
+                        ? t('context.compressing')
+                        : t('context.compressNow')}
                     </button>
                     {lastCompactMsg && compactingRole === null && (
                       <span className="text-[9px] text-jade ml-1.5">{lastCompactMsg}</span>

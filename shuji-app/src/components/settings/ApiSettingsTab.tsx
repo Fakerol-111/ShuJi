@@ -90,7 +90,9 @@ export default function ApiSettingsTab({
       {/* ── Per-role overrides ── */}
       <div className="space-y-0.5">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-[11px] font-semibold text-ink-300">{t('settings.apiRoleOverrides')}</span>
+          <span className="text-[11px] font-semibold text-ink-300">
+            {t('settings.apiRoleOverrides')}
+          </span>
           <span className="text-[10px] text-ink-500">
             {t('settings.customCount', { count: customCount, total: roleList.length })}
           </span>
@@ -134,7 +136,9 @@ export default function ApiSettingsTab({
                     onChange={() => toggleDefault(r.key)}
                     className="accent-ink-500"
                   />
-                  <span className="text-[10px] text-ink-500 whitespace-nowrap">{t('common.useDefault')}</span>
+                  <span className="text-[10px] text-ink-500 whitespace-nowrap">
+                    {t('common.useDefault')}
+                  </span>
                 </label>
                 <span className="flex-1 text-left">{r.label}</span>
                 <span className="text-[10px] text-ink-500 italic">{provider}</span>
@@ -143,7 +147,9 @@ export default function ApiSettingsTab({
                 <div className="px-2 pb-2 space-y-1">
                   {usingDefault ? (
                     <div className="text-[10px] text-ink-500 italic px-1 py-2">
-                      {t('settings.usingDefaultConfig', { model: defaultCfg.model || t('setup.notSet') })}
+                      {t('settings.usingDefaultConfig', {
+                        model: defaultCfg.model || t('setup.notSet'),
+                      })}
                       <br />
                       {t('settings.uncheckToCustomize')}
                     </div>

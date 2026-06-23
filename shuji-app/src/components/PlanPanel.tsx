@@ -102,9 +102,13 @@ export default function PlanPanel() {
                 <span className="plan-panel__step-icon">{STATUS_ICONS[status] || '⬜'}</span>
                 <span className="plan-panel__step-id">{step.step_id}</span>
                 <span className="plan-panel__step-desc">{step.description}</span>
-                {step.action === 'approval_gate' && <span className="plan-panel__badge">{t('plan.approval')}</span>}
+                {step.action === 'approval_gate' && (
+                  <span className="plan-panel__badge">{t('plan.approval')}</span>
+                )}
                 {step.action === 'ask_user' && (
-                  <span className="plan-panel__badge plan-panel__badge--question">{t('plan.question')}</span>
+                  <span className="plan-panel__badge plan-panel__badge--question">
+                    {t('plan.question')}
+                  </span>
                 )}
                 {step.action === 'parallel' && (
                   <span className="plan-panel__badge plan-panel__badge--parallel">并行</span>
