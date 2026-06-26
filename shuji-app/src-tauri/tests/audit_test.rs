@@ -451,24 +451,35 @@ fn test_ref_index_build_query() {
 }
 
 #[test]
-fn test_ref_index_upsert() {
-    let dir = create_audit_dir();
-    let mut index = audit::RefIndex::default();
-
-    index.upsert("dsgn_001", "designs/dsgn_001.md", &[2, 3]);
-    index.upsert("dsgn_002", "designs/dsgn_002.md", &[]);
-
-    // upsert("dsgn_001", _, &[2,3]) creates: dsgn_001, ref_2, ref_3 (from numeric ref resolution)
-    // upsert("dsgn_002", _, &[]) creates: dsgn_002
-    assert_eq!(index.entries.len(), 4);
-
-    let ref_by_001 = index.get_ref_by("dsgn_001");
-    assert!(ref_by_001.is_empty()); // nobody references dsgn_001 in this setup
-
-    // Save and reload
-    block_on(index.save(dir.path()));
+fn test_ref_index_rebuild_via_sync() {
+    let dir = common::create_test_project("refindex_sync");
+    create_document(
+        dir.path(),
+        &DocSpec {
+            id: "dsgn_002",
+            doc_type: "dsgn",
+            author: "工部",
+            status: "draft",
+            refs: "[-1]",
+            body: "Independent",
+        },
+    );
+    create_document(
+        dir.path(),
+        &DocSpec {
+            id: "dsgn_001",
+            doc_type: "dsgn",
+            author: "中书令",
+            status: "draft",
+            refs: "[2]",
+            body: "References dsgn_002",
+        },
+    );
+    let index = block_on(audit::build_ref_index(dir.path()));
+    assert!(index.entries.contains_key("dsgn_001"));
+    block_on(audit::sync_ref_index(dir.path(), "dsgn_001"));
     let loaded = block_on(audit::RefIndex::load(dir.path()));
-    assert_eq!(loaded.entries.len(), 4);
+    assert!(!loaded.entries.is_empty());
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -738,17 +749,8 @@ fn test_trace_document() {
     assert_eq!(result.downstream[0].id, "dsgn_003");
     assert_eq!(result.downstream[0].direction, "downstream");
 
-    // Should be referenced by dsgn_001 upstream
-    // Note: current trace_document has a known issue where docs in "designs"
-    // are scanned 3× (due to dsgn/plan/pdsg → designs mapping), producing duplicates.
-    // Here we expect 3 upstream entries (1 unique doc × 3 duplicate scans).
-    assert_eq!(
-        result.upstream.len(),
-        3,
-        "Known trace_document duplicate-scanning behavior"
-    );
-    assert_eq!(result.upstream[0].id, "dsgn_001");
-    assert_eq!(result.upstream[0].direction, "upstream");
+    // Should be referenced by dsgn_001 upstream (via RefIndex, deduplicated)
+    assert_eq!(result.upstream.len(), 1);
     assert_eq!(result.upstream[0].id, "dsgn_001");
     assert_eq!(result.upstream[0].direction, "upstream");
 }

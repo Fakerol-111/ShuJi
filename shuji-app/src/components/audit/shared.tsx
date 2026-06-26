@@ -114,9 +114,15 @@ export function LineageTree({ node, depth }: { node: LineageNode; depth: number 
         <span className="text-ink-300">{node.author}</span>
         {node.status && (
           <span
-            className={`px-1 rounded text-[9px] ${node.status === 'approved' ? 'bg-jade/10 text-jade' : 'bg-gold/10 text-gold'}`}
+            className={`px-1 rounded text-[9px] ${
+              node.status === 'approved'
+                ? 'bg-jade/10 text-jade'
+                : node.status === 'missing'
+                  ? 'bg-vermillion/10 text-vermillion'
+                  : 'bg-gold/10 text-gold'
+            }`}
           >
-            {node.status}
+            {node.status === 'missing' ? '断链' : node.status}
           </span>
         )}
       </div>

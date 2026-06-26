@@ -6,9 +6,10 @@ import {
   generateDeliveryReport,
   traceDocument,
   verifyAuditTrail,
+  queryDocuments,
   type VerificationReport,
 } from '../api';
-import type { TimelineData, LineageNode, TraceResult } from '../types';
+import type { TimelineData, LineageNode, TraceResult, DocSummary, DocQuery } from '../types';
 import { formatError } from '../utils/error';
 import { DocCard, LineageTree, docIdToPath } from './audit/shared';
 
@@ -22,7 +23,7 @@ const EVENT_COLORS: Record<string, string> = {
   milestone: 'text-ink-500',
 };
 
-type SubTab = 'timeline' | 'lineage' | 'trace' | 'report' | 'dashboard';
+type SubTab = 'timeline' | 'lineage' | 'trace' | 'report' | 'dashboard' | 'search';
 
 export default function AuditPanel({
   projectDir,
@@ -49,11 +50,16 @@ export default function AuditPanel({
   const [traceLoading, setTraceLoading] = useState(false);
   const [verification, setVerification] = useState<VerificationReport | null>(null);
   const [verifying, setVerifying] = useState(false);
+  const [searchStatus, setSearchStatus] = useState('');
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [searchResults, setSearchResults] = useState<DocSummary[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   const TABS: { key: SubTab; label: string }[] = [
     { key: 'timeline', label: t('audit.timeline') },
     { key: 'lineage', label: t('audit.lineage') },
     { key: 'trace', label: t('audit.trace') },
+    { key: 'search', label: '检索' },
     { key: 'report', label: t('audit.report') },
     { key: 'dashboard', label: t('audit.dashboard') },
   ];
@@ -125,6 +131,24 @@ export default function AuditPanel({
         setReport(t('audit.loadFailed'));
       })
       .finally(() => setReportLoading(false));
+  }
+
+  function runDocSearch(filter: DocQuery) {
+    setSearchLoading(true);
+    queryDocuments(filter)
+      .then(setSearchResults)
+      .catch((e) => {
+        console.error('文档检索失败', e);
+        setSearchResults([]);
+      })
+      .finally(() => setSearchLoading(false));
+  }
+
+  function handleDocSearch() {
+    const filter: DocQuery = { limit: 50 };
+    if (searchStatus) filter.status = [searchStatus];
+    if (searchKeyword.trim()) filter.keyword = searchKeyword.trim();
+    runDocSearch(filter);
   }
 
   return (
@@ -332,6 +356,87 @@ export default function AuditPanel({
                 )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Search Tab ── */}
+      {tab === 'search' && (
+        <div className="p-3 space-y-2 flex-1 overflow-y-auto min-h-0">
+          <div className="flex flex-wrap gap-1">
+            <button
+              onClick={() => {
+                setSearchStatus('in_review');
+                runDocSearch({ status: ['in_review'], limit: 50 });
+              }}
+              className="px-2 py-0.5 rounded bg-gold/10 text-gold text-[10px] hover:bg-gold/20"
+            >
+              全部待批
+            </button>
+            <button
+              onClick={() => {
+                setSearchStatus('rejected');
+                runDocSearch({ status: ['rejected'], limit: 50 });
+              }}
+              className="px-2 py-0.5 rounded bg-vermillion/10 text-vermillion text-[10px] hover:bg-vermillion/20"
+            >
+              全部已驳回
+            </button>
+          </div>
+          <div className="flex gap-1">
+            <select
+              value={searchStatus}
+              onChange={(e) => setSearchStatus(e.target.value)}
+              className="px-2 py-1 text-caption rounded bg-ink-100 border border-fold text-ink-700 outline-none"
+            >
+              <option value="">全部状态</option>
+              <option value="in_review">in_review</option>
+              <option value="approved">approved</option>
+              <option value="rejected">rejected</option>
+            </select>
+            <input
+              type="text"
+              placeholder="关键词"
+              value={searchKeyword}
+              onChange={(e) => setSearchKeyword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleDocSearch()}
+              className="flex-1 px-2 py-1 text-caption rounded bg-ink-100 border border-fold text-ink-700 placeholder-ink-300 outline-none"
+            />
+            <button
+              onClick={handleDocSearch}
+              className="px-2 py-1 rounded bg-ink-700 text-white text-caption hover:bg-ink-600"
+            >
+              {t('audit.query')}
+            </button>
+          </div>
+          {searchLoading && <div className="text-caption text-ink-400">{t('common.loading')}</div>}
+          {!searchLoading && searchResults.length === 0 && (
+            <div className="text-caption text-ink-300">无匹配文档</div>
+          )}
+          <div className="space-y-1">
+            {searchResults.map((doc) => (
+              <div
+                key={doc.id}
+                className="rounded border border-fold p-2 hover:bg-ink-100/30 cursor-pointer transition-colors"
+                onClick={() => onDocSelect?.(docIdToPath(doc.id))}
+              >
+                <div className="flex items-center gap-1.5 text-caption">
+                  <span className="font-mono text-ink-700">{doc.id}</span>
+                  <span className="text-ink-400">({doc.doc_type})</span>
+                  {doc.status && (
+                    <span
+                      className={`px-1 rounded text-[9px] ${doc.status === 'approved' ? 'bg-jade/10 text-jade' : doc.status === 'rejected' ? 'bg-vermillion/10 text-vermillion' : 'bg-gold/10 text-gold'}`}
+                    >
+                      {doc.status}
+                    </span>
+                  )}
+                </div>
+                <div className="text-caption text-ink-400 truncate mt-0.5">{doc.preview || '—'}</div>
+                <div className="text-[9px] text-ink-300 font-mono mt-0.5">
+                  {doc.author} · {doc.timestamp}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

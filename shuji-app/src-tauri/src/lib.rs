@@ -139,78 +139,66 @@ pub fn run() {
             commands::project::load_project,
             commands::project::get_project,
             commands::project::list_projects,
-            // --- 工作流核心 ---
-            commands::workflow::send_message, // 向内阁发送用户消息，启动工作流
-            commands::workflow::discuss_with_cabinet, // 讨论模式（无工具、不修改项目）
-            commands::workflow::get_snapshot, // 获取文档目录快照
-            commands::workflow::read_document, // 读取 .shuji/ 下文档内容
-            commands::workflow::list_documents, // 列出所有文档
-            commands::workflow::list_log_files, // 列出日志文件
-            commands::workflow::read_log_file, // 读取日志文件内容
-            commands::workflow::get_recent_dirs, // 获取最近使用的目录
-            // --- Token & 上下文统计 ---
-            commands::workflow::get_token_stats, // Token 消耗统计（按时间窗口）
-            commands::workflow::get_context_stats, // 上下文使用统计
-            commands::workflow::compact_context, // 手动触发上下文压缩
-            commands::workflow::get_round_metrics, // 当前轮次指标
-            commands::workflow::get_active_roles, // 获取当前活跃的角色
-            // --- 取消操作 ---
-            commands::workflow::cancel_discuss,    // 取消讨论模式
-            commands::workflow::cancel_processing, // 取消当前处理流程
-            // --- 聊天 & 日志 ---
-            commands::workflow::get_chat_history, // 获取聊天记录
-            commands::workflow::get_dept_logs,    // 获取部门日志
-            // --- 审批系统 ---
-            commands::workflow::get_pending_approvals, // 获取待审批文档列表
-            commands::workflow::set_document_status,   // 设置文档审批状态（朱批）
-            // --- 演示模式 ---
-            commands::demo::create_demo_project, // 创建演示项目
-            // --- 设置 ---
-            commands::settings::get_config,  // 获取 config.toml 配置
-            commands::settings::save_config, // 保存 config.toml 配置
-            commands::settings::set_dotenv_key, // 设置 .env 环境变量
-            commands::settings::get_context_config, // 获取上下文压缩配置
-            commands::settings::save_context_config, // 保存上下文压缩配置
-            commands::settings::reset_context_config, // 重置上下文压缩配置
-            commands::settings::check_api_connection, // 测试 API 连接
-            commands::settings::get_workflow_preset, // 获取工作流预设
-            commands::settings::set_workflow_preset, // 设置工作流预设
-            commands::settings::get_workflow_config, // 获取工作流配置
-            commands::settings::set_workflow_config, // 设置工作流配置
-            commands::settings::get_soul_content, // 获取内阁 soul.md 内容
-            commands::settings::clear_soul,  // 清空内阁 soul
-            commands::settings::get_model_preset, // 获取模型预设
-            commands::settings::set_model_preset, // 设置模型预设
-            // --- 文档浏览器 ---
-            commands::shuji_docs::list_shuji_tree, // 获取 .shuji/ 目录树
-            commands::shuji_docs::read_shuji_doc,  // 读取 .shuji/ 文档
-            commands::shuji_docs::get_document_diff, // 获取文档 diff
-            // --- Checkpoint ---
-            commands::checkpoint::list_checkpoints, // 列出 checkpoint 快照
-            commands::checkpoint::restore_checkpoint, // 恢复到指定 checkpoint
-            // --- 审计 ---
-            commands::workflow::get_document_lineage, // 获取文档谱系
-            commands::workflow::get_audit_timeline,   // 获取审计时间线
-            commands::workflow::generate_delivery_report, // 生成交付报告
-            commands::workflow::get_document_diffs,   // 获取文档 diff 列表
-            commands::workflow::read_document_diff,   // 读取文档 diff
-            commands::workflow::trace_document,       // 追踪文档上下游依赖
-            commands::workflow::verify_audit_trail,   // 验证审计轨迹完整性
-            // --- 定价 ---
-            commands::pricing::get_pricing,     // 获取定价信息
-            commands::pricing::save_pricing,    // 保存定价信息
-            commands::pricing::refresh_pricing, // 刷新定价信息
-            // --- Pipeline ---
-            commands::workflow::get_pipeline_status, // 获取 pipeline 状态
-            commands::workflow::get_tool_logs,       // 获取工具调用日志
-            commands::workflow::get_workflow_state,  // 获取工作流状态
-            commands::workflow::get_workflow_graph,  // 获取工作流图谱
-            commands::workflow::list_workflow_archives, // 列出工作流归档
-            commands::workflow::load_workflow_archive, // 加载工作流归档
-            // --- 验证 & 指标 ---
-            commands::validate::validate_delivery_cmd, // 执行交付验证
-            commands::metrics::get_latest_run_metrics, // 获取最近运行指标
-            commands::metrics::list_run_metrics,       // 列出历史运行指标
+            commands::workflow::send_message,
+            commands::workflow::discuss_with_cabinet,
+            commands::workflow::get_snapshot,
+            commands::workflow::read_document,
+            commands::workflow::list_documents,
+            commands::workflow::list_log_files,
+            commands::workflow::read_log_file,
+            commands::workflow::get_recent_dirs,
+            commands::workflow::get_token_stats,
+            commands::workflow::get_context_stats,
+            commands::workflow::compact_context,
+            commands::workflow::cancel_discuss,
+            commands::workflow::cancel_processing,
+            commands::workflow::get_chat_history,
+            commands::workflow::get_dept_logs,
+            commands::workflow::get_round_metrics,
+            commands::workflow::get_active_roles,
+            commands::workflow::get_pending_approvals,
+            commands::workflow::set_document_status,
+            commands::demo::create_demo_project,
+            commands::settings::get_config,
+            commands::settings::save_config,
+            commands::settings::set_dotenv_key,
+            commands::settings::get_context_config,
+            commands::settings::save_context_config,
+            commands::settings::reset_context_config,
+            commands::settings::check_api_connection,
+            commands::settings::get_workflow_preset,
+            commands::settings::set_workflow_preset,
+            commands::settings::get_workflow_config,
+            commands::settings::set_workflow_config,
+            commands::settings::get_soul_content,
+            commands::settings::clear_soul,
+            commands::settings::get_model_preset,
+            commands::settings::set_model_preset,
+            commands::shuji_docs::list_shuji_tree,
+            commands::shuji_docs::read_shuji_doc,
+            commands::shuji_docs::get_document_diff,
+            commands::checkpoint::list_checkpoints,
+            commands::checkpoint::restore_checkpoint,
+            commands::workflow::get_document_lineage,
+            commands::workflow::get_audit_timeline,
+            commands::workflow::generate_delivery_report,
+            commands::workflow::get_document_diffs,
+            commands::workflow::read_document_diff,
+            commands::workflow::trace_document,
+            commands::workflow::query_documents,
+            commands::pricing::get_pricing,
+            commands::pricing::save_pricing,
+            commands::pricing::refresh_pricing,
+            commands::workflow::verify_audit_trail,
+            commands::workflow::get_pipeline_status,
+            commands::workflow::get_tool_logs,
+            commands::workflow::get_workflow_state,
+            commands::workflow::get_workflow_graph,
+            commands::workflow::list_workflow_archives,
+            commands::workflow::load_workflow_archive,
+            commands::validate::validate_delivery_cmd,
+            commands::metrics::get_latest_run_metrics,
+            commands::metrics::list_run_metrics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

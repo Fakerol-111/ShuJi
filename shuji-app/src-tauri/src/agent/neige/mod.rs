@@ -542,7 +542,17 @@ impl Agent for NeigeAgent {
                             must_approve_retries
                         );
                         let _ =
-                            crate::tool::documents::remove_pending_approval(&working_dir, id).await;
+                            crate::tool::documents::tool_set_document_status(
+                                &working_dir,
+                                &serde_json::json!({
+                                    "id": id,
+                                    "status": "approved",
+                                    "auto": true,
+                                    "retries": must_approve_retries
+                                }),
+                            )
+                            .await;
+                        crate::audit::sync_ref_index(&working_dir, id).await;
                         let msg = format!(
                             "[System] Document {} has been auto-approved (内阁 retried {} times without requesting emperor decision). Continuing execution.",
                             id, must_approve_retries

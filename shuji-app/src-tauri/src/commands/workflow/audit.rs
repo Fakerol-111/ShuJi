@@ -176,6 +176,7 @@ pub async fn set_document_status(
     let v: serde_json::Value =
         serde_json::from_str(&result).map_err(|_| "解析结果失败".to_string())?;
     if v["ok"].as_bool().unwrap_or(false) {
+        crate::audit::sync_ref_index(Path::new(&working_dir), &id).await;
         Ok(v["message"].as_str().unwrap_or("ok").to_string())
     } else {
         Err(v["message"].as_str().unwrap_or("未知错误").to_string())
@@ -196,4 +197,20 @@ pub async fn trace_document(
         p.working_dir.clone()
     };
     Ok(crate::audit::trace_document(Path::new(&working_dir), &doc_id).await)
+}
+
+/// Query documents with combined filters.
+#[tauri::command]
+pub async fn query_documents(
+    state: State<'_, AppState>,
+    filter: crate::audit::DocQuery,
+) -> Result<Vec<crate::audit::DocSummary>, String> {
+    let working_dir = {
+        let project_opt = state.current_project.lock().await;
+        let p = project_opt
+            .as_ref()
+            .ok_or_else(|| friendly_error("没有加载项目"))?;
+        p.working_dir.clone()
+    };
+    Ok(crate::audit::query_documents(Path::new(&working_dir), &filter).await)
 }

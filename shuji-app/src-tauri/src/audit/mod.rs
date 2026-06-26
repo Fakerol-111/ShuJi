@@ -264,6 +264,20 @@ pub struct LineageNode {
 
 /// Build a lineage tree for a document by recursively following refs.
 pub async fn build_lineage(working_dir: &Path, doc_id: &str) -> Option<LineageNode> {
+    let mut visited = std::collections::HashSet::new();
+    build_lineage_inner(working_dir, doc_id, &mut visited).await
+}
+
+async fn build_lineage_inner(
+    working_dir: &Path,
+    doc_id: &str,
+    visited: &mut std::collections::HashSet<String>,
+) -> Option<LineageNode> {
+    if visited.contains(doc_id) {
+        return None;
+    }
+    visited.insert(doc_id.to_string());
+
     let content = read_doc_by_id(working_dir, doc_id).await?;
     let (meta, _body) = documents::parse_doc(&content).ok()?;
     let ref_nums = documents::parse_refs(&meta.refs);
@@ -271,9 +285,21 @@ pub async fn build_lineage(working_dir: &Path, doc_id: &str) -> Option<LineageNo
     let mut children = Vec::new();
     for num in &ref_nums {
         if let Some((child_id, _)) = find_by_numeric_id(working_dir, *num).await {
-            if let Some(child) = Box::pin(build_lineage(working_dir, &child_id)).await {
+            if let Some(child) =
+                Box::pin(build_lineage_inner(working_dir, &child_id, visited)).await
+            {
                 children.push(child);
             }
+        } else {
+            children.push(LineageNode {
+                id: format!("ref_{num}"),
+                doc_type: "missing".to_string(),
+                author: String::new(),
+                timestamp: String::new(),
+                status: "missing".to_string(),
+                refs: vec![],
+                children: vec![],
+            });
         }
     }
 
@@ -694,51 +720,28 @@ pub async fn trace_document(working_dir: &Path, doc_id: &str) -> TraceResult {
         }
     }
 
-    // 3. Upstream: docs that reference the target
+    // 3. Upstream: docs that reference the target (via RefIndex)
     let mut upstream = Vec::new();
-    let num_part = doc_id.split('_').nth(1).and_then(|n| n.parse::<u64>().ok());
-    if let Some(num) = num_part {
-        for type_prefix in ALL_DOC_TYPES {
-            let dir = documents::type_to_dir(type_prefix);
-            let rel_dir = if dir.is_empty() {
-                ".shuji/".to_string()
-            } else {
-                format!(".shuji/{}/", dir)
-            };
-            let dir_path = working_dir.join(&rel_dir);
-            let mut rd = match tokio::fs::read_dir(&dir_path).await {
-                Ok(r) => r,
-                Err(_) => continue,
-            };
-            while let Ok(Some(entry)) = rd.next_entry().await {
-                let path = entry.path();
-                if path.extension().and_then(|e| e.to_str()) != Some("md") {
-                    continue;
-                }
-                if let Ok(content) = tokio::fs::read_to_string(&path).await {
-                    if let Ok((meta, body)) = documents::parse_doc(&content) {
-                        let ref_nums = documents::parse_refs(&meta.refs);
-                        if ref_nums.contains(&num) {
-                            let fname = path
-                                .file_stem()
-                                .and_then(|s| s.to_str())
-                                .unwrap_or("")
-                                .to_string();
-                            let preview =
-                                body.lines().next().unwrap_or("").chars().take(80).collect();
-                            let stage = stage_for_type(&meta.doc_type);
-                            upstream.push(ChainNode {
-                                id: fname,
-                                doc_type: meta.doc_type,
-                                author: meta.author,
-                                timestamp: meta.timestamp,
-                                stage,
-                                content_preview: preview,
-                                direction: "upstream".to_string(),
-                            });
-                        }
-                    }
-                }
+    let index = RefIndex::load(working_dir).await;
+    let index = if index.entries.is_empty() {
+        build_ref_index(working_dir).await
+    } else {
+        index
+    };
+    for ref_by_id in index.get_ref_by(doc_id) {
+        if let Some(content) = read_doc_by_id(working_dir, &ref_by_id).await {
+            if let Ok((meta, body)) = documents::parse_doc(&content) {
+                let preview = body.lines().next().unwrap_or("").chars().take(80).collect();
+                let stage = stage_for_type(&meta.doc_type);
+                upstream.push(ChainNode {
+                    id: ref_by_id,
+                    doc_type: meta.doc_type,
+                    author: meta.author,
+                    timestamp: meta.timestamp,
+                    stage,
+                    content_preview: preview,
+                    direction: "upstream".to_string(),
+                });
             }
         }
     }
@@ -879,66 +882,12 @@ impl RefIndex {
         }
     }
 
-    /// Add or update an entry for a document.
-    pub fn upsert(&mut self, doc_id: &str, path: &str, refs: &[u64]) {
-        // Clone old refs to avoid borrow conflicts
-        let old_refs: Vec<u64> = self
-            .entries
-            .get(doc_id)
-            .map(|e| e.refs.clone())
-            .unwrap_or_default();
-        let old_ref_by: Vec<String> = self
-            .entries
-            .get(doc_id)
-            .map(|e| e.ref_by.clone())
-            .unwrap_or_default();
-
-        // Clean up old reverse refs
-        for old_ref_id in &old_refs {
-            let old_key = Self::numeric_to_doc_id(*old_ref_id);
-            if let Some(e) = self.entries.get_mut(&old_key) {
-                e.ref_by.retain(|d| d != doc_id);
-            }
-        }
-
-        // Add new reverse refs
-        for new_ref_id in refs {
-            let new_key = Self::numeric_to_doc_id(*new_ref_id);
-            let entry = self.entries.entry(new_key).or_insert(RefIndexEntry {
-                path: String::new(),
-                refs: vec![],
-                ref_by: vec![],
-            });
-            if !entry.ref_by.contains(&doc_id.to_string()) {
-                entry.ref_by.push(doc_id.to_string());
-            }
-        }
-
-        self.entries.insert(
-            doc_id.to_string(),
-            RefIndexEntry {
-                path: path.to_string(),
-                refs: refs.to_vec(),
-                ref_by: old_ref_by,
-            },
-        );
-    }
-
-    /// Get documents that reference `doc_id` (reverse refs �?downstream impact).
+    /// Get documents that reference `doc_id` (reverse refs — downstream impact).
     pub fn get_ref_by(&self, doc_id: &str) -> Vec<String> {
         self.entries
             .get(doc_id)
             .map(|e| e.ref_by.clone())
             .unwrap_or_default()
-    }
-
-    fn numeric_to_doc_id(num: u64) -> String {
-        // Scan TYPE_TO_DIR to find which prefix maps the numeric ID.
-        // Since we don't know the type from just the number, we return
-        // a placeholder �?the index is keyed by full doc ID (type_num).
-        // If the numeric ref doesn't resolve to a known entry, it's a
-        // forward reference only.
-        format!("ref_{}", num)
     }
 }
 
@@ -1033,25 +982,123 @@ pub async fn check_immutability(working_dir: &Path, doc_id: &str) -> Vec<String>
 
 /// Synchronize the ref index after a document change.
 pub async fn sync_ref_index(working_dir: &Path, _doc_id: &str) {
-    // Simple approach: rebuild the index. For large projects,
-    // incremental update can be implemented later.
     let index = build_ref_index(working_dir).await;
     index.save(working_dir).await;
 }
 
-/// Log a review conclusion event to the audit trail.
-/// Records structured review data for design quality feedback analysis.
-pub async fn log_review_conclusion(
-    working_dir: &Path,
-    doc_id: &str,
-    reviewer: &str,
-    conclusion: &str,
-    pass_count: u32,
-    total_count: u32,
-) {
-    let detail = format!(
-        "conclusion={}, pass_count={}, total_count={}",
-        conclusion, pass_count, total_count
-    );
-    append(working_dir, "review_conclusion", reviewer, doc_id, &detail).await;
+// ── Document query ────────────────────────────────────────────
+
+/// Filter parameters for querying documents.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct DocQuery {
+    pub doc_type: Option<Vec<String>>,
+    pub author: Option<String>,
+    pub status: Option<Vec<String>>,
+    pub refs_id: Option<u64>,
+    pub keyword: Option<String>,
+    pub since: Option<String>,
+    pub until: Option<String>,
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+}
+
+/// Summary of a document for query results.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DocSummary {
+    pub id: String,
+    pub doc_type: String,
+    pub author: String,
+    pub timestamp: String,
+    pub status: String,
+    pub refs: String,
+    pub preview: String,
+}
+
+/// Query documents with combined filters.
+pub async fn query_documents(working_dir: &Path, filter: &DocQuery) -> Vec<DocSummary> {
+    let mut results = Vec::new();
+    let shuji_dir = working_dir.join(".shuji");
+
+    for (_type_prefix, dir_name) in TYPE_TO_DIR {
+        let dir = shuji_dir.join(dir_name);
+        let mut entries = match tokio::fs::read_dir(&dir).await {
+            Ok(rd) => rd,
+            Err(_) => continue,
+        };
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let path = entry.path();
+            if path.extension().is_none_or(|e| e != "md") {
+                continue;
+            }
+            let Ok(content) = tokio::fs::read_to_string(&path).await else {
+                continue;
+            };
+            let Ok((meta, body)) = documents::parse_doc(&content) else {
+                continue;
+            };
+
+            if let Some(ref types) = filter.doc_type {
+                if !types.iter().any(|t| t == &meta.doc_type) {
+                    continue;
+                }
+            }
+            if let Some(ref author) = filter.author {
+                if &meta.author != author {
+                    continue;
+                }
+            }
+            if let Some(ref statuses) = filter.status {
+                let doc_status = if meta.status.is_empty() {
+                    "-"
+                } else {
+                    &meta.status
+                };
+                if !statuses.iter().any(|s| s == doc_status) {
+                    continue;
+                }
+            }
+            if let Some(since) = &filter.since {
+                if meta.timestamp < *since {
+                    continue;
+                }
+            }
+            if let Some(until) = &filter.until {
+                if meta.timestamp > *until {
+                    continue;
+                }
+            }
+            if let Some(ref kw) = filter.keyword {
+                if !body.contains(kw.as_str()) && !meta.id.contains(kw.as_str()) {
+                    continue;
+                }
+            }
+            if let Some(refs_num) = filter.refs_id {
+                let ref_nums = documents::parse_refs(&meta.refs);
+                if !ref_nums.contains(&refs_num) {
+                    continue;
+                }
+            }
+
+            let preview = body.lines().next().unwrap_or("").chars().take(120).collect();
+            results.push(DocSummary {
+                id: meta.id.clone(),
+                doc_type: meta.doc_type,
+                author: meta.author,
+                timestamp: meta.timestamp,
+                status: meta.status,
+                refs: meta.refs,
+                preview,
+            });
+        }
+    }
+
+    results.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+
+    let offset = filter.offset.unwrap_or(0);
+    let limit = filter.limit.unwrap_or(100);
+    results
+        .into_iter()
+        .skip(offset)
+        .take(limit)
+        .collect()
 }

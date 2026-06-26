@@ -15,6 +15,8 @@ import type {
   TimelineData,
   DocDiffFile,
   TraceResult,
+  DocQuery,
+  DocSummary,
   WorkflowConfig,
   WorkflowState,
   WorkflowGraph,
@@ -316,6 +318,10 @@ export async function readDocumentDiff(filename: string): Promise<string> {
 
 export async function traceDocument(docId: string): Promise<TraceResult> {
   return invoke('trace_document', { docId });
+}
+
+export async function queryDocuments(filter: DocQuery): Promise<DocSummary[]> {
+  return invoke('query_documents', { filter });
 }
 
 // ── ESAA: Audit trail verification ──────────────────────────────

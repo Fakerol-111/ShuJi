@@ -203,6 +203,11 @@ pub async fn execute_named_tool(
             // Invalidate .shuji/ dir since document listings and reads may change
             let shuji_dir = working_dir.join(".shuji");
             cache_invalidate(working_dir, &shuji_dir);
+            if raw_result.contains("\"ok\":true") {
+                if let Some(doc_id) = doc_id_from_write_result(name, args, &raw_result) {
+                    crate::audit::sync_ref_index(working_dir, &doc_id).await;
+                }
+            }
         }
         _ => {}
     }
@@ -293,6 +298,27 @@ fn augment_error_with_hint(name: &str, raw_result: &str, _dept: &str) -> String 
         }
     }
     raw_result.to_string()
+}
+
+/// Resolve doc id from tool args or success JSON (`path` field for create_document).
+fn doc_id_from_write_result(name: &str, args: &serde_json::Value, raw_result: &str) -> Option<String> {
+    if name != "create_document" {
+        if let Some(id) = args.get("id").and_then(|v| v.as_str()) {
+            if !id.is_empty() {
+                return Some(id.to_string());
+            }
+        }
+    }
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(raw_result) {
+        if v.get("ok").and_then(|o| o.as_bool()) == Some(true) {
+            if let Some(path) = v.get("path").and_then(|p| p.as_str()) {
+                if !path.is_empty() {
+                    return Some(path.to_string());
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Validate and execute route_to — returns a ToolOutput with `operation: "route_to"`

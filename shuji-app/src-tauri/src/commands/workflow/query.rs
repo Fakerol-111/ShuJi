@@ -201,11 +201,10 @@ pub async fn get_pending_approvals(state: State<'_, AppState>) -> Result<Vec<Str
             .working_dir
             .clone()
     };
-    let path = std::path::Path::new(&working_dir).join(".shuji/pending_approvals.json");
-    match tokio::fs::read_to_string(&path).await {
-        Ok(content) => serde_json::from_str(&content).map_err(|e| e.to_string()),
-        Err(_) => Ok(vec![]),
-    }
+    let path = std::path::Path::new(&working_dir);
+    crate::tool::documents::sync_pending_approvals_cache(path)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Get the current round metrics.
