@@ -22,7 +22,11 @@ export default function WorkflowSettingsTab({
 
   const INTENTS: { key: string; labelKey: string; descKey: string }[] = [
     { key: 'auto', labelKey: 'workflow.intentAuto', descKey: 'settings.intentAutoDesc' },
-    { key: 'greenfield_standard', labelKey: 'workflow.newFeature', descKey: 'settings.intentNewFeatureDesc' },
+    {
+      key: 'greenfield_standard',
+      labelKey: 'workflow.newFeature',
+      descKey: 'settings.intentNewFeatureDesc',
+    },
     {
       key: 'brownfield_optimize',
       labelKey: 'workflow.existingOptimization',
@@ -34,14 +38,26 @@ export default function WorkflowSettingsTab({
 
   const PRESETS: { key: WFConfig['governance']; labelKey: string; descKey: string }[] = [
     { key: 'full', labelKey: 'workflow.governanceFull', descKey: 'settings.presetFullDesc' },
-    { key: 'standard', labelKey: 'workflow.governanceStandard', descKey: 'settings.presetStandardDesc' },
+    {
+      key: 'standard',
+      labelKey: 'workflow.governanceStandard',
+      descKey: 'settings.presetStandardDesc',
+    },
     { key: 'fast', labelKey: 'workflow.governanceFast', descKey: 'settings.presetFastDesc' },
     { key: 'audit', labelKey: 'workflow.governanceAudit', descKey: 'settings.presetAuditDesc' },
   ];
 
   const MODEL_PRESETS: { key: string; labelKey: string; descKey: string }[] = [
-    { key: 'balanced', labelKey: 'setup.presetBalanced', descKey: 'settings.modelPresetBalancedDesc' },
-    { key: 'economy', labelKey: 'setup.presetEconomyLabel', descKey: 'settings.modelPresetEconomyDesc' },
+    {
+      key: 'balanced',
+      labelKey: 'setup.presetBalanced',
+      descKey: 'settings.modelPresetBalancedDesc',
+    },
+    {
+      key: 'economy',
+      labelKey: 'setup.presetEconomyLabel',
+      descKey: 'settings.modelPresetEconomyDesc',
+    },
     { key: 'quality', labelKey: 'setup.presetQuality', descKey: 'settings.modelPresetQualityDesc' },
   ];
 
@@ -49,7 +65,9 @@ export default function WorkflowSettingsTab({
     <div className="space-y-3">
       {/* ── Workflow Intent ── */}
       <div className="space-y-1">
-        <span className="text-[11px] font-semibold text-ink-300">{t('settings.workflowIntent')}</span>
+        <span className="text-[11px] font-semibold text-ink-300">
+          {t('settings.workflowIntent')}
+        </span>
         <div className="flex gap-1 flex-wrap">
           {INTENTS.map((p) => (
             <button
@@ -67,13 +85,17 @@ export default function WorkflowSettingsTab({
           ))}
         </div>
         <div className="text-[10px] text-ink-500 px-1">
-          {INTENTS.find((i) => i.key === workflowIntent) ? t(INTENTS.find((i) => i.key === workflowIntent)!.descKey) : ''}
+          {INTENTS.find((i) => i.key === workflowIntent)
+            ? t(INTENTS.find((i) => i.key === workflowIntent)!.descKey)
+            : ''}
         </div>
       </div>
 
       {/* ── Workflow preset ── */}
       <div className="space-y-1 pt-2 border-t border-ink-700">
-        <span className="text-[11px] font-semibold text-ink-300">{t('settings.workflowPreset')}</span>
+        <span className="text-[11px] font-semibold text-ink-300">
+          {t('settings.workflowPreset')}
+        </span>
         <div className="flex gap-1 flex-wrap">
           {PRESETS.map((p) => (
             <button
@@ -91,7 +113,9 @@ export default function WorkflowSettingsTab({
           ))}
         </div>
         <div className="text-[10px] text-ink-500 px-1">
-          {PRESETS.find((p) => p.key === workflowPreset) ? t(PRESETS.find((p) => p.key === workflowPreset)!.descKey) : ''}
+          {PRESETS.find((p) => p.key === workflowPreset)
+            ? t(PRESETS.find((p) => p.key === workflowPreset)!.descKey)
+            : ''}
         </div>
       </div>
 
@@ -122,9 +146,7 @@ export default function WorkflowSettingsTab({
             ? t(MODEL_PRESETS.find((p) => p.key === modelPreset)!.descKey)
             : t('settings.modelPresetCustomDesc')}
         </div>
-        <div className="text-[10px] text-ink-400 px-1">
-          {t('settings.modelPresetHint')}
-        </div>
+        <div className="text-[10px] text-ink-400 px-1">{t('settings.modelPresetHint')}</div>
       </div>
     </div>
   );

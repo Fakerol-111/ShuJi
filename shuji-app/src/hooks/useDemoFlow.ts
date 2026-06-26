@@ -99,9 +99,7 @@ export function useDemoFlow(
     const elapsed = Math.round((Date.now() - demoStartTime) / 1000);
     const minutes = Math.floor(elapsed / 60);
     const seconds = elapsed % 60;
-    const elapsedStr = lang === 'en'
-      ? `${minutes}m ${seconds}s`
-      : `${minutes}分${seconds}秒`;
+    const elapsedStr = lang === 'en' ? `${minutes}m ${seconds}s` : `${minutes}分${seconds}秒`;
 
     getRoundMetrics()
       .then((metrics) => {

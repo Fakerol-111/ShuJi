@@ -1,4 +1,5 @@
 use serde::Serialize;
+use serde_json;
 
 /// Structured tool result returned to the LLM as JSON.
 /// Helps the model reliably determine operation outcomes.
@@ -57,6 +58,57 @@ impl ToolOutput {
             content
         ));
         serde_json::to_string(&o).unwrap_or_else(|_| content.to_string())
+    }
+    /// Check if a tool output string represents an error.
+    /// Parses JSON `ok` field; falls back to keyword detection for non-JSON output.
+    pub fn is_error(raw: &str) -> bool {
+        serde_json::from_str::<serde_json::Value>(raw)
+            .ok()
+            .and_then(|v| v.get("ok").and_then(|o| o.as_bool()))
+            .map(|ok| !ok)
+            .unwrap_or_else(|| {
+                let lower = raw.to_lowercase();
+                lower.contains("failed")
+                    || lower.contains("error")
+                    || lower.contains("unknown tool")
+            })
+    }
+
+    /// Extract the error_code from a tool output JSON, if it's an error.
+    pub fn error_code(raw: &str) -> Option<String> {
+        let v = serde_json::from_str::<serde_json::Value>(raw).ok()?;
+        if v.get("ok")?.as_bool()? {
+            return None;
+        }
+        v.get("error_code")
+            .and_then(|c| c.as_str())
+            .map(String::from)
+    }
+
+    /// Extract the message field from a tool output JSON.
+    pub fn extract_message(raw: &str) -> Option<String> {
+        let v: serde_json::Value = serde_json::from_str(raw).ok()?;
+        v.get("message").and_then(|m| m.as_str()).map(String::from)
+    }
+
+    /// Success with a warning. Creates ok=true with an attached warning field.
+    pub fn success_with_warning(
+        operation: &str,
+        id: &str,
+        warning_code: &str,
+        warning_msg: &str,
+    ) -> String {
+        serde_json::json!({
+            "ok": true,
+            "operation": operation,
+            "path": id,
+            "message": format!("Created. Note: {}.", warning_msg),
+            "warning": {
+                "code": warning_code,
+                "message": warning_msg,
+            },
+        })
+        .to_string()
     }
 
     pub fn error(operation: &str, path: &str, code: &str, message: &str) -> String {

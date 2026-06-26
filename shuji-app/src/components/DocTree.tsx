@@ -62,7 +62,9 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
   return (
     <div className="py-2 text-ui">
       <div className="sticky top-0 z-10 bg-surface-parchment px-2 pb-2 flex justify-end items-center gap-2 border-b border-fold mb-1">
-        {loading && <span className="text-[10px] text-ink-400 animate-pulse">{t('docTree.refreshing')}</span>}
+        {loading && (
+          <span className="text-[10px] text-ink-400 animate-pulse">{t('docTree.refreshing')}</span>
+        )}
         <button
           onClick={loadTree}
           className="px-2 py-1 rounded text-ui text-ink-500 hover:bg-ink-100 hover:text-ink-800"

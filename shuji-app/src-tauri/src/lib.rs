@@ -1,8 +1,18 @@
 // 存量 clippy warning 允许项 — 逐文件消解（已全部消解完毕）
 
-/// Console logging via a dedicated writer task.
-/// Sends formatted lines through an mpsc channel; a single background
-/// task drains and writes to stderr sequentially, preventing interleaving.
+// ============================================================================
+// 宏定义
+// ============================================================================
+
+/// 控制台日志宏 — 通过专用 writer 任务输出日志。
+///
+/// 日志行通过 mpsc 通道发送到单个后台任务，由该任务顺序写入 stderr，
+/// 从而防止多线程环境下日志行交错输出的问题。
+///
+/// 使用方式：
+/// ```ignore
+/// log_console!("[{}] 任务完成，耗时 {}ms", role_name, elapsed);
+/// ```
 #[macro_export]
 macro_rules! log_console {
     ($($arg:tt)*) => {{
@@ -10,48 +20,107 @@ macro_rules! log_console {
     }};
 }
 
-pub mod actor;
-pub mod agent;
-pub mod api;
-pub mod audit;
-mod commands;
-pub mod config;
-mod logging;
-pub mod metrics;
-pub mod models;
-pub mod pipeline;
-pub mod playbook;
-pub mod precepts;
-pub mod pricing;
-mod round_metrics;
-pub mod scenario;
-pub mod storage;
-mod token_tracker;
-pub mod tool;
-pub mod validate;
-pub mod workflow;
+// ============================================================================
+// 模块声明
+// ============================================================================
+
+// --- 核心业务模块 (pub — 外部可访问) ---
+pub mod actor; // Actor 系统：角色邮箱、消息路由、FastMessage/FastChannel
+pub mod agent; // Agent trait + 通用执行框架 (runner) + 9 部门 + 2 子 agent
+pub mod api; // LLM API 层：双格式 HTTP client、会话管理、AgentController、上下文压缩
+pub mod audit; // 审计系统：事件日志、引用索引、文档谱系、diff 追踪、合规检查单
+pub mod config; // 配置系统：RuntimeConfig (TOML)、优先级合并、阈值解析
+pub mod metrics; // 运行指标收集与查询
+pub mod models; // 数据模型：Role、ChatMessage、Project、WorkflowState 等
+pub mod pipeline; // Pipeline 引擎：阶段编排、验证、恢复、死锁检测
+pub mod playbook; // Playbook 剧本定义：本项目中预定义的协作流程模板
+pub mod precepts; // 戒律/规范模块：项目中定义的规则和约束
+pub mod pricing; // API 定价计算与统计
+pub mod scenario; // 场景定义与回放测试框架
+pub mod storage; // 存储层：.shuji/ 目录管理、checkpoint 持久化
+pub mod tool; // 工具系统：工具注册表、分发、文件操作、文档操作、审计工具
+pub mod validate; // 交付验证模块：端到端验证流程与验证器
+pub mod workflow; // 工作流系统：WorkflowProfile、Resolver、Gate、Chain 组合器
+
+// --- 内部模块 (非 pub — 仅供 crate 内部使用) ---
+mod commands; // Tauri 命令处理器：project、workflow、settings、checkpoint 等
+mod logging; // 日志系统：部门作用域的 JSONL 日志、控制台输出
+mod round_metrics; // 轮次指标：当前角色/skill 的实时 token 消耗追踪
+mod token_tracker; // Token 追踪器：持久化记录、按时间窗口聚合统计
+mod usage_notify; // 度支/文脉面板刷新通知（usage-update 事件）
+
+// ============================================================================
+// 类型别名
+// ============================================================================
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-/// Shared type alias for the complex cancel-flag map used by agents and tools.
-/// 内阁 uses this to interrupt other agents via the `cancel_agent` tool.
+/// 取消标志映射表 — 共享类型别名，用于 agent 和 tool 之间传递取消信号。
+///
+/// 结构：`Map<Role, Arc<AtomicBool>>`
+/// - 内阁通过 `cancel_agent` 工具将一个部门的 flag 置为 true 来中断其执行
+/// - 各部门在 `AgentController.run()` 的每次迭代开始时检查自己的 flag
 pub type CancelMap = Arc<std::sync::Mutex<HashMap<crate::models::role::Role, Arc<AtomicBool>>>>;
+
+/// 快速消息发送器映射表 — 用于内阁向特定部门发送即时控制消息。
+///
+/// 结构：`Map<Role, mpsc::Sender<FastMessage>>`
+/// - `FastMessage` 携带更高优先级的中断/控制指令
+/// - 通过专用的 mpsc channel 直接送达目标 agent 的 mailbox
 pub type FastTxMap =
     Arc<HashMap<crate::models::role::Role, tokio::sync::mpsc::Sender<crate::actor::FastMessage>>>;
 
+// ============================================================================
+// 应用入口
+// ============================================================================
+
 use commands::project::AppState;
 use config::RuntimeConfig;
+use tauri::Emitter;
 
+/// Tauri 应用主入口函数。
+///
+/// 负责：
+/// 1. 加载 `config.toml` 运行时配置（失败则使用默认值）
+/// 2. 注册 Tauri 插件（shell、dialog）
+/// 3. 初始化全局 `AppState` 并注入 Tauri 状态管理
+/// 4. 注册所有前端可调用的 Tauri 命令
+///
+/// 全局状态字段说明 (AppState):
+/// - `current_project`: 当前打开的项目路径
+/// - `current_dir`: 当前工作目录
+/// - `cancel_flag`: 全局取消标志（用户点击"停止"时置 true）
+/// - `actor_system`: Actor 系统句柄（None 表示未启动）
+/// - `chat_history`: 当前会话的聊天记录缓存
+/// - `dept_log_history`: 部门日志历史缓存
+/// - `runtime_config`: 运行时配置（线程安全共享）
+/// - `compacting_roles`: 正在执行上下文压缩的角色集合（防重复点击）
+/// - `discuss_cancel`: 讨论模式取消标志
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // 加载运行时配置，文件缺失或解析失败时回退到默认值
     let runtime_config = RuntimeConfig::load_or_default("config.toml");
 
     tauri::Builder::default()
+        // 注册 Tauri 插件：shell（命令执行）、dialog（文件对话框）
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            let (usage_tx, mut usage_rx) =
+                tokio::sync::mpsc::unbounded_channel::<usage_notify::UsageUpdate>();
+            usage_notify::set_sender(usage_tx);
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                while let Some(update) = usage_rx.recv().await {
+                    let _ = handle.emit("usage-update", &update);
+                }
+            });
+            Ok(())
+        })
+        // 注入全局应用状态 — 所有字段均为 Arc 包装，支持跨线程安全共享
         .manage(AppState {
             current_project: Arc::new(Mutex::new(None)),
             current_dir: Arc::new(Mutex::new(None)),
@@ -63,7 +132,9 @@ pub fn run() {
             compacting_roles: Arc::new(Mutex::new(HashSet::new())),
             discuss_cancel: Arc::new(AtomicBool::new(false)),
         })
+        // 注册所有 Tauri 命令 — 前端通过 invoke() 调用这些函数
         .invoke_handler(tauri::generate_handler![
+            // --- 项目管理 ---
             commands::project::create_project,
             commands::project::load_project,
             commands::project::get_project,

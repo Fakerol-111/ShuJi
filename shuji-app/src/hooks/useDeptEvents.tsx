@@ -2,6 +2,11 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { listen } from '@tauri-apps/api/event';
 import { getActiveRoles } from '../api';
 import type { DeptLogEntry, DeptStepEntry } from '../types';
+import {
+  normalizeDeptLabel,
+  normalizeDeptLogEntry,
+  normalizeDeptStepEntry,
+} from '../utils/deptLog';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -52,7 +57,7 @@ export function DeptEventsProvider({ children }: { children: ReactNode }) {
   // ── Centralized dept-log event listener ──
   useEffect(() => {
     const unlisten = listen<DeptLogEntry>('dept-log', (event) => {
-      const entry = event.payload;
+      const entry = normalizeDeptLogEntry(event.payload);
       setLatestLogs((prev) => {
         const next = new Map(prev);
         next.set(entry.dept, entry);
@@ -76,7 +81,7 @@ export function DeptEventsProvider({ children }: { children: ReactNode }) {
     const setup = async () => {
       const unlisten = await listen<DeptStepEntry>('dept-step', (event) => {
         if (cancelled) return;
-        const entry = event.payload;
+        const entry = normalizeDeptStepEntry(event.payload);
         setDeptSteps((prev) => {
           const next = new Map(prev);
           const dept = entry.dept;
@@ -114,7 +119,7 @@ export function DeptEventsProvider({ children }: { children: ReactNode }) {
     const poll = async () => {
       try {
         const roles = await getActiveRoles();
-        setActiveDepts(roles);
+        setActiveDepts(roles.map((r) => normalizeDeptLabel(r)));
       } catch {
         // Silently retry on next tick
       }

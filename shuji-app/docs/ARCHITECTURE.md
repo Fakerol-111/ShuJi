@@ -1,6 +1,6 @@
 # 枢机（ShuJi）架构文档
 
-> 本文档描述当前实际实现的架构。与 `mailbox_design.md`（未来设计）不同，本文档反映**运行时代码的真实行为**。
+> 本文档描述当前实际实现的架构。与 [`design/future-mailbox.md`](design/future-mailbox.md)（未来设计）不同，本文档反映**运行时代码的真实行为**。
 
 ## 消息流模型：Actor + mpsc Push
 
@@ -28,7 +28,7 @@
 | 部门 | 职责 |
 |------|------|
 | 内阁 | 皇帝入口，skill 检测，工作流分发 |
-| 中书令 | 方案设计（3 skills：overall_design / phase_plan / phase_design） |
+| 中书令 | 方案设计（7 skills，见 `agent/zhongshuling/skills/`） |
 | 门下侍中 | 审查（2 skills：review_overall / review_phase） |
 | 尚书令 | 执行调度 |
 | 吏部尚书 | 详细设计 |
@@ -174,7 +174,7 @@ Governance Fast overlay 追加禁 expand_requirements + 门下侍中（greenfiel
 - `workflow_preset.json` 双写兼容；governance 值与之对齐
 - 无 `workflow_config.json` 时行为与改前一致（auto + routing + 无 GateEngine）
 
-| 特性 | mailbox_design.md（未来） | 当前实现 |
+| 特性 | design/future-mailbox.md（未来） | 当前实现 |
 |------|--------------------------|---------|
 | 消息模型 | Pull 式调度器轮询 | Push 式 mpsc channel |
 | 信箱 | 快信箱 + 慢信箱 | 单一 mpsc + FastMessage 通道 |

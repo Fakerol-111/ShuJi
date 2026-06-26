@@ -229,8 +229,10 @@ async fn test_watchdog_consecutive_errors_stops_agent() {
 
     // 验证结果是 Stopped（含终止信息）
     let text = result.into_text();
+    // Check that the result indicates termination (case-insensitive "terminating" check)
+    let text_lower = text.to_lowercase();
     assert!(
-        text.contains("terminating"),
+        text_lower.contains("terminating"),
         "watchdog should terminate after 3 consecutive errors. Output: {}",
         text
     );

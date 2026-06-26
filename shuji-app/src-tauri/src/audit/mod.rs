@@ -166,7 +166,7 @@ pub async fn verify_audit_trail(working_dir: &Path) -> Result<VerificationReport
 
     for entry in &entries {
         if entry.hash.is_empty() {
-            // Pre-upgrade entry — skip chain check
+            // Pre-upgrade entry �?skip chain check
             pre_chain += 1;
             continue;
         }
@@ -664,9 +664,9 @@ pub struct ChainNode {
 pub struct TraceResult {
     /// The document that was searched for.
     pub target: Option<ChainNode>,
-    /// Documents that the target references (downstream: target → refs).
+    /// Documents that the target references (downstream: target �?refs).
     pub downstream: Vec<ChainNode>,
-    /// Documents that reference the target (upstream: refs → target).
+    /// Documents that reference the target (upstream: refs �?target).
     pub upstream: Vec<ChainNode>,
 }
 
@@ -822,7 +822,7 @@ pub async fn generate_report(working_dir: &Path) -> String {
 
     report.push_str("\n### Document Output\n\n");
     for doc in &docs_created {
-        report.push_str(&format!("- `{}` — {}\n", doc.doc_id, doc.detail));
+        report.push_str(&format!("- `{}` �?{}\n", doc.doc_id, doc.detail));
     }
 
     report
@@ -843,7 +843,7 @@ pub struct RefIndexEntry {
     pub ref_by: Vec<String>,
 }
 
-/// Document type → directory mapping (mirrors documents.rs TYPE_TO_DIR).
+/// Document type �?directory mapping (mirrors documents.rs TYPE_TO_DIR).
 const TYPE_TO_DIR: &[(&str, &str)] = &[
     ("dsgn", "designs"),
     ("plan", "designs"),

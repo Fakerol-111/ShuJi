@@ -33,7 +33,9 @@ export default function ProjectPicker(props: ProjectPickerProps) {
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-lg font-bold text-ink-900 mb-4">{t('workspace.openProject')}</h2>
-        <label className="block text-xs font-medium text-ink-500 mb-1">{t('workspace.workingDir')}</label>
+        <label className="block text-xs font-medium text-ink-500 mb-1">
+          {t('workspace.workingDir')}
+        </label>
         <div className="flex gap-2 mb-3">
           <input
             value={pickerPath}

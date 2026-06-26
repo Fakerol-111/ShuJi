@@ -50,8 +50,38 @@ pub async fn execute_named_tool(
 ) -> String {
     tool_log::log_tool_call(dept, name, args, working_dir).await;
     let raw_result = match name {
-        "read_file" => tool_read_file(working_dir, args).await,
-        "create_file" => tool_create_file(working_dir, args).await,
+        "read_file" => {
+            if args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .map_or(true, |p| p.is_empty())
+            {
+                crate::tool::output::ToolOutput::error(
+                    "read_file",
+                    "",
+                    "empty_path",
+                    "请指定要读取的文件路径（path 参数不能为空）。",
+                )
+            } else {
+                tool_read_file(working_dir, args).await
+            }
+        }
+        "create_file" => {
+            if args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .map_or(true, |p| p.is_empty())
+            {
+                crate::tool::output::ToolOutput::error(
+                    "create_file",
+                    "",
+                    "empty_path",
+                    "请指定要创建的文件路径（path 参数不能为空）。",
+                )
+            } else {
+                tool_create_file(working_dir, args).await
+            }
+        }
         "list_dir" => tool_list_dir(working_dir, args).await,
         "list_dir_tree" => tool_list_dir_tree(working_dir, args).await,
         "append_file" => tool_append_file(working_dir, args).await,
@@ -60,9 +90,45 @@ pub async fn execute_named_tool(
         "modify_file" => tool_modify_file(working_dir, args).await,
         "apply_patch" => tool_apply_patch(working_dir, args).await,
         "edit_file" => tool_edit_file(working_dir, args).await,
-        "create_document" => documents::tool_create_document(working_dir, args, dept).await,
+        "create_document" => {
+            if let Some(dt) = args.get("type").and_then(|v| v.as_str()) {
+                let valid_types = ["dsgn", "plan", "pdsg", "revw", "anls", "rprt"];
+                if !valid_types.contains(&dt) {
+                    crate::tool::output::ToolOutput::error("create_document", dt, "invalid_type",
+                        &format!("文档类型不合法: {}. 合法类型: dsgn(设计), plan(计划), pdsg(阶段设计), revw(审核), anls(分析), rprt(报告)", dt))
+                } else {
+                    documents::tool_create_document(working_dir, args, dept).await
+                }
+            } else {
+                crate::tool::output::ToolOutput::error(
+                    "create_document",
+                    "",
+                    "missing_type",
+                    "请指定文档类型（type 参数）。合法类型: dsgn, plan, pdsg, revw, anls, rprt",
+                )
+            }
+        }
         "modify_document" => documents::tool_modify_document(working_dir, args, dept).await,
-        "set_document_status" => documents::tool_set_document_status(working_dir, args).await,
+        "set_document_status" => match args.get("status").and_then(|v| v.as_str()) {
+            Some(s) if s == "approved" || s == "rejected" => {
+                documents::tool_set_document_status(working_dir, args).await
+            }
+            Some(other) => crate::tool::output::ToolOutput::error(
+                "set_document_status",
+                other,
+                "invalid_status",
+                &format!(
+                    "状态值不合法: {}. 必须是 approved(批准) 或 rejected(驳回).",
+                    other
+                ),
+            ),
+            None => crate::tool::output::ToolOutput::error(
+                "set_document_status",
+                "",
+                "missing_status",
+                "请指定状态值（status 参数）。合法值: approved, rejected",
+            ),
+        },
         "append_document" => {
             // Gate: check refs before appending to a document
             let id = args["id"].as_str().unwrap_or("");
@@ -145,7 +211,93 @@ pub async fn execute_named_tool(
         }
         _ => {}
     }
-    truncate_tool_result_by_name(name, &raw_result)
+    truncate_tool_result_by_name(name, &augment_error_with_hint(name, &raw_result, dept))
+}
+
+/// Classify a tool error and append an actionable correction hint for the LLM.
+/// The hint is appended to the JSON result so the LLM knows what to do differently.
+fn augment_error_with_hint(name: &str, raw_result: &str, _dept: &str) -> String {
+    // Only augment error results
+    if !crate::tool::output::ToolOutput::is_error(raw_result) {
+        return raw_result.to_string();
+    }
+
+    let error_code = crate::tool::output::ToolOutput::error_code(raw_result);
+    let message = crate::tool::output::ToolOutput::extract_message(raw_result).unwrap_or_default();
+    let msg_lower = message.to_lowercase();
+
+    let hint = match (name, error_code.as_deref()) {
+        // -- File operations --
+        ("read_file", _) if msg_lower.contains("not found") || msg_lower.contains("no such file") => {
+            "HINT: 文件不存在。请先使用 list_dir 确认文件路径，或检查路径拼写。如果文件可能在其他位置，使用 search_text 搜索。"
+        }
+        ("create_file", _) if msg_lower.contains("already exists") => {
+            "HINT: 文件已存在。请使用 edit_file（单处修改）或 apply_patch（多处修改）来更新现有文件，不要重复创建。"
+        }
+        ("edit_file", _) | ("apply_patch", _) if msg_lower.contains("search") || msg_lower.contains("not found") => {
+            "HINT: SEARCH 块匹配失败。请先 read_file 获取文件当前内容，确保 SEARCH 块与文件中完全一致的代码段匹配（包括缩进和空格）。"
+        }
+        ("edit_file", _) | ("apply_patch", _) if msg_lower.contains("no such") || msg_lower.contains("not found") => {
+            "HINT: 要修改的文件不存在。请先使用 read_file 确认文件路径和当前内容，再进行修改。"
+        }
+
+        // -- Document operations --
+        ("create_document", _) if msg_lower.contains("type") && (msg_lower.contains("invalid") || msg_lower.contains("illegal")) => {
+            "HINT: 文档类型不合法。请使用以下之一：dsgn（设计文档）、plan（计划）、pdsg（阶段设计）、revw（审核报告）、anls（分析文档）、rprt（工作报告）。"
+        }
+        ("read_document", _) if msg_lower.contains("not found") => {
+            "HINT: 文档 ID 不存在。请先使用 list_dir 浏览 .shuji/ 目录下的文档列表，找到正确的文档 ID。"
+        }
+        ("append_document", Some("doc_not_approved")) => {
+            "HINT: 该文档引用的内容尚未通过审批。请先完成审批流程（使用 set_document_status 工具），然后再追加内容。"
+        }
+        ("append_document", _) if msg_lower.contains("not found") => {
+            "HINT: 要追加的文档 ID 不存在。请先使用 create_document 创建文档，然后再追加内容。"
+        }
+
+        // -- Route operations --
+        ("route_to", Some("unknown_target")) => {
+            "HINT: 目标部门名称无法识别。请使用中文全称：内阁、中书令、门下侍中、尚书令、吏部、兵部、工部、刑部、礼部。"
+        }
+        ("route_to", Some("doc_not_approved")) => {
+            "HINT: 路由被拒绝，因为目标文档涉及的内容尚未通过审批。请先完成审批流程。"
+        }
+
+        // -- Command operations --
+        ("execute_command", _) if msg_lower.contains("not found") || msg_lower.contains("no such") => {
+            "HINT: 命令不存在或找不到可执行文件。请检查命令名称和路径是否正确。"
+        }
+
+        // -- Unknown tool --
+        ("unknown_tool", _) => {
+            "HINT: 调用了不存在的工具。请检查工具名称拼写。可用工具列表在 system prompt 中有定义。"
+        }
+
+        // Default: generic hint based on tool category
+        _ => {
+            if matches!(name, "read_file" | "read_document" | "list_dir" | "search_text") {
+                "HINT: 请确认参数正确，或检查目标文件/文档是否存在。"
+            } else if matches!(name, "create_file" | "create_document") {
+                "HINT: 请检查参数是否完整（路径、内容等），或确认目标路径不重复。"
+            } else if matches!(name, "edit_file" | "apply_patch" | "modify_file") {
+                "HINT: 请先 read_file 获取文件最新内容，确保修改基准确确。"
+            } else {
+                "HINT: 请检查工具参数后重试。如果持续失败，考虑换一种实现方式。"
+            }
+        }
+    };
+
+    // Insert the hint into the JSON result: add a "hint" field inside the existing object
+    if let Ok(mut v) = serde_json::from_str::<serde_json::Value>(raw_result) {
+        if let Some(obj) = v.as_object_mut() {
+            obj.insert(
+                "hint".to_string(),
+                serde_json::Value::String(hint.to_string()),
+            );
+            return serde_json::to_string(obj).unwrap_or_else(|_| raw_result.to_string());
+        }
+    }
+    raw_result.to_string()
 }
 
 /// Resolve doc id from tool args or success JSON (`path` field for create_document).
@@ -199,6 +351,17 @@ fn handle_route_to(args: &serde_json::Value, dept: &str) -> String {
             &format!(
                 "Invalid route type: {}, must be task/replace/interrupt",
                 _type
+            ),
+        );
+    }
+    // P1-3: 路由预验证 - 检查目标部门是否合法
+    if crate::models::role::Role::from_name(to_name).is_none() {
+        return ToolOutput::error(
+            "route_to",
+            to_name,
+            "unknown_target",
+            &format!("无法识别目标部门 '{}' 可用部门: 内阁、中书令、门下侍中、尚书令、吏部、兵部、工部、刑部、礼部。请使用中文全称或英文名称(cabinet/architect/reviewer/personnel/war/works/justice/rites)。",
+                to_name
             ),
         );
     }

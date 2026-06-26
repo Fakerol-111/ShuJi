@@ -85,6 +85,7 @@ fn test_reject_hidden_parent_traversal() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_reject_absolute_path_unix() {
     let temp = common::create_test_project("path_absolute_unix");
     let root = temp.path();
@@ -210,7 +211,7 @@ fn test_reject_symlink_escape() {
         );
     } else {
         // 或者直接返回错误也是可以接受的
-        common::assert_path_error_contains(&result, "路径越界");
+        common::assert_path_error_contains(&result, "path out of bounds");
     }
 }
 

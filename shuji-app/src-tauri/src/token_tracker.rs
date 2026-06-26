@@ -81,6 +81,7 @@ pub fn record(role: &str, prompt: u64, cached: u64, completion: u64, model: &str
             let _ = save_to_file(Path::new(path), records);
         }
     }
+    crate::usage_notify::notify(role, crate::usage_notify::UsageUpdateKind::Token);
 }
 
 /// Estimate cost in both USD and CNY using the pricing module.

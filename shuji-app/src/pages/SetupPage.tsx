@@ -224,7 +224,13 @@ export default function SetupPage() {
               <span
                 className={`text-ui ${step === s ? 'text-ink-900 font-medium' : 'text-ink-400'}`}
               >
-                {s === 1 ? t('setup.preset') : s === 2 ? t('setup.apiKey') : s === 3 ? t('setup.role') : t('common.finish')}
+                {s === 1
+                  ? t('setup.preset')
+                  : s === 2
+                    ? t('setup.apiKey')
+                    : s === 3
+                      ? t('setup.role')
+                      : t('common.finish')}
               </span>
               {s < 4 && <div className="w-6 h-px bg-ink-300 mx-1" />}
             </div>
@@ -303,7 +309,9 @@ export default function SetupPage() {
 
             {/* API URL */}
             <div>
-              <label className="block text-ui font-medium text-ink-600 mb-1.5">{t('setup.provider')}</label>
+              <label className="block text-ui font-medium text-ink-600 mb-1.5">
+                {t('setup.provider')}
+              </label>
               <div className="flex gap-1.5 flex-wrap mb-2">
                 {API_URL_PRESETS.map((p) => (
                   <button
@@ -369,7 +377,9 @@ export default function SetupPage() {
               >
                 {testing ? t('setup.testing') : t('setup.testConnection')}
               </Button>
-              {testResult === 'ok' && <span className="text-ui text-jade">{t('setup.connectionSuccess')}</span>}
+              {testResult === 'ok' && (
+                <span className="text-ui text-jade">{t('setup.connectionSuccess')}</span>
+              )}
               {testResult === 'fail' && (
                 <span className="text-ui text-vermillion">{t('setup.connectionFailHint')}</span>
               )}
@@ -414,9 +424,7 @@ export default function SetupPage() {
             <h2 className="font-display text-sm font-bold text-ink-900 text-center">
               {t('setup.roleOverviewTitle')}
             </h2>
-            <p className="text-caption text-ink-500 text-center">
-              {t('setup.roleOverviewDesc')}
-            </p>
+            <p className="text-caption text-ink-500 text-center">{t('setup.roleOverviewDesc')}</p>
             <div className="space-y-1 max-h-[320px] overflow-y-auto">
               {roleModels.map((r) => {
                 const meta = r.key !== 'default' ? DEPT_META_BY_KEY[r.key] : undefined;
@@ -464,7 +472,9 @@ export default function SetupPage() {
               </svg>
             </div>
             <div>
-              <h2 className="font-display text-sm font-bold text-ink-900">{t('setup.configSaved')}</h2>
+              <h2 className="font-display text-sm font-bold text-ink-900">
+                {t('setup.configSaved')}
+              </h2>
               <p className="text-body text-ink-600 mt-1">{t('setup.configSavedDesc')}</p>
             </div>
             <div className="space-y-2">

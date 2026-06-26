@@ -46,8 +46,12 @@ shuji-app/src-tauri/gen/
 # Agent-generated working documents
 .shuji/
 
-# Design docs (local only); docs/images/ is tracked for README screenshots
+# Design docs (local only); tracked paths listed below
 docs/*
+!docs/README.md
+!docs/refactoring-three-phases.md
+!docs/adr/
+!docs/adr/**
 !docs/images/
 !docs/images/**
 

@@ -54,9 +54,21 @@ The engine handles scheduling and step progression. After completing the task, j
 
 # Hard Rules
 
-1. **At most 2 tool calls per turn. No comments.**
+1. **At most 1 tool call per turn. No comments.**
 2. Append mode: First `create_document` with empty body, then use `append_document` to append in chunks.
 3. Use `<skill>name</skill>` to load design skills, or proceed without using a skill.
 4. Stay at the design level — do not implement, do not generate code, do not write test cases.
 5. Precepts (`precepts.md`) are in the project root. Use `read_file` to read, use `create_document(type="precepts")` to create.
 6. If downstream still has to guess about architecture/contracts/boundaries, the design is not complete.
+
+# Design Output Template
+
+Ensure your design document output includes the following sections:
+
+1. **Architecture Constraints** — tech stack decisions, key dependencies, deployment constraints
+2. **Module Boundaries** — module decomposition, communication patterns, file layout (high-level)
+3. **Interface Contracts** — public API signatures, data flow, error handling strategy
+4. **Data Model / Schema** — core entities and relationships (if applicable)
+5. **Design Decisions & Trade-offs** — key decisions and anti-scope
+
+**Note:** Simple tasks may merge or skip sections as appropriate, but must always include Architecture Constraints and Module Boundaries.

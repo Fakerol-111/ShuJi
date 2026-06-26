@@ -25,10 +25,10 @@ export default function DeptActivityCard({ entry, onDocClick }: DeptActivityCard
 
   return (
     <div className="flex items-start gap-2 py-1.5 px-2 rounded-lg hover:bg-ink-100/30 transition-colors group">
-        <div
-          className="w-[3px] h-full min-h-[20px] rounded-full shrink-0 mt-1"
-          style={{ backgroundColor: borderColor }}
-        />
+      <div
+        className="w-[3px] h-full min-h-[20px] rounded-full shrink-0 mt-1"
+        style={{ backgroundColor: borderColor }}
+      />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 text-caption">
           <span className="font-semibold text-ink-700 shrink-0" style={{ color: borderColor }}>

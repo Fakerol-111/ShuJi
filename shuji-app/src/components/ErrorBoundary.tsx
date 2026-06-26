@@ -32,8 +32,12 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="h-screen bg-surface-paper flex items-center justify-center">
           <div className="max-w-md mx-auto p-8 text-center">
             <SealLogo size={40} />
-            <h1 className="font-display text-display font-bold text-ink-900 mt-4">{i18n.t('error.genericTitle')}</h1>
-            <p className="text-body text-ink-600 mt-2 mb-4">{i18n.t('error.systemError') + i18n.t('common.reload')}</p>
+            <h1 className="font-display text-display font-bold text-ink-900 mt-4">
+              {i18n.t('error.genericTitle')}
+            </h1>
+            <p className="text-body text-ink-600 mt-2 mb-4">
+              {i18n.t('error.systemError') + i18n.t('common.reload')}
+            </p>
             <details className="text-left mb-6">
               <summary className="text-caption text-ink-500 cursor-pointer hover:text-ink-700">
                 {i18n.t('common.error')}

@@ -1,3 +1,14 @@
+//! 消息发送与取消命令。
+//!
+//! 本文件定义了前端可直接调用的核心交互接口：
+//! - `send_message`: 向内阁发送消息，自动判断走 pipeline 恢复还是常规工作流
+//! - `discuss_with_cabinet`: 独立讨论模式（不修改项目状态）
+//! - `cancel_discuss` / `cancel_processing`: 取消机制
+
+// ============================================================================
+// 依赖导入
+// ============================================================================
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
@@ -18,21 +29,41 @@ use crate::models::chat::ChatMessage;
 use crate::models::dept_step::DeptStepEntry;
 use crate::models::role::Role;
 
-/// Send a message to the 内阁 actor.
-/// If there's an active pipeline runtime on disk, the message is consumed by
-/// the pipeline (resume from AwaitingUserInput/AwaitingApproval) instead.
+// ============================================================================
+// send_message — 核心消息入口
+// ============================================================================
+
+/// 向内阁（或 pipeline）发送用户消息。
+///
+/// **双路径分发**:
+/// 1. 如果磁盘上存在活跃的 `PlanRuntime` → 消息交给 pipeline 引擎，
+///    用于恢复暂停状态（`AwaitingUserInput` / `AwaitingApproval`）
+/// 2. 否则 → 消息路由到内阁 actor，走常规工作流通路
+///
+/// **延迟初始化**: 首次调用时自动创建完整的 actor 系统
+///   - 5 个转发通道（emperor / dept_log / dept_step / plan / milestone）
+///   - 每个通道 spawn 一个后台任务：转发到前端 + 写入缓存 + 持久化 JSONL
+///   - 调用 `start_actor_system` 启动全部 9 部门 actor
+///
+/// **运行中的流程打断**: 如果当前有非内阁角色正在执行，
+///   先发送 `FastMessage::Interrupt` 中断之，再投递新消息。
+///
+/// **工作流图谱归档**: 每次新消息都会将当前 WorkflowGraph 归档并重置。
 #[tauri::command]
 pub async fn send_message(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     message: String,
 ) -> Result<String, String> {
+    // 开始新一轮指标追踪（记录本轮开始时间、角色等）
     crate::round_metrics::start_round();
 
+    // 加载完整配置（含 api_config.json + .env 合并结果）
     let config = crate::commands::settings::get_config()
         .await
         .map_err(friendly_error)?;
 
+    // 获取当前打开项目的工作目录
     let p_working_dir = {
         let project_opt = state.current_project.lock().await;
         let p = project_opt
@@ -41,16 +72,18 @@ pub async fn send_message(
         p.working_dir.clone()
     };
 
-    // ── Pipeline resume: check if there's an active PlanRuntime on disk ──
+    // =======================================================================
+    // 路径 A: Pipeline 恢复 — 磁盘上存在活跃的 PlanRuntime
+    // =======================================================================
     let project_dir = std::path::Path::new(&p_working_dir);
     if let Some(runtime) = crate::pipeline::PlanRuntime::load_from(project_dir).await {
         log_console!("[pipeline] found active runtime on disk, resuming pipeline");
 
-        // Ensure actor system is initialized (needed for department routing)
+        // 确保 actor 系统已初始化（pipeline 需要部门路由能力）
         {
             let mut sys_lock = state.actor_system.lock().await;
             if sys_lock.is_none() {
-                // Same lazy init as below — emit pipeline resume events
+                // 与下方常规路径相同的延迟初始化逻辑 — 创建 5 个转发通道
                 let (emperor_tx, mut emperor_rx) = tokio::sync::mpsc::channel::<ChatMessage>(200);
                 let (dept_log_tx, mut dept_log_rx) =
                     tokio::sync::mpsc::channel::<DeptLogEntry>(500);
@@ -64,6 +97,8 @@ pub async fn send_message(
                 let dept_log_hist = state.dept_log_history.clone();
                 let chat_persist_dir = p_working_dir.clone();
 
+                // 通道 1: emperor → 前端 chat-message 事件
+                // 工作流: emit 到前端 → 写入内存缓存 → 持久化到 .shuji/chat.jsonl
                 tokio::spawn(async move {
                     while let Some(msg) = emperor_rx.recv().await {
                         let _ = app_handle.emit("chat-message", &msg);
@@ -86,6 +121,7 @@ pub async fn send_message(
                     }
                 });
 
+                // 通道 2: dept_log → 前端 dept-log 事件（仅写入内存缓存）
                 let app2 = app.clone();
                 let _dept_log_dir = p_working_dir.clone();
                 tokio::spawn(async move {
@@ -96,6 +132,7 @@ pub async fn send_message(
                     }
                 });
 
+                // 通道 3: dept_step → 前端 dept-step 事件
                 let app_step = app.clone();
                 tokio::spawn(async move {
                     while let Some(entry) = dept_step_rx.recv().await {
@@ -103,6 +140,7 @@ pub async fn send_message(
                     }
                 });
 
+                // 通道 4: plan → 前端 plan-update 事件
                 let app_plan = app.clone();
                 tokio::spawn(async move {
                     while let Some(plan_json) = plan_rx.recv().await {
@@ -110,6 +148,8 @@ pub async fn send_message(
                     }
                 });
 
+                // 通道 5: milestone → 更新项目状态 + 持久化
+                // 收到里程碑时：更新 Project.talk/summary → 保存到磁盘 → emit project-update → 写审计日志
                 let app3 = app.clone();
                 let wd = p_working_dir.clone();
                 tokio::spawn(async move {
@@ -124,6 +164,7 @@ pub async fn send_message(
                     }
                 });
 
+                // 启动完整的 9 部门 actor 系统
                 let system = start_actor_system(
                     &config,
                     state.runtime_config.clone(),
@@ -142,6 +183,7 @@ pub async fn send_message(
             }
         }
 
+        // 从 runtime 构建 pipeline 引擎，注入用户消息恢复执行
         let sys_lock = state.actor_system.lock().await;
         if let Some(system) = sys_lock.as_ref() {
             let engine = crate::pipeline::engine::PipelineEngine::from_runtime(
@@ -150,10 +192,10 @@ pub async fn send_message(
                 project_dir.to_path_buf(),
             );
 
-            // Resume pipeline with user's message as input
+            // 将用户消息作为输入恢复 pipeline 执行
             let result = engine.resume_with_input(Some(&message)).await;
 
-            // Emit result to emperor
+            // 根据 pipeline 执行结果构造用户可读的状态消息
             let msg = match &result {
                 crate::pipeline::PipelineResult::Complete { ref runtime } => {
                     format!("✅ Pipeline execution complete: {}", runtime.plan.summary)
@@ -180,6 +222,7 @@ pub async fn send_message(
                     format!("❌ Pipeline step {} failed: {}", step_id, reason)
                 }
                 crate::pipeline::PipelineResult::Aborted { .. } => {
+                    // 中止时清理磁盘上的 runtime 文件
                     crate::pipeline::PlanRuntime::cleanup(project_dir).await;
                     "🛑 Pipeline execution aborted".to_string()
                 }
@@ -188,7 +231,7 @@ pub async fn send_message(
                 }
             };
 
-            // Emit pipeline result to frontend
+            // 将 pipeline 结果发送到前端聊天面板
             let _ = system.emperor_tx.try_send(ChatMessage::new("System", &msg));
             log_console!("[pipeline] result: {}", msg);
 
@@ -196,12 +239,21 @@ pub async fn send_message(
         }
     }
 
-    // ── Normal flow: send to 内阁 (no active pipeline) ──
+    // =======================================================================
+    // 路径 B: 常规流程 — 发送消息到内阁（无活跃 pipeline）
+    // =======================================================================
 
-    // Lazy init: create actor system on first message
+    // 延迟初始化: 第一次发消息时创建完整的 actor 系统
     {
         let mut sys_lock = state.actor_system.lock().await;
         if sys_lock.is_none() {
+            // 创建 5 个 mpsc 通道，连接 actor 系统与前端
+            // 通道容量设计:
+            //   emperor: 200  — 聊天消息（高频，需缓冲）
+            //   dept_log: 500 — 部门日志（高频，批量写入）
+            //   dept_step: 无界 — 步骤事件（允许瞬时尖峰）
+            //   plan: 50 — 计划更新（低频）
+            //   milestone: 50 — 里程碑（极低频）
             let (emperor_tx, mut emperor_rx) = mpsc::channel::<ChatMessage>(200);
             let (dept_log_tx, mut dept_log_rx) = mpsc::channel::<DeptLogEntry>(500);
             let (dept_step_tx, mut dept_step_rx) = mpsc::unbounded_channel::<DeptStepEntry>();
@@ -213,7 +265,8 @@ pub async fn send_message(
             let dept_log_hist = state.dept_log_history.clone();
             let chat_persist_dir = p_working_dir.clone();
 
-            // Forward actor output to frontend + buffer + persist
+            // 通道 1: emperor → 前端 chat-message 事件
+            // 三步联动: Tauri emit(实时) → 内存缓存(上下文面板) → .shuji/chat.jsonl(持久化)
             tokio::spawn(async move {
                 while let Some(msg) = emperor_rx.recv().await {
                     let _ = app_handle.emit("chat-message", &msg);
@@ -236,7 +289,8 @@ pub async fn send_message(
                 }
             });
 
-            // Forward department logs to frontend + buffer + persist
+            // 通道 2: dept_log → 前端 dept-log 事件
+            // 两步联动: Tauri emit → 内存缓存 + .shuji/dept-log.jsonl 持久化
             let app2 = app.clone();
             let dept_log_dir = p_working_dir.clone();
             tokio::spawn(async move {
@@ -261,7 +315,7 @@ pub async fn send_message(
                 }
             });
 
-            // Forward department step events to frontend
+            // 通道 3: dept_step → 前端 dept-step 事件（实时步骤流，无需持久化）
             let app_step = app.clone();
             tokio::spawn(async move {
                 while let Some(entry) = dept_step_rx.recv().await {
@@ -269,7 +323,7 @@ pub async fn send_message(
                 }
             });
 
-            // Forward plan updates to frontend
+            // 通道 4: plan → 前端 plan-update 事件（实时计划进度，无需持久化）
             let app_plan = app.clone();
             tokio::spawn(async move {
                 while let Some(plan_json) = plan_rx.recv().await {
@@ -277,26 +331,36 @@ pub async fn send_message(
                 }
             });
 
-            // Update project state on milestones
+            // 通道 5: milestone → 项目状态更新
+            // 收到里程碑时执行:
+            //   1. 更新 Project.talk（追加）和 Project.summary（取前120字符）
+            //   2. 持久化项目状态到磁盘（ShujiDir::save_project）
+            //   3. emit project-update 事件通知前端刷新
+            //   4. 写审计日志（audit::append）
             let app3 = app.clone();
             let wd = p_working_dir.clone();
             tokio::spawn(async move {
                 let s = crate::storage::shuji_dir::ShujiDir::new(&wd);
                 while let Some(milestone) = milestone_rx.recv().await {
+                    // 更新内存中的项目状态
                     let st = app3.state::<AppState>();
                     let mut p_opt = st.current_project.lock().await;
                     if let Some(ref mut p) = *p_opt {
                         p.append_talk(&milestone);
                         p.summary = milestone.chars().take(120).collect();
                     }
+                    // 快照克隆以在锁释放后使用
                     let snapshot = p_opt.clone();
                     drop(p_opt);
+                    // 持久化项目状态到 .shuji/state.json
                     if let Some(ref project) = snapshot {
                         let _ = s.save_project(project).await;
                     }
+                    // 通知前端项目状态已更新
                     if let Some(ref project) = snapshot {
                         let _ = app3.emit("project-update", project);
                     }
+                    // 写审计日志: 事件= milestone, role= 里程碑来源角色, detail= 前120字符
                     let event = "milestone";
                     let role = milestone.split('|').next().unwrap_or("").trim();
                     let detail = milestone.chars().take(120).collect::<String>();
@@ -304,6 +368,8 @@ pub async fn send_message(
                 }
             });
 
+            // 启动完整的 9 部门 actor 系统
+            // 参数: 配置、项目/工作目录（此处相同）、取消标志、5 个通道的发送端
             let system = start_actor_system(
                 &config,
                 state.runtime_config.clone(),
@@ -322,11 +388,13 @@ pub async fn send_message(
         }
     }
 
+    // 获取已初始化的 actor 系统句柄
     let sys_lock = state.actor_system.lock().await;
     let system = sys_lock
         .as_ref()
         .ok_or_else(|| friendly_error("actor system not initialized"))?;
 
+    // 每次新消息前归档当前 WorkflowGraph 并创建新的
     {
         let wd = Path::new(&p_working_dir);
         let mut graph = system.workflow_graph.lock().await;
@@ -334,6 +402,8 @@ pub async fn send_message(
         graph.archive_and_new(wd, label.trim()).await;
     }
 
+    // 如果有其他部门正在执行，先发 FastMessage::Interrupt 中断之
+    // 这确保新消息到达时没有旧流程在运行
     if let Some(current_role) = crate::round_metrics::current_role_name() {
         if current_role != Role::Neige.name() {
             if let Some(role) = Role::from_name(&current_role) {
@@ -345,6 +415,7 @@ pub async fn send_message(
         }
     }
 
+    // 将用户消息投递到内阁邮箱，触发工作流
     system
         .send(&Role::Neige, ActorMessage::new(message, RouteMsgType::Task))
         .map_err(friendly_error)?;
@@ -352,9 +423,20 @@ pub async fn send_message(
     Ok("received".to_string())
 }
 
-/// Independent discussion with Cabinet — does NOT modify project state.
-/// Uses `state.discuss_cancel` as the fast_cancel flag so cancel_discuss can
-/// interrupt mid-execution (checked by AgentController on each tool iteration).
+// ============================================================================
+// discuss_with_cabinet — 独立讨论模式
+// ============================================================================
+
+/// 与内阁进行独立讨论 — 不修改项目状态、不使用工具。
+///
+/// **与 send_message 的关键区别**:
+/// - 不经过 actor 系统 — 直接创建 NeigeAgent 实例同步调用
+/// - `discuss_mode: true` — 内阁不会调用任何文档/文件工具
+/// - `fast_cancel: state.discuss_cancel` — 可通过 `cancel_discuss` 中断
+/// - 返回 `ChatMessage` 给前端（而非 "received" 确认）
+///
+/// **上下文注入**: 将当前项目的 goal / summary / task / talk 作为参考上下文
+///   注入到 prompt 中，让内阁了解项目现状但不做修改。
 #[tauri::command]
 pub async fn discuss_with_cabinet(
     state: State<'_, AppState>,
@@ -364,6 +446,7 @@ pub async fn discuss_with_cabinet(
         .await
         .map_err(friendly_error)?;
 
+    // 获取项目上下文（只读引用，不做修改）
     let (working_dir, project_context) = {
         let project_opt = state.current_project.lock().await;
         let p = match project_opt.as_ref() {
@@ -372,6 +455,7 @@ pub async fn discuss_with_cabinet(
         };
         (
             p.working_dir.clone(),
+            // 构造结构化的项目状态摘要，作为讨论的参考背景
             format!(
                 r#"━━ Project Goal ━━
 {}
@@ -389,8 +473,10 @@ pub async fn discuss_with_cabinet(
         )
     };
 
+    // 从配置中获取内阁专属的 API endpoint（支持 per-role key）
     let ep = config.for_role("neige");
     let client = AnthropicClient::new(ep.api_key, ep.api_url);
+    // 独立模式不使用 agent runner，直接实例化 NeigeAgent
     let neige = NeigeAgent::new(
         client,
         &ep.model,
@@ -399,6 +485,7 @@ pub async fn discuss_with_cabinet(
         None,
     );
 
+    // 构造 AgentInput: discuss_mode=true 确保不调用任何修改工具
     let input = AgentInput {
         role: Role::Neige,
         task_description: format!(
@@ -412,25 +499,35 @@ pub async fn discuss_with_cabinet(
         resume_paused: false,
         context_window_config: Arc::new(HashMap::new()),
         runtime_config: state.runtime_config.clone(),
-        discuss_mode: true,
-        fast_cancel: state.discuss_cancel.clone(),
-        dept_step_tx: None,
+        discuss_mode: true, // 关键标志：讨论模式，不修改项目状态
+        fast_cancel: state.discuss_cancel.clone(), // 复用 discuss_cancel 作为取消信号
+        dept_step_tx: None, // 讨论模式不发送步骤事件
     };
 
+    // 执行内阁 agent（同步等待结果）
     let output = neige.execute(&input).await.map_err(|e| {
+        // 出错时重置取消标志，防止后续调用被误取消
         state
             .discuss_cancel
             .store(false, std::sync::atomic::Ordering::SeqCst);
         friendly_error(&e.to_string())
     })?;
+    // 正常结束后重置取消标志
     state
         .discuss_cancel
         .store(false, std::sync::atomic::Ordering::SeqCst);
     Ok(ChatMessage::new("内阁", &output.content))
 }
 
-/// Cancel an active discuss_with_cabinet call by setting the discuss_cancel flag.
-/// The flag is checked by AgentController on every tool-call iteration.
+// ============================================================================
+// 取消命令
+// ============================================================================
+
+/// 取消活跃的讨论模式调用。
+///
+/// 原理: 设置 `discuss_cancel` AtomicBool 为 true，
+/// `AgentController` 在每次工具调用迭代时检查该标志，发现为 true 则终止执行。
+/// 这种方式不杀线程，而是让 agent 自行在安全点退出。
 #[tauri::command]
 pub async fn cancel_discuss(state: State<'_, AppState>) -> Result<(), String> {
     state
@@ -440,20 +537,33 @@ pub async fn cancel_discuss(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
-/// Cancel all running actor processing.
+/// 取消所有正在运行的 actor 处理流程。
+///
+/// **三层取消机制**（递进式，从最轻到最重）:
+/// 1. **CancelMap**: 遍历所有部门的 `Arc<AtomicBool>`，全部置 true
+///    → 各部门在 AgentController 迭代中自行检测并退出
+/// 2. **FastMessage::Interrupt**: 通过专用 fast channel 发送即时中断信号
+///    → 比 mailbox 消息优先级更高，可中断正在执行的工具调用
+/// 3. **ActorMessage::interrupt()**: 向常规 mailbox 发送中断消息
+///    → 作为兜底，清理 mailbox 中可能堆积的后续任务
+///
+/// 三层设计确保即使某一层失效，其他层仍能取消执行。
 #[tauri::command]
 pub async fn cancel_processing(state: State<'_, AppState>) -> Result<(), String> {
     if let Some(sys) = state.actor_system.lock().await.as_ref() {
+        // 第一层: 设置 CancelMap — 各部门在下一次 AgentController 迭代时检测并退出
         if let Ok(map) = sys.cancel_map.lock() {
             for flag in map.values() {
                 flag.store(true, std::sync::atomic::Ordering::SeqCst);
             }
             log_console!("[commands] cancel_processing: all per-actor flags set");
         }
+        // 第二层: 发送 FastMessage::Interrupt — 通过高优先级通道即时通知
         for tx in sys.fast_txs.values() {
             let _ = tx.send(FastMessage::Interrupt);
         }
         log_console!("[commands] cancel_processing: FastMessage::Interrupt sent to all actors");
+        // 第三层: 发送 ActorMessage::interrupt() — 兜底常规 mailbox 中断
         for tx in sys.senders.values() {
             let _ = tx.send(crate::actor::ActorMessage::interrupt());
         }
