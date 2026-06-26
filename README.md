@@ -91,7 +91,7 @@ npm run tauri build
 
 内阁分析任务后提交结构化 **PipelinePlan**；引擎按依赖顺序驱动部门，关键文档需朱批后才能继续。Legacy `route_to` 仅用于计划步骤内部转发，不再是内阁主编排方式。
 
-> 架构细节见 [shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md)。界面截图待补充 → 见 [`docs/images/`](docs/images/README.md)。
+架构细节见 [CLAUDE.md](CLAUDE.md)。
 
 ---
 
@@ -111,9 +111,6 @@ npm run tauri build
 |------|------|
 | [**ONBOARDING.md**](ONBOARDING.md) | **新人入口**：文档地图、目录约定、后端阅读路径 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 开发环境、测试、配置与贡献指南 |
-| [shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md) | **现行架构**：Pipeline-first 主流程、Actor/Pipeline/Session 关系 |
-| [shuji-app/docs/repo-optimization-checklist.md](shuji-app/docs/repo-optimization-checklist.md) | Repo 优化清单：Pipeline-first、agent 行动约束、UI 流程透明化 |
-| [shuji-app/docs/BACKEND_LEARNING_PLAN.md](shuji-app/docs/BACKEND_LEARNING_PLAN.md) | 后端研读计划 |
 | [CLAUDE.md](CLAUDE.md) | 架构深度说明（面向维护者与 AI 辅助开发） |
 | [LICENSE](LICENSE) | MIT 许可证 |
 
