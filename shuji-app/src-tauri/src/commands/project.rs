@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use tauri::State;
 use tokio::sync::Mutex;
 use uuid::Uuid;
@@ -20,11 +20,16 @@ pub struct AppState {
     pub actor_system: Arc<tokio::sync::Mutex<Option<crate::actor::ActorSystem>>>,
     pub chat_history: Arc<Mutex<Vec<ChatMessage>>>,
     pub dept_log_history: Arc<Mutex<Vec<DeptLogEntry>>>,
-    pub runtime_config: Arc<RuntimeConfig>,
+    pub runtime_config: Arc<RwLock<RuntimeConfig>>,
     pub compacting_roles: Arc<Mutex<HashSet<String>>>,
     /// Cancel flag for `discuss_with_cabinet` — checked by AgentController
     /// on every tool-call iteration. Set by `cancel_discuss` command.
     pub discuss_cancel: Arc<AtomicBool>,
+}
+
+/// Clone the current runtime config snapshot for agent / pipeline use.
+pub fn snapshot_runtime_config(lock: &Arc<RwLock<RuntimeConfig>>) -> Arc<RuntimeConfig> {
+    Arc::new(lock.read().unwrap().clone())
 }
 
 #[tauri::command]

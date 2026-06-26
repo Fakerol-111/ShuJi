@@ -2,6 +2,7 @@
 shuji-app/src-tauri/target/
 
 # Node
+node_modules/
 shuji-app/node_modules/
 shuji-app/dist/
 

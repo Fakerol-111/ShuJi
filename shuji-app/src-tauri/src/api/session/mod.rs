@@ -509,6 +509,7 @@ impl Session {
                     } else {
                         args.get("path")
                             .or_else(|| args.get("command"))
+                            .or_else(|| args.get("id"))
                             .and_then(|v| v.as_str())
                             .unwrap_or("")
                             .to_string()

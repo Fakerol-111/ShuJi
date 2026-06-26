@@ -129,7 +129,7 @@ pub(super) fn now_iso() -> String {
 
 /// Map English dept string to Chinese author name.
 pub(crate) fn dept_to_author(dept: &str) -> &'static str {
-    match dept {
+    match dept.to_lowercase().as_str() {
         "zhongshuling" => "中书令",
         "menxiashizhong" => "门下侍中",
         "neige" => "内阁",
@@ -140,6 +140,7 @@ pub(crate) fn dept_to_author(dept: &str) -> &'static str {
         "xingbushangshu" => "刑部",
         "liburshangshu" => "礼部",
         "hubu" => "户部",
+        "requirements_agent" | "survey_agent" => "内阁",
         _ => "未知",
     }
 }
@@ -188,7 +189,7 @@ pub(super) async fn find_rprt_path(working_dir: &Path, id: &str) -> Option<PathB
 }
 
 /// Must-approve document types that require emperor approval.
-pub(super) const MUST_APPROVE_TYPES: &[&str] = &["plan", "revw"];
+pub(super) const MUST_APPROVE_TYPES: &[&str] = &["revw"];
 
 /// Parse refs string like "[3, 4]" or "[-1]" into a Vec<u64>.
 pub(crate) fn parse_refs(refs: &str) -> Vec<u64> {
@@ -209,10 +210,7 @@ const ALL_DOC_TYPE_PREFIXES: &[&str] = &[
 /// Resolve a numeric ref (e.g. 3) to a full document ID by scanning known directories.
 pub(crate) async fn resolve_ref_doc_id(working_dir: &Path, num: u64) -> Option<String> {
     for prefix in ALL_DOC_TYPE_PREFIXES {
-        for candidate in [
-            format!("{prefix}_{num}"),
-            format!("{prefix}_{num:03}"),
-        ] {
+        for candidate in [format!("{prefix}_{num}"), format!("{prefix}_{num:03}")] {
             if let Ok(path) = resolve_doc_path(working_dir, &candidate).await {
                 if path.exists() {
                     return Some(candidate);
@@ -221,6 +219,91 @@ pub(crate) async fn resolve_ref_doc_id(working_dir: &Path, num: u64) -> Option<S
         }
     }
     None
+}
+
+/// Normalize a raw document ID from LLM tool calls (strip `.md`, resolve numeric refs).
+pub(crate) async fn normalize_doc_id(working_dir: &Path, raw: &str) -> String {
+    let mut id = raw.trim().to_string();
+    if id.ends_with(".md") {
+        id.truncate(id.len() - 3);
+    }
+    if id.chars().all(|c| c.is_ascii_digit()) {
+        if let Ok(num) = id.parse::<u64>() {
+            if let Some(resolved) = resolve_ref_doc_id(working_dir, num).await {
+                return resolved;
+            }
+        }
+    }
+    id
+}
+
+/// Collect document IDs (without `.md`) from a `.shuji` subdirectory for error hints.
+pub(crate) async fn list_doc_ids_in_subdir(
+    working_dir: &Path,
+    subdir: &str,
+    limit: usize,
+) -> Vec<String> {
+    let dir = working_dir.join(".shuji").join(subdir);
+    let mut entries = match tokio::fs::read_dir(&dir).await {
+        Ok(rd) => rd,
+        Err(_) => return vec![],
+    };
+    let mut ids = Vec::new();
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if let Some(id) = name.strip_suffix(".md") {
+            if id.contains('_') {
+                ids.push(id.to_string());
+            }
+        }
+    }
+    ids.sort();
+    ids.truncate(limit);
+    ids
+}
+
+/// Find the newest design/plan document by numeric suffix (for pipeline review handoff).
+pub(crate) async fn find_latest_design_doc_id(working_dir: &Path) -> Option<String> {
+    find_latest_doc_with_prefixes(working_dir, &["dsgn", "plan", "pdsg", "ddtl"]).await
+}
+
+/// Find the newest document matching any of the given type prefixes.
+pub(crate) async fn find_latest_doc_with_prefixes(
+    working_dir: &Path,
+    type_prefixes: &[&str],
+) -> Option<String> {
+    let mut best: Option<(u64, String)> = None;
+    let subdirs = [
+        "designs",
+        "designs/detail",
+        "reviews",
+        "requirements",
+        "tasks",
+        "contracts",
+        "analysis",
+    ];
+    for subdir in subdirs {
+        let dir = working_dir.join(".shuji").join(subdir);
+        let mut entries = match tokio::fs::read_dir(&dir).await {
+            Ok(rd) => rd,
+            Err(_) => continue,
+        };
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let Some(id) = name.strip_suffix(".md") else {
+                continue;
+            };
+            let prefix = id.split('_').next().unwrap_or("");
+            if !type_prefixes.contains(&prefix) {
+                continue;
+            }
+            let num = id.rsplit('_').next()?.parse::<u64>().ok()?;
+            if best.as_ref().is_none_or(|(n, _)| num >= *n) {
+                best = Some((num, id.to_string()));
+            }
+        }
+    }
+    best.map(|(_, id)| id)
 }
 
 /// Resolve the full path for a document by its ID.

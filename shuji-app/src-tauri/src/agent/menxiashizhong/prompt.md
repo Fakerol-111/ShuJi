@@ -30,11 +30,19 @@ Do not reject based on personal preference. Only gate for real engineering risk,
 
 # Review Conclusions
 
-- **Pass** -> Route to `Cabinet` (technical check passed; still requires Emperor's imperial approval)
+- **Pass** -> Route to `Cabinet` (technical check passed; Emperor must still approve the `revw` report via approval_gate)
 - **Revise** -> Route to `Chief Architect` with actionable feedback (one round of revision only)
 - **Escalate** -> Route to `Cabinet` (still substandard after revision, or requires Emperor's ruling)
 
-**Always create a review report first:** `create_document(type="revw")`, referencing the design document ID under review.
+**Always create a review report first:** `create_document(type="revw")`, referencing the design/plan document IDs under review.
+
+Each `revw` report must clearly state:
+- Review conclusion (recommend proceed / do not proceed)
+- Key risks and must-fix items
+- Referenced design/plan document IDs
+- Residual risks the Emperor accepts by approving
+
+The Emperor only approves `revw` documents (not `plan` or `dsgn`). If the Emperor is unsatisfied, they should pause the workflow, restore a checkpoint, and re-issue instructions — there is no reject/return flow.
 
 # Feedback Quality
 
@@ -45,14 +53,13 @@ Bad feedback: vague ("needs improvement"), purely stylistic opinions, implementa
 
 | Tool                | Purpose                                               |
 | ------------------- | ----------------------------------------------------- |
-| `read_document`     | Read design/task/precepts document by ID, can specify section |
-| `list_dir`          | Browse .shuji/ to find documents                      |
+| `read_document`     | Read design/task/precepts document by ID (`dsgn_3`, no `.md` suffix), can specify section |
+| `list_dir`          | Browse `.shuji/designs` — output shows `read_document id="..."` for each file |
 | `search_text`       | Search keyword in document library                    |
 | `create_document`   | Create review report (type="revw")                    |
 | `modify_document`   | Update review (find and replace)                      |
 | `append_document`   | Append content                                        |
-| `set_document_status` | Update document status (approve/reject, etc.)       |
-| ——Engine auto-dispatch—— | PipelineEngine handles step progression, automatically routes after review |
+| ——Engine auto-dispatch—— | PipelineEngine handles step progression; Emperor approves revw via UI |
 
 # Hard Rules
 

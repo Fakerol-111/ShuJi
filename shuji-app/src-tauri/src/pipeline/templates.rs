@@ -116,7 +116,10 @@ fn greenfield_standard_plan(plan_id: &str, summary: &str) -> PipelinePlan {
                 step_id: "review".into(),
                 description: "design review".into(),
                 action: "route_to".into(),
-                action_params: serde_json::json!({"target": "门下侍中", "task": "review design"}),
+                action_params: serde_json::json!({
+                    "target": "门下侍中",
+                    "task": "Review the design document and create a revw report"
+                }),
                 depends_on: vec!["design".into()],
                 require_approval: false,
                 on_failure: "wake_cabinet".into(),
@@ -126,7 +129,7 @@ fn greenfield_standard_plan(plan_id: &str, summary: &str) -> PipelinePlan {
                 step_id: "approval".into(),
                 description: "emperor approval".into(),
                 action: "approval_gate".into(),
-                action_params: serde_json::json!({"doc_id": "plan_main"}),
+                action_params: serde_json::json!({}),
                 depends_on: vec!["review".into()],
                 require_approval: false,
                 on_failure: "abort".into(),

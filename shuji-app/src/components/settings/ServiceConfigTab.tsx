@@ -1,5 +1,5 @@
 import { API_URL_PRESETS, MODEL_PRESETS } from '../../constants/presets';
-import type { WorkflowConfig as WFConfig } from '../../types';
+import type { ApprovalMode, WorkflowConfig as WFConfig } from '../../types';
 import {
   SettingsSection,
   SettingsField,
@@ -9,7 +9,9 @@ import {
   SettingsAccordion,
   SettingsCheckbox,
   SettingsAction,
+  SettingsNumberField,
 } from './SettingsPrimitives';
+import { useTranslation } from 'react-i18next';
 
 interface RoleFormState {
   api_key: string;
@@ -41,6 +43,10 @@ interface ServiceConfigTabProps {
   setWorkflowPresetLocal: (key: string) => void;
   modelPreset: string;
   setModelPresetLocal: (key: string) => void;
+  approvalMode: ApprovalMode;
+  setApprovalMode: (mode: ApprovalMode) => void;
+  approvalAutoRetries: number;
+  setApprovalAutoRetries: (n: number) => void;
 }
 
 const INTENTS: { key: string; label: string; desc: string }[] = [
@@ -68,6 +74,15 @@ const MODEL_PRESET_OPTIONS: { key: string; label: string; desc: string }[] = [
   { key: 'quality', label: '质量', desc: '设计/编码部门用最强模型，其余用默认' },
 ];
 
+const APPROVAL_MODES: { key: ApprovalMode; labelKey: string; descKey: string }[] = [
+  {
+    key: 'manual',
+    labelKey: 'settings.approvalModeManual',
+    descKey: 'settings.approvalModeManualDesc',
+  },
+  { key: 'auto', labelKey: 'settings.approvalModeAuto', descKey: 'settings.approvalModeAutoDesc' },
+];
+
 export default function ServiceConfigTab({
   defaultCfg,
   setDefaultCfg,
@@ -86,7 +101,12 @@ export default function ServiceConfigTab({
   setWorkflowPresetLocal,
   modelPreset,
   setModelPresetLocal,
+  approvalMode,
+  setApprovalMode,
+  approvalAutoRetries,
+  setApprovalAutoRetries,
 }: ServiceConfigTabProps) {
+  const { t } = useTranslation();
   const customCount = roleList.filter((r) => !(useDefault[r.key] ?? true)).length;
 
   return (
@@ -259,6 +279,38 @@ export default function ServiceConfigTab({
           ))}
         </div>
         <SettingsHint>{PRESETS.find((p) => p.key === workflowPreset)?.desc || ''}</SettingsHint>
+      </SettingsSection>
+
+      <SettingsSection title={t('settings.approvalMode')} divider>
+        <div className="flex gap-2 flex-wrap">
+          {APPROVAL_MODES.map((p) => (
+            <SettingsChip
+              key={p.key}
+              selected={approvalMode === p.key}
+              onClick={() => setApprovalMode(p.key)}
+              title={t(p.descKey)}
+            >
+              {t(p.labelKey)}
+            </SettingsChip>
+          ))}
+        </div>
+        <SettingsHint>
+          {t(
+            APPROVAL_MODES.find((p) => p.key === approvalMode)?.descKey ??
+              'settings.approvalModeManualDesc'
+          )}
+        </SettingsHint>
+        {approvalMode === 'auto' && (
+          <div className="mt-3 max-w-xs">
+            <SettingsNumberField
+              label={t('settings.approvalAutoRetries')}
+              value={approvalAutoRetries}
+              min={1}
+              onChange={setApprovalAutoRetries}
+            />
+          </div>
+        )}
+        <SettingsHint>{t('settings.approvalModeHint')}</SettingsHint>
       </SettingsSection>
     </div>
   );

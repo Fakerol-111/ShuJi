@@ -23,13 +23,6 @@ interface DocPreviewProps {
 
 type ViewMode = 'content' | 'diff' | 'lineage';
 
-const REJECTION_REASONS = [
-  { labelKey: 'docPreview.reasonNoApi', value: '缺少 API 定义' },
-  { labelKey: 'docPreview.reasonNoTest', value: '缺少测试策略' },
-  { labelKey: 'docPreview.reasonTooBroad', value: '范围过大需拆分' },
-  { labelKey: 'docPreview.reasonCustom', value: '' },
-];
-
 export default function DocPreview({ projectDir, docPath, initialTab, onClose }: DocPreviewProps) {
   const { t } = useTranslation();
   const [content, setContent] = useState('');
@@ -86,16 +79,13 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
     (isShujiMarkdown && parsed.meta?.id) || docPath.split('/').pop()?.replace(/\.md$/, '') || '';
   const docStatus = parsed.meta?.status || '';
 
-  const handleApproval = async (status: 'approved' | 'rejected') => {
+  const handleApproval = async () => {
     setApproving(true);
     setApprovalError('');
     try {
-      const msg =
-        status === 'approved'
-          ? `朕已御批。${comment ? ' ' + comment : ''}`
-          : `驳回。${comment ? ' ' + comment : ''}`;
+      const msg = `朕已御批。${comment ? ' ' + comment : ''}`;
       // 1. Write judgment to document (must succeed)
-      await apiSetStatus(docId, status, comment || undefined);
+      await apiSetStatus(docId, 'approved', comment || undefined);
       // 2. Notify 内阁 (best-effort — judgment is already saved)
       try {
         await sendMessage(msg);
@@ -112,12 +102,6 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
       setApprovalError(formatError(e));
     } finally {
       setApproving(false);
-    }
-  };
-
-  const insertRejectionReason = (reason: string) => {
-    if (reason) {
-      setComment(reason);
     }
   };
 
@@ -198,45 +182,22 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
                 </h3>
                 <p className="text-caption text-ink-600 mt-0.5">{t('document.approvalRequired')}</p>
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleApproval('approved')}
-                  disabled={approving}
-                  className="bg-jade hover:bg-jade/80 text-white text-ui font-bold px-4 py-2 rounded-lg transition disabled:opacity-50"
-                >
-                  {approving ? t('common.loading') : t('document.approve')}
-                </button>
-                <button
-                  onClick={() => handleApproval('rejected')}
-                  disabled={approving}
-                  className="bg-vermillion hover:bg-vermillion-dark text-white text-ui font-bold px-4 py-2 rounded-lg transition disabled:opacity-50"
-                >
-                  {t('document.reject')}
-                </button>
-              </div>
+              <button
+                onClick={handleApproval}
+                disabled={approving}
+                className="bg-jade hover:bg-jade/80 text-white text-ui font-bold px-4 py-2 rounded-lg transition disabled:opacity-50"
+              >
+                {approving ? t('common.loading') : t('document.approve')}
+              </button>
             </div>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2">
               <input
                 type="text"
                 placeholder={t('document.imperialNote')}
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-                className="flex-1 px-3 py-1.5 border border-fold rounded-lg text-body bg-surface-parchment"
+                className="w-full px-3 py-1.5 border border-fold rounded-lg text-body bg-surface-parchment"
               />
-              <select
-                onChange={(e) => insertRejectionReason(e.target.value)}
-                value=""
-                className="px-2 py-1.5 border border-fold rounded-lg text-caption bg-surface-parchment text-ink-600"
-              >
-                <option value="" disabled>
-                  {t('document.rejectionTemplate')}
-                </option>
-                {REJECTION_REASONS.map((r) => (
-                  <option key={r.value || '__custom'} value={r.value}>
-                    {t(r.labelKey)}
-                  </option>
-                ))}
-              </select>
             </div>
             {approvalError && <p className="text-caption text-vermillion mt-1">{approvalError}</p>}
           </div>

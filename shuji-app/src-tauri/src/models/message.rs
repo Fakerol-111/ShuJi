@@ -46,4 +46,13 @@ impl Message {
             timestamp: chrono::Local::now().to_rfc3339(),
         }
     }
+
+    /// 创建一条 system 角色消息（上下文注入，非用户任务）。
+    pub fn system(content: &str) -> Self {
+        Self {
+            role: "system".into(),
+            content: content.to_string(),
+            timestamp: chrono::Local::now().to_rfc3339(),
+        }
+    }
 }

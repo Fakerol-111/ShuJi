@@ -5,9 +5,8 @@
 mod common;
 
 use shuji_app_lib::tool::documents::{
-    check_doc_refs_approved_for_route, get_first_pending_approval,
-    tool_append_document, tool_create_document, tool_find_document,
-    tool_modify_document, tool_set_document_status,
+    check_doc_refs_approved_for_route, get_first_pending_approval, tool_append_document,
+    tool_create_document, tool_find_document, tool_modify_document, tool_set_document_status,
 };
 use std::path::Path;
 
@@ -54,6 +53,43 @@ fn read_doc_notes(root: &Path, doc_id: &str) -> Option<String> {
     let content = std::fs::read_to_string(&path).ok()?;
     for line in content.lines() {
         if let Some(val) = line.strip_prefix("notes: ") {
+            return Some(val.trim().to_string());
+        }
+    }
+    None
+}
+
+/// Helper: read a .shuji document's `author` field from frontmatter.
+fn read_doc_author(root: &Path, doc_id: &str) -> Option<String> {
+    let prefix = doc_id.split('_').next()?;
+    let path = if prefix == "rprt" {
+        let reports_dir = root.join(".shuji/reports");
+        std::fs::read_dir(&reports_dir)
+            .ok()?
+            .filter_map(|e| e.ok())
+            .find_map(|entry| {
+                let candidate = entry.path().join(format!("{doc_id}.md"));
+                candidate.exists().then_some(candidate)
+            })?
+    } else {
+        let dir = match prefix {
+            "plan" | "dsgn" | "pdsg" => "designs",
+            "revw" => "reviews",
+            "ctrt" => "contracts",
+            "task" => "tasks",
+            "reqs" => "requirements",
+            "anls" => "analysis",
+            _ => "",
+        };
+        if dir.is_empty() {
+            root.join(".shuji").join(format!("{doc_id}.md"))
+        } else {
+            root.join(".shuji").join(dir).join(format!("{doc_id}.md"))
+        }
+    };
+    let content = std::fs::read_to_string(&path).ok()?;
+    for line in content.lines() {
+        if let Some(val) = line.strip_prefix("author: ") {
             return Some(val.trim().to_string());
         }
     }
@@ -270,10 +306,10 @@ fn test_find_document_not_found() {
 // 朱批与门禁测试 (P0-2)
 // ═══════════════════════════════════════════════════════════════
 
-/// 1. plan 文档创建后进入 in_review 状态
+/// 1. plan 文档创建后不进入 in_review 状态
 #[test]
-fn test_plan_created_in_review() {
-    let temp = common::create_test_project("plan_in_review");
+fn test_plan_not_in_review() {
+    let temp = common::create_test_project("plan_not_in_review");
     let root = temp.path();
 
     let args = serde_json::json!({"type": "plan", "refs": []});
@@ -284,7 +320,6 @@ fn test_plan_created_in_review() {
     let doc_id = parsed["doc_id"]
         .as_str()
         .unwrap_or(parsed["path"].as_str().unwrap_or(""));
-    // Extract bare ID from path like ".shuji/designs/plan_1.md"
     let bare_id = doc_id
         .split('/')
         .last()
@@ -292,7 +327,7 @@ fn test_plan_created_in_review() {
         .trim_end_matches(".md");
 
     let status = read_doc_status(root, bare_id);
-    assert_eq!(status.as_deref(), Some("in_review"));
+    assert!(status.is_none() || status.as_deref() == Some(""));
 }
 
 /// 2. revw 文档创建后进入 in_review 状态
@@ -340,10 +375,10 @@ fn test_design_not_in_review() {
     assert!(status.is_none() || status.as_deref() == Some(""));
 }
 
-/// 4. plan 文档创建后自动加入 pending_approvals
+/// 4. plan 文档不会加入 pending_approvals
 #[test]
-fn test_plan_adds_pending_approval() {
-    let temp = common::create_test_project("plan_pending_add");
+fn test_plan_not_adds_pending_approval() {
+    let temp = common::create_test_project("plan_no_pending");
     let root = temp.path();
 
     let args = serde_json::json!({"type": "plan", "refs": []});
@@ -353,19 +388,9 @@ fn test_plan_adds_pending_approval() {
 
     let pending = read_pending_approvals(root);
     assert!(
-        !pending.is_empty(),
-        "pending_approvals should not be empty after creating a plan doc"
+        pending.is_empty(),
+        "plan docs should not create pending approvals"
     );
-
-    let doc_id = parsed["doc_id"].as_str().unwrap_or("");
-    // The pending list should contain the doc_id
-    if !doc_id.is_empty() {
-        assert!(
-            pending.contains(&doc_id.to_string()),
-            "pending_approvals should contain {}",
-            doc_id
-        );
-    }
 }
 
 /// 5. dsgn 文档不会加入 pending_approvals
@@ -392,9 +417,8 @@ fn test_set_approved_removes_pending() {
     let temp = common::create_test_project("approve_removes_pending");
     let root = temp.path();
 
-    // Create a plan doc
-    let args = serde_json::json!({"type": "plan", "refs": []});
-    let result = block_on(tool_create_document(root, &args, "zhongshuling"));
+    let args = serde_json::json!({"type": "revw", "refs": []});
+    let result = block_on(tool_create_document(root, &args, "menxiashizhong"));
     let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
     assert_eq!(parsed["ok"], true);
 
@@ -434,14 +458,14 @@ fn test_set_approved_removes_pending() {
     assert_eq!(status.as_deref(), Some("approved"));
 }
 
-/// 7. set_document_status(rejected) 保存皇帝意见
+/// 6b. 已批准 revw 被修改后回到 in_review
 #[test]
-fn test_set_rejected_saves_emperor_note() {
-    let temp = common::create_test_project("reject_saves_note");
+fn test_approved_revw_modify_reverts_to_in_review() {
+    let temp = common::create_test_project("revw_modify_reapprove");
     let root = temp.path();
 
-    let args = serde_json::json!({"type": "plan", "refs": []});
-    let result = block_on(tool_create_document(root, &args, "zhongshuling"));
+    let args = serde_json::json!({"type": "revw", "refs": []});
+    let result = block_on(tool_create_document(root, &args, "menxiashizhong"));
     let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
     assert_eq!(parsed["ok"], true);
 
@@ -455,7 +479,42 @@ fn test_set_rejected_saves_emperor_note() {
             .trim_end_matches(".md"),
     );
 
-    // Reject with note
+    let approve_args = serde_json::json!({"id": doc_id, "status": "approved"});
+    let _ = block_on(tool_set_document_status(root, &approve_args));
+
+    let modify_args = serde_json::json!({
+        "id": doc_id,
+        "content": "更新审查结论"
+    });
+    let _ = block_on(tool_modify_document(root, &modify_args, "menxiashizhong"));
+
+    let status = read_doc_status(root, doc_id);
+    assert_eq!(status.as_deref(), Some("in_review"));
+    let pending = read_pending_approvals(root);
+    assert!(pending.contains(&doc_id.to_string()));
+}
+
+/// 7. set_document_status(rejected) 被拒绝
+#[test]
+fn test_set_rejected_fails() {
+    let temp = common::create_test_project("reject_fails");
+    let root = temp.path();
+
+    let args = serde_json::json!({"type": "revw", "refs": []});
+    let result = block_on(tool_create_document(root, &args, "menxiashizhong"));
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+    assert_eq!(parsed["ok"], true);
+
+    let doc_id = parsed["doc_id"].as_str().unwrap_or(
+        parsed["path"]
+            .as_str()
+            .unwrap_or("")
+            .split('/')
+            .last()
+            .unwrap_or("")
+            .trim_end_matches(".md"),
+    );
+
     let reject_args = serde_json::json!({
         "id": doc_id,
         "status": "rejected",
@@ -463,17 +522,11 @@ fn test_set_rejected_saves_emperor_note() {
     });
     let reject_result = block_on(tool_set_document_status(root, &reject_args));
     let reject_parsed: serde_json::Value = serde_json::from_str(&reject_result).unwrap();
-    assert_eq!(reject_parsed["ok"], true, "Rejection should succeed");
+    assert_eq!(reject_parsed["ok"], false);
+    assert_eq!(reject_parsed["error_code"], "invalid_status");
 
-    // Verify status
     let status = read_doc_status(root, doc_id);
-    assert_eq!(status.as_deref(), Some("rejected"));
-
-    // Verify emperor note was saved (appended with 朱批 prefix)
-    let notes = read_doc_notes(root, doc_id);
-    let notes_str = notes.as_deref().unwrap_or("");
-    assert!(notes_str.contains("缺少 API 定义"));
-    assert!(notes_str.contains("朱批[rejected"));
+    assert_eq!(status.as_deref(), Some("in_review"));
 }
 
 /// 7b. 多条朱批 notes 用 | 分隔，round-trip 不丢失
@@ -482,8 +535,8 @@ fn test_multiple_notes_roundtrip() {
     let temp = common::create_test_project("multi_notes");
     let root = temp.path();
 
-    let args = serde_json::json!({"type": "plan", "refs": []});
-    let result = block_on(tool_create_document(root, &args, "zhongshuling"));
+    let args = serde_json::json!({"type": "revw", "refs": []});
+    let result = block_on(tool_create_document(root, &args, "menxiashizhong"));
     let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
     assert_eq!(parsed["ok"], true);
 
@@ -497,23 +550,29 @@ fn test_multiple_notes_roundtrip() {
             .trim_end_matches(".md"),
     );
 
-    let reject_args = serde_json::json!({
-        "id": doc_id,
-        "status": "rejected",
-        "emperor_note": "第一遍驳回"
-    });
-    let _ = block_on(tool_set_document_status(root, &reject_args));
-
     let approve_args = serde_json::json!({
+        "id": doc_id,
+        "status": "approved",
+        "emperor_note": "第一遍准奏"
+    });
+    let _ = block_on(tool_set_document_status(root, &approve_args));
+
+    let modify_args = serde_json::json!({
+        "id": doc_id,
+        "content": "更新后的审查内容"
+    });
+    let _ = block_on(tool_modify_document(root, &modify_args, "menxiashizhong"));
+
+    let approve_args2 = serde_json::json!({
         "id": doc_id,
         "status": "approved",
         "emperor_note": "第二遍准奏"
     });
-    let _ = block_on(tool_set_document_status(root, &approve_args));
+    let _ = block_on(tool_set_document_status(root, &approve_args2));
 
     let notes = read_doc_notes(root, doc_id).unwrap_or_default();
     assert!(
-        notes.contains("第一遍驳回"),
+        notes.contains("第一遍准奏"),
         "first note should survive: {notes}"
     );
     assert!(
@@ -526,10 +585,10 @@ fn test_multiple_notes_roundtrip() {
     );
 }
 
-/// 8. set_document_status(rejected) 也移除 pending approval
+/// 8. set_document_status(plan, approved) 失败
 #[test]
-fn test_set_rejected_removes_pending() {
-    let temp = common::create_test_project("reject_removes_pending");
+fn test_set_status_plan_fails() {
+    let temp = common::create_test_project("set_status_plan_fails");
     let root = temp.path();
 
     let args = serde_json::json!({"type": "plan", "refs": []});
@@ -547,17 +606,14 @@ fn test_set_rejected_removes_pending() {
             .trim_end_matches(".md"),
     );
 
-    let reject_args = serde_json::json!({"id": doc_id, "status": "rejected"});
-    let _ = block_on(tool_set_document_status(root, &reject_args));
-
-    let pending = read_pending_approvals(root);
-    assert!(
-        !pending.contains(&doc_id.to_string()),
-        "pending should not contain rejected doc"
-    );
+    let approve_args = serde_json::json!({"id": doc_id, "status": "approved"});
+    let approve_result = block_on(tool_set_document_status(root, &approve_args));
+    let approve_parsed: serde_json::Value = serde_json::from_str(&approve_result).unwrap();
+    assert_eq!(approve_parsed["ok"], false);
+    assert_eq!(approve_parsed["error_code"], "wrong_type");
 }
 
-/// 9. set_document_status 拒绝非 plan/revw 类型
+/// 9. set_document_status 拒绝非 revw 类型
 #[test]
 fn test_set_status_wrong_type_fails() {
     let temp = common::create_test_project("set_status_wrong_type");
@@ -606,8 +662,8 @@ fn test_set_status_invalid_value_fails() {
     let temp = common::create_test_project("set_status_invalid");
     let root = temp.path();
 
-    let args = serde_json::json!({"type": "plan", "refs": []});
-    let result = block_on(tool_create_document(root, &args, "zhongshuling"));
+    let args = serde_json::json!({"type": "revw", "refs": []});
+    let result = block_on(tool_create_document(root, &args, "menxiashizhong"));
     let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
 
     let doc_id = parsed["doc_id"].as_str().unwrap_or(
@@ -633,20 +689,20 @@ fn doc_num(id: &str) -> u64 {
     id.rsplit('_').next().unwrap_or("0").parse().unwrap_or(0)
 }
 
-/// 12. 未批准的 plan ref 会阻止检查 (check_doc_refs_approved_for_route)
+/// 12. 未批准的 revw ref 会阻止检查 (check_doc_refs_approved_for_route)
 #[test]
 fn test_gate_blocks_unapproved_ref() {
     let temp = common::create_test_project("gate_block_unapproved");
     let root = temp.path();
 
-    // Create a plan document (will be in_review)
-    let plan_args = serde_json::json!({"type": "plan", "refs": []});
-    let plan_result = block_on(tool_create_document(root, &plan_args, "zhongshuling"));
-    let plan_parsed: serde_json::Value = serde_json::from_str(&plan_result).unwrap();
-    assert_eq!(plan_parsed["ok"], true);
+    // Create a revw document (will be in_review)
+    let revw_args = serde_json::json!({"type": "revw", "refs": []});
+    let revw_result = block_on(tool_create_document(root, &revw_args, "menxiashizhong"));
+    let revw_parsed: serde_json::Value = serde_json::from_str(&revw_result).unwrap();
+    assert_eq!(revw_parsed["ok"], true);
 
-    let plan_doc_id = plan_parsed["doc_id"].as_str().unwrap_or(
-        plan_parsed["path"]
+    let revw_doc_id = revw_parsed["doc_id"].as_str().unwrap_or(
+        revw_parsed["path"]
             .as_str()
             .unwrap_or("")
             .split('/')
@@ -654,10 +710,10 @@ fn test_gate_blocks_unapproved_ref() {
             .unwrap_or("")
             .trim_end_matches(".md"),
     );
-    let plan_num = doc_num(plan_doc_id);
+    let revw_num = doc_num(revw_doc_id);
 
-    // Create a dsgn document that references the plan
-    let dsgn_args = serde_json::json!({"type": "dsgn", "refs": [plan_num]});
+    // Create a dsgn document that references the revw
+    let dsgn_args = serde_json::json!({"type": "dsgn", "refs": [revw_num]});
     let dsgn_result = block_on(tool_create_document(root, &dsgn_args, "zhongshuling"));
     let dsgn_parsed: serde_json::Value = serde_json::from_str(&dsgn_result).unwrap();
     assert_eq!(dsgn_parsed["ok"], true);
@@ -672,15 +728,15 @@ fn test_gate_blocks_unapproved_ref() {
             .trim_end_matches(".md"),
     );
 
-    // The gate should block because dsgn_1 references plan_0 which is in_review
+    // The gate should block because dsgn references revw which is in_review
     let gate_result = block_on(check_doc_refs_approved_for_route(root, dsgn_doc_id));
     assert!(
         gate_result.is_err(),
-        "Gate should block reference to unapproved plan doc"
+        "Gate should block reference to unapproved revw doc"
     );
     let err_msg = gate_result.unwrap_err();
     assert!(
-        err_msg.contains("awaiting emperor approval"),
+        err_msg.contains("not approved yet"),
         "Error should mention pending approval: {}",
         err_msg
     );
@@ -692,14 +748,14 @@ fn test_gate_passes_approved_ref() {
     let temp = common::create_test_project("gate_pass_approved");
     let root = temp.path();
 
-    // Create a plan doc (gets plan_0)
-    let plan_args = serde_json::json!({"type": "plan", "refs": []});
-    let plan_result = block_on(tool_create_document(root, &plan_args, "zhongshuling"));
-    let plan_parsed: serde_json::Value = serde_json::from_str(&plan_result).unwrap();
-    assert_eq!(plan_parsed["ok"], true);
+    // Create a revw doc
+    let revw_args = serde_json::json!({"type": "revw", "refs": []});
+    let revw_result = block_on(tool_create_document(root, &revw_args, "menxiashizhong"));
+    let revw_parsed: serde_json::Value = serde_json::from_str(&revw_result).unwrap();
+    assert_eq!(revw_parsed["ok"], true);
 
-    let plan_doc_id = plan_parsed["doc_id"].as_str().unwrap_or(
-        plan_parsed["path"]
+    let revw_doc_id = revw_parsed["doc_id"].as_str().unwrap_or(
+        revw_parsed["path"]
             .as_str()
             .unwrap_or("")
             .split('/')
@@ -709,12 +765,12 @@ fn test_gate_passes_approved_ref() {
     );
 
     // Approve it
-    let approve_args = serde_json::json!({"id": plan_doc_id, "status": "approved"});
+    let approve_args = serde_json::json!({"id": revw_doc_id, "status": "approved"});
     let _ = block_on(tool_set_document_status(root, &approve_args));
 
-    let plan_num = doc_num(plan_doc_id);
-    // Create a doc that references the approved plan
-    let dsgn_args = serde_json::json!({"type": "dsgn", "refs": [plan_num]});
+    let revw_num = doc_num(revw_doc_id);
+    // Create a doc that references the approved revw
+    let dsgn_args = serde_json::json!({"type": "dsgn", "refs": [revw_num]});
     let dsgn_result = block_on(tool_create_document(root, &dsgn_args, "zhongshuling"));
     let dsgn_parsed: serde_json::Value = serde_json::from_str(&dsgn_result).unwrap();
     assert_eq!(dsgn_parsed["ok"], true);
@@ -729,7 +785,7 @@ fn test_gate_passes_approved_ref() {
             .trim_end_matches(".md"),
     );
 
-    // Gate should pass since plan is approved
+    // Gate should pass since revw is approved
     let gate_result = block_on(check_doc_refs_approved_for_route(root, dsgn_doc_id));
     assert!(
         gate_result.is_ok(),
@@ -738,20 +794,19 @@ fn test_gate_passes_approved_ref() {
     );
 }
 
-/// 14. 被驳回的 ref 也会被 gate 阻止
+/// 14. 历史 rejected revw 也会被 gate 阻止
 #[test]
 fn test_gate_blocks_rejected_ref() {
     let temp = common::create_test_project("gate_block_rejected");
     let root = temp.path();
 
-    // Create a plan doc (plan_0)
-    let plan_args = serde_json::json!({"type": "plan", "refs": []});
-    let plan_result = block_on(tool_create_document(root, &plan_args, "zhongshuling"));
-    let plan_parsed: serde_json::Value = serde_json::from_str(&plan_result).unwrap();
-    assert_eq!(plan_parsed["ok"], true);
+    let revw_args = serde_json::json!({"type": "revw", "refs": []});
+    let revw_result = block_on(tool_create_document(root, &revw_args, "menxiashizhong"));
+    let revw_parsed: serde_json::Value = serde_json::from_str(&revw_result).unwrap();
+    assert_eq!(revw_parsed["ok"], true);
 
-    let plan_doc_id = plan_parsed["doc_id"].as_str().unwrap_or(
-        plan_parsed["path"]
+    let revw_doc_id = revw_parsed["doc_id"].as_str().unwrap_or(
+        revw_parsed["path"]
             .as_str()
             .unwrap_or("")
             .split('/')
@@ -760,13 +815,14 @@ fn test_gate_blocks_rejected_ref() {
             .trim_end_matches(".md"),
     );
 
-    // Reject it
-    let reject_args = serde_json::json!({"id": plan_doc_id, "status": "rejected"});
-    let _ = block_on(tool_set_document_status(root, &reject_args));
+    // Simulate legacy rejected status by editing frontmatter directly
+    let revw_path = root.join(format!(".shuji/reviews/{revw_doc_id}.md"));
+    let content = std::fs::read_to_string(&revw_path).unwrap();
+    let updated = content.replace("status: in_review", "status: rejected");
+    std::fs::write(&revw_path, updated).unwrap();
 
-    let plan_num = doc_num(plan_doc_id);
-    // Create a doc that references the rejected plan
-    let dsgn_args = serde_json::json!({"type": "dsgn", "refs": [plan_num]});
+    let revw_num = doc_num(revw_doc_id);
+    let dsgn_args = serde_json::json!({"type": "dsgn", "refs": [revw_num]});
     let dsgn_result = block_on(tool_create_document(root, &dsgn_args, "zhongshuling"));
     let dsgn_parsed: serde_json::Value = serde_json::from_str(&dsgn_result).unwrap();
     assert_eq!(dsgn_parsed["ok"], true);
@@ -781,12 +837,14 @@ fn test_gate_blocks_rejected_ref() {
             .trim_end_matches(".md"),
     );
 
-    // Gate should block rejected refs
     let gate_result = block_on(check_doc_refs_approved_for_route(root, dsgn_doc_id));
-    assert!(gate_result.is_err(), "Gate should block rejected ref");
     assert!(
-        gate_result.unwrap_err().contains("rejected"),
-        "Error should mention rejection"
+        gate_result.is_err(),
+        "Gate should block legacy rejected ref"
+    );
+    assert!(
+        gate_result.unwrap_err().contains("not approved yet"),
+        "Error should mention not approved"
     );
 }
 
@@ -827,9 +885,9 @@ fn test_pending_approval_add_remove() {
     let before = block_on(get_first_pending_approval(root));
     assert!(before.is_none(), "Should start with no pending approvals");
 
-    // Create plan doc → auto in_review
-    let args = serde_json::json!({"type": "plan", "refs": []});
-    let result = block_on(tool_create_document(root, &args, "zhongshuling"));
+    // Create revw doc → auto in_review
+    let args = serde_json::json!({"type": "revw", "refs": []});
+    let result = block_on(tool_create_document(root, &args, "menxiashizhong"));
     let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
     assert_eq!(parsed["ok"], true);
     let doc_id = parsed["doc_id"].as_str().unwrap_or(
@@ -851,4 +909,136 @@ fn test_pending_approval_add_remove() {
 
     let after_remove = block_on(get_first_pending_approval(root));
     assert!(after_remove.is_none(), "Should be empty after approval");
+}
+
+#[test]
+fn test_read_document_accepts_md_suffix() {
+    use shuji_app_lib::tool::documents::tool_read_document;
+
+    let temp = common::create_test_project("doc_read_md_suffix");
+    let root = temp.path();
+
+    let create_args = serde_json::json!({
+        "type": "dsgn",
+        "refs": "[-1]",
+        "content": "## Scope\nTest design body"
+    });
+    let created = block_on(tool_create_document(root, &create_args, "zhongshuling"));
+    let parsed: serde_json::Value = serde_json::from_str(&created).unwrap();
+    assert!(parsed["ok"].as_bool().unwrap());
+    let doc_id = parsed["path"].as_str().unwrap();
+
+    let read_args = serde_json::json!({ "id": format!("{}.md", doc_id) });
+    let result = block_on(tool_read_document(root, &read_args));
+    let read_parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+    assert!(
+        read_parsed["ok"].as_bool().unwrap(),
+        "read_document should accept .md suffix: {}",
+        result
+    );
+}
+
+// ── 作者归属 & 部门权限闸门 ──────────────────────────────────────
+
+#[test]
+fn test_dept_to_author_case_insensitive() {
+    let temp = common::create_test_project("doc_author_case");
+    let root = temp.path();
+
+    let cases: [(&str, &str, &str); 4] = [
+        ("Zhongshuling", "dsgn", "中书令"),
+        ("GONGBUSHANGSHU", "rprt", "工部"),
+        ("neige", "task", "内阁"),
+        ("requirements_agent", "reqs", "内阁"),
+    ];
+
+    for (dept, doc_type, expected_author) in cases {
+        let args = serde_json::json!({"type": doc_type, "refs": []});
+        let result = block_on(tool_create_document(root, &args, dept));
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(
+            parsed["ok"], true,
+            "dept {dept} should create {doc_type}: {}",
+            parsed["message"]
+        );
+        let doc_id = parsed["path"].as_str().unwrap();
+        assert_eq!(
+            read_doc_author(root, doc_id).as_deref(),
+            Some(expected_author),
+            "author for dept {dept}"
+        );
+    }
+}
+
+#[test]
+fn test_neige_cannot_create_plan() {
+    let temp = common::create_test_project("doc_neige_plan_forbidden");
+    let root = temp.path();
+
+    let args = serde_json::json!({"type": "plan", "refs": []});
+    let result = block_on(tool_create_document(root, &args, "neige"));
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+    assert_eq!(parsed["ok"], false);
+    assert_eq!(parsed["error_code"], "forbidden_type");
+    assert!(
+        parsed["message"]
+            .as_str()
+            .unwrap()
+            .contains("submit_pipeline_plan"),
+        "Should hint submit_pipeline_plan: {}",
+        parsed["message"]
+    );
+
+    let designs_dir = root.join(".shuji/designs");
+    let plan_files: Vec<_> = std::fs::read_dir(&designs_dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path()
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n.starts_with("plan_") && n.ends_with(".md"))
+                .unwrap_or(false)
+        })
+        .collect();
+    assert!(plan_files.is_empty(), "No plan file should be created");
+    assert!(
+        read_pending_approvals(root).is_empty(),
+        "Should not enter pending approval queue"
+    );
+}
+
+#[test]
+fn test_zhongshuling_can_create_plan() {
+    let temp = common::create_test_project("doc_zhongshuling_plan");
+    let root = temp.path();
+
+    let args = serde_json::json!({"type": "plan", "refs": []});
+    let result = block_on(tool_create_document(root, &args, "Zhongshuling"));
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+    assert_eq!(parsed["ok"], true, "{}", parsed["message"]);
+    assert_eq!(
+        read_doc_author(root, parsed["path"].as_str().unwrap()),
+        Some("中书令".to_string())
+    );
+}
+
+#[test]
+fn test_neige_can_create_task() {
+    let temp = common::create_test_project("doc_neige_task");
+    let root = temp.path();
+
+    let args = serde_json::json!({"type": "task", "refs": []});
+    let result = block_on(tool_create_document(root, &args, "neige"));
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+    assert_eq!(parsed["ok"], true, "{}", parsed["message"]);
+    let doc_id = parsed["path"].as_str().unwrap();
+    assert_eq!(read_doc_author(root, doc_id), Some("内阁".to_string()));
+    assert!(root
+        .join(".shuji/tasks")
+        .join(format!("{doc_id}.md"))
+        .exists());
 }

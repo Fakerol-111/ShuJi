@@ -99,6 +99,7 @@ async fn tool_assign_task(args: &serde_json::Value, ctx: &ToolContext) -> String
         msg_type: RouteMsgType::Task,
         subject: task.to_string(),
         payload: None,
+        doc_ids: Vec::new(),
         reply_to: Some(output_tx),
     };
 

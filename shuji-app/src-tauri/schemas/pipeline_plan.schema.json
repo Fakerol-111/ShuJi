@@ -40,7 +40,8 @@
             "enum": ["ask_user", "route_to", "parallel", "approval_gate", "self_execute"]
           },
           "action_params": {
-            "type": "object"
+            "type": "object",
+            "description": "Action-specific params. route_to: {target, task}. approval_gate: {} (doc resolved from upstream artifacts). parallel: {targets: [...]}."
           },
           "depends_on": {
             "type": "array",

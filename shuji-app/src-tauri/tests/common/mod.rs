@@ -8,6 +8,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use shuji_app_lib::actor::ActorMessage;
+use shuji_app_lib::config::RuntimeConfig;
 use shuji_app_lib::models::role::Role;
 use shuji_app_lib::pipeline::engine::PipelineEngine;
 use shuji_app_lib::pipeline::{PipelinePlan, PlanStep};
@@ -254,6 +255,7 @@ pub fn make_pipeline_engine(
         Arc::new(AtomicBool::new(false)),
         dir.to_path_buf(),
         None,
+        Arc::new(RuntimeConfig::default()),
     )
 }
 

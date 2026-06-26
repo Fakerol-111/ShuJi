@@ -205,7 +205,14 @@
     "compressionThreshold": "压缩阈值",
     "keepRecentMessages": "保留最近消息数",
     "midRunCompact": "运行时压缩",
-    "fullReset": "全部恢复默认"
+    "fullReset": "全部恢复默认",
+    "approvalMode": "审批模式",
+    "approvalModeManual": "等待朱批",
+    "approvalModeAuto": "自动放行",
+    "approvalAutoRetries": "自动放行重试次数",
+    "approvalModeManualDesc": "plan/revw 待批时暂停流程，必须皇帝朱批后才继续。（默认）",
+    "approvalModeAutoDesc": "内阁连续 N 轮未请示后自动批准，兼容旧版行为。",
+    "approvalModeHint": "保存后立即写入 config.local.toml；进行中的工作流需重新打开项目后生效。"
   },
   "settingsExtra": {
     "workflowIntent": "任务意图 (Intent)",
@@ -317,7 +324,7 @@
   },
   "document": {
     "pendingApproval": "待陛下朱批",
-    "approvalRequired": "此文档需皇帝御批后方可继续执行",
+    "approvalRequired": "此审查报告需皇帝准奏后方可继续执行",
     "approve": "准奏",
     "reject": "封还",
     "imperialNote": "御批备注（可选）...",

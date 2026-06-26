@@ -167,7 +167,7 @@ pub async fn send_message(
                 // 启动完整的 9 部门 actor 系统
                 let system = start_actor_system(
                     &config,
-                    state.runtime_config.clone(),
+                    crate::commands::project::snapshot_runtime_config(&state.runtime_config),
                     Path::new(&p_working_dir),
                     Path::new(&p_working_dir),
                     state.cancel_flag.clone(),
@@ -190,6 +190,7 @@ pub async fn send_message(
                 runtime,
                 system.senders.clone(),
                 project_dir.to_path_buf(),
+                crate::commands::project::snapshot_runtime_config(&state.runtime_config),
             );
 
             // 将用户消息作为输入恢复 pipeline 执行
@@ -372,7 +373,7 @@ pub async fn send_message(
             // 参数: 配置、项目/工作目录（此处相同）、取消标志、5 个通道的发送端
             let system = start_actor_system(
                 &config,
-                state.runtime_config.clone(),
+                crate::commands::project::snapshot_runtime_config(&state.runtime_config),
                 Path::new(&p_working_dir),
                 Path::new(&p_working_dir),
                 state.cancel_flag.clone(),
@@ -492,13 +493,14 @@ pub async fn discuss_with_cabinet(
             "(Current project state for reference)\n{}\n\n━━ Emperor Discussion ━━\n{}",
             project_context, message,
         ),
+        upstream_doc_ids: vec![],
         context_messages: vec![],
         project_dir: std::path::PathBuf::from(&working_dir),
         working_dir: std::path::PathBuf::from(&working_dir),
         current_skill: None,
         resume_paused: false,
         context_window_config: Arc::new(HashMap::new()),
-        runtime_config: state.runtime_config.clone(),
+        runtime_config: crate::commands::project::snapshot_runtime_config(&state.runtime_config),
         discuss_mode: true, // 关键标志：讨论模式，不修改项目状态
         fast_cancel: state.discuss_cancel.clone(), // 复用 discuss_cancel 作为取消信号
         dept_step_tx: None, // 讨论模式不发送步骤事件

@@ -40,7 +40,7 @@ impl NeigeAgent {
             "read source files and .shuji/ regular files",
         ));
         // Documents: create + append only (no modify_document, no set_document_status)
-        tools.push(crate::tool::documents::create_document_tool_def());
+        tools.push(crate::tool::documents::create_task_document_tool_def());
         tools.push(crate::tool::documents::append_document_tool_def());
         // Special tools
         tools.extend(crate::tool::registry::summarize_logs_tool());
@@ -481,20 +481,10 @@ impl Agent for NeigeAgent {
             })
         };
 
-        let mut result;
-        let mut route: Option<crate::api::control::RouteTo>;
-        let mut must_approve_retries = 0u32;
-        // plan_json: extracted from tool call after run() completes
-        let plan_json: Option<String>;
-        loop {
-            // Suspension point: check cancel between controller.run() rounds
-            if self.cancel.load(std::sync::atomic::Ordering::SeqCst) {
-                log_console!("[内阁] interrupted");
-                result = String::new();
-                route = None;
-                break;
-            }
-
+        let (result, route) = if self.cancel.load(std::sync::atomic::Ordering::SeqCst) {
+            log_console!("[内阁] interrupted");
+            (String::new(), None)
+        } else {
             let run_result = controller
                 .run(
                     &mut session,
@@ -506,79 +496,15 @@ impl Agent for NeigeAgent {
                     Some(&*input.fast_cancel),
                 )
                 .await?;
-            (result, route) = match run_result {
+            match run_result {
                 crate::api::control::RunResult::Done(text) => (text, None),
                 crate::api::control::RunResult::Routed { text, route: r } => (text, Some(r)),
                 crate::api::control::RunResult::Stopped(text) => (text, None),
-            };
-
-            if route.is_some() {
-                break;
             }
-
-            // ── Hard enforcement: must-approve doc pending but no request_decision ──
-            let pending_id = crate::tool::documents::get_first_pending_approval(&working_dir).await;
-            if let Some(ref id) = pending_id {
-                let snap = session.snapshot();
-                let already_asked = snap.messages.iter().rev().take(3).any(|m| {
-                    m.get("tool_calls")
-                        .and_then(|tc| tc.as_array())
-                        .map(|calls| {
-                            calls.iter().any(|c| {
-                                c.get("function")
-                                    .and_then(|f| f.get("name"))
-                                    .and_then(|n| n.as_str())
-                                    == Some("request_decision")
-                            })
-                        })
-                        .unwrap_or(false)
-                });
-                if !already_asked {
-                    must_approve_retries += 1;
-                    if must_approve_retries >= 3 {
-                        log_console!(
-                            "[内阁] must-approve doc {} retried {} times without request_decision, auto-approving",
-                            id,
-                            must_approve_retries
-                        );
-                        let _ =
-                            crate::tool::documents::tool_set_document_status(
-                                &working_dir,
-                                &serde_json::json!({
-                                    "id": id,
-                                    "status": "approved",
-                                    "auto": true,
-                                    "retries": must_approve_retries
-                                }),
-                            )
-                            .await;
-                        crate::audit::sync_ref_index(&working_dir, id).await;
-                        let msg = format!(
-                            "[System] Document {} has been auto-approved (内阁 retried {} times without requesting emperor decision). Continuing execution.",
-                            id, must_approve_retries
-                        );
-                        session.inject(&msg);
-                        continue;
-                    }
-                    log_console!(
-                        "[内阁] must-approve doc {} pending (retry {}/3) — re-prompting",
-                        id,
-                        must_approve_retries
-                    );
-                    let msg = format!(
-                        "[System] Document {} has been created but not yet approved by 皇帝. Please immediately call request_decision tool with options for 皇帝 to decide.",
-                        id
-                    );
-                    session.inject(&msg);
-                    continue;
-                }
-            }
-
-            break;
-        }
+        };
 
         // ── Extract plan_json from submit_pipeline_plan tool call ──
-        plan_json = session.snapshot().messages.iter().rev().find_map(|m| {
+        let plan_json = session.snapshot().messages.iter().rev().find_map(|m| {
             m.get("tool_calls")
                 .and_then(|tc| tc.as_array())
                 .and_then(|calls| {
@@ -615,39 +541,88 @@ impl Agent for NeigeAgent {
         };
         session.inject(level_prompt);
 
-        // ── Pause detection: check for request_decision tool call ──
-        let snap = session.snapshot();
-        let has_decision_call = snap.messages.iter().rev().take(3).any(|m| {
-            m.get("tool_calls")
-                .and_then(|tc| tc.as_array())
-                .map(|calls| {
-                    calls.iter().any(|c| {
-                        c.get("function")
-                            .and_then(|f| f.get("name"))
-                            .and_then(|n| n.as_str())
-                            == Some("request_decision")
-                    })
-                })
-                .unwrap_or(false)
-        });
+        // ── Pause detection: pending revw awaiting emperor approval ──
+        let has_pending = crate::tool::documents::get_first_pending_approval(&working_dir)
+            .await
+            .is_some();
+        let should_pause = has_pending && route.is_none();
 
-        if has_decision_call && route.is_none() {
+        if should_pause {
+            let snap = session.snapshot();
             // Save raw session (bypasses PersistedContext compression)
             Self::save_paused_session(&snap.messages, &working_dir).await;
-            log_console!(
-                "[内阁] request_decision detected — session paused, awaiting emperor decision"
-            );
+            log_console!("[内阁] paused awaiting emperor approval (pending={has_pending})");
         } else {
             // Normal: save to PersistedContext
+            let snap = session.snapshot();
             let ctx = crate::api::session::PersistedContext::from_messages(&snap.messages);
             ctx.save_to(&working_dir, &role_name).await;
         }
 
+        let snap = session.snapshot();
         let clean = strip_skill_tag(result);
         let mut output = AgentOutput::new(clean);
-        output.paused = has_decision_call && route.is_none();
+        output.paused = should_pause;
         output.route = route;
         output.plan_json = plan_json;
+        output.decision_options = extract_decision_options(&snap.messages);
         Ok(output)
+    }
+}
+
+/// 从 session 快照中提取最近一次 `request_decision` 工具的 options 数组。
+fn extract_decision_options(messages: &[serde_json::Value]) -> Vec<String> {
+    for msg in messages.iter().rev() {
+        let Some(calls) = msg.get("tool_calls").and_then(|tc| tc.as_array()) else {
+            continue;
+        };
+        for call in calls.iter().rev() {
+            if call
+                .get("function")
+                .and_then(|f| f.get("name"))
+                .and_then(|n| n.as_str())
+                != Some("request_decision")
+            {
+                continue;
+            }
+            let Some(args_str) = call
+                .get("function")
+                .and_then(|f| f.get("arguments"))
+                .and_then(|a| a.as_str())
+            else {
+                continue;
+            };
+            let Ok(args) = serde_json::from_str::<serde_json::Value>(args_str) else {
+                continue;
+            };
+            let Some(options) = args.get("options").and_then(|v| v.as_array()) else {
+                continue;
+            };
+            return options
+                .iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect();
+        }
+    }
+    vec![]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_decision_options;
+
+    #[test]
+    fn extract_decision_options_from_tool_call() {
+        let messages = vec![serde_json::json!({
+            "role": "assistant",
+            "tool_calls": [{
+                "function": {
+                    "name": "request_decision",
+                    "arguments": r#"{"options":["选项A","选项B"]}"#
+                }
+            }]
+        })];
+        let opts = extract_decision_options(&messages);
+        assert_eq!(opts, vec!["选项A", "选项B"]);
     }
 }

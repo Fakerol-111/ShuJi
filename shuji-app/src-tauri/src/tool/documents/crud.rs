@@ -4,9 +4,33 @@ use crate::tool::{resolve_scoped_path, ToolOutput};
 
 use super::approval::add_pending_approval;
 use super::parse::{
-    build_doc, dept_to_author, find_rprt_path, next_id, now_iso, parse_doc, parse_refs,
-    resolve_doc_path, resolve_ref_doc_id, rprt_rel_path, type_to_dir, DocMeta, MUST_APPROVE_TYPES,
+    build_doc, dept_to_author, find_rprt_path, list_doc_ids_in_subdir, next_id, normalize_doc_id,
+    now_iso, parse_doc, parse_refs, resolve_doc_path, resolve_ref_doc_id, rprt_rel_path,
+    type_to_dir, DocMeta, MUST_APPROVE_TYPES,
 };
+
+/// 返回某部门允许创建的文档类型白名单。
+/// 返回 None 表示「不限制」（对未知部门保守放行，避免误伤）。
+fn allowed_doc_types(dept: &str) -> Option<&'static [&'static str]> {
+    use crate::models::role::Role;
+    match dept.to_lowercase().as_str() {
+        "requirements_agent" => return Some(&["reqs", "task"]),
+        "survey_agent" => return Some(&["anls"]),
+        _ => {}
+    }
+    let role = Role::from_name(dept)?;
+    Some(match role {
+        Role::Neige => &["task"],
+        Role::Zhongshuling => &["dsgn", "plan", "pdsg", "anls", "precepts"],
+        Role::MenxiaShizhong => &["revw"],
+        Role::Shangshuling => &["task", "rprt"],
+        Role::LiBuShangshu => &["ddtl", "pdsg"],
+        Role::BingbuShangshu => &["ctrt", "rprt"],
+        Role::GongbuShangshu => &["rprt"],
+        Role::XingbuShangshu => &["rprt"],
+        Role::LiBuRShangshu => &["rprt"],
+    })
+}
 
 /// ── create_document ────────────────────────────────────────────────
 pub async fn tool_create_document(
@@ -67,6 +91,28 @@ pub async fn tool_create_document(
         }
     }
 
+    if let Some(allowed) = allowed_doc_types(dept) {
+        if !allowed.contains(&doc_type.as_str()) {
+            use crate::models::role::Role;
+            let hint = if Role::from_name(dept) == Some(Role::Neige) && doc_type == "plan" {
+                "内阁应通过 submit_pipeline_plan 提交可执行流程，而非创建 plan 文档；plan 由中书令创建。"
+            } else {
+                "该文档类型不属于本部门职责，请改由对应部门创建，或选择正确的类型。"
+            };
+            return ToolOutput::error(
+                "create_document",
+                "",
+                "forbidden_type",
+                &format!(
+                    "部门「{}」无权创建 {} 类型文档。{}",
+                    dept_to_author(dept),
+                    doc_type,
+                    hint
+                ),
+            );
+        }
+    }
+
     let id_num = match next_id(working_dir).await {
         Ok(n) => n,
         Err(e) => return ToolOutput::error("create_document", "", "counter_error", &e),
@@ -86,7 +132,7 @@ pub async fn tool_create_document(
     let author = dept_to_author(dept);
     let ts = now_iso();
     let status = match doc_type.as_str() {
-        "plan" | "revw" => "in_review".to_string(),
+        "revw" => "in_review".to_string(),
         _ => String::new(),
     };
 
@@ -129,7 +175,7 @@ pub async fn tool_create_document(
     }
 }
 
-/// If an approved plan/revw is modified, revert to in_review for re-approval.
+/// If an approved revw is modified, revert to in_review for re-approval.
 async fn revert_approved_if_needed(meta: &mut DocMeta, working_dir: &Path) -> Option<&'static str> {
     if MUST_APPROVE_TYPES.contains(&meta.doc_type.as_str()) && meta.status == "approved" {
         meta.status = "in_review".to_string();
@@ -458,6 +504,28 @@ pub fn create_document_tool_def() -> crate::api::client::ToolDefinition {
     }
 }
 
+pub fn create_task_document_tool_def() -> crate::api::client::ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "create_document".into(),
+            description: "Create a task document (type fixed to 'task'). 内阁出流程请用 submit_pipeline_plan；本工具仅用于创建 task 文档作为 expand_requirements 的前置。".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "type": { "type": "string", "enum": ["task"], "description": "固定为 task" },
+                    "refs": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "Referenced document IDs (integers, no prefix). Pass [] for none"
+                    }
+                },
+                "required": ["type", "refs"]
+            }),
+        },
+    }
+}
+
 pub fn modify_document_tool_def() -> crate::api::client::ToolDefinition {
     crate::api::client::ToolDefinition {
         tool_type: "function".into(),
@@ -525,28 +593,69 @@ pub fn append_document_tool_def() -> crate::api::client::ToolDefinition {
     }
 }
 
+/// Build a helpful hint when read_document fails (list nearby valid IDs).
+async fn doc_not_found_hint(working_dir: &Path, raw_id: &str, normalized_id: &str) -> String {
+    let mut parts = vec![
+        "read_document expects a document ID like dsgn_3 or plan_1 — not a filename path or context JSON."
+            .to_string(),
+    ];
+    if raw_id != normalized_id {
+        parts.push(format!(
+            "Normalized \"{raw_id}\" → \"{normalized_id}\" but still not found."
+        ));
+    }
+    if raw_id.ends_with(".md") || raw_id.contains('/') || raw_id.contains('\\') {
+        parts.push("Do not pass file paths or .md extensions; use the ID only.".to_string());
+    }
+    let mut samples = list_doc_ids_in_subdir(working_dir, "designs", 8).await;
+    if samples.is_empty() {
+        samples = list_doc_ids_in_subdir(working_dir, "requirements", 5).await;
+    }
+    if !samples.is_empty() {
+        parts.push(format!(
+            "Available IDs in .shuji/designs: {}",
+            samples.join(", ")
+        ));
+    } else {
+        parts.push(
+            "No documents in .shuji/designs yet — list_dir .shuji/designs first.".to_string(),
+        );
+    }
+    parts.join(" ")
+}
+
 /// ── read_document ─────────────────────────────────────────────────
 pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) -> String {
-    let id = args["id"].as_str().unwrap_or("");
-    if id.is_empty() {
+    let raw_id = args["id"].as_str().unwrap_or("");
+    if raw_id.is_empty() {
         return ToolOutput::error(
             "read_document",
             "",
             "empty_id",
-            "Document ID cannot be empty",
+            "Document ID cannot be empty. Use list_dir on .shuji/designs to find IDs like dsgn_3 (no .md suffix).",
         );
     }
 
-    let full = match resolve_doc_path(working_dir, id).await {
+    let id = normalize_doc_id(working_dir, raw_id).await;
+    let full = match resolve_doc_path(working_dir, &id).await {
         Ok(p) => p,
-        Err(e) => return ToolOutput::error("read_document", id, "not_found", &e),
+        Err(e) => {
+            let hint = doc_not_found_hint(working_dir, raw_id, &id).await;
+            return ToolOutput::error(
+                "read_document",
+                raw_id,
+                "not_found",
+                &format!("{e}. {hint}"),
+            );
+        }
     };
     if !full.exists() {
+        let hint = doc_not_found_hint(working_dir, raw_id, &id).await;
         return ToolOutput::error(
             "read_document",
-            id,
+            raw_id,
             "not_found",
-            &format!("Document {} does not exist", id),
+            &format!("Document {id} does not exist. {hint}"),
         );
     }
 
@@ -563,12 +672,12 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
             }
             c
         }
-        Err(e) => return ToolOutput::error("read_document", id, "read_error", &e.to_string()),
+        Err(e) => return ToolOutput::error("read_document", &id, "read_error", &e.to_string()),
     };
 
     let (meta, body) = match parse_doc(&content) {
         Ok(m) => m,
-        Err(e) => return ToolOutput::error("read_document", id, "parse_error", &e),
+        Err(e) => return ToolOutput::error("read_document", &id, "parse_error", &e),
     };
 
     let target_section = args["section"].as_str().filter(|s| !s.is_empty());
@@ -576,7 +685,7 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
         match extract_section(body, section_name) {
             Ok(content) => content,
             Err(msg) => {
-                return ToolOutput::error("read_document", id, "section_not_found", &msg);
+                return ToolOutput::error("read_document", &id, "section_not_found", &msg);
             }
         }
     } else {
@@ -679,7 +788,7 @@ pub fn read_document_tool_def() -> crate::api::client::ToolDefinition {
                 "properties": {
                     "id": {
                         "type": "string",
-                        "description": "Document ID, e.g. dsgn_003, rprt_32, task_5"
+                        "description": "Document ID without .md suffix, e.g. dsgn_3, plan_1, revw_2. Use list_dir on .shuji/designs to discover IDs from filenames."
                     },
                     "section": {
                         "type": "string",
@@ -764,27 +873,4 @@ pub fn find_document_tool_def() -> crate::api::client::ToolDefinition {
             }),
         },
     }
-}
-
-/// 检查设计文档的内容质量，返回缺失的关键内容警告（不阻塞流程）。
-/// 用于在 append_document/modify_document 中附加质量提示。
-fn check_design_quality(doc_type: &str, body: &str) -> Option<String> {
-    let must_have: &[&str] = match doc_type {
-        "dsgn" => &["架构", "模块", "接口", "约束"],
-        "plan" => &["阶段", "依赖"],
-        "pdsg" => &["接口", "合约", "模块"],
-        _ => return None,
-    };
-    let missing: Vec<&str> = must_have
-        .iter()
-        .filter(|kw| !body.contains(*kw))
-        .copied()
-        .collect();
-    if missing.len() >= must_have.len() / 2 {
-        return Some(format!(
-             "设计文档缺少以下关键内容：{}。一个完整的设计文档应包含：架构约束、模块边界、接口定义。",
-             missing.join("、"),
-         ));
-    }
-    None
 }

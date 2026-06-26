@@ -41,6 +41,8 @@ pub struct RouteTo {
     pub subject: String,
     /// Optional inline payload for short instructions (bypasses document write).
     pub payload: Option<String>,
+    /// Document IDs from upstream (route_to subject when it is a doc id).
+    pub doc_ids: Vec<String>,
 }
 
 /// Outcome of one AgentController::run() call.

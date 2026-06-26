@@ -17,7 +17,7 @@ use crate::agent::r#trait::AgentInput;
 use crate::models::role::Role;
 
 use super::super::ActorContext;
-use super::emit::emit_to_emperor;
+use super::emit::{emit_to_emperor, emit_to_emperor_with_options};
 
 /// 内阁成功执行后的前置处理。
 ///
@@ -42,7 +42,12 @@ pub(super) async fn handle_neige_success(
 
     // 跳过纯路由通知（如 "routed to 中书令"）
     if !output.content.starts_with("routed to") {
-        emit_to_emperor(&ctx.emperor_tx, ctx.role, &output.content);
+        emit_to_emperor_with_options(
+            &ctx.emperor_tx,
+            ctx.role,
+            &output.content,
+            &output.decision_options,
+        );
     }
 
     // 检查是否有 pipeline plan
@@ -94,6 +99,7 @@ async fn run_submitted_pipeline(
                 ctx.cancel.clone(),
                 ctx.project_dir.clone(),
                 ctx.workflow_graph.clone(),
+                ctx.runtime_config.clone(),
             );
             // 持久化 runtime → 支持恢复
             engine.save().await.ok();
@@ -155,6 +161,7 @@ async fn report_pipeline_result(
             let summary_input = AgentInput {
                 role: ctx.role,
                 task_description: summary_task,
+                upstream_doc_ids: vec![],
                 context_messages: context_msgs.to_vec(),
                 project_dir: ctx.project_dir.clone(),
                 working_dir: ctx.working_dir.clone(),

@@ -129,3 +129,28 @@ fn test_watchdog_default_delete_create_warning() {
     let config = RuntimeConfig::default();
     assert_eq!(config.watchdog.delete_create_warning_count, 2);
 }
+
+// ── Approval config tests ────────────────────────────────────────────
+
+#[test]
+fn test_approval_config_defaults() {
+    let config = RuntimeConfig::default();
+    assert_eq!(
+        config.approval.mode,
+        shuji_app_lib::config::ApprovalMode::Manual
+    );
+    assert_eq!(config.approval.auto_retries, 3);
+}
+
+#[test]
+fn test_approval_config_deserialize() {
+    let cfg: shuji_app_lib::config::ApprovalConfig = toml::from_str(
+        r#"
+mode = "auto"
+auto_retries = 5
+"#,
+    )
+    .unwrap();
+    assert_eq!(cfg.mode, shuji_app_lib::config::ApprovalMode::Auto);
+    assert_eq!(cfg.auto_retries, 5);
+}

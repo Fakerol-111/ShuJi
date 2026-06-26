@@ -12,6 +12,8 @@ import {
   setWorkflowPreset as apiSetPreset,
   getModelPreset,
   setModelPreset,
+  getApprovalConfig,
+  setApprovalConfig,
   getWorkflowConfig as apiGetWorkflowConfig,
   setWorkflowConfig as apiSetWorkflowConfig,
 } from '../api';
@@ -21,6 +23,7 @@ import type {
   ContextWindowConfig,
   RoleContextConfig,
   WorkflowConfig as WFConfig,
+  ApprovalMode,
 } from '../types';
 import SettingsSidebar from '../components/settings/SettingsSidebar';
 import ServiceConfigTab from '../components/settings/ServiceConfigTab';
@@ -80,6 +83,10 @@ export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
   const [workflowPreset, setWorkflowPresetLocal] = useState('standard');
   const [workflowIntent, setWorkflowIntent] = useState<string>('auto');
   const [modelPreset, setModelPresetLocal] = useState('balanced');
+
+  // Approval mode state
+  const [approvalMode, setApprovalMode] = useState<ApprovalMode>('manual');
+  const [approvalAutoRetries, setApprovalAutoRetries] = useState(3);
 
   // Context config state
   const [contextOverrides, setContextOverrides] = useState<Record<string, ContextRoleForm>>({});
@@ -148,12 +155,25 @@ export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
       .catch(() => setModelPresetLocal('balanced'));
   }, []);
 
+  const loadApprovalConfig = useCallback(() => {
+    getApprovalConfig()
+      .then((cfg) => {
+        setApprovalMode(cfg.mode);
+        setApprovalAutoRetries(cfg.auto_retries);
+      })
+      .catch(() => {
+        setApprovalMode('manual');
+        setApprovalAutoRetries(3);
+      });
+  }, []);
+
   useEffect(() => {
     loadConfig();
     loadContextConfig();
     loadWorkflowConfig();
     loadModelPreset();
-  }, [loadConfig, loadContextConfig, loadWorkflowConfig, loadModelPreset]);
+    loadApprovalConfig();
+  }, [loadConfig, loadContextConfig, loadWorkflowConfig, loadModelPreset, loadApprovalConfig]);
 
   const setOverride = (role: string, field: keyof RoleFormState, value: string) => {
     setOverrides((prev) => ({
@@ -244,6 +264,10 @@ export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
         governance: workflowPreset as WFConfig['governance'],
         intent_override: null,
       });
+      await setApprovalConfig({
+        mode: approvalMode,
+        auto_retries: approvalAutoRetries,
+      });
 
       setSavedMsg(t('common.saved'));
       setTimeout(() => setSavedMsg(''), 2000);
@@ -293,6 +317,10 @@ export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
             setWorkflowPresetLocal={setWorkflowPresetLocal}
             modelPreset={modelPreset}
             setModelPresetLocal={setModelPresetLocal}
+            approvalMode={approvalMode}
+            setApprovalMode={setApprovalMode}
+            approvalAutoRetries={approvalAutoRetries}
+            setApprovalAutoRetries={setApprovalAutoRetries}
           />
         );
       case 'context':

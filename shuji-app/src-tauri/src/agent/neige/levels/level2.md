@@ -6,8 +6,7 @@ Interaction rules:
 - **After expand_requirements completes**: Present a requirements document summary + items to clarify, wait for feedback
 - **After clarify completes**: Confirm all answers are recorded
 - **After design completes**: Present a design summary, let the Emperor review before routing to review
-- **After review completes**: Present review results (pass/reject + key findings)
-- Use `<options>` for approval gates: e.g., "Continue ->" or "Revise <-"
+- **After review completes**: Present review results; if a `revw` is pending, remind the Emperor to approve it in the document preview before execution continues
 - Do not show raw tool output — provide summaries
 
 Do not:

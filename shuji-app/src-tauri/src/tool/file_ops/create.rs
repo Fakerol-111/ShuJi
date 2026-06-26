@@ -68,11 +68,19 @@ pub async fn tool_list_dir(working_dir: &Path, args: &serde_json::Value) -> Stri
             let items: Vec<String> = entries
                 .filter_map(|e| e.ok())
                 .map(|e| {
+                    let name = e.file_name().to_string_lossy().to_string();
                     let tag = e
                         .file_type()
                         .map(|t| if t.is_dir() { "[DIR]" } else { "[FILE]" })
                         .unwrap_or("[?]");
-                    format!("{} {}", tag, e.file_name().to_string_lossy())
+                    if tag == "[FILE]" {
+                        if let Some(id) = name.strip_suffix(".md") {
+                            if id.contains('_') {
+                                return format!("{tag} {name}  (read_document id=\"{id}\")");
+                            }
+                        }
+                    }
+                    format!("{tag} {name}")
                 })
                 .collect();
             let message = if items.is_empty() {
