@@ -62,6 +62,15 @@ impl IntentChecker for ImmutabilityChecker {
             Some(id) if !id.is_empty() => id,
             _ => return IntentVerdict::Allow,
         };
+
+        // plan/revw content changes use soft revert in crud.rs — skip immutability gate
+        let type_prefix = doc_id.split('_').next().unwrap_or("");
+        if ["plan", "revw"].contains(&type_prefix)
+            && ["modify_document", "append_document"].contains(&intent.tool.as_str())
+        {
+            return IntentVerdict::Allow;
+        }
+
         let refs = crate::audit::check_immutability(wd, doc_id).await;
         if refs.is_empty() {
             IntentVerdict::Allow

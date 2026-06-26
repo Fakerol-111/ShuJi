@@ -309,6 +309,28 @@ export interface TraceResult {
   upstream: ChainNode[];
 }
 
+export interface DocQuery {
+  doc_type?: string[];
+  author?: string;
+  status?: string[];
+  refs_id?: number;
+  keyword?: string;
+  since?: string;
+  until?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface DocSummary {
+  id: string;
+  doc_type: string;
+  author: string;
+  timestamp: string;
+  status: string;
+  refs: string;
+  preview: string;
+}
+
 // ── 文移图 DAG ───────────────────────────────────────
 
 export type GraphNodeStatus = 'active' | 'completed' | 'failed' | 'planned';

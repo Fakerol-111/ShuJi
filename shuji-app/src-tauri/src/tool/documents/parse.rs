@@ -32,6 +32,20 @@ pub(crate) struct DocMeta {
     pub(crate) refs: String,
     pub(crate) status: String,
     pub(crate) notes: String,
+    pub(crate) approved_hash: String,
+}
+
+/// Separator for multiple 朱批 entries in frontmatter `notes` (must stay single-line).
+pub(super) const NOTES_ENTRY_SEP: &str = " | ";
+
+/// Append a note entry; keeps notes on one frontmatter line for line-based parsing.
+pub(super) fn append_note_entry(existing: &str, entry: &str) -> String {
+    let existing = existing.replace('\n', NOTES_ENTRY_SEP);
+    if existing.is_empty() {
+        entry.to_string()
+    } else {
+        format!("{existing}{NOTES_ENTRY_SEP}{entry}")
+    }
 }
 
 /// Parse the YAML frontmatter and body from a document string.
@@ -52,6 +66,7 @@ pub(crate) fn parse_doc(content: &str) -> Result<(DocMeta, &str), String> {
     let mut refs = String::from("[-1]");
     let mut status = String::new();
     let mut notes = String::new();
+    let mut approved_hash = String::new();
 
     for line in header.lines() {
         if let Some((key, val)) = line.split_once(": ") {
@@ -63,7 +78,8 @@ pub(crate) fn parse_doc(content: &str) -> Result<(DocMeta, &str), String> {
                 "timestamp" => timestamp = val.to_string(),
                 "refs" => refs = val.to_string(),
                 "status" => status = val.to_string(),
-                "notes" => notes = val.to_string(),
+                "notes" => notes = val.replace('\n', NOTES_ENTRY_SEP),
+                "approved_hash" => approved_hash = val.to_string(),
                 _ => {}
             }
         }
@@ -82,6 +98,7 @@ pub(crate) fn parse_doc(content: &str) -> Result<(DocMeta, &str), String> {
             refs,
             status,
             notes,
+            approved_hash,
         },
         body_text,
     ))
@@ -98,6 +115,9 @@ pub(super) fn build_doc(meta: &DocMeta, body: &str) -> String {
     }
     if !meta.notes.is_empty() {
         frontmatter += &format!("\nnotes: {}", meta.notes);
+    }
+    if !meta.approved_hash.is_empty() {
+        frontmatter += &format!("\napproved_hash: {}", meta.approved_hash);
     }
     format!("{}\n---\n{}", frontmatter, body)
 }
@@ -180,6 +200,27 @@ pub(crate) fn parse_refs(refs: &str) -> Vec<u64> {
         .split(',')
         .filter_map(|s| s.trim().parse().ok())
         .collect()
+}
+
+const ALL_DOC_TYPE_PREFIXES: &[&str] = &[
+    "dsgn", "plan", "pdsg", "ddtl", "revw", "task", "ctrt", "rprt", "reqs", "anls", "precepts",
+];
+
+/// Resolve a numeric ref (e.g. 3) to a full document ID by scanning known directories.
+pub(crate) async fn resolve_ref_doc_id(working_dir: &Path, num: u64) -> Option<String> {
+    for prefix in ALL_DOC_TYPE_PREFIXES {
+        for candidate in [
+            format!("{prefix}_{num}"),
+            format!("{prefix}_{num:03}"),
+        ] {
+            if let Ok(path) = resolve_doc_path(working_dir, &candidate).await {
+                if path.exists() {
+                    return Some(candidate);
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Resolve the full path for a document by its ID.

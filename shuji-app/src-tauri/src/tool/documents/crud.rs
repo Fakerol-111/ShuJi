@@ -4,8 +4,8 @@ use crate::tool::{resolve_scoped_path, ToolOutput};
 
 use super::approval::add_pending_approval;
 use super::parse::{
-    build_doc, dept_to_author, find_rprt_path, next_id, now_iso, parse_doc, resolve_doc_path,
-    rprt_rel_path, type_to_dir, DocMeta,
+    build_doc, dept_to_author, find_rprt_path, next_id, now_iso, parse_doc, parse_refs,
+    resolve_doc_path, resolve_ref_doc_id, rprt_rel_path, type_to_dir, DocMeta, MUST_APPROVE_TYPES,
 };
 
 /// ── create_document ────────────────────────────────────────────────
@@ -55,6 +55,18 @@ pub async fn tool_create_document(
         })
         .unwrap_or_else(|| "[-1]".to_string());
 
+    let ref_nums = parse_refs(&refs);
+    for num in &ref_nums {
+        if resolve_ref_doc_id(working_dir, *num).await.is_none() {
+            return ToolOutput::error(
+                "create_document",
+                "",
+                "dangling_ref",
+                &format!("引用 {num} 不存在，请确认 refs 指向有效文档"),
+            );
+        }
+    }
+
     let id_num = match next_id(working_dir).await {
         Ok(n) => n,
         Err(e) => return ToolOutput::error("create_document", "", "counter_error", &e),
@@ -86,6 +98,7 @@ pub async fn tool_create_document(
         refs,
         status: status.clone(),
         notes: String::new(),
+        approved_hash: String::new(),
     };
     let content = build_doc(&meta, "");
 
@@ -113,6 +126,18 @@ pub async fn tool_create_document(
             )
         }
         Err(e) => ToolOutput::error("create_document", &doc_id, "write_error", &e.to_string()),
+    }
+}
+
+/// If an approved plan/revw is modified, revert to in_review for re-approval.
+async fn revert_approved_if_needed(meta: &mut DocMeta, working_dir: &Path) -> Option<&'static str> {
+    if MUST_APPROVE_TYPES.contains(&meta.doc_type.as_str()) && meta.status == "approved" {
+        meta.status = "in_review".to_string();
+        meta.approved_hash.clear();
+        let _ = add_pending_approval(working_dir, &meta.id).await;
+        Some("已批准文档内容变更，已自动转入重审")
+    } else {
+        None
     }
 }
 
@@ -227,6 +252,7 @@ pub async fn tool_modify_document(
     };
 
     meta.timestamp = now_iso();
+    let revert_msg = revert_approved_if_needed(&mut meta, working_dir).await;
     let new_content = build_doc(&meta, &new_body);
 
     match tokio::fs::write(&full, &new_content).await {
@@ -238,7 +264,10 @@ pub async fn tool_modify_document(
             );
             crate::audit::append(working_dir, "modify_document", dept, id, &detail).await;
             crate::audit::save_diff(working_dir, id, "modify_document", body, &new_body).await;
-            ToolOutput::success("modify_document", id, "Modified successfully")
+            let msg = revert_msg
+                .map(|m| format!("Modified successfully. {m}"))
+                .unwrap_or_else(|| "Modified successfully".to_string());
+            ToolOutput::success("modify_document", id, &msg)
         }
         Err(e) => ToolOutput::error("modify_document", id, "write_error", &e.to_string()),
     }
@@ -384,6 +413,7 @@ pub async fn tool_append_document(
     };
 
     meta.timestamp = now_iso();
+    let revert_msg = revert_approved_if_needed(&mut meta, working_dir).await;
     let new_content = build_doc(&meta, &new_body);
 
     match tokio::fs::write(&full, &new_content).await {
@@ -392,7 +422,10 @@ pub async fn tool_append_document(
             let detail = format!("append_parts={}, total_chars={}", append_parts.len(), total);
             crate::audit::append(working_dir, "append_document", dept, id, &detail).await;
             crate::audit::save_diff(working_dir, id, "append_document", body, &new_body).await;
-            ToolOutput::success("append_document", id, "Appended successfully")
+            let msg = revert_msg
+                .map(|m| format!("Appended successfully. {m}"))
+                .unwrap_or_else(|| "Appended successfully".to_string());
+            ToolOutput::success("append_document", id, &msg)
         }
         Err(e) => ToolOutput::error("append_document", id, "write_error", &e.to_string()),
     }
