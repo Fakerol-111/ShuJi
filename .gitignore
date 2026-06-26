@@ -47,14 +47,9 @@ shuji-app/src-tauri/gen/
 # Agent-generated working documents
 .shuji/
 
-# Design docs (local only); tracked paths listed below
-docs/*
-!docs/README.md
-!docs/refactoring-three-phases.md
-!docs/adr/
-!docs/adr/**
-!docs/images/
-!docs/images/**
+# Local docs (not for repo)
+docs/
+shuji-app/docs/
 
 # Project meta files (local only)
 CLAUDE.md
@@ -67,6 +62,3 @@ PRODUCTION_CHECKLIST.md
 
 # Presentations (local only)
 *.pptx
-
-# Local docs (not for repo)
-shuji-app/docs/
