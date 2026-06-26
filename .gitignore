@@ -67,3 +67,6 @@ PRODUCTION_CHECKLIST.md
 
 # Presentations (local only)
 *.pptx
+
+# Local docs (not for repo)
+shuji-app/docs/
