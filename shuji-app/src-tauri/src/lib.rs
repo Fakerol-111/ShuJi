@@ -55,7 +55,7 @@ mod usage_notify; // 度支/文脉面板刷新通知（usage-update 事件）
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use tokio::sync::Mutex;
 
 /// 取消标志映射表 — 共享类型别名，用于 agent 和 tool 之间传递取消信号。
@@ -128,7 +128,7 @@ pub fn run() {
             actor_system: Arc::new(tokio::sync::Mutex::new(None)),
             chat_history: Arc::new(tokio::sync::Mutex::new(Vec::new())),
             dept_log_history: Arc::new(tokio::sync::Mutex::new(Vec::new())),
-            runtime_config: Arc::new(runtime_config),
+            runtime_config: Arc::new(RwLock::new(runtime_config)),
             compacting_roles: Arc::new(Mutex::new(HashSet::new())),
             discuss_cancel: Arc::new(AtomicBool::new(false)),
         })
@@ -174,6 +174,8 @@ pub fn run() {
             commands::settings::clear_soul,
             commands::settings::get_model_preset,
             commands::settings::set_model_preset,
+            commands::settings::get_approval_config,
+            commands::settings::set_approval_config,
             commands::shuji_docs::list_shuji_tree,
             commands::shuji_docs::read_shuji_doc,
             commands::shuji_docs::get_document_diff,

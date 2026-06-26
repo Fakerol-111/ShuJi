@@ -90,43 +90,23 @@ pub async fn execute_named_tool(
         "modify_file" => tool_modify_file(working_dir, args).await,
         "apply_patch" => tool_apply_patch(working_dir, args).await,
         "edit_file" => tool_edit_file(working_dir, args).await,
-        "create_document" => {
-            if let Some(dt) = args.get("type").and_then(|v| v.as_str()) {
-                let valid_types = ["dsgn", "plan", "pdsg", "revw", "anls", "rprt"];
-                if !valid_types.contains(&dt) {
-                    crate::tool::output::ToolOutput::error("create_document", dt, "invalid_type",
-                        &format!("文档类型不合法: {}. 合法类型: dsgn(设计), plan(计划), pdsg(阶段设计), revw(审核), anls(分析), rprt(报告)", dt))
-                } else {
-                    documents::tool_create_document(working_dir, args, dept).await
-                }
-            } else {
-                crate::tool::output::ToolOutput::error(
-                    "create_document",
-                    "",
-                    "missing_type",
-                    "请指定文档类型（type 参数）。合法类型: dsgn, plan, pdsg, revw, anls, rprt",
-                )
-            }
-        }
+        "create_document" => documents::tool_create_document(working_dir, args, dept).await,
         "modify_document" => documents::tool_modify_document(working_dir, args, dept).await,
         "set_document_status" => match args.get("status").and_then(|v| v.as_str()) {
-            Some(s) if s == "approved" || s == "rejected" => {
+            Some(s) if s == "approved" => {
                 documents::tool_set_document_status(working_dir, args).await
             }
             Some(other) => crate::tool::output::ToolOutput::error(
                 "set_document_status",
                 other,
                 "invalid_status",
-                &format!(
-                    "状态值不合法: {}. 必须是 approved(批准) 或 rejected(驳回).",
-                    other
-                ),
+                &format!("状态值不合法：必须是 approved。当前值: {other}"),
             ),
             None => crate::tool::output::ToolOutput::error(
                 "set_document_status",
                 "",
                 "missing_status",
-                "请指定状态值（status 参数）。合法值: approved, rejected",
+                "请指定状态值（status 参数）。合法值: approved",
             ),
         },
         "append_document" => {
@@ -242,11 +222,17 @@ fn augment_error_with_hint(name: &str, raw_result: &str, _dept: &str) -> String 
         }
 
         // -- Document operations --
+        ("create_document", Some("forbidden_type")) => {
+            "HINT: 该文档类型不属于本部门职责。内阁出流程请用 submit_pipeline_plan，不要 create_document(type=\"plan\")；plan/dsgn 由中书令创建，revw 由门下侍中创建。"
+        }
         ("create_document", _) if msg_lower.contains("type") && (msg_lower.contains("invalid") || msg_lower.contains("illegal")) => {
             "HINT: 文档类型不合法。请使用以下之一：dsgn（设计文档）、plan（计划）、pdsg（阶段设计）、revw（审核报告）、anls（分析文档）、rprt（工作报告）。"
         }
-        ("read_document", _) if msg_lower.contains("not found") => {
-            "HINT: 文档 ID 不存在。请先使用 list_dir 浏览 .shuji/ 目录下的文档列表，找到正确的文档 ID。"
+        ("read_document", Some("not_found")) | ("read_document", Some("empty_id")) => {
+            "HINT: 文档 ID 不存在或格式错误。先用 list_dir 浏览 .shuji/designs，从文件名得到 ID（如 dsgn_3.md → id=\"dsgn_3\"，不要带 .md）。不要用 context/pipeline 下的 JSON 文件名。"
+        }
+        ("read_document", _) if msg_lower.contains("not found") || msg_lower.contains("does not exist") => {
+            "HINT: 文档 ID 不存在。先用 list_dir 浏览 .shuji/designs，使用返回行中的 id=\"...\" 参数调用 read_document。"
         }
         ("append_document", Some("doc_not_approved")) => {
             "HINT: 该文档引用的内容尚未通过审批。请先完成审批流程（使用 set_document_status 工具），然后再追加内容。"
@@ -301,7 +287,11 @@ fn augment_error_with_hint(name: &str, raw_result: &str, _dept: &str) -> String 
 }
 
 /// Resolve doc id from tool args or success JSON (`path` field for create_document).
-fn doc_id_from_write_result(name: &str, args: &serde_json::Value, raw_result: &str) -> Option<String> {
+fn doc_id_from_write_result(
+    name: &str,
+    args: &serde_json::Value,
+    raw_result: &str,
+) -> Option<String> {
     if name != "create_document" {
         if let Some(id) = args.get("id").and_then(|v| v.as_str()) {
             if !id.is_empty() {

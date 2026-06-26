@@ -257,6 +257,7 @@ fn run_result_routed_text_and_route() {
         msg_type: RouteMsgType::Task,
         subject: "dsgn_001".to_string(),
         payload: None,
+        doc_ids: vec![],
     };
     let result = RunResult::Routed {
         text: "已路由".to_string(),

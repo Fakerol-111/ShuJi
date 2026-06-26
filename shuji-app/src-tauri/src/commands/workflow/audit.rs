@@ -146,7 +146,7 @@ pub async fn read_document_diff(
         .map_err(|e| format!("读取 diff 失败: {}", e))
 }
 
-/// Set a document's approval status (approved/rejected).
+/// Set a document's approval status (approved only).
 #[tauri::command]
 pub async fn set_document_status(
     state: State<'_, AppState>,
@@ -154,6 +154,9 @@ pub async fn set_document_status(
     status: String,
     emperor_note: Option<String>,
 ) -> Result<String, String> {
+    if status != "approved" {
+        return Err("status must be approved".to_string());
+    }
     let working_dir = {
         let project_opt = state.current_project.lock().await;
         let p = project_opt

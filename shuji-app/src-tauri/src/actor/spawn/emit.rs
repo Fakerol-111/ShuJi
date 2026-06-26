@@ -7,7 +7,7 @@
 
 use tokio::sync::mpsc;
 
-use crate::models::chat::ChatMessage;
+use crate::models::chat::{ChatMessage, ChatOption};
 use crate::models::role::Role;
 
 use super::super::{ActorContext, DeptLogEntry};
@@ -21,17 +21,45 @@ use super::super::{ActorContext, DeptLogEntry};
 ///
 /// 空内容直接返回（不 emit 空白消息）。
 pub(super) fn emit_to_emperor(tx: &mpsc::Sender<ChatMessage>, role: Role, content: &str) {
+    emit_to_emperor_with_options(tx, role, content, &[]);
+}
+
+/// 将 agent 输出 emit 到皇帝的前端面板，优先使用 `request_decision` 工具选项。
+pub(super) fn emit_to_emperor_with_options(
+    tx: &mpsc::Sender<ChatMessage>,
+    role: Role,
+    content: &str,
+    decision_options: &[String],
+) {
     let role_name = role.name();
     let trimmed = content.trim();
     if trimmed.is_empty() {
         return;
     }
-    let (clean_content, options) = parse_options(trimmed);
+    let (clean_content, options) = if !decision_options.is_empty() {
+        (
+            trimmed.to_string(),
+            build_decision_options(decision_options),
+        )
+    } else {
+        parse_options(trimmed)
+    };
     let mut msg = ChatMessage::new(role_name, &clean_content);
     msg.options = options;
     if let Err(e) = tx.try_send(msg) {
         log_console!("[actor] emperor_tx.try_send failed ({}): {}", role_name, e);
     }
+}
+
+/// 将 `request_decision` 工具的选项数组转为前端按钮。
+pub(super) fn build_decision_options(opts: &[String]) -> Vec<ChatOption> {
+    opts.iter()
+        .map(|s| ChatOption {
+            key: s.clone(),
+            label: s.clone(),
+            description: String::new(),
+        })
+        .collect()
 }
 
 /// 从内容中提取 `<options>` 块，返回（干净内容, 选项列表）。
@@ -48,41 +76,46 @@ pub(super) fn emit_to_emperor(tx: &mpsc::Sender<ChatMessage>, role: Role, conten
 /// 1. 找到 `<options>` / `</options>` 配对位置
 /// 2. 在块内逐个查找 `<option ... />` 标签
 /// 3. 提取每个标签的 key/label/description 属性
-/// 4. 从原始内容中移除整个 options 块
-pub(super) fn parse_options(content: &str) -> (String, Vec<crate::models::chat::ChatOption>) {
+/// 4. 仅当解析出有效 option 时才从原始内容中移除 options 块
+pub(super) fn parse_options(content: &str) -> (String, Vec<ChatOption>) {
     let mut options = Vec::new();
     // 找到 <options> ... </options> 块
     if let Some(start) = content.find("<options>") {
         if let Some(end) = content.find("</options>") {
             let block = &content[start..end + "</options>".len()];
-            // 逐项提取 <option key="X" label="Y" description="Z" />
+            // 逐项提取 <option ... /> 或 <option ...>
             let mut pos = 0;
             while let Some(opt_start) = block[pos..].find("<option ") {
                 let abs_start = pos + opt_start;
-                if let Some(opt_end) = block[abs_start..].find("/>") {
-                    let tag = &block[abs_start..abs_start + opt_end + 2];
+                let tag_end = block[abs_start..]
+                    .find("/>")
+                    .map(|i| abs_start + i + 2)
+                    .or_else(|| block[abs_start..].find('>').map(|i| abs_start + i + 1));
+                if let Some(end_pos) = tag_end {
+                    let tag = &block[abs_start..end_pos];
                     let key = extract_attr(tag, "key").unwrap_or_default();
                     let label = extract_attr(tag, "label").unwrap_or_default();
                     let desc = extract_attr(tag, "description").unwrap_or_default();
                     if !key.is_empty() {
-                        options.push(crate::models::chat::ChatOption {
+                        options.push(ChatOption {
                             key,
                             label,
                             description: desc,
                         });
                     }
-                    pos = abs_start + opt_end + 2;
+                    pos = end_pos;
                 } else {
                     break;
                 }
             }
-            // 从内容中移除整个 options 块
-            let clean = format!(
-                "{}{}",
-                content[..start].trim(),
-                content[end + "</options>".len()..].trim()
-            );
-            return (clean, options);
+            if !options.is_empty() {
+                let clean = format!(
+                    "{}{}",
+                    content[..start].trim(),
+                    content[end + "</options>".len()..].trim()
+                );
+                return (clean, options);
+            }
         }
     }
     (content.to_string(), options)
@@ -94,13 +127,15 @@ pub(super) fn parse_options(content: &str) -> (String, Vec<crate::models::chat::
 /// tag = `<option key="approve" label="批准" />`
 /// 返回 `Some("approve")`
 ///
-/// 查找模式 `{attr}="` → 定位值起点 → 查找下一个 `"` 定位终点 → 返回中间字符串。
+/// 查找模式 `{attr}="` 或 `{attr}='` → 定位值起点 → 查找下一个引号定位终点。
 fn extract_attr(tag: &str, attr: &str) -> Option<String> {
-    let pattern = format!("{}=\"", attr);
-    if let Some(val_start) = tag.find(&pattern) {
-        let val_begin = val_start + pattern.len();
-        if let Some(val_end) = tag[val_begin..].find('\"') {
-            return Some(tag[val_begin..val_begin + val_end].to_string());
+    for quote in ['\"', '\''] {
+        let pattern = format!("{attr}={quote}");
+        if let Some(val_start) = tag.find(&pattern) {
+            let val_begin = val_start + pattern.len();
+            if let Some(val_end) = tag[val_begin..].find(quote) {
+                return Some(tag[val_begin..val_begin + val_end].to_string());
+            }
         }
     }
     None
@@ -113,5 +148,52 @@ fn extract_attr(tag: &str, attr: &str) -> Option<String> {
 pub(in crate::actor) fn log_dept(ctx: &ActorContext, dept: &str, action: &str) {
     if let Err(e) = ctx.dept_log_tx.try_send(DeptLogEntry::new(dept, action)) {
         log_console!("[actor] dept_log_tx.try_send failed ({}): {}", dept, e);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_decision_options_uses_full_text_as_key_and_label() {
+        let opts = build_decision_options(&["选项A".into(), "选项B".into()]);
+        assert_eq!(opts.len(), 2);
+        assert_eq!(opts[0].key, "选项A");
+        assert_eq!(opts[0].label, "选项A");
+        assert_eq!(opts[1].key, "选项B");
+    }
+
+    #[test]
+    fn parse_options_invalid_block_preserves_content() {
+        let content = "请选择:\n<options>\n无效内容\n</options>";
+        let (clean, options) = parse_options(content);
+        assert!(options.is_empty());
+        assert_eq!(clean, content);
+    }
+
+    #[test]
+    fn parse_options_valid_xml_still_works() {
+        let content = r#"摘要
+<options>
+<option key="approve" label="批准" description="通过"/>
+<option key="reject" label="驳回" />
+</options>
+尾部"#;
+        let (clean, options) = parse_options(content);
+        assert_eq!(options.len(), 2);
+        assert_eq!(options[0].key, "approve");
+        assert_eq!(options[1].label, "驳回");
+        assert!(!clean.contains("<options>"));
+        assert!(clean.contains("摘要"));
+    }
+
+    #[test]
+    fn parse_options_supports_single_quotes() {
+        let content = r#"<options><option key='go' label='继续' /></options>"#;
+        let (_, options) = parse_options(content);
+        assert_eq!(options.len(), 1);
+        assert_eq!(options[0].key, "go");
+        assert_eq!(options[0].label, "继续");
     }
 }

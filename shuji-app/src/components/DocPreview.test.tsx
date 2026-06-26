@@ -26,8 +26,8 @@ const mockedApi = vi.mocked(api);
 
 function shujiDoc(status: string = 'draft') {
   return {
-    content: `---\nid: doc-001\ntype: plan\nauthor: 工部尚书\ntimestamp: 2026-01-01\nstatus: ${status}\n---\n\n## 实施计划\n\n第一阶段完成。`,
-    path: '.shuji/doc-001.md',
+    content: `---\nid: doc-001\ntype: revw\nauthor: 门下侍中\ntimestamp: 2026-01-01\nstatus: ${status}\n---\n\n## 审查报告\n\n审查结论：建议准奏。`,
+    path: '.shuji/reviews/doc-001.md',
   };
 }
 
@@ -43,8 +43,8 @@ describe('DocPreview', () => {
     });
     mockedApi.getDocumentLineage.mockResolvedValue({
       id: 'doc-001',
-      doc_type: 'plan',
-      author: '工部尚书',
+      doc_type: 'revw',
+      author: '门下侍中',
       timestamp: '2026-01-01T00:00:00Z',
       status: 'approved',
       refs: [],
@@ -55,7 +55,7 @@ describe('DocPreview', () => {
   it('renders loading state initially', () => {
     // Keep the promise pending
     mockedApi.readShujiDoc.mockReturnValue(new Promise(() => {}));
-    render(<DocPreview projectDir="/test" docPath=".shuji/doc-001.md" />);
+    render(<DocPreview projectDir="/test" docPath=".shuji/reviews/doc-001.md" />);
     expect(screen.getByText('开卷中…')).toBeTruthy();
   });
 
@@ -68,24 +68,24 @@ describe('DocPreview', () => {
   });
 
   it('renders document content after loading', async () => {
-    render(<DocPreview projectDir="/test" docPath=".shuji/doc-001.md" />);
+    render(<DocPreview projectDir="/test" docPath=".shuji/reviews/doc-001.md" />);
     await waitFor(() => {
-      expect(screen.getByText(/实施计划/)).toBeTruthy();
+      expect(screen.getByText(/审查报告/)).toBeTruthy();
     });
   });
 
   it('shows 待陛下朱批 banner for in_review documents', async () => {
     mockedApi.readShujiDoc.mockResolvedValue(shujiDoc('in_review'));
-    render(<DocPreview projectDir="/test" docPath=".shuji/doc-001.md" />);
+    render(<DocPreview projectDir="/test" docPath=".shuji/reviews/doc-001.md" />);
     await waitFor(() => {
       expect(screen.getByText('待陛下朱批')).toBeTruthy();
       expect(screen.getByText('准奏')).toBeTruthy();
-      expect(screen.getByText('封还')).toBeTruthy();
+      expect(screen.queryByText('封还')).toBeFalsy();
     });
   });
 
   it('hides 朱批 banner for non-review documents', async () => {
-    render(<DocPreview projectDir="/test" docPath=".shuji/doc-001.md" />);
+    render(<DocPreview projectDir="/test" docPath=".shuji/reviews/doc-001.md" />);
     await waitFor(() => {
       expect(screen.queryByText('待陛下朱批')).toBeFalsy();
     });
@@ -97,26 +97,12 @@ describe('DocPreview', () => {
     mockedApi.sendMessage.mockResolvedValue('ok');
     const user = userEvent.setup();
 
-    render(<DocPreview projectDir="/test" docPath=".shuji/doc-001.md" />);
+    render(<DocPreview projectDir="/test" docPath=".shuji/reviews/doc-001.md" />);
     await waitFor(() => {
       expect(screen.getByText('准奏')).toBeTruthy();
     });
     await user.click(screen.getByText('准奏'));
     expect(mockedApi.setDocumentStatus).toHaveBeenCalledWith('doc-001', 'approved', undefined);
-  });
-
-  it('calls setDocumentStatus with rejected when 封还 clicked', async () => {
-    mockedApi.readShujiDoc.mockResolvedValue(shujiDoc('in_review'));
-    mockedApi.setDocumentStatus.mockResolvedValue('ok');
-    mockedApi.sendMessage.mockResolvedValue('ok');
-    const user = userEvent.setup();
-
-    render(<DocPreview projectDir="/test" docPath=".shuji/doc-001.md" />);
-    await waitFor(() => {
-      expect(screen.getByText('封还')).toBeTruthy();
-    });
-    await user.click(screen.getByText('封还'));
-    expect(mockedApi.setDocumentStatus).toHaveBeenCalledWith('doc-001', 'rejected', undefined);
   });
 
   it('sends 御批 message after approval', async () => {
@@ -125,7 +111,7 @@ describe('DocPreview', () => {
     mockedApi.sendMessage.mockResolvedValue('ok');
     const user = userEvent.setup();
 
-    render(<DocPreview projectDir="/test" docPath=".shuji/doc-001.md" />);
+    render(<DocPreview projectDir="/test" docPath=".shuji/reviews/doc-001.md" />);
     await waitFor(() => {
       expect(screen.getByText('准奏')).toBeTruthy();
     });
@@ -137,7 +123,7 @@ describe('DocPreview', () => {
   });
 
   it('renders diff tab when has_previous is true', async () => {
-    render(<DocPreview projectDir="/test" docPath=".shuji/doc-001.md" />);
+    render(<DocPreview projectDir="/test" docPath=".shuji/reviews/doc-001.md" />);
     await waitFor(() => {
       expect(screen.getByText('差异')).toBeTruthy();
       expect(screen.getByText('+1/-1')).toBeTruthy();
@@ -145,7 +131,7 @@ describe('DocPreview', () => {
   });
 
   it('renders lineage tab for .shuji markdown files', async () => {
-    render(<DocPreview projectDir="/test" docPath=".shuji/doc-001.md" />);
+    render(<DocPreview projectDir="/test" docPath=".shuji/reviews/doc-001.md" />);
     await waitFor(() => {
       expect(screen.getByText('血缘')).toBeTruthy();
     });
@@ -159,13 +145,12 @@ describe('DocPreview', () => {
     });
   });
 
-  it('shows rejection reason dropdown options', async () => {
+  it('does not show rejection template dropdown', async () => {
     mockedApi.readShujiDoc.mockResolvedValue(shujiDoc('in_review'));
-    render(<DocPreview projectDir="/test" docPath=".shuji/doc-001.md" />);
+    render(<DocPreview projectDir="/test" docPath=".shuji/reviews/doc-001.md" />);
     await waitFor(() => {
-      expect(screen.getByText('驳回模板')).toBeTruthy();
+      expect(screen.getByText('准奏')).toBeTruthy();
     });
-    const select = screen.getByText('驳回模板').closest('select') as HTMLSelectElement;
-    expect(select).toBeTruthy();
+    expect(screen.queryByText('驳回模板')).toBeFalsy();
   });
 });

@@ -404,21 +404,28 @@ impl AgentController {
                                     tc.args["type"].as_str().unwrap_or("task"),
                                 )
                                 .unwrap_or(RouteMsgType::Task);
-                                let subject = tc.args["subject"].as_str().unwrap_or("").to_string();
+                                let subject_raw =
+                                    tc.args["subject"].as_str().unwrap_or("").to_string();
                                 let payload = tc
                                     .args
                                     .get("inline")
                                     .and_then(|v| v.as_str())
                                     .filter(|s| !s.is_empty())
                                     .map(|s| s.to_string());
+                                let (task_subject, doc_ids) =
+                                    crate::pipeline::artifacts::split_route_task_and_doc_ids(
+                                        &subject_raw,
+                                        payload.as_deref(),
+                                    );
                                 let route = RouteTo {
                                     target,
                                     msg_type,
-                                    subject,
+                                    subject: task_subject,
                                     payload,
+                                    doc_ids,
                                 };
                                 let summary = format!(
-                                    "Routed to {} ({}): {}",
+                                    "Routed to {} ({}): {}{}",
                                     target.name(),
                                     match msg_type {
                                         RouteMsgType::Task => "new task",
@@ -426,6 +433,11 @@ impl AgentController {
                                         RouteMsgType::Interrupt => "interrupt",
                                     },
                                     route.subject,
+                                    if route.doc_ids.is_empty() {
+                                        String::new()
+                                    } else {
+                                        format!(" [docs: {}]", route.doc_ids.join(", "))
+                                    },
                                 );
                                 let out = if last_text.is_empty() {
                                     summary
@@ -686,18 +698,25 @@ impl AgentController {
                                     tc.args["type"].as_str().unwrap_or("task"),
                                 )
                                 .unwrap_or(RouteMsgType::Task);
-                                let subject = tc.args["subject"].as_str().unwrap_or("").to_string();
+                                let subject_raw =
+                                    tc.args["subject"].as_str().unwrap_or("").to_string();
                                 let payload = tc
                                     .args
                                     .get("inline")
                                     .and_then(|v| v.as_str())
                                     .filter(|s| !s.is_empty())
                                     .map(|s| s.to_string());
+                                let (task_subject, doc_ids) =
+                                    crate::pipeline::artifacts::split_route_task_and_doc_ids(
+                                        &subject_raw,
+                                        payload.as_deref(),
+                                    );
                                 let route = RouteTo {
                                     target,
                                     msg_type,
-                                    subject,
+                                    subject: task_subject,
                                     payload,
+                                    doc_ids,
                                 };
                                 log_console!(
                                     "[control] max-iter wrap-up: routed to {} ({})",

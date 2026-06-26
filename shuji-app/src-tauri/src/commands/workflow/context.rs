@@ -19,7 +19,7 @@ pub async fn get_context_stats(
         Some(d) => d.clone(),
         None => return Ok(HashMap::new()),
     };
-    let config = &state.runtime_config;
+    let config = state.runtime_config.read().unwrap().clone();
 
     let role_overrides: HashMap<String, crate::config::RoleContextConfig> = {
         let path = std::path::Path::new(&dir).join("context_config.json");
@@ -154,6 +154,8 @@ async fn compact_impl(
 
     let thresholds = state
         .runtime_config
+        .read()
+        .unwrap()
         .resolve_compact_thresholds(role, role_overrides.get(role));
 
     let total_tokens = crate::api::token_count::count_messages_tokens(&ctx.context_messages);

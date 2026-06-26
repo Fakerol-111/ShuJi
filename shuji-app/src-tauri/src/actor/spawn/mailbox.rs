@@ -29,11 +29,11 @@ pub(super) struct ActorRunState {
 
 /// 一条 Task 消息解析后的执行载荷。
 pub(super) struct TaskPayload {
-    /// 实际要执行的任务内容。
-    /// 如果是 Replace 消息，此字段为替换后的内容。
+    /// 实际要执行的任务内容（不含文档 ID）。
     pub content: String,
+    /// 上游传入的文档 ID，注入 context 而非任务正文。
+    pub doc_ids: Vec<String>,
     /// Pipeline 引擎等待结果的回执通道（可选）。
-    /// 仅当 pipeline engine 等待 actor 输出时存在。
     pub reply_to: Option<mpsc::UnboundedSender<String>>,
 }
 
@@ -126,6 +126,7 @@ pub(super) async fn dispatch_mailbox_message(
 
     MailboxOutcome::Run(TaskPayload {
         content,
+        doc_ids: msg.doc_ids.clone(),
         reply_to: msg.reply_to,
     })
 }

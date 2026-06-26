@@ -3,6 +3,7 @@
 //! 内阁 outputs a JSON plan → PipelineEngine executes it mechanically.
 //! Departments run without `route_to` — the engine handles all routing.
 
+pub mod artifacts;
 pub mod engine;
 pub mod handlers;
 pub mod schema;

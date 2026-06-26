@@ -348,6 +348,7 @@ async fn test_cancel_flag_stops_agent_execution() {
     let input = AgentInput {
         role: Role::GongbuShangshu,
         task_description: "创建一个测试文件".into(),
+        upstream_doc_ids: vec![],
         context_messages: vec![],
         project_dir: working_dir.clone(),
         working_dir: working_dir.clone(),
@@ -453,6 +454,7 @@ async fn test_route_to_cross_actor() {
     let input = AgentInput {
         role: Role::Neige,
         task_description: "创建一个新功能".into(),
+        upstream_doc_ids: vec![],
         context_messages: vec![],
         project_dir: working_dir.clone(),
         working_dir: working_dir.clone(),
@@ -492,6 +494,7 @@ async fn test_route_to_cross_actor() {
         let gongbu_input = AgentInput {
             role: Role::GongbuShangshu,
             task_description: format!("执行路由任务: {}", route.subject),
+            upstream_doc_ids: route.doc_ids.clone(),
             context_messages: vec![Message::user(&route.subject)],
             project_dir: working_dir.clone(),
             working_dir,

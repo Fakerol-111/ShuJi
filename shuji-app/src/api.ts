@@ -20,6 +20,7 @@ import type {
   WorkflowConfig,
   WorkflowState,
   WorkflowGraph,
+  ApprovalConfig,
   PricingConfig,
   PricingEntry,
   ModelPrices,
@@ -195,6 +196,18 @@ export async function setModelPreset(preset: string): Promise<void> {
   return invoke('set_model_preset', { preset });
 }
 
+// ── Approval mode ─────────────────────────────────────────
+
+export type { ApprovalConfig, ApprovalMode } from './types';
+
+export async function getApprovalConfig(): Promise<ApprovalConfig> {
+  return invoke('get_approval_config');
+}
+
+export async function setApprovalConfig(config: ApprovalConfig): Promise<void> {
+  return invoke('set_approval_config', { config });
+}
+
 // ── Pending approvals ─────────────────────────────────────
 
 export async function getPendingApprovals(): Promise<string[]> {
@@ -268,7 +281,7 @@ export async function loadWorkflowArchive(filename: string): Promise<WorkflowGra
 
 export async function setDocumentStatus(
   id: string,
-  status: 'approved' | 'rejected',
+  status: 'approved',
   emperorNote?: string
 ): Promise<string> {
   return invoke('set_document_status', { id, status, emperorNote });

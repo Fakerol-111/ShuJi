@@ -1,0 +1,13 @@
+{
+  "name": "shuji",
+  "private": true,
+  "scripts": {
+    "prepare": "husky",
+    "format": "npm run format --prefix shuji-app && cargo fmt --manifest-path shuji-app/src-tauri/Cargo.toml",
+    "format:check": "npm run format:check --prefix shuji-app && cargo fmt --manifest-path shuji-app/src-tauri/Cargo.toml --check"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.0"
+  }
+}

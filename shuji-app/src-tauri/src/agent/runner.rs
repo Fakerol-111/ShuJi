@@ -11,6 +11,7 @@ use crate::api::compact::compact_and_save;
 use crate::api::control::{CheckpointFn, CompactFn};
 use crate::api::session::{PersistedContext, Session, SessionSnapshot};
 use crate::config::{CompactThresholds, RuntimeConfig};
+use crate::models::message::Message;
 
 /// Build a mid-run compaction handler (shared by all agents).
 ///
@@ -115,6 +116,22 @@ pub async fn load_and_compact_context(
     } else {
         false
     }
+}
+
+/// Inject upstream document IDs as a system context message (not part of the user task).
+pub fn inject_upstream_doc_context(msgs: &mut Vec<Message>, doc_ids: &[String]) {
+    if doc_ids.is_empty() {
+        return;
+    }
+    let listing = doc_ids
+        .iter()
+        .enumerate()
+        .map(|(i, id)| format!("{}. {id}", i + 1))
+        .collect::<Vec<_>>()
+        .join("\n");
+    msgs.push(Message::system(&format!(
+        "[上游文档]\n{listing}\n请使用 read_document(id=\"...\") 读取以上文档（将 ... 替换为对应 ID）。"
+    )));
 }
 
 /// Save the current session state as persisted context.

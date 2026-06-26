@@ -1079,7 +1079,13 @@ pub async fn query_documents(working_dir: &Path, filter: &DocQuery) -> Vec<DocSu
                 }
             }
 
-            let preview = body.lines().next().unwrap_or("").chars().take(120).collect();
+            let preview = body
+                .lines()
+                .next()
+                .unwrap_or("")
+                .chars()
+                .take(120)
+                .collect();
             results.push(DocSummary {
                 id: meta.id.clone(),
                 doc_type: meta.doc_type,
@@ -1096,9 +1102,5 @@ pub async fn query_documents(working_dir: &Path, filter: &DocQuery) -> Vec<DocSu
 
     let offset = filter.offset.unwrap_or(0);
     let limit = filter.limit.unwrap_or(100);
-    results
-        .into_iter()
-        .skip(offset)
-        .take(limit)
-        .collect()
+    results.into_iter().skip(offset).take(limit).collect()
 }

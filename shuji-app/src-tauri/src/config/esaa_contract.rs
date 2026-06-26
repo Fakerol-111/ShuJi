@@ -42,7 +42,7 @@ impl AgentContracts {
 
     /// Get contract for a role, supporting both Chinese and English role names.
     pub fn for_role(&self, role: &str) -> Option<&RoleContract> {
-        let role_key = match role {
+        let role_key = match role.to_lowercase().as_str() {
             "工部" | "gongbushangshu" => "gongbushangshu",
             "刑部" | "xingbushangshu" => "xingbushangshu",
             "内阁" | "neige" => "neige",
@@ -336,6 +336,23 @@ roles:
         assert!(!contract.is_path_allowed("config.toml"));
         assert!(!contract.is_route_allowed("内阁"));
         assert!(contract.is_route_allowed("礼部"));
+    }
+
+    #[test]
+    fn test_for_role_pascal_case() {
+        let dir = tempfile::tempdir().unwrap();
+        create_contract_yaml(
+            dir.path(),
+            r#"
+roles:
+  gongbushangshu:
+    allowed_tools:
+      - create_file
+"#,
+        );
+        let contracts = AgentContracts::load(&dir.path().join(".shuji"));
+        assert!(contracts.for_role("Gongbushangshu").is_some());
+        assert!(contracts.for_role("GONGBUSHANGSHU").is_some());
     }
 
     #[test]

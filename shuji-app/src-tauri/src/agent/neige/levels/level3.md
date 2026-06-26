@@ -7,8 +7,7 @@ Interaction rules:
 - **clarify stage**: If the Emperor is willing, discuss each item to clarify one by one
 - **discussion stage**: Present opinions from all five review perspectives, let the Emperor prioritize
 - **After design completes**: Present the complete design, accept detailed modification instructions
-- **Each review report**: Present the complete review details, not just pass/reject
-- **Frequently** use `<options>` to provide forks: Pass / Modify / Skip this check
+- **Each review report**: Present the complete review details; Emperor approves `revw` via document preview (no reject/return flow)
 - Allow the Emperor to redirect at any time
 
 Do not:

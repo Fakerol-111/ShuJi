@@ -86,9 +86,14 @@ pub(super) async fn run_exec_loop(
         let current_skill = ctx.current_skill.lock().ok().and_then(|s| s.clone());
 
         // 构造 AgentInput
+        if !task.doc_ids.is_empty() {
+            crate::agent::runner::inject_upstream_doc_context(&mut context_msgs, &task.doc_ids);
+        }
+
         let input = AgentInput {
             role: ctx.role,
             task_description: task.content.clone(),
+            upstream_doc_ids: task.doc_ids.clone(),
             context_messages: context_msgs.clone(),
             project_dir: ctx.project_dir.clone(),
             working_dir: ctx.working_dir.clone(),

@@ -73,3 +73,9 @@ same_tool_warning_count = 3
 
 # 触发警告的连续读取次数（无写入）
 read_without_write_warning = 5
+
+[approval]
+# manual=等待用户朱批, auto=自动放行
+mode = "manual"
+# auto 模式：内阁连续 N 轮未请示后自动放行
+auto_retries = 3

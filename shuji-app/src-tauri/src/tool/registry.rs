@@ -295,7 +295,7 @@ pub fn submit_pipeline_plan_tool() -> ToolDefinition {
                 "properties": {
                     "plan_json": {
                         "type": "string",
-                        "description": "Complete JSON plan string. Format: {\"plan_id\":\"plan-YYYYMMDD-NNN\",\"summary\":\"...\",\"estimated_complexity\":\"low|medium|high\",\"steps\":[...]}"
+                        "description": "Complete JSON plan. route_to steps: {target, task} only — no doc IDs in plan. Engine captures each step's output document ID and passes it to downstream steps (via depends_on) as separate agent context."
                     }
                 },
                 "required": ["plan_json"]

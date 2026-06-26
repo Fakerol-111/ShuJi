@@ -12,7 +12,7 @@ After the paragraph, append a single JSON line with the current state machine fi
 
 ```
 [对话摘要] User requested user registration and login. Workflow_standard selected. Chief Architect completed overall design, Gate Reviewer completed review. Chief Architect produced dsgn_003, Gate Reviewer produced revw_005, awaiting emperor approval.
-{"pending_approval":"plan_12","skill":"workflow_standard","blocker":"Gate Reviewer"}
+{"pending_approval":"revw_12","skill":"workflow_standard","blocker":"Gate Reviewer"}
 ```
 
 JSON fields:

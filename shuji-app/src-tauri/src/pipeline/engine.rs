@@ -7,10 +7,14 @@ use std::sync::{Arc, Mutex};
 
 use crate::actor::ActorMessage;
 use crate::api::control::RouteMsgType;
+use crate::config::{ApprovalMode, RuntimeConfig};
 use crate::models::role::Role;
 use crate::workflow::WorkflowGraph;
 use tokio::sync::mpsc;
 
+use super::artifacts::{
+    approval_doc_from_upstream, collect_upstream_doc_ids, extract_artifact_from_output,
+};
 use super::{PipelinePlan, PipelineResult, PlanRuntime, PlanStep, StepStatus};
 
 // ── Internal step result (not yet converted to PipelineResult) ──
@@ -52,6 +56,8 @@ pub struct PipelineEngine {
     graph_last_role: String,
     /// Run metrics for observability.
     pub run_metrics: Option<crate::metrics::RunMetrics>,
+    /// Runtime configuration (approval mode, etc.)
+    runtime_config: Arc<RuntimeConfig>,
 }
 
 impl PipelineEngine {
@@ -64,6 +70,7 @@ impl PipelineEngine {
         cancel: Arc<AtomicBool>,
         project_dir: PathBuf,
         workflow_graph: Option<Arc<tokio::sync::Mutex<WorkflowGraph>>>,
+        runtime_config: Arc<RuntimeConfig>,
     ) -> Self {
         Self {
             runtime: PlanRuntime::new(plan),
@@ -75,6 +82,7 @@ impl PipelineEngine {
             workflow_graph,
             graph_last_role: "内阁".to_string(),
             run_metrics: None,
+            runtime_config,
         }
     }
 
@@ -89,6 +97,7 @@ impl PipelineEngine {
         runtime: PlanRuntime,
         actor_txs: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
         project_dir: PathBuf,
+        runtime_config: Arc<RuntimeConfig>,
     ) -> Self {
         Self {
             runtime,
@@ -103,6 +112,7 @@ impl PipelineEngine {
             workflow_graph: None,
             graph_last_role: "内阁".to_string(),
             run_metrics: None,
+            runtime_config,
         }
     }
 
@@ -152,13 +162,55 @@ impl PipelineEngine {
         // Get the current step that was waiting
         let current = self.runtime.current_step.clone();
         let current = match current {
-            Some(ref id) => {
-                // Mark it as Done so find_executable_step can proceed
-                self.set_status(id, StepStatus::Done);
-                id.clone()
-            }
+            Some(ref id) => id.clone(),
             None => return self.run().await, // No pending step, just continue
         };
+
+        // approval_gate: in manual mode, verify document is actually approved before proceeding
+        if self.runtime_config.approval.mode == ApprovalMode::Manual {
+            if let Some(step) = self
+                .runtime
+                .plan
+                .steps
+                .iter()
+                .find(|s| s.step_id == current)
+            {
+                if step.action == "approval_gate" {
+                    let doc_id =
+                        approval_doc_from_upstream(&self.runtime.artifacts, &step.depends_on);
+                    let Some(doc_id) = doc_id.filter(|id| !id.is_empty()) else {
+                        log_console!(
+                            "[pipeline] approval_gate failed: no upstream revw document artifact"
+                        );
+                        return PipelineResult::StepFailed {
+                            step_id: current,
+                            reason:
+                                "approval_gate requires an upstream revw document, but none was found."
+                                    .into(),
+                            runtime: self.runtime.clone(),
+                        };
+                    };
+                    let status =
+                        crate::tool::documents::get_document_status(&self.project_dir, &doc_id)
+                            .await;
+                    if status.as_deref() != Some("approved") {
+                        log_console!(
+                            "[pipeline] approval_gate blocked: doc {} status={:?}",
+                            doc_id,
+                            status
+                        );
+                        return PipelineResult::AwaitingApproval {
+                            doc_id,
+                            step_id: current,
+                            runtime: self.runtime.clone(),
+                        };
+                    }
+                }
+            }
+        }
+
+        // Mark current step Done so find_executable_step can proceed
+        self.set_status(&current, StepStatus::Done);
 
         // Record user input as artifact if provided
         if let Some(input) = user_input {
@@ -176,6 +228,7 @@ impl PipelineEngine {
     pub async fn load_from_disk(
         project_dir: &std::path::Path,
         actor_system: &crate::actor::ActorSystem,
+        runtime_config: Arc<RuntimeConfig>,
     ) -> Option<Self> {
         let runtime = PlanRuntime::load_from(project_dir).await?;
         Some(Self {
@@ -188,6 +241,7 @@ impl PipelineEngine {
             workflow_graph: Some(actor_system.workflow_graph.clone()),
             graph_last_role: "内阁".to_string(),
             run_metrics: None,
+            runtime_config,
         })
     }
 
@@ -389,13 +443,15 @@ impl PipelineEngine {
                 }
             }
             "approval_gate" => {
-                let doc_id = step
-                    .action_params
-                    .get("doc_id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("unknown")
-                    .to_string();
-                StepResultInner::ApprovalRequired { doc_id }
+                let doc_id = approval_doc_from_upstream(&self.runtime.artifacts, &step.depends_on);
+                match doc_id.filter(|id| !id.is_empty()) {
+                    Some(id) => StepResultInner::ApprovalRequired { doc_id: id },
+                    None => StepResultInner::Failed {
+                        reason:
+                            "approval_gate requires an upstream revw document, but none was found."
+                                .into(),
+                    },
+                }
             }
             "route_to" => self.execute_route_to_step(step).await,
             "parallel" => {
@@ -521,6 +577,33 @@ impl PipelineEngine {
             }
         };
 
+        // 从 depends_on 对应的上游步骤 artifact 收集文档 ID（plan 不含 id）
+        let upstream_doc_ids = collect_upstream_doc_ids(&self.runtime.artifacts, &step.depends_on);
+
+        // Manual mode: gate route_to to execution departments when refs are not approved
+        const EXEC_DEPTS: [&str; 6] = ["尚书令", "吏部", "兵部", "工部", "刑部", "礼部"];
+        if self.runtime_config.approval.mode == ApprovalMode::Manual && EXEC_DEPTS.contains(&target)
+        {
+            if let Some(subject) = upstream_doc_ids.first() {
+                if let Err(msg) = crate::tool::documents::check_doc_refs_approved_for_route(
+                    &self.project_dir,
+                    subject,
+                )
+                .await
+                {
+                    log_console!(
+                        "[pipeline] route_to blocked at step {} → {}: {}",
+                        step.step_id,
+                        target,
+                        msg
+                    );
+                    return StepResultInner::ApprovalRequired {
+                        doc_id: subject.to_string(),
+                    };
+                }
+            }
+        }
+
         // Create a reply channel so the actor can send output back
         let (output_tx, mut output_rx) = mpsc::unbounded_channel::<String>();
 
@@ -528,6 +611,7 @@ impl PipelineEngine {
             msg_type: RouteMsgType::Task,
             subject: task.to_string(),
             payload: None,
+            doc_ids: upstream_doc_ids.clone(),
             reply_to: Some(output_tx),
         };
 
@@ -540,11 +624,19 @@ impl PipelineEngine {
             }
         };
 
+        if !upstream_doc_ids.is_empty() {
+            log_console!(
+                "[pipeline] step {} upstream doc_ids: {}",
+                step.step_id,
+                upstream_doc_ids.join(", ")
+            );
+        }
+
         log_console!(
             "[pipeline] routing step {} → {}: {}",
             step.step_id,
             target,
-            task.chars().take(60).collect::<String>()
+            task.chars().take(80).collect::<String>()
         );
 
         // ── 文移图：标记节点为 active（节点/边已由 preview 预创建） ──
@@ -568,8 +660,15 @@ impl PipelineEngine {
                     target,
                     &output.chars().take(80).collect::<String>()
                 );
+                let mut artifact_id = extract_artifact_from_output(&output, target);
+                if artifact_id.is_none() {
+                    artifact_id = self.infer_artifact_fallback(target).await;
+                }
+                if let Some(ref id) = artifact_id {
+                    log_console!("[pipeline] step {} artifact: {}", step.step_id, id);
+                }
                 StepResultInner::Success {
-                    artifact_id: None,
+                    artifact_id,
                     target_role: Some(target.to_string()),
                 }
             }
@@ -694,6 +793,20 @@ impl PipelineEngine {
 
     fn set_status(&mut self, step_id: &str, status: StepStatus) {
         self.runtime.step_status.insert(step_id.to_string(), status);
+    }
+
+    /// Filesystem fallback when agent output omits the document ID.
+    async fn infer_artifact_fallback(&self, target_dept: &str) -> Option<String> {
+        match Role::from_name(target_dept) {
+            Some(Role::Zhongshuling) => {
+                crate::tool::documents::find_latest_design_doc_id(&self.project_dir).await
+            }
+            Some(Role::MenxiaShizhong) => {
+                crate::tool::documents::find_latest_doc_with_prefixes(&self.project_dir, &["revw"])
+                    .await
+            }
+            _ => None,
+        }
     }
 }
 

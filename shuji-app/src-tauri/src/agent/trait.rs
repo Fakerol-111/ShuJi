@@ -31,8 +31,10 @@ pub struct AgentInput {
     /// 本次执行的任务描述（用户消息或上游部门的指令）
     pub task_description: String,
 
-    /// 上下文历史消息（不含 base prompt 和 soul prompt）,
-    /// 包含技能摘要、对话摘要和最近几轮的工具调用记录
+    /// 上游部门/ Pipeline 传入的文档 ID，注入 context 而非 task 正文
+    pub upstream_doc_ids: Vec<String>,
+
+    /// 上下文历史消息
     pub context_messages: Vec<Message>,
 
     /// 项目根目录（绝对路径），文件工具在此范围内操作
@@ -97,6 +99,9 @@ pub struct AgentOutput {
     /// 内阁调用 `submit_pipeline_plan` 时捕获的 JSON 计划字符串。
     /// PipelineEngine 消费此字段来初始化或更新 pipeline 运行时。
     pub plan_json: Option<String>,
+
+    /// 内阁 `request_decision` 工具产生的待选项（供前端渲染按钮）
+    pub decision_options: Vec<String>,
 }
 
 impl AgentOutput {
@@ -109,6 +114,7 @@ impl AgentOutput {
             skill: None,
             paused: false,
             plan_json: None,
+            decision_options: vec![],
         }
     }
 

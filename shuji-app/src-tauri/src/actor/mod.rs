@@ -124,11 +124,13 @@ pub struct ActorMessage {
     /// 消息主题/内容（任务描述或指令）
     pub subject: String,
 
-    /// 可选的额外载荷（用于 RouteTo 携带设计文档 ID 等）
+    /// 可选的额外载荷（用于 RouteTo 携带短指令等）
     pub payload: Option<String>,
 
-    /// Pipeline 引擎的回执通道：当 step 完成后，发送结果到此 channel。
-    /// 仅在 pipeline 引擎等待 actor 输出时填充。
+    /// 上游传递的文档 ID（与 task 分离，注入 agent 上下文而非任务正文）
+    pub doc_ids: Vec<String>,
+
+    /// Pipeline 引擎的回执通道
     pub reply_to: Option<mpsc::UnboundedSender<String>>,
 }
 
@@ -139,6 +141,7 @@ impl ActorMessage {
             msg_type,
             subject: subject.into(),
             payload: None,
+            doc_ids: Vec::new(),
             reply_to: None,
         }
     }
@@ -150,13 +153,9 @@ impl ActorMessage {
             msg_type: RouteMsgType::Interrupt,
             subject: String::new(),
             payload: None,
+            doc_ids: Vec::new(),
             reply_to: None,
         }
-    }
-
-    /// 获取消息主题的引用（用于 `msg.subject()` 语法）。
-    fn subject(&self) -> &str {
-        &self.subject
     }
 }
 

@@ -255,6 +255,13 @@ export interface WorkflowConfig {
   intent_override: Intent | null;
 }
 
+export type ApprovalMode = 'manual' | 'auto';
+
+export interface ApprovalConfig {
+  mode: ApprovalMode;
+  auto_retries: number;
+}
+
 // ── Workflow state (runtime) ──────────────────────────────
 
 export interface WorkflowState {

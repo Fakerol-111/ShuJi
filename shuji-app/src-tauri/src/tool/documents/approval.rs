@@ -15,10 +15,10 @@ fn hash_body(body: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-/// Scan designs/ and reviews/ for plan/revw documents with status=in_review.
+/// Scan reviews/ for revw documents with status=in_review.
 pub async fn scan_in_review_docs(working_dir: &Path) -> Vec<String> {
     let mut pending = Vec::new();
-    for dir_name in ["designs", "reviews"] {
+    for dir_name in ["reviews"] {
         let dir = working_dir.join(".shuji").join(dir_name);
         let mut entries = match tokio::fs::read_dir(&dir).await {
             Ok(rd) => rd,
@@ -103,8 +103,6 @@ pub async fn get_first_pending_approval(working_dir: &Path) -> Option<String> {
 pub async fn tool_set_document_status(working_dir: &Path, args: &serde_json::Value) -> String {
     let id = args["id"].as_str().unwrap_or("");
     let new_status = args["status"].as_str().unwrap_or("");
-    let auto = args["auto"].as_bool().unwrap_or(false);
-    let retries = args["retries"].as_u64().unwrap_or(3);
     if id.is_empty() || new_status.is_empty() {
         return ToolOutput::error(
             "set_document_status",
@@ -113,12 +111,12 @@ pub async fn tool_set_document_status(working_dir: &Path, args: &serde_json::Val
             "id and status cannot be empty",
         );
     }
-    if !matches!(new_status, "approved" | "rejected") {
+    if new_status != "approved" {
         return ToolOutput::error(
             "set_document_status",
             id,
             "invalid_status",
-            "status must be approved or rejected",
+            "status must be approved",
         );
     }
 
@@ -152,52 +150,31 @@ pub async fn tool_set_document_status(working_dir: &Path, args: &serde_json::Val
             "set_document_status",
             id,
             "wrong_type",
-            "Only plan and revw document types can have approval status set",
+            "Only revw document types can have approval status set",
         );
     }
 
     let emperor_note = args["emperor_note"].as_str().unwrap_or("");
     let ts = now_iso();
 
-    if auto {
-        let note_line = format!(
-            "[auto_approved @{}] 超时自动放行（内阁连续 {} 轮未请示）",
-            ts, retries
-        );
-        meta.notes = append_note_entry(&meta.notes, &note_line);
-    } else if !emperor_note.is_empty() {
+    if !emperor_note.is_empty() {
         let note_line = format!("朱批[{new_status} @{ts}]: {emperor_note}");
         meta.notes = append_note_entry(&meta.notes, &note_line);
     }
 
     meta.status = new_status.to_string();
     meta.timestamp = ts;
-
-    if new_status == "approved" {
-        meta.approved_hash = hash_body(body);
-    } else {
-        meta.approved_hash.clear();
-    }
+    meta.approved_hash = hash_body(body);
 
     let new_content = build_doc(&meta, body);
     match tokio::fs::write(&full, &new_content).await {
         Ok(_) => {
             let _ = remove_pending_approval(working_dir, id).await;
-            let role = if auto { "system" } else { "emperor" };
-            let detail = if auto {
-                format!(
-                    "status=approved; auto_approved=true; retries={}; hash={}",
-                    retries, meta.approved_hash
-                )
-            } else if new_status == "approved" {
-                format!(
-                    "status=approved; hash={}; note={}",
-                    meta.approved_hash, emperor_note
-                )
-            } else {
-                format!("status={new_status}; note={emperor_note}")
-            };
-            crate::audit::append(working_dir, "set_document_status", role, id, &detail).await;
+            let detail = format!(
+                "status=approved; hash={}; note={}",
+                meta.approved_hash, emperor_note
+            );
+            crate::audit::append(working_dir, "set_document_status", "emperor", id, &detail).await;
             ToolOutput::success(
                 "set_document_status",
                 id,
@@ -213,18 +190,18 @@ pub fn set_document_status_tool_def() -> crate::api::client::ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "set_document_status".into(),
-            description: "Set document approval status (approved/rejected). Only applies to plan and revw document types. After status change, downstream departments may proceed.".into(),
+            description: "Approve a review document. Only revw documents can be approved.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "id": {
                         "type": "string",
-                        "description": "Document ID, e.g. plan_5 or revw_3"
+                        "description": "Document ID, e.g. revw_3"
                     },
                     "status": {
                         "type": "string",
-                        "enum": ["approved", "rejected"],
-                        "description": "approved or rejected"
+                        "enum": ["approved"],
+                        "description": "approved"
                     },
                     "emperor_note": {
                         "type": "string",
@@ -262,15 +239,9 @@ async fn check_must_approve_status(
         .map_err(|e| e.to_string())?;
     let (ref_meta, _) = parse_doc(&content)?;
 
-    if ref_meta.status == "in_review" {
+    if ref_meta.status == "in_review" || ref_meta.status == "rejected" {
         return Err(format!(
-            "Document {} references {}, which is still awaiting emperor approval (status: in_review). Please handle the approval first.",
-            subject_doc_id, doc_id
-        ));
-    }
-    if ref_meta.status == "rejected" {
-        return Err(format!(
-            "Document {} references {}, which has been rejected (status: rejected). Please address the rejection feedback first.",
+            "Document {} references {}, which is not approved yet. Please approve the review document before proceeding.",
             subject_doc_id, doc_id
         ));
     }
@@ -278,7 +249,7 @@ async fn check_must_approve_status(
 }
 
 /// Check whether any must-approve document referenced by the given doc
-/// is still `in_review`. Returns Err if any referenced plan/revw is pending.
+/// is still pending. Returns Err if any referenced revw is not approved.
 pub async fn check_doc_refs_approved_for_route(
     working_dir: &Path,
     subject_doc_id: &str,
@@ -301,17 +272,11 @@ pub async fn check_doc_refs_approved_for_route(
         Err(_) => return Ok(()),
     };
 
-    // Subject itself must be approved if plan/revw
+    // Subject itself must be approved if revw
     if MUST_APPROVE_TYPES.contains(&meta.doc_type.as_str()) {
-        if meta.status == "in_review" {
+        if meta.status == "in_review" || meta.status == "rejected" {
             return Err(format!(
-                "Document {} is still awaiting emperor approval (status: in_review). Please handle the approval first.",
-                subject_doc_id
-            ));
-        }
-        if meta.status == "rejected" {
-            return Err(format!(
-                "Document {} has been rejected (status: rejected). Please address the rejection feedback first.",
+                "Document {} is not approved yet. Please approve the review document before proceeding.",
                 subject_doc_id
             ));
         }
@@ -337,7 +302,7 @@ pub async fn check_doc_refs_approved_for_route(
             check_must_approve_status(working_dir, &ref_id, subject_doc_id).await?;
         }
 
-        // One-level transitive: check plan/revw refs of the resolved document
+        // One-level transitive: check revw refs of the resolved document
         if let Ok(ref_path) = resolve_doc_path(working_dir, &ref_id).await {
             if let Ok(ref_content) = tokio::fs::read_to_string(&ref_path).await {
                 if let Ok((ref_meta, _)) = parse_doc(&ref_content) {
@@ -368,4 +333,16 @@ pub async fn check_doc_refs_approved_for_route(
     }
 
     Ok(())
+}
+
+/// Read the `status` field from a document's YAML frontmatter.
+/// Returns `None` if the document does not exist or cannot be parsed.
+pub async fn get_document_status(working_dir: &Path, doc_id: &str) -> Option<String> {
+    let full = resolve_doc_path(working_dir, doc_id).await.ok()?;
+    if !full.exists() {
+        return None;
+    }
+    let content = tokio::fs::read_to_string(&full).await.ok()?;
+    let (meta, _) = parse_doc(&content).ok()?;
+    Some(meta.status)
 }

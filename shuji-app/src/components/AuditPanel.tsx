@@ -430,7 +430,9 @@ export default function AuditPanel({
                     </span>
                   )}
                 </div>
-                <div className="text-caption text-ink-400 truncate mt-0.5">{doc.preview || '—'}</div>
+                <div className="text-caption text-ink-400 truncate mt-0.5">
+                  {doc.preview || '—'}
+                </div>
                 <div className="text-[9px] text-ink-300 font-mono mt-0.5">
                   {doc.author} · {doc.timestamp}
                 </div>

@@ -16,6 +16,8 @@ pub struct RuntimeConfig {
     pub checkpoint: CheckpointConfig,
     #[serde(default)]
     pub esaa: EsaaConfig,
+    #[serde(default)]
+    pub approval: ApprovalConfig,
 }
 
 /// API 相关配置
@@ -171,6 +173,44 @@ impl Default for EsaaConfig {
         Self {
             enabled: default_esaa_enabled(),
             full_intent_log: default_esaa_full_intent_log(),
+        }
+    }
+}
+
+/// 朱批审批模式配置
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ApprovalMode {
+    /// 等待用户朱批
+    Manual,
+    /// 自动放行
+    Auto,
+}
+
+/// 朱批审批配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApprovalConfig {
+    /// 审批模式：manual = 等待用户朱批；auto = 自动放行
+    #[serde(default = "default_approval_mode")]
+    pub mode: ApprovalMode,
+    /// auto 模式下，内阁连续多少轮未 request_decision 后自动放行（manual 模式忽略）
+    #[serde(default = "default_approval_auto_retries")]
+    pub auto_retries: u32,
+}
+
+fn default_approval_mode() -> ApprovalMode {
+    ApprovalMode::Manual
+}
+
+fn default_approval_auto_retries() -> u32 {
+    3
+}
+
+impl Default for ApprovalConfig {
+    fn default() -> Self {
+        Self {
+            mode: default_approval_mode(),
+            auto_retries: default_approval_auto_retries(),
         }
     }
 }
@@ -400,7 +440,13 @@ impl RuntimeConfig {
                     config.merge_from(local);
                 }
                 Err(e) => {
-                    log_console!("[config] local config parse error, ignoring: {}", e);
+                    log_console!(
+                        "[config] local config parse error, trying approval section only: {}",
+                        e
+                    );
+                    if let Some(approval) = Self::load_approval_from_local(&local_path) {
+                        config.approval = approval;
+                    }
                 }
             }
         }
@@ -498,6 +544,14 @@ impl RuntimeConfig {
         if other.checkpoint.interval_secs != default_checkpoint_interval() {
             self.checkpoint.interval_secs = other.checkpoint.interval_secs;
         }
+
+        // Approval
+        if other.approval.mode != default_approval_mode() {
+            self.approval.mode = other.approval.mode;
+        }
+        if other.approval.auto_retries != default_approval_auto_retries() {
+            self.approval.auto_retries = other.approval.auto_retries;
+        }
     }
 
     /// 保存配置到文件
@@ -510,6 +564,52 @@ impl RuntimeConfig {
     /// 获取 API 超时时间
     pub fn api_timeout(&self) -> Duration {
         Duration::from_secs(self.api.timeout_secs)
+    }
+
+    /// Resolve `config.toml` path (CWD, then parent directory).
+    pub fn config_toml_path() -> std::path::PathBuf {
+        let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let candidate = cwd.join("config.toml");
+        if candidate.exists() {
+            return candidate;
+        }
+        if let Some(parent) = cwd.parent() {
+            let parent_candidate = parent.join("config.toml");
+            if parent_candidate.exists() {
+                return parent_candidate;
+            }
+        }
+        candidate
+    }
+
+    /// Load only the `[approval]` section from `config.local.toml`.
+    pub fn load_approval_from_local(path: &Path) -> Option<ApprovalConfig> {
+        let content = std::fs::read_to_string(path).ok()?;
+        let doc: toml::Value = toml::from_str(&content).ok()?;
+        let approval = doc.get("approval")?;
+        approval.clone().try_into().ok()
+    }
+
+    /// Merge `[approval]` into `config.local.toml` (create file if missing).
+    pub fn save_approval_to_local(
+        base_config_path: &Path,
+        approval: &ApprovalConfig,
+    ) -> anyhow::Result<()> {
+        let local_path = base_config_path.with_file_name("config.local.toml");
+        let mut doc: toml::Value = if local_path.exists() {
+            let content = std::fs::read_to_string(&local_path)?;
+            toml::from_str(&content).unwrap_or(toml::Value::Table(toml::map::Map::new()))
+        } else {
+            toml::Value::Table(toml::map::Map::new())
+        };
+        if let toml::Value::Table(ref mut table) = doc {
+            table.insert(
+                "approval".to_string(),
+                toml::Value::try_from(approval.clone())?,
+            );
+        }
+        std::fs::write(&local_path, toml::to_string_pretty(&doc)?)?;
+        Ok(())
     }
 
     /// 为指定角色解析上下文压缩阈值。

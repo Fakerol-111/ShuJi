@@ -9,11 +9,14 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use shuji_app_lib::actor::ActorMessage;
+use shuji_app_lib::config::{ApprovalMode, RuntimeConfig};
 use shuji_app_lib::models::role::Role;
 use shuji_app_lib::pipeline::engine::PipelineEngine;
 use shuji_app_lib::pipeline::schema::validate_plan_json;
 use shuji_app_lib::pipeline::{PipelinePlan, PipelineResult, PlanRuntime, PlanStep, StepStatus};
 use tokio::sync::mpsc;
+
+mod common;
 
 // ── Mock Actor Harness ────────────────────────────────────────────
 
@@ -27,22 +30,33 @@ struct MockActorHarness {
 }
 
 impl MockActorHarness {
-    /// Create a harness with mock actors for the given roles.
-    fn with_roles(roles: &[Role]) -> Self {
+    /// Default mock output per role (appended doc id for artifact extraction tests).
+    fn default_output(role: Role, role_name: &str, subject: &str) -> String {
+        let doc = match role {
+            Role::Zhongshuling => " plan_1",
+            Role::MenxiaShizhong => " revw_1",
+            _ => "",
+        };
+        format!("mock {role_name} completed: {subject}{doc}")
+    }
+
+    fn with_roles_and_outputs(roles: &[Role], outputs: HashMap<Role, String>) -> Self {
         let mut senders = HashMap::new();
         let mut handles = Vec::new();
 
         for role in roles {
             let (tx, mut rx) = mpsc::unbounded_channel::<ActorMessage>();
             senders.insert(*role, tx);
-
-            // Spawn a mock actor that replies immediately
+            let role_copy = *role;
             let role_name = role.name().to_string();
+            let fixed = outputs.get(role).cloned();
             let handle = tokio::spawn(async move {
                 while let Some(msg) = rx.recv().await {
                     if let Some(reply) = msg.reply_to {
-                        let _ =
-                            reply.send(format!("mock {} completed: {}", role_name, msg.subject));
+                        let body = fixed.clone().unwrap_or_else(|| {
+                            Self::default_output(role_copy, &role_name, &msg.subject)
+                        });
+                        let _ = reply.send(body);
                     }
                 }
             });
@@ -53,6 +67,11 @@ impl MockActorHarness {
             senders,
             _handles: handles,
         }
+    }
+
+    /// Create a harness with mock actors for the given roles.
+    fn with_roles(roles: &[Role]) -> Self {
+        Self::with_roles_and_outputs(roles, HashMap::new())
     }
 
     /// Create a harness with all standard pipeline roles.
@@ -74,6 +93,15 @@ impl MockActorHarness {
 // ── Test Helpers ──────────────────────────────────────────────────
 
 fn make_engine(plan: PipelinePlan, harness: &MockActorHarness, dir: &Path) -> PipelineEngine {
+    make_engine_with_config(plan, harness, dir, Arc::new(RuntimeConfig::default()))
+}
+
+fn make_engine_with_config(
+    plan: PipelinePlan,
+    harness: &MockActorHarness,
+    dir: &Path,
+    runtime_config: Arc<RuntimeConfig>,
+) -> PipelineEngine {
     PipelineEngine::new(
         plan,
         harness.senders.clone(),
@@ -82,6 +110,7 @@ fn make_engine(plan: PipelinePlan, harness: &MockActorHarness, dir: &Path) -> Pi
         Arc::new(AtomicBool::new(false)),
         dir.to_path_buf(),
         None,
+        runtime_config,
     )
 }
 
@@ -140,14 +169,8 @@ fn self_exec_step(
     make_step(id, desc, "self_execute", full, deps)
 }
 
-fn approval_step(id: &str, desc: &str, doc_id: &str, deps: Vec<&str>) -> PlanStep {
-    make_step(
-        id,
-        desc,
-        "approval_gate",
-        serde_json::json!({"doc_id": doc_id}),
-        deps,
-    )
+fn approval_step(id: &str, desc: &str, deps: Vec<&str>) -> PlanStep {
+    make_step(id, desc, "approval_gate", serde_json::json!({}), deps)
 }
 
 fn ask_user_step(id: &str, desc: &str, question: &str, deps: Vec<&str>) -> PlanStep {
@@ -244,17 +267,19 @@ async fn route_to_unknown_role_fails() {
     }
 }
 
-/// Test 5: Approval gate pauses the pipeline.
+/// Test 5: Approval gate pauses the pipeline until revw is approved.
 #[tokio::test]
 async fn approval_gate_pauses_and_resumes() {
     let harness = MockActorHarness::all_roles();
     let tmp = tempfile::TempDir::new().unwrap();
+    let revw_id = seed_revw_in_review(tmp.path()).await;
     let plan = simple_plan(
         "p5",
         "approval",
         vec![
             route_step("s1", "design", "中书令", "design", vec![]),
-            approval_step("s2", "approve", "doc_001", vec!["s1"]),
+            route_step("s2", "review", "门下侍中", "review", vec!["s1"]),
+            approval_step("s3", "approve", vec!["s2"]),
         ],
     );
     let engine = make_engine(plan, &harness, tmp.path());
@@ -267,22 +292,29 @@ async fn approval_gate_pauses_and_resumes() {
             doc_id,
             runtime,
         } => {
-            assert_eq!(step_id, "s2");
-            assert_eq!(doc_id, "doc_001");
-            // Save runtime for resume
+            assert_eq!(step_id, "s3");
+            assert_eq!(doc_id, revw_id);
             runtime.save_to(tmp.path()).await.unwrap();
 
-            // Resume — approval gate should proceed
+            let approve_args = serde_json::json!({
+                "id": revw_id,
+                "status": "approved",
+            });
+            let _ =
+                shuji_app_lib::tool::documents::tool_set_document_status(tmp.path(), &approve_args)
+                    .await;
+
             let loaded = PlanRuntime::load_from(tmp.path()).await.unwrap();
             let engine2 = PipelineEngine::from_runtime(
                 loaded,
                 harness.senders.clone(),
                 tmp.path().to_path_buf(),
+                Arc::new(RuntimeConfig::default()),
             );
             let resume_result = engine2.resume_with_input(None).await;
             match resume_result {
                 PipelineResult::Complete { runtime } => {
-                    assert_eq!(runtime.step_status.get("s2"), Some(&StepStatus::Done));
+                    assert_eq!(runtime.step_status.get("s3"), Some(&StepStatus::Done));
                 }
                 other => panic!("expected Complete after resume, got {:?}", other),
             }
@@ -324,6 +356,7 @@ async fn ask_user_pauses_and_resumes() {
                 loaded,
                 harness.senders.clone(),
                 tmp.path().to_path_buf(),
+                Arc::new(RuntimeConfig::default()),
             );
             let resume_result = engine2.resume_with_input(Some("Alice")).await;
             match resume_result {
@@ -552,12 +585,13 @@ edition = "2021"
 async fn runtime_persist_and_reload() {
     let harness = MockActorHarness::all_roles();
     let tmp = tempfile::TempDir::new().unwrap();
+    let revw_id = seed_revw_in_review(tmp.path()).await;
     let plan = simple_plan(
         "p13",
         "persistence",
         vec![
-            route_step("s1", "step1", "工部", "task 1", vec![]),
-            approval_step("s2", "approval", "doc_002", vec!["s1"]),
+            route_step("s1", "review", "门下侍中", "review design", vec![]),
+            approval_step("s2", "approval", vec!["s1"]),
             route_step("s3", "step3", "刑部", "task 3", vec!["s2"]),
         ],
     );
@@ -582,11 +616,18 @@ async fn runtime_persist_and_reload() {
             assert_eq!(loaded.step_status.get("s1"), Some(&StepStatus::Done));
             assert_eq!(loaded.step_status.get("s2"), Some(&StepStatus::InProgress));
 
+            // Approve revw before resume
+            let approve_args = serde_json::json!({"id": revw_id, "status": "approved"});
+            let _ =
+                shuji_app_lib::tool::documents::tool_set_document_status(tmp.path(), &approve_args)
+                    .await;
+
             // Resume and complete
             let engine2 = PipelineEngine::from_runtime(
                 loaded,
                 harness.senders.clone(),
                 tmp.path().to_path_buf(),
+                Arc::new(RuntimeConfig::default()),
             );
             let resume_result = engine2.resume_with_input(None).await;
             match resume_result {
@@ -691,6 +732,410 @@ async fn self_execute_noop_handler() {
     match result {
         PipelineResult::Complete { runtime } => {
             assert_eq!(runtime.step_status.get("n1"), Some(&StepStatus::Done));
+        }
+        other => panic!("expected Complete, got {:?}", other),
+    }
+}
+
+fn extract_doc_id(parsed: &serde_json::Value) -> String {
+    let raw = parsed["doc_id"]
+        .as_str()
+        .or_else(|| parsed["path"].as_str())
+        .unwrap_or("");
+    raw.split('/')
+        .last()
+        .unwrap_or(raw)
+        .trim_end_matches(".md")
+        .to_string()
+}
+
+async fn seed_revw_in_review(root: &Path) -> String {
+    let shuji = root.join(".shuji");
+    tokio::fs::create_dir_all(shuji.join("reviews"))
+        .await
+        .unwrap();
+    let counter = shuji.join("_counter");
+    tokio::fs::write(&counter, "1").await.unwrap();
+    let revw_args = serde_json::json!({"type": "revw", "refs": []});
+    let revw_result =
+        shuji_app_lib::tool::documents::tool_create_document(root, &revw_args, "menxiashizhong")
+            .await;
+    let revw_parsed: serde_json::Value = serde_json::from_str(&revw_result).unwrap();
+    assert_eq!(revw_parsed["ok"], true);
+    extract_doc_id(&revw_parsed)
+}
+
+/// Test 17: Manual mode blocks route_to when upstream revw is in_review.
+#[tokio::test]
+async fn manual_mode_route_to_blocks_unapproved_revw() {
+    let tmp = common::create_test_project("pipeline_manual_gate");
+    let root = tmp.path();
+
+    let revw_id = seed_revw_in_review(root).await;
+
+    let mut outputs = HashMap::new();
+    outputs.insert(
+        Role::Zhongshuling,
+        format!("Review basis {revw_id} documented."),
+    );
+    let harness = MockActorHarness::with_roles_and_outputs(
+        &[
+            Role::Zhongshuling,
+            Role::Shangshuling,
+            Role::MenxiaShizhong,
+            Role::GongbuShangshu,
+        ],
+        outputs,
+    );
+
+    let pipeline_plan = simple_plan(
+        "p17",
+        "manual gate",
+        vec![
+            route_step("prep", "prepare", "中书令", "prepare review basis", vec![]),
+            route_step("s1", "execute", "尚书令", "implement feature", vec!["prep"]),
+        ],
+    );
+    let mut config = RuntimeConfig::default();
+    config.approval.mode = ApprovalMode::Manual;
+    let mut engine = make_engine_with_config(pipeline_plan, &harness, root, Arc::new(config));
+    let result = engine.run().await;
+    match result {
+        PipelineResult::AwaitingApproval {
+            doc_id, step_id, ..
+        } => {
+            assert_eq!(step_id, "s1");
+            assert_eq!(doc_id, revw_id);
+        }
+        other => panic!("expected AwaitingApproval, got {:?}", other),
+    }
+}
+
+/// Test 18: approval_gate resume blocked while revw still in_review (manual mode).
+#[tokio::test]
+async fn manual_mode_approval_gate_resume_requires_approved_doc() {
+    let tmp = common::create_test_project("pipeline_approval_block");
+    let root = tmp.path();
+
+    let revw_id = seed_revw_in_review(root).await;
+
+    let mut outputs = HashMap::new();
+    outputs.insert(
+        Role::MenxiaShizhong,
+        format!("Review report {revw_id} complete."),
+    );
+    let harness = MockActorHarness::with_roles_and_outputs(
+        &[
+            Role::Zhongshuling,
+            Role::MenxiaShizhong,
+            Role::Shangshuling,
+            Role::GongbuShangshu,
+        ],
+        outputs,
+    );
+
+    let pipeline_plan = simple_plan(
+        "p18",
+        "approval verify",
+        vec![
+            route_step("prep", "design", "中书令", "design", vec![]),
+            route_step(
+                "review",
+                "review",
+                "门下侍中",
+                "review design",
+                vec!["prep"],
+            ),
+            approval_step("s1", "approve review", vec!["review"]),
+        ],
+    );
+
+    let mut config = RuntimeConfig::default();
+    config.approval.mode = ApprovalMode::Manual;
+    let engine = make_engine_with_config(pipeline_plan, &harness, root, Arc::new(config));
+    let mut engine = Some(engine);
+
+    let result = engine.take().unwrap().run().await;
+    match result {
+        PipelineResult::AwaitingApproval {
+            runtime, doc_id, ..
+        } => {
+            assert_eq!(doc_id, revw_id);
+            runtime.save_to(root).await.unwrap();
+            let loaded = PlanRuntime::load_from(root).await.unwrap();
+            let engine2 = PipelineEngine::from_runtime(
+                loaded,
+                harness.senders.clone(),
+                root.to_path_buf(),
+                Arc::new(RuntimeConfig::default()),
+            );
+            let resume_result = engine2.resume_with_input(None).await;
+            match resume_result {
+                PipelineResult::AwaitingApproval {
+                    doc_id, step_id, ..
+                } => {
+                    assert_eq!(step_id, "s1");
+                    assert_eq!(doc_id, revw_id);
+                }
+                other => panic!(
+                    "expected AwaitingApproval after premature resume, got {:?}",
+                    other
+                ),
+            }
+        }
+        other => panic!("expected initial AwaitingApproval, got {:?}", other),
+    }
+}
+
+/// Test 19: approval_gate resume proceeds after revw approved (manual mode).
+#[tokio::test]
+async fn manual_mode_approval_gate_resume_after_approved() {
+    let tmp = common::create_test_project("pipeline_approval_pass");
+    let root = tmp.path();
+
+    let revw_id = seed_revw_in_review(root).await;
+
+    let mut outputs = HashMap::new();
+    outputs.insert(
+        Role::MenxiaShizhong,
+        format!("Review report {revw_id} complete."),
+    );
+    let harness = MockActorHarness::with_roles_and_outputs(
+        &[
+            Role::Zhongshuling,
+            Role::MenxiaShizhong,
+            Role::Shangshuling,
+            Role::GongbuShangshu,
+        ],
+        outputs,
+    );
+
+    let pipeline_plan = simple_plan(
+        "p19",
+        "approval pass",
+        vec![
+            route_step("prep", "design", "中书令", "design", vec![]),
+            route_step(
+                "review",
+                "review",
+                "门下侍中",
+                "review design",
+                vec!["prep"],
+            ),
+            approval_step("s1", "approve review", vec!["review"]),
+            route_step("s2", "execute", "工部", "continue", vec!["s1"]),
+        ],
+    );
+
+    let mut config = RuntimeConfig::default();
+    config.approval.mode = ApprovalMode::Manual;
+    let engine = make_engine_with_config(pipeline_plan, &harness, root, Arc::new(config));
+    let mut engine = Some(engine);
+
+    let result = engine.take().unwrap().run().await;
+    match result {
+        PipelineResult::AwaitingApproval { runtime, .. } => {
+            runtime.save_to(root).await.unwrap();
+
+            let approve_args = serde_json::json!({
+                "id": revw_id,
+                "status": "approved",
+                "emperor_note": "准"
+            });
+            let _ =
+                shuji_app_lib::tool::documents::tool_set_document_status(root, &approve_args).await;
+
+            let loaded = PlanRuntime::load_from(root).await.unwrap();
+            let engine2 = PipelineEngine::from_runtime(
+                loaded,
+                harness.senders.clone(),
+                root.to_path_buf(),
+                Arc::new(RuntimeConfig::default()),
+            );
+            let resume_result = engine2.resume_with_input(None).await;
+            match resume_result {
+                PipelineResult::Complete { runtime } => {
+                    assert_eq!(runtime.step_status.get("s1"), Some(&StepStatus::Done));
+                    assert_eq!(runtime.step_status.get("s2"), Some(&StepStatus::Done));
+                }
+                other => panic!("expected Complete after approval, got {:?}", other),
+            }
+        }
+        other => panic!("expected AwaitingApproval, got {:?}", other),
+    }
+}
+
+/// Test 20: approval_gate fails when upstream has no revw artifact.
+#[tokio::test]
+async fn approval_gate_fails_without_revw_upstream() {
+    let harness = MockActorHarness::all_roles();
+    let tmp = tempfile::TempDir::new().unwrap();
+    let plan = simple_plan(
+        "p20",
+        "missing revw",
+        vec![
+            route_step("s1", "design", "中书令", "design", vec![]),
+            approval_step("s2", "approve", vec!["s1"]),
+        ],
+    );
+    let mut engine = make_engine(plan, &harness, tmp.path());
+    let result = engine.run().await;
+    match result {
+        PipelineResult::StepFailed {
+            step_id, reason, ..
+        } => {
+            assert_eq!(step_id, "s2");
+            assert!(reason.contains("upstream revw"));
+        }
+        other => panic!("expected StepFailed, got {:?}", other),
+    }
+}
+
+/// Test 21: legacy plan in_review does not satisfy approval_gate.
+#[tokio::test]
+async fn approval_gate_ignores_plan_upstream() {
+    let tmp = common::create_test_project("pipeline_plan_not_approval");
+    let root = tmp.path();
+
+    let plan_args = serde_json::json!({"type": "plan", "refs": []});
+    let plan_result =
+        shuji_app_lib::tool::documents::tool_create_document(root, &plan_args, "zhongshuling")
+            .await;
+    let plan_parsed: serde_json::Value = serde_json::from_str(&plan_result).unwrap();
+    assert_eq!(plan_parsed["ok"], true);
+    let plan_doc_id = extract_doc_id(&plan_parsed);
+
+    let mut outputs = HashMap::new();
+    outputs.insert(
+        Role::Zhongshuling,
+        format!("Plan document {plan_doc_id} created."),
+    );
+    let harness = MockActorHarness::with_roles_and_outputs(
+        &[Role::Zhongshuling, Role::MenxiaShizhong],
+        outputs,
+    );
+
+    let pipeline_plan = simple_plan(
+        "p21",
+        "plan only",
+        vec![
+            route_step("s1", "design", "中书令", "design", vec![]),
+            approval_step("s2", "approve", vec!["s1"]),
+        ],
+    );
+    let mut engine = make_engine(pipeline_plan, &harness, root);
+    let result = engine.run().await;
+    match result {
+        PipelineResult::StepFailed {
+            step_id, reason, ..
+        } => {
+            assert_eq!(step_id, "s2");
+            assert!(reason.contains("upstream revw"));
+        }
+        other => panic!("expected StepFailed, got {:?}", other),
+    }
+}
+
+/// Test: upstream artifact propagates via doc_ids channel (not embedded in task text).
+#[tokio::test]
+async fn artifact_doc_id_propagates_to_review_step() {
+    use std::sync::Mutex;
+
+    #[derive(Default)]
+    struct Captured {
+        subjects: Vec<String>,
+        doc_ids: Vec<Vec<String>>,
+    }
+
+    let tmp = tempfile::TempDir::new().unwrap();
+    let captured = Arc::new(Mutex::new(Captured::default()));
+    let captured_clone = captured.clone();
+
+    let (tx_z, mut rx_z) = mpsc::unbounded_channel::<ActorMessage>();
+    let (tx_m, mut rx_m) = mpsc::unbounded_channel::<ActorMessage>();
+    let mut senders = HashMap::new();
+    senders.insert(Role::Zhongshuling, tx_z);
+    senders.insert(Role::MenxiaShizhong, tx_m);
+
+    tokio::spawn(async move {
+        while let Some(msg) = rx_z.recv().await {
+            if let Some(reply) = msg.reply_to {
+                let _ = reply.send("Design document dsgn_42 created.".into());
+            }
+        }
+    });
+    tokio::spawn(async move {
+        while let Some(msg) = rx_m.recv().await {
+            let mut cap = captured_clone.lock().unwrap();
+            cap.subjects.push(msg.subject.clone());
+            cap.doc_ids.push(msg.doc_ids.clone());
+            if let Some(reply) = msg.reply_to {
+                let _ = reply.send("Review Report: revw_7".into());
+            }
+        }
+    });
+
+    let plan = simple_plan(
+        "p-artifact",
+        "artifact chain",
+        vec![
+            PlanStep {
+                step_id: "design".into(),
+                description: "design".into(),
+                action: "route_to".into(),
+                action_params: serde_json::json!({"target": "中书令", "task": "design"}),
+                depends_on: vec![],
+                require_approval: false,
+                on_failure: "wake_cabinet".into(),
+                retry: 1,
+            },
+            PlanStep {
+                step_id: "review".into(),
+                description: "review".into(),
+                action: "route_to".into(),
+                action_params: serde_json::json!({
+                    "target": "门下侍中",
+                    "task": "Review the design"
+                }),
+                depends_on: vec!["design".into()],
+                require_approval: false,
+                on_failure: "wake_cabinet".into(),
+                retry: 1,
+            },
+        ],
+    );
+
+    let mut engine = PipelineEngine::new(
+        plan,
+        senders,
+        Arc::new(HashMap::new()),
+        Arc::new(Mutex::new(HashMap::new())),
+        Arc::new(AtomicBool::new(false)),
+        tmp.path().to_path_buf(),
+        None,
+        Arc::new(RuntimeConfig::default()),
+    );
+
+    let result = engine.run().await;
+    match result {
+        PipelineResult::Complete { runtime } => {
+            assert_eq!(
+                runtime.artifacts.get("design").map(String::as_str),
+                Some("dsgn_42")
+            );
+            assert_eq!(
+                runtime.artifacts.get("review").map(String::as_str),
+                Some("revw_7")
+            );
+            let cap = captured.lock().unwrap();
+            assert_eq!(cap.subjects.len(), 1);
+            assert!(
+                !cap.subjects[0].contains("dsgn_42"),
+                "task text must not contain doc id: {}",
+                cap.subjects[0]
+            );
+            assert_eq!(cap.doc_ids.len(), 1);
+            assert_eq!(cap.doc_ids[0], vec!["dsgn_42".to_string()]);
         }
         other => panic!("expected Complete, got {:?}", other),
     }

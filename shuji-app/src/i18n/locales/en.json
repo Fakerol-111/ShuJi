@@ -206,7 +206,14 @@
     "compressionThreshold": "Compression Threshold",
     "keepRecentMessages": "Keep Recent Messages",
     "midRunCompact": "Mid-Run Compaction",
-    "fullReset": "Reset All"
+    "fullReset": "Reset All",
+    "approvalMode": "Approval Mode",
+    "approvalModeManual": "Wait for Approval",
+    "approvalModeAuto": "Auto Approve",
+    "approvalAutoRetries": "Auto-approve Retries",
+    "approvalModeManualDesc": "Pause when plan/revw is pending; workflow continues only after imperial approval. (Default)",
+    "approvalModeAutoDesc": "Cabinet auto-approves after N rounds without request_decision; legacy behavior.",
+    "approvalModeHint": "Saved to config.local.toml immediately; reload the project for in-flight workflows."
   },
   "settingsExtra": {
     "workflowIntent": "Workflow Intent",
@@ -318,7 +325,7 @@
   },
   "document": {
     "pendingApproval": "Awaiting Imperial Approval",
-    "approvalRequired": "This document requires imperial approval before proceeding",
+    "approvalRequired": "This review report requires imperial approval before proceeding",
     "approve": "Approve",
     "reject": "Reject",
     "imperialNote": "Imperial note (optional)...",

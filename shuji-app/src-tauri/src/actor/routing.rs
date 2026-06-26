@@ -27,9 +27,14 @@ use super::{ActorContext, ActorMessage};
 ///      （src=当前部门, dst=目标部门, task_id="{msg_type}/{subject}"）
 ///    - **未找到** → 向皇帝发送错误消息："找不到目标部门: X"
 pub async fn forward_route(ctx: &ActorContext, route: RouteTo) {
-    let subject_for_graph = route.subject.clone();
-    let mut actor_msg = ActorMessage::new(subject_for_graph.clone(), route.msg_type);
+    let subject_for_graph = if route.doc_ids.is_empty() {
+        route.subject.clone()
+    } else {
+        format!("{} [{}]", route.subject, route.doc_ids.join(", "))
+    };
+    let mut actor_msg = ActorMessage::new(route.subject.clone(), route.msg_type);
     actor_msg.payload = route.payload.clone();
+    actor_msg.doc_ids = route.doc_ids.clone();
 
     let target_name = route.target.name();
     log_dept(ctx, ctx.role.name(), &format!("→ {}", subject_for_graph));
@@ -90,6 +95,7 @@ pub async fn forward_route(ctx: &ActorContext, route: RouteTo) {
                             crate::api::control::RouteMsgType::Task,
                         );
                         fb_msg.payload = route.payload.clone();
+                        fb_msg.doc_ids = route.doc_ids.clone();
                         let _ = tx.send(fb_msg);
                         log_dept(
                             ctx,

@@ -82,7 +82,7 @@ fn extract_route_lenient(text: &str) -> Option<(Role, String)> {
         if text.contains(role_name) {
             let role = Role::from_name(role_name)?;
             // Try to find a document ID pattern: xxx_NN
-            let subject = find_doc_id(text).unwrap_or_default();
+            let subject = find_doc_id_in_text(text).unwrap_or_default();
             return Some((role, subject));
         }
     }
@@ -90,18 +90,45 @@ fn extract_route_lenient(text: &str) -> Option<(Role, String)> {
 }
 
 /// Find a document ID pattern like "task_5" or "dsgn_003" in text.
-fn find_doc_id(text: &str) -> Option<String> {
+pub fn find_doc_id_in_text(text: &str) -> Option<String> {
+    find_all_doc_ids_in_text(text).into_iter().next()
+}
+
+/// Collect all document ID patterns in text (order preserved, deduplicated).
+pub fn find_all_doc_ids_in_text(text: &str) -> Vec<String> {
+    let mut ids = Vec::new();
     for word in text.split_whitespace() {
-        let trimmed = word.trim_matches(|c: char| c == '"' || c == '\'' || c == '>' || c == '/');
-        if let Some(pos) = trimmed.find('_') {
-            let prefix = &trimmed[..pos];
-            let suffix = &trimmed[pos + 1..];
-            if !prefix.is_empty()
-                && prefix.chars().all(|c| c.is_ascii_lowercase())
-                && suffix.chars().all(|c| c.is_ascii_digit())
-            {
-                return Some(trimmed.to_string());
+        if let Some(id) = parse_doc_id_token(word) {
+            if !ids.contains(&id) {
+                ids.push(id);
             }
+        }
+    }
+    ids
+}
+
+fn parse_doc_id_token(word: &str) -> Option<String> {
+    let trimmed = word.trim_matches(|c: char| {
+        c == '"'
+            || c == '\''
+            || c == '>'
+            || c == '/'
+            || c == ','
+            || c == '.'
+            || c == ':'
+            || c == '('
+            || c == ')'
+    });
+    let trimmed = trimmed.strip_suffix(".md").unwrap_or(trimmed);
+    if let Some(pos) = trimmed.find('_') {
+        let prefix = &trimmed[..pos];
+        let suffix = &trimmed[pos + 1..];
+        if !prefix.is_empty()
+            && prefix.chars().all(|c| c.is_ascii_lowercase())
+            && !suffix.is_empty()
+            && suffix.chars().all(|c| c.is_ascii_alphanumeric())
+        {
+            return Some(trimmed.to_string());
         }
     }
     None
@@ -163,11 +190,11 @@ mod tests {
 
     #[test]
     fn test_find_doc_id() {
-        assert_eq!(find_doc_id("请处理 task_5"), Some("task_5".into()));
+        assert_eq!(find_doc_id_in_text("请处理 task_5"), Some("task_5".into()));
         assert_eq!(
-            find_doc_id("文档 dsgn_003 需要审查"),
+            find_doc_id_in_text("文档 dsgn_003 需要审查"),
             Some("dsgn_003".into())
         );
-        assert_eq!(find_doc_id("no doc id here"), None);
+        assert_eq!(find_doc_id_in_text("no doc id here"), None);
     }
 }

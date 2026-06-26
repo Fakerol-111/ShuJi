@@ -8,6 +8,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use shuji_app_lib::actor::ActorMessage;
+use shuji_app_lib::config::RuntimeConfig;
 use shuji_app_lib::models::role::Role;
 use shuji_app_lib::pipeline::engine::PipelineEngine;
 use shuji_app_lib::pipeline::{PipelinePlan, PlanStep};
@@ -202,18 +203,29 @@ pub struct MockActorHarness {
 }
 
 impl MockActorHarness {
+    /// Default mock output per role (appended doc id for pipeline artifact extraction).
+    fn default_output(role: Role, role_name: &str, subject: &str) -> String {
+        let doc = match role {
+            Role::Zhongshuling => " plan_1",
+            Role::MenxiaShizhong => " revw_1",
+            _ => "",
+        };
+        format!("mock {role_name} completed: {subject}{doc}")
+    }
+
     pub fn with_roles(roles: &[Role]) -> Self {
         let mut senders = HashMap::new();
         let mut handles = Vec::new();
         for role in roles {
             let (tx, mut rx) = mpsc::unbounded_channel::<ActorMessage>();
             senders.insert(*role, tx);
+            let role_copy = *role;
             let role_name = role.name().to_string();
             let handle = tokio::spawn(async move {
                 while let Some(msg) = rx.recv().await {
                     if let Some(reply) = msg.reply_to {
-                        let _ =
-                            reply.send(format!("mock {} completed: {}", role_name, msg.subject));
+                        let body = Self::default_output(role_copy, &role_name, &msg.subject);
+                        let _ = reply.send(body);
                     }
                 }
             });
@@ -254,6 +266,7 @@ pub fn make_pipeline_engine(
         Arc::new(AtomicBool::new(false)),
         dir.to_path_buf(),
         None,
+        Arc::new(RuntimeConfig::default()),
     )
 }
 
