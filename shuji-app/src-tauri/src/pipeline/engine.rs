@@ -91,8 +91,35 @@ impl PipelineEngine {
         self.runtime.save_to(&self.project_dir).await
     }
 
-    /// Create engine from existing runtime (resume path).
-    /// Directly uses actor senders without going through ActorSystem.
+    /// Create engine from an in-memory runtime plus a live ActorSystem.
+    ///
+    /// Prefer this (or [`Self::load_from_disk`]) for resume paths so fast cancel,
+    /// workflow graph, and the global cancel flag stay aligned with the running app.
+    pub fn from_actor_system(
+        runtime: PlanRuntime,
+        actor_system: &crate::actor::ActorSystem,
+        project_dir: PathBuf,
+        runtime_config: Arc<RuntimeConfig>,
+    ) -> Self {
+        Self {
+            runtime,
+            actor_txs: actor_system.senders.clone(),
+            fast_txs: Arc::new(actor_system.fast_txs.clone()),
+            cancel_map: actor_system.cancel_map.clone(),
+            cancel: actor_system.cancel.clone(),
+            project_dir,
+            workflow_graph: Some(actor_system.workflow_graph.clone()),
+            graph_last_role: "内阁".to_string(),
+            run_metrics: None,
+            runtime_config,
+        }
+    }
+
+    /// Legacy resume helper — only actor senders, no cancel/graph context.
+    ///
+    /// Kept for lightweight tests. Production resume should use
+    /// [`Self::from_actor_system`] or [`Self::load_from_disk`].
+    #[deprecated(note = "use from_actor_system or load_from_disk for full resume context")]
     pub fn from_runtime(
         runtime: PlanRuntime,
         actor_txs: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
@@ -231,18 +258,12 @@ impl PipelineEngine {
         runtime_config: Arc<RuntimeConfig>,
     ) -> Option<Self> {
         let runtime = PlanRuntime::load_from(project_dir).await?;
-        Some(Self {
+        Some(Self::from_actor_system(
             runtime,
-            actor_txs: actor_system.senders.clone(),
-            fast_txs: Arc::new(actor_system.fast_txs.clone()),
-            cancel_map: actor_system.cancel_map.clone(),
-            cancel: actor_system.cancel.clone(),
-            project_dir: project_dir.to_path_buf(),
-            workflow_graph: Some(actor_system.workflow_graph.clone()),
-            graph_last_role: "内阁".to_string(),
-            run_metrics: None,
+            actor_system,
+            project_dir.to_path_buf(),
             runtime_config,
-        })
+        ))
     }
 
     /// Main execution loop. Drives all steps according to plan.

@@ -202,7 +202,7 @@ impl NeigeAgent {
 - workflow_standard and workflow_complex are forbidden
 - expand_requirements: disabled, must not call
 - Skip 门下侍中 review and 礼部 standards check
-- route_to 尚书令 directly for execution"
+- submit_pipeline_plan with minimal route_to steps via 尚书令 for execution"
             }
             "audit" => {
                 "\

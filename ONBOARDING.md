@@ -26,7 +26,7 @@
 
 | 文档 | 读者 | 说明 |
 |------|------|------|
-| [shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md) | 人 | **现行实现**的 Actor + mpsc 架构（较短） |
+| [shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md) | 人 | **现行实现**：Pipeline-first 主流程 + Actor/Pipeline 关系 |
 | [shuji-app/docs/BACKEND_LEARNING_PLAN.md](shuji-app/docs/BACKEND_LEARNING_PLAN.md) | 后端新人 | 分阶段研读 Rust 后端的计划书 |
 | [CLAUDE.md](CLAUDE.md) | 维护者 / AI | 深度索引（文件级导航）；本地可有副本，见 [docs/README.md](docs/README.md) |
 
@@ -53,7 +53,8 @@
 ```
 shuji-app/src-tauri/src/
 ├── lib.rs                    # 模块树 + Tauri 命令注册
-├── commands/workflow/send.rs # 用户发消息入口
+├── commands/workflow/send.rs # 用户发消息入口（常规 / pipeline 恢复双路径）
+├── commands/workflow/bootstrap.rs # ensure_actor_system、事件转发
 ├── actor/spawn.rs            # 各部门 Actor 循环
 ├── api/control.rs            # LLM 工具驱动循环（最核心）
 ├── api/session/              # 消息历史与 API 调用

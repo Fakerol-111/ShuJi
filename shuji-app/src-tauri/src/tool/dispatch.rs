@@ -137,6 +137,14 @@ pub async fn execute_named_tool(
         "setup_test_env" => crate::tool::test_env::tool_setup_test_env(working_dir, args).await,
         "execute_command" => tool_execute_command(working_dir, args, dept).await,
         "summarize_logs" => tool_summarize_logs(working_dir, args).await,
+        // Legacy route_to — NOT the primary orchestration path.
+        //
+        // Main flow: 内阁 submit_pipeline_plan → PipelineEngine schedules departments.
+        // route_to remains for:
+        //   - Pipeline plan steps with action "route_to" (engine-internal dispatch)
+        //   - 尚书令 and execution departments forwarding work inside a running task
+        //   - Actor spawn output parsing when an agent still emits route_to in tool results
+        // Do not extend route_to as a new cabinet-level orchestration mechanism.
         "route_to" => {
             // Gate: check refs before routing to execution departments
             let exec_depts = ["尚书令", "吏部", "兵部", "工部", "刑部", "礼部"];
