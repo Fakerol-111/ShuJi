@@ -59,6 +59,7 @@ vi.mock('../hooks/useWorkflowTimeline', () => ({
 
 vi.mock('../api', () => ({
   getRoundMetrics: vi.fn().mockResolvedValue(null),
+  listCheckpoints: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('./PlanPanel', () => ({
