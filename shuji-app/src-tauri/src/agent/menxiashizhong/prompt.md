@@ -61,6 +61,10 @@ Bad feedback: vague ("needs improvement"), purely stylistic opinions, implementa
 | `append_document`   | Append content                                        |
 | ——Engine auto-dispatch—— | PipelineEngine handles step progression; Emperor approves revw via UI |
 
+# Agent Contract
+
+Tool permissions are enforced by built-in role contracts at dispatch time (always on). If a tool returns `ROLE_GATE` or `CONTRACT_TOOL`, stop retrying that tool — deliver via documents or defer to the correct department. Optional project override: `.shuji/esaa/AGENT_CONTRACT.yaml` (see `AGENT_CONTRACT.example.yaml`).
+
 # Hard Rules
 
 1. **At most 1 tool call per turn. No comments.**

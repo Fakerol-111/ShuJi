@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { GlossaryTerm } from './GlossaryTerm';
 
 export type ActivitySelection =
   | 'files'
@@ -13,6 +15,7 @@ interface ActivityBarProps {
   selected: ActivitySelection;
   onSelect: (selected: ActivitySelection) => void;
   pendingApprovalsCount?: number;
+  beginnerMode?: boolean;
 }
 
 function FolderIcon({ active }: { active: boolean }) {
@@ -138,92 +141,124 @@ function NewspaperIcon({ active }: { active: boolean }) {
   );
 }
 
+type ItemDef = {
+  id: Exclude<ActivitySelection, null>;
+  icon: (active: boolean) => React.ReactNode;
+  tooltip: string;
+  glossaryTerm?: string;
+  advanced?: boolean;
+};
+
 export default function ActivityBar({
   selected,
   onSelect,
   pendingApprovalsCount,
+  beginnerMode = false,
 }: ActivityBarProps) {
   const { t, i18n } = useTranslation();
   const isEn = i18n.language?.startsWith('en');
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  const ITEMS: Array<{
-    id: Exclude<ActivitySelection, null>;
-    icon: (active: boolean) => React.ReactNode;
-    label: string;
-    tooltip: string;
-  }> = [
+  const ITEMS: ItemDef[] = [
     {
       id: 'files',
       icon: (a) => <FolderIcon active={a} />,
-      label: t('activityBar.duty'),
-      tooltip: t('activityBar.duty'),
+      tooltip: t('activityBar.files'),
+      glossaryTerm: 'artifact',
     },
     {
       id: 'stats',
       icon: (a) => <ChartIcon active={a} />,
-      label: t('activityBar.tokens'),
       tooltip: t('activityBar.tokens'),
+      advanced: true,
     },
     {
       id: 'context',
       icon: (a) => <ScrollIcon active={a} />,
-      label: t('activityBar.context'),
       tooltip: t('activityBar.context'),
+      advanced: true,
     },
     {
       id: 'archives',
       icon: (a) => <ArchiveIcon active={a} />,
-      label: t('activityBar.checkpoints'),
       tooltip: t('activityBar.checkpoints'),
+      advanced: true,
     },
     {
       id: 'audit',
       icon: (a) => <NewspaperIcon active={a} />,
-      label: t('activityBar.audit'),
       tooltip: t('activityBar.audit'),
+      advanced: true,
     },
     {
       id: 'graph',
       icon: (a) => <GraphIcon active={a} />,
-      label: t('activityBar.graph'),
       tooltip: t('activityBar.graph'),
+      glossaryTerm: 'workflowGraph',
+      advanced: true,
     },
   ];
 
+  const visibleItems = ITEMS.filter((item) => {
+    if (!beginnerMode) return true;
+    if (!item.advanced) return true;
+    return advancedOpen;
+  });
+
+  const renderItem = (item: ItemDef) => {
+    const active = selected === item.id;
+    const hasBadge = item.id === 'files' && (pendingApprovalsCount ?? 0) > 0;
+    const label = item.glossaryTerm ? (
+      <GlossaryTerm term={item.glossaryTerm}>{item.tooltip}</GlossaryTerm>
+    ) : (
+      item.tooltip
+    );
+
+    return (
+      <button
+        key={item.id}
+        onClick={() => onSelect(active ? null : item.id)}
+        aria-label={item.tooltip}
+        className={`group relative w-full h-11 flex items-center justify-center transition-colors ${
+          active ? 'bg-ink-800' : 'text-ink-500 hover:text-ink-200 hover:bg-ink-800/60'
+        }`}
+      >
+        {active && (
+          <span className="absolute left-0 top-1 bottom-1 w-0.5 bg-vermillion rounded-r" />
+        )}
+        {item.icon(active)}
+        {hasBadge && (
+          <span
+            className="absolute top-1 right-1.5 w-2 h-2 bg-gold rounded-full animate-pulse"
+            title={
+              isEn
+                ? `${pendingApprovalsCount} pending approval`
+                : `${pendingApprovalsCount} 份朱批待批`
+            }
+          />
+        )}
+        <span className="absolute left-full ml-2 whitespace-nowrap bg-ink-800 text-ink-200 text-xs px-2 py-1 rounded border border-ink-700 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+          {label}
+        </span>
+      </button>
+    );
+  };
+
   return (
     <div className="w-12 bg-ink-900 border-r border-ink-800 flex flex-col items-center py-2 shrink-0">
-      {ITEMS.map((item) => {
-        const active = selected === item.id;
-        const hasBadge = item.id === 'files' && (pendingApprovalsCount ?? 0) > 0;
-        return (
-          <button
-            key={item.id}
-            onClick={() => onSelect(active ? null : item.id)}
-            aria-label={item.tooltip}
-            className={`group relative w-full h-11 flex items-center justify-center transition-colors ${
-              active ? 'bg-ink-800' : 'text-ink-500 hover:text-ink-200 hover:bg-ink-800/60'
-            }`}
-          >
-            {active && (
-              <span className="absolute left-0 top-1 bottom-1 w-0.5 bg-vermillion rounded-r" />
-            )}
-            {item.icon(active)}
-            {hasBadge && (
-              <span
-                className="absolute top-1 right-1.5 w-2 h-2 bg-gold rounded-full animate-pulse"
-                title={
-                  isEn
-                    ? `${pendingApprovalsCount} pending approval`
-                    : `${pendingApprovalsCount} 份朱批待批`
-                }
-              />
-            )}
-            <span className="absolute left-full ml-2 whitespace-nowrap bg-ink-800 text-ink-200 text-xs px-2 py-1 rounded border border-ink-700 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-              {item.tooltip}
-            </span>
-          </button>
-        );
-      })}
+      {visibleItems.map(renderItem)}
+
+      {beginnerMode && (
+        <button
+          type="button"
+          onClick={() => setAdvancedOpen((v) => !v)}
+          className="mt-auto w-full h-9 flex items-center justify-center text-caption text-ink-500 hover:text-ink-200 hover:bg-ink-800/60 border-t border-ink-800"
+          title={t('activityBar.advancedView')}
+          aria-expanded={advancedOpen}
+        >
+          {advancedOpen ? '▴' : '▾'}
+        </button>
+      )}
     </div>
   );
 }

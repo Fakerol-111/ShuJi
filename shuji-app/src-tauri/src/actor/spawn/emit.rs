@@ -7,7 +7,7 @@
 
 use tokio::sync::mpsc;
 
-use crate::models::chat::{ChatMessage, ChatOption};
+use crate::models::chat::{ChatDocument, ChatMessage, ChatOption};
 use crate::models::role::Role;
 
 use super::super::{ActorContext, DeptLogEntry};
@@ -21,7 +21,7 @@ use super::super::{ActorContext, DeptLogEntry};
 ///
 /// 空内容直接返回（不 emit 空白消息）。
 pub(super) fn emit_to_emperor(tx: &mpsc::Sender<ChatMessage>, role: Role, content: &str) {
-    emit_to_emperor_with_options(tx, role, content, &[]);
+    emit_to_emperor_with_options(tx, role, content, &[], &[]);
 }
 
 /// 将 agent 输出 emit 到皇帝的前端面板，优先使用 `request_decision` 工具选项。
@@ -30,6 +30,7 @@ pub(super) fn emit_to_emperor_with_options(
     role: Role,
     content: &str,
     decision_options: &[String],
+    documents: &[ChatDocument],
 ) {
     let role_name = role.name();
     let trimmed = content.trim();
@@ -46,6 +47,7 @@ pub(super) fn emit_to_emperor_with_options(
     };
     let mut msg = ChatMessage::new(role_name, &clean_content);
     msg.options = options;
+    msg.documents = documents.to_vec();
     if let Err(e) = tx.try_send(msg) {
         log_console!("[actor] emperor_tx.try_send failed ({}): {}", role_name, e);
     }

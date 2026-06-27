@@ -46,4 +46,9 @@ describe('ValidationSummary', () => {
     render(<ValidationSummary report={null} />);
     expect(screen.getByText(/暂无验证/i)).toBeDefined();
   });
+
+  it('renders compact mode', () => {
+    render(<ValidationSummary report={passReport} compact />);
+    expect(screen.getByText(/1\/1/)).toBeDefined();
+  });
 });

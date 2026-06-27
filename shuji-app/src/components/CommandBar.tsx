@@ -1,14 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getRoundMetrics, getWorkflowState } from '../api';
-import { getDeptMeta } from '../constants';
+import { getRoundMetrics } from '../api';
+import { getDeptMeta, getDeptDisplayLabel } from '../constants';
+import { useDeptEvents } from '../hooks/useDeptEvents';
+import { useWorkflowTimeline } from '../hooks/useWorkflowTimeline';
 import { docIdToPath } from '../utils/docPath';
+import WorkflowTimeline from './WorkflowTimeline';
+import PlanPanel from './PlanPanel';
+import { ValidationSummary } from './ValidationSummary';
 import type {
   RoundMetrics,
   PlanInfo,
   PhaseRuntime,
   PhaseExecutionStatus,
-  WorkflowState as WFState,
+  TimelineNode,
+  ValidationReport,
 } from '../types';
 
 export interface CommandBarProps {
@@ -20,12 +26,14 @@ export interface CommandBarProps {
   activeDepts: string[];
   planInfo: PlanInfo | null;
   pendingApprovals: string[];
+  validationReport?: ValidationReport | null;
+  validationLoading?: boolean;
   onSelectDoc: (docPath: string) => void;
+  onSelectDept?: (dept: string) => void;
   onPendingClick?: () => void;
   onOpenGraph?: () => void;
 }
 
-// Icon mapping by English status code
 const STATUS_ICONS: Record<string, string> = {
   NotStarted: '○',
   Designing: '●',
@@ -43,11 +51,6 @@ const STATUS_ICONS: Record<string, string> = {
   MinorIssue: '●',
 };
 
-function statusIcon(status: string): string {
-  return STATUS_ICONS[status] || '●';
-}
-
-// Translation key lookup for status codes
 function statusTKey(status: string): string {
   const map: Record<string, string> = {
     NotStarted: 'workflow.notStarted',
@@ -107,18 +110,50 @@ export default function CommandBar({
   phases,
   overall,
   activeDepts,
+  planInfo,
   pendingApprovals,
+  validationReport = null,
+  validationLoading = false,
   onSelectDoc,
+  onSelectDept,
   onPendingClick,
+  onOpenGraph,
 }: CommandBarProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith('en') ? 'en' : 'zh';
+  const { latestLogs } = useDeptEvents();
+  const {
+    wfState,
+    timelineNodes,
+    recentDocIds,
+    nextAction,
+    pipelineProgress,
+    gongbuBatch,
+    hasFlowActivity,
+    pipeline,
+  } = useWorkflowTimeline({
+    activeDepts,
+    latestLogs,
+    pendingApprovals,
+    planInfo,
+  });
+
   const [expanded, setExpanded] = useState(() => loadWorkflowExpanded());
   const [roundMetrics, setRoundMetrics] = useState<RoundMetrics | null>(null);
   const [elapsed, setElapsed] = useState('');
-  const [wfState, setWfState] = useState<WFState | null>(null);
 
-  // Profile label mapping
+  useEffect(() => {
+    if (hasFlowActivity && pendingApprovals.length > 0 && !loadWorkflowExpanded()) {
+      setExpanded(true);
+    }
+  }, [hasFlowActivity, pendingApprovals.length]);
+
+  useEffect(() => {
+    if (pipeline && !loadWorkflowExpanded()) {
+      setExpanded(true);
+    }
+  }, [pipeline]);
+
   const profileLabels: Record<string, string> = {
     greenfield_standard: t('workflow.newFeature'),
     brownfield_optimize: t('workflow.existingOptimization'),
@@ -130,7 +165,6 @@ export default function CommandBar({
     return profileLabels[id] || id;
   }
 
-  // Stage label mapping
   const stageLabels: Record<string, string> = {
     init: t('workflow.initialize'),
     expand: t('workflow.expandRequirements'),
@@ -175,17 +209,6 @@ export default function CommandBar({
     return () => clearInterval(timer);
   }, [roundMetrics]);
 
-  useEffect(() => {
-    const fetch = () => {
-      getWorkflowState()
-        .then(setWfState)
-        .catch(() => setWfState(null));
-    };
-    fetch();
-    const timer = setInterval(fetch, 3000);
-    return () => clearInterval(timer);
-  }, []);
-
   const total = (phaseCount || phases.length) * 2 + 1;
   let done = 0;
   if (overall === 'Approved') done += 1;
@@ -193,12 +216,27 @@ export default function CommandBar({
     if (phase.design === 'Approved') done += 1;
     if (phase.execution === 'Completed') done += 1;
   }
-  const progress = total > 0 ? Math.round((done / total) * 100) : 0;
+  const progress =
+    pipelineProgress && pipelineProgress.total > 0
+      ? Math.round((pipelineProgress.done / pipelineProgress.total) * 100)
+      : total > 0
+        ? Math.round((done / total) * 100)
+        : 0;
 
   const mainActiveDept = activeDepts.length > 0 ? activeDepts[activeDepts.length - 1] : null;
   const activeMeta = mainActiveDept ? getDeptMeta(mainActiveDept) : null;
 
-  const isEmpty = phases.length === 0 && !wfState && !roundMetrics;
+  const isEmpty = phases.length === 0 && !hasFlowActivity && !roundMetrics;
+
+  const handleTimelineNodeClick = (node: TimelineNode) => {
+    if (node.docId) {
+      onSelectDoc(docIdToPath(node.docId));
+      return;
+    }
+    if (node.dept && onSelectDept) {
+      onSelectDept(node.dept);
+    }
+  };
 
   if (isEmpty) {
     return (
@@ -210,58 +248,67 @@ export default function CommandBar({
 
   return (
     <div className="shrink-0 bg-surface-elevated border-b border-fold command-bar-glow">
-      <div className="h-10 flex items-center gap-3 px-4">
-        {/* Workflow profile badge */}
+      <div className="h-10 flex items-center gap-3 px-4 min-w-0">
         {wfState && (
-          <span className="text-caption px-1.5 py-[1px] rounded-full border border-ink-300 text-ink-500 bg-ink-100/30 whitespace-nowrap">
+          <span className="text-caption px-1.5 py-[1px] rounded-full border border-ink-300 text-ink-500 bg-ink-100/30 whitespace-nowrap shrink-0">
             {profileLabel(wfState.profile_id)}
           </span>
         )}
 
-        {/* Separator */}
         {wfState && wfState.current_stage !== 'init' && (
-          <span className="text-caption text-ink-300">·</span>
+          <>
+            <span className="text-caption text-ink-300 shrink-0">·</span>
+            <span className="text-caption px-1.5 py-[1px] rounded-full border border-gold/30 text-gold-700 bg-gold/8 whitespace-nowrap shrink-0">
+              {stageLabel(wfState.current_stage)}
+            </span>
+          </>
         )}
 
-        {/* Current stage badge */}
-        {wfState && wfState.current_stage !== 'init' && (
-          <span className="text-caption px-1.5 py-[1px] rounded-full border border-gold/30 text-gold-700 bg-gold/8 whitespace-nowrap">
-            {stageLabel(wfState.current_stage)}
+        {pipelineProgress && (
+          <span
+            className="text-caption text-ink-500 truncate max-w-[120px] shrink-0 hidden sm:inline"
+            title={pipelineProgress.summary}
+          >
+            {pipelineProgress.done}/{pipelineProgress.total}
           </span>
         )}
 
-        {/* Progress bar */}
         {progress > 0 && (
-          <div className="flex items-center gap-2 max-w-40">
-            <div className="flex-1 h-[6px] bg-ink-200 rounded-full overflow-hidden min-w-[80px]">
+          <div className="flex items-center gap-2 max-w-40 shrink-0">
+            <div className="flex-1 h-[6px] bg-ink-200 rounded-full overflow-hidden min-w-[64px]">
               <div
                 className="h-full bg-gold rounded-full transition-all duration-500"
                 style={{ width: `${Math.min(progress, 100)}%` }}
               />
             </div>
-            <span className="text-caption text-ink-500 font-mono tabular-nums shrink-0">
-              {progress}%
-            </span>
+            <span className="text-caption text-ink-500 font-mono tabular-nums">{progress}%</span>
           </div>
         )}
 
-        {/* Active department */}
         {activeMeta && (
           <span className="flex items-center gap-1.5 shrink-0">
             <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse shrink-0" />
             <span className="text-ui font-display text-ink-700">
-              {lang === 'en' ? activeMeta.shortLabelEn : activeMeta.shortLabel}
+              {getDeptDisplayLabel(activeMeta, lang)}
             </span>
           </span>
         )}
 
-        {/* Elapsed */}
+        {nextAction && (
+          <span
+            className={`text-caption truncate min-w-0 ${
+              nextAction.type === 'approval' ? 'text-vermillion font-medium' : 'text-ink-600'
+            }`}
+            title={nextAction.label}
+          >
+            {nextAction.label}
+          </span>
+        )}
+
         {elapsed && <span className="text-caption text-ink-500 font-mono shrink-0">{elapsed}</span>}
 
-        {/* Spacer */}
         <div className="flex-1 min-w-0" />
 
-        {/* 朱批 badge */}
         {pendingApprovals.length > 0 && (
           <button
             onClick={onPendingClick ?? (() => onSelectDoc(docIdToPath(pendingApprovals[0])))}
@@ -274,8 +321,17 @@ export default function CommandBar({
           </button>
         )}
 
-        {/* Expand toggle */}
-        {(phases.length > 0 || wfState) && (
+        {onOpenGraph && (
+          <button
+            type="button"
+            onClick={onOpenGraph}
+            className="text-caption text-ink-400 hover:text-ink-600 shrink-0 hidden md:inline"
+          >
+            {t('activityBar.graph')}
+          </button>
+        )}
+
+        {(phases.length > 0 || hasFlowActivity || pipeline) && (
           <button
             onClick={() => {
               setExpanded((prev) => {
@@ -290,14 +346,59 @@ export default function CommandBar({
         )}
       </div>
 
-      {/* Expanded details */}
       {expanded && (
         <div
-          className="px-4 pb-2 border-t border-fold/50 text-caption text-ink-600 overflow-y-auto"
+          className="px-4 pb-3 border-t border-fold/50 text-caption text-ink-600 overflow-y-auto space-y-2"
           style={{ maxHeight: 'var(--cockpit-command-expanded-max)' }}
         >
+          {pipeline && <PlanPanel runtime={pipeline} defaultExpanded />}
+
+          {(validationReport || validationLoading) && (
+            <div>
+              <span className="text-ink-500 font-medium block mb-1">
+                {t('validation.latestReport')}
+              </span>
+              <ValidationSummary report={validationReport} loading={validationLoading} />
+            </div>
+          )}
+
+          <div>
+            <div className="flex items-center justify-between gap-2 pt-1.5 pb-1">
+              <span className="text-ink-500 font-medium">{t('audit.timeline')}</span>
+              {gongbuBatch && (
+                <span className="text-ink-400">
+                  {t('inspector.gongbuBatch')} {gongbuBatch.done}/{gongbuBatch.total}
+                </span>
+              )}
+            </div>
+            <WorkflowTimeline nodes={timelineNodes} onNodeClick={handleTimelineNodeClick} />
+          </div>
+
+          {recentDocIds.length > 0 && (
+            <div className="pt-1 border-t border-fold/30">
+              <span className="text-ink-500 font-medium block mb-1">
+                {t('timeline.recentDocs')}
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {recentDocIds.map((docId) => (
+                  <button
+                    key={docId}
+                    type="button"
+                    onClick={() => onSelectDoc(docIdToPath(docId))}
+                    className="px-2 py-0.5 rounded border border-ink-200 bg-ink-100/40 hover:bg-ink-100 font-mono text-ink-700"
+                  >
+                    {docId}
+                    {pendingApprovals.includes(docId) && (
+                      <span className="ml-1 text-vermillion">★</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {wfState && (
-            <div className="pt-1.5 pb-1">
+            <div className="pt-1 border-t border-fold/30">
               <div className="flex items-center gap-2 mb-1 text-ink-500 font-medium">
                 <span>{t('commandBar.workflow')}</span>
                 <span className="text-caption px-1 rounded bg-ink-100/50">
@@ -320,7 +421,7 @@ export default function CommandBar({
           )}
 
           {phases.length > 0 && (
-            <div className="space-y-0.5 pt-1.5 border-t border-fold/30">
+            <div className="space-y-0.5 pt-1 border-t border-fold/30">
               {phases.map((phase) => {
                 const dStatus = typeof phase.design === 'string' ? phase.design : '';
                 const eObj = phase.execution as PhaseExecutionStatus;
@@ -339,15 +440,15 @@ export default function CommandBar({
                     <span
                       className={`${statusColor(dStatus)} ${isBlocked(dStatus) ? 'font-medium' : ''}`}
                     >
-                      {statusIcon(dStatus)} {t(statusTKey(dStatus), dStatus)}
+                      {STATUS_ICONS[dStatus] || '●'} {t(statusTKey(dStatus), dStatus)}
                     </span>
                     <span className="text-ink-300 mx-0.5">|</span>
                     <span
                       className={eIsBlocked ? 'text-vermillion font-medium' : statusColor(eStr)}
                     >
                       {eIsBlocked
-                        ? `${statusIcon('Blocked')} ${t('workflow.blocked')}`
-                        : `${statusIcon(eStr)} ${t(statusTKey(eStr), eStr)}`}
+                        ? `${STATUS_ICONS['Blocked'] || '⚑'} ${t('workflow.blocked')}`
+                        : `${STATUS_ICONS[eStr] || '●'} ${t(statusTKey(eStr), eStr)}`}
                     </span>
                   </div>
                 );

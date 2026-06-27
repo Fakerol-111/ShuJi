@@ -2,15 +2,23 @@
 import { useTranslation } from 'react-i18next';
 import { useDeptEvents } from '../hooks/useDeptEvents';
 import { useUsageStats } from '../hooks/useUsageStats';
-import { getDeptMeta, DEPT_META_LIST } from '../constants';
+import { useRunMetrics } from '../hooks/useRunMetrics';
+import { getDeptMeta, DEPT_META_LIST, getDeptDisplayLabel } from '../constants';
+import { ValidationSummary } from './ValidationSummary';
 import DeptStatusPanel from './DeptStatusPanel';
 
-export default function DutyBar() {
-  const { t } = useTranslation();
+interface DutyBarProps {
+  projectDir?: string;
+}
+
+export default function DutyBar({ projectDir }: DutyBarProps) {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language?.startsWith('en') ? 'en' : 'zh';
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [tokenExpanded, setTokenExpanded] = useState(false);
   const { activeDepts, latestLogs } = useDeptEvents();
   const { tokenStats, roundMetrics } = useUsageStats();
+  const runMetrics = useRunMetrics(projectDir);
   const [currency, setCurrency] = useState<'usd' | 'cny'>('usd');
 
   const deptArray =
@@ -39,6 +47,7 @@ export default function DutyBar() {
   const hasActive = activeDepts.length > 0;
   const roundStarted = roundMetrics?.started_at ?? 0;
   const roundCompletion = roundMetrics?.completion_tokens ?? 0;
+  const validationReport = runMetrics?.validation ?? null;
 
   return (
     <div className="shrink-0">
@@ -53,7 +62,7 @@ export default function DutyBar() {
             deptArray.map((dept) => {
               const meta = getDeptMeta(dept);
               const color = meta?.color || '#8B7355';
-              const label = meta?.shortLabel || dept;
+              const label = meta ? getDeptDisplayLabel(meta, lang) : dept;
               const latestEntry = latestLogs.get(dept);
               const action = latestEntry
                 ? latestEntry.action.replace(/^[❌→]\s*/, '').replace(/:.*/, '')
@@ -80,6 +89,20 @@ export default function DutyBar() {
         </div>
 
         <div className="ml-auto flex items-center gap-2 text-caption font-mono text-ink-500 shrink-0">
+          {!hasActive && runMetrics && (
+            <>
+              <span className="text-ink-400 hidden sm:inline">{t('duty.lastRun')}</span>
+              <span className="text-ink-300 truncate max-w-[100px]" title={runMetrics.plan_id}>
+                {runMetrics.status}
+              </span>
+            </>
+          )}
+          {!hasActive && validationReport && (
+            <>
+              <span className="text-ink-700 hidden sm:inline">|</span>
+              <ValidationSummary report={validationReport} compact />
+            </>
+          )}
           {hasActive && roundStarted > 0 && (
             <>
               <span className="text-gold/60">{t('duty.output')}</span>
@@ -117,7 +140,7 @@ export default function DutyBar() {
 
       {tokenExpanded && (
         <div className="max-h-32 overflow-y-auto bg-ink-950 px-3 py-1.5 border-t border-ink-800">
-          <div className="flex items-center gap-3 text-caption font-mono text-ink-500">
+          <div className="flex items-center gap-3 text-caption font-mono text-ink-500 flex-wrap">
             <span className="text-jade/80">{t('duty.cacheHit')}</span>
             <span className="text-ink-300">{formatToken(tokenCached)}</span>
             <span className="text-ink-700">|</span>
@@ -126,6 +149,15 @@ export default function DutyBar() {
             <span className="text-ink-700">|</span>
             <span className="text-gold/60">{t('duty.output')}</span>
             <span className="text-ink-300">{formatToken(tokenCompletion)}</span>
+            {runMetrics && (
+              <>
+                <span className="text-ink-700">|</span>
+                <span className="text-ink-400">{t('duty.runId')}</span>
+                <span className="text-ink-300 truncate max-w-[120px]" title={runMetrics.run_id}>
+                  {runMetrics.run_id.slice(0, 8)}
+                </span>
+              </>
+            )}
             {tokenCost !== null && (
               <>
                 <span className="text-ink-700">|</span>

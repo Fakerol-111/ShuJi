@@ -7,6 +7,7 @@ pub mod artifacts;
 pub mod engine;
 pub mod handlers;
 pub mod schema;
+pub mod supervisor;
 pub mod templates;
 
 use serde::{Deserialize, Serialize};
@@ -173,17 +174,44 @@ impl PlanRuntime {
 
     /// Delete runtime file (cleanup after completion).
     pub async fn cleanup(project_dir: &std::path::Path) {
-        let path = project_dir
-            .join(".shuji")
-            .join("pipeline")
-            .join("runtime.json");
+        let path = Self::runtime_file_path(project_dir);
         let _ = tokio::fs::remove_file(&path).await;
     }
+
+    /// Path to persisted runtime (`.shuji/pipeline/runtime.json`).
+    pub fn runtime_file_path(project_dir: &std::path::Path) -> std::path::PathBuf {
+        project_dir
+            .join(".shuji")
+            .join("pipeline")
+            .join("runtime.json")
+    }
+}
+
+/// Routing decision for `send_message`: resume pipeline when disk holds a paused
+/// runtime and the supervisor is not already executing a plan.
+pub fn should_resume_from_disk(has_paused_runtime: bool, supervisor_running: bool) -> bool {
+    has_paused_runtime && !supervisor_running
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn should_resume_from_disk_when_paused_and_supervisor_idle() {
+        assert!(should_resume_from_disk(true, false));
+    }
+
+    #[test]
+    fn should_not_resume_without_runtime_on_disk() {
+        assert!(!should_resume_from_disk(false, false));
+        assert!(!should_resume_from_disk(false, true));
+    }
+
+    #[test]
+    fn should_not_resume_while_supervisor_running() {
+        assert!(!should_resume_from_disk(true, true));
+    }
 
     #[test]
     fn test_find_executable_step_no_deps() {

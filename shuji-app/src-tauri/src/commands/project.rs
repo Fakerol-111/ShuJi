@@ -25,6 +25,8 @@ pub struct AppState {
     /// Cancel flag for `discuss_with_cabinet` — checked by AgentController
     /// on every tool-call iteration. Set by `cancel_discuss` command.
     pub discuss_cancel: Arc<AtomicBool>,
+    /// Background pipeline runner — keeps 内阁 mailbox free during long plans
+    pub pipeline_supervisor: Arc<crate::pipeline::supervisor::PipelineSupervisor>,
 }
 
 /// Clone the current runtime config snapshot for agent / pipeline use.
@@ -84,6 +86,9 @@ pub async fn load_project(
     // This prevents old project actors from emitting events to the new project's UI.
     {
         let mut sys_lock = state.actor_system.lock().await;
+        if let Some(sys) = sys_lock.as_ref() {
+            state.pipeline_supervisor.abort_current(sys).await;
+        }
         *sys_lock = None; // Drop triggers ActorSystem::drop() → cancel all actors
     }
 

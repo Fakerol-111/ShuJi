@@ -37,6 +37,7 @@ pub struct AgentController {
     compact_handler: Option<CompactFn>,
     compact_iter_interval: u32,
     step_emit: Option<DeptStepCallback>,
+    created_doc_ids: Vec<String>,
 }
 
 impl Default for AgentController {
@@ -54,7 +55,47 @@ impl AgentController {
             compact_handler: None,
             compact_iter_interval: 0,
             step_emit: None,
+            created_doc_ids: Vec::new(),
         }
+    }
+
+    fn collect_document_from_tool(&mut self, tool_name: &str, result: &str) {
+        if !matches!(tool_name, "create_document" | "append_document") {
+            return;
+        }
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(result) else {
+            return;
+        };
+        if v.get("ok").and_then(|o| o.as_bool()) != Some(true) {
+            return;
+        }
+        if let Some(id) = v
+            .get("path")
+            .and_then(|p| p.as_str())
+            .filter(|s| !s.is_empty())
+        {
+            if !self.created_doc_ids.iter().any(|x| x == id) {
+                self.created_doc_ids.push(id.to_string());
+            }
+        }
+    }
+
+    /// Resolve collected document IDs into chat-card metadata.
+    pub async fn take_documents(
+        &mut self,
+        working_dir: &std::path::Path,
+    ) -> Vec<crate::models::chat::ChatDocument> {
+        let ids = std::mem::take(&mut self.created_doc_ids);
+        let mut docs: Vec<crate::models::chat::ChatDocument> = Vec::new();
+        for id in ids {
+            if let Some(doc) = crate::tool::documents::chat_document_from_id(working_dir, &id).await
+            {
+                if !docs.iter().any(|d| d.id == doc.id) {
+                    docs.push(doc);
+                }
+            }
+        }
+        docs
     }
 
     /// Register a handler for real-time step events.
@@ -308,6 +349,7 @@ impl AgentController {
                         } else {
                             tool_exec(&tc.name, &tc.args).await
                         };
+                        self.collect_document_from_tool(&tc.name, &result);
 
                         // 鈹€鈹€ Emit tool result step 鈹€鈹€
                         if let Some(ref emit) = self.step_emit {
@@ -324,18 +366,9 @@ impl AgentController {
                             });
                         }
 
-                        // 鈹€鈹€ Watchdog intervention hints 鈹€鈹€
-                        // Append corrective reminders to the tool result when
-                        // the LLM is stuck in a loop. This is a closed-loop
-                        // intervention: the LLM sees these as part of the tool
-                        // output and can self-correct without a full stop.
-                        let mut intervention_hints: Vec<String> = Vec::new();
-                        if same_tool_count >= config.watchdog.same_tool_warning_count {
-                            intervention_hints.push(format!(
-                                "Intervention] You have called the {} tool {} times (with the same arguments). If this is not an intentional batched operation, please consider switching operations or moving to the next step.",
-                                tc.name, same_tool_count + 1,
-                            ));
-                        }
+                        // ── Watchdog intervention hints ──
+                        // Playbook-backed recovery hints are appended to tool_content
+                        // after write/read tracking (see below).
                         let is_read = matches!(
                             tc.name.as_str(),
                             "read_file"
@@ -345,19 +378,6 @@ impl AgentController {
                                 | "read_document"
                                 | "search_text"
                         );
-                        if is_read
-                            && read_without_write >= config.watchdog.read_without_write_warning
-                        {
-                            intervention_hints.push(format!(
-                                "鈿狅笍 You have read files {} times without producing any output. Please check whether you need to create a file or modify code.",
-                                read_without_write + 1,
-                            ));
-                        }
-                        let intervention_note = if intervention_hints.is_empty() {
-                            String::new()
-                        } else {
-                            format!("\n\n[Intervention] {}", intervention_hints.join(" "))
-                        };
 
                         // 鈹€鈹€ Route detection (output-driven) 鈹€鈹€
                         // Check the tool output for operation=="route_to" instead of
@@ -476,7 +496,7 @@ impl AgentController {
                         if tc.name == "delete_file" && !key_path.is_empty() {
                             *delete_seen.entry(key_path.to_string()).or_insert(0) += 1;
                         }
-                        let mut delete_cycle_hint = String::new();
+                        let mut delete_cycle_count: Option<u32> = None;
                         if tc.name == "create_file" && !key_path.is_empty() {
                             if let Some(del_count) = delete_seen.get(key_path) {
                                 if *del_count > 0 {
@@ -485,12 +505,7 @@ impl AgentController {
                                         .or_insert(0);
                                     *cycle_count += 1;
                                     if *cycle_count >= config.watchdog.delete_create_warning_count {
-                                        delete_cycle_hint = format!(
-                                            "\n\n[Intervention] You have executed {} delete 鈫?create cycles on the same file ({}). \
-                                            For existing files that need local changes, use edit_file (search/replace). \
-                                            For batch changes, use apply_patch. The delete+create pattern wastes tokens and can lose file history.",
-                                            key_path, *cycle_count,
-                                        );
+                                        delete_cycle_count = Some(*cycle_count);
                                         log_console!(
                                             "[control] WATCHDOG: delete-create cycle detected ({}x) on {}",
                                             cycle_count, key_path
@@ -531,18 +546,44 @@ impl AgentController {
                         if !progress_note.is_empty() {
                             tool_content.push_str(&progress_note);
                         }
-                        if !intervention_note.is_empty() {
-                            tool_content.push_str(&intervention_note);
+
+                        use crate::playbook::{
+                            append_watchdog_intervention, WatchdogEvent, WatchdogHintContext,
+                        };
+
+                        if same_tool_count >= config.watchdog.same_tool_warning_count {
+                            append_watchdog_intervention(
+                                &mut tool_content,
+                                WatchdogEvent::RepeatedTool,
+                                &WatchdogHintContext::new(same_tool_count).tool(&tc.name),
+                            );
                             log_console!(
-                                "[control] WATCHDOG: intervention hint injected for {}",
+                                "[control] WATCHDOG: repeated-tool playbook injected for {}",
                                 tc.name
                             );
                         }
-                        if !delete_cycle_hint.is_empty() {
-                            tool_content.push_str(&delete_cycle_hint);
+                        if is_read
+                            && read_without_write >= config.watchdog.read_without_write_warning
+                        {
+                            append_watchdog_intervention(
+                                &mut tool_content,
+                                WatchdogEvent::ReadWithoutWrite,
+                                &WatchdogHintContext::new(read_without_write),
+                            );
                             log_console!(
-                                "[control] WATCHDOG: delete-cycle hint injected for {}",
-                                tc.name
+                                "[control] WATCHDOG: read-without-write playbook injected ({} reads)",
+                                read_without_write
+                            );
+                        }
+                        if let Some(cycle_count) = delete_cycle_count {
+                            append_watchdog_intervention(
+                                &mut tool_content,
+                                WatchdogEvent::DeleteCreateCycle,
+                                &WatchdogHintContext::new(cycle_count).path(key_path),
+                            );
+                            log_console!(
+                                "[control] WATCHDOG: delete-create playbook injected for {}",
+                                key_path
                             );
                         }
 
@@ -570,37 +611,35 @@ impl AgentController {
                             );
                             log_console!("  {}", preview);
 
-                            // 鈹€鈹€ P0-3: Early intervention at >=3 total errors 鈹€鈹€
-                            if total_errors >= 3
-                                && total_errors < config.watchdog.max_consecutive_errors
-                            {
+                            // ── Consecutive tool errors → playbook ──
+                            if total_errors >= 3 {
                                 let error_tools: Vec<String> = tool_error_map
                                     .iter()
                                     .map(|(k, v)| format!("{}x {}", v, k))
                                     .collect();
-                                let early_hint = format!(
-                                    "\n\n[Caution] tool calls have failed {} times ({}).                                     Before retrying, consider using read_file to verify state,                                     check parameter names, or try a different approach.",
-                                    total_errors,
-                                    error_tools.join(", "),
+                                append_watchdog_intervention(
+                                    &mut tool_content,
+                                    WatchdogEvent::ConsecutiveToolErrors,
+                                    &WatchdogHintContext::new(total_errors)
+                                        .detail(&error_tools.join(", ")),
                                 );
-                                tool_content.push_str(&early_hint);
                                 log_console!(
-                                    "[control] P0-3 early intervention injected (total_errors={})",
+                                    "[control] consecutive-tool-errors playbook injected (total_errors={})",
                                     total_errors
                                 );
                             }
 
-                            // 鈹€鈹€ Test stalemate detection 鈹€鈹€
+                            // ── Test stalemate detection ──
                             if tc.name == "run_tests"
                                 && err_count >= config.watchdog.test_stalemate_threshold
                             {
-                                let stalemate_hint = format!(
-                                    "\n\n鈿狅笍 Test stalemate detected: `run_tests` failed {} consecutive times.                                      Suggestions: 鈶?Check test code and implementation match the contract                                      鈶?`read_file` to confirm current source content                                      鈶?Follow [playbook: test-red] systematic troubleshooting                                      鈶?If still unresolved, `wake_cabinet` for assistance",
-                                    err_count
+                                append_watchdog_intervention(
+                                    &mut tool_content,
+                                    WatchdogEvent::TestRedLoop,
+                                    &WatchdogHintContext::new(err_count),
                                 );
-                                tool_content.push_str(&stalemate_hint);
                                 log_console!(
-                                    "[control] WATCHDOG: test stalemate detected (consecutive={})",
+                                    "[control] WATCHDOG: test-red playbook injected (consecutive={})",
                                     err_count
                                 );
                             }
@@ -689,6 +728,7 @@ impl AgentController {
                 // Execute first tool call 鈥?check if it's a route_to
                 if let Some(tc) = calls.first() {
                     let result = tool_exec(&tc.name, &tc.args).await;
+                    self.collect_document_from_tool(&tc.name, &result);
                     // Route detection (same logic as main loop)
                     if let Ok(v) = serde_json::from_str::<serde_json::Value>(&result) {
                         if v["operation"].as_str() == Some("route_to") {

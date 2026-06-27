@@ -82,20 +82,24 @@ impl Role {
             "shangshuling" | "尚书令" | "chief executor" | "executor" | "执行" | "dispatch"
             | "调度" => Some(Role::Shangshuling),
 
-            "libushangshu" | "吏部" | "personnel" | "人事" => Some(Role::LiBuShangshu),
+            "libushangshu" | "吏部" | "吏部尚书" | "personnel" | "人事" => {
+                Some(Role::LiBuShangshu)
+            }
 
-            "liburshangshu" | "礼部" | "rites" | "礼仪" => Some(Role::LiBuRShangshu),
+            "liburshangshu" | "礼部" | "礼部尚书" | "rites" | "礼仪" => {
+                Some(Role::LiBuRShangshu)
+            }
 
-            "bingbushangshu" | "兵部" | "war" | "测试" | "contract" => {
+            "bingbushangshu" | "兵部" | "兵部尚书" | "war" | "测试" | "contract" => {
                 Some(Role::BingbuShangshu)
             }
 
-            "xingbushangshu" | "刑部" | "justice" | "刑法" | "validate" => {
+            "xingbushangshu" | "刑部" | "刑部尚书" | "justice" | "刑法" | "validate" => {
                 Some(Role::XingbuShangshu)
             }
 
-            "gongbushangshu" | "工部" | "works" | "ministry of works" | "编码" | "实现"
-            | "engineering" => Some(Role::GongbuShangshu),
+            "gongbushangshu" | "工部" | "工部尚书" | "works" | "ministry of works" | "编码"
+            | "实现" | "engineering" => Some(Role::GongbuShangshu),
 
             _ => None,
         };

@@ -57,6 +57,7 @@ pub struct GongbuShangshuAgent {
     model: String,
     cancel: Arc<AtomicBool>,
     plan: Arc<Mutex<Option<PlanState>>>,
+    last_stopped: AtomicBool,
 }
 
 impl GongbuShangshuAgent {
@@ -66,6 +67,7 @@ impl GongbuShangshuAgent {
             model: model.to_string(),
             cancel,
             plan: Arc::new(Mutex::new(None)),
+            last_stopped: AtomicBool::new(false),
         }
     }
 
@@ -299,7 +301,7 @@ impl Agent for GongbuShangshuAgent {
                 }
             })
         };
-        let (result, _route) = controller
+        let run_result = controller
             .run(
                 &mut session,
                 &exec,
@@ -309,8 +311,13 @@ impl Agent for GongbuShangshuAgent {
                 &config,
                 Some(&*input.fast_cancel),
             )
-            .await?
-            .into_tuple();
+            .await?;
+
+        let stopped = matches!(run_result, crate::api::control::RunResult::Stopped(_));
+        if stopped {
+            self.last_stopped.store(true, Ordering::SeqCst);
+        }
+        let result = run_result.into_text();
 
         // Persist for continuation within the batch
         let snap = session.snapshot();
@@ -319,10 +326,16 @@ impl Agent for GongbuShangshuAgent {
         ctx.save_to(&working_dir, &role_name).await;
 
         // route_to 已移除 —— PipelineEngine 负责所有调度
-        Ok(AgentOutput::new(result))
+        let mut output = AgentOutput::new(result);
+        crate::agent::runner::attach_run_documents(&mut output, &mut controller, &working_dir)
+            .await;
+        Ok(output)
     }
 
     fn after_execute(&self, _output: &AgentOutput) -> LoopDecision {
+        if self.last_stopped.swap(false, Ordering::SeqCst) {
+            return LoopDecision::Done;
+        }
         let plan_guard = self.plan.lock().unwrap();
         match *plan_guard {
             Some(ref p) if !p.complete => LoopDecision::Continue(
@@ -336,6 +349,7 @@ impl Agent for GongbuShangshuAgent {
     fn reset_plan(&self) {
         let mut guard = self.plan.lock().unwrap();
         *guard = None;
+        self.last_stopped.store(false, Ordering::SeqCst);
         log_console!("[工部] plan cleared for new task");
     }
 
@@ -362,5 +376,35 @@ impl Agent for GongbuShangshuAgent {
             }
             None => "null".to_string(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agent::r#trait::AgentOutput;
+
+    #[test]
+    fn gongbu_stopped_does_not_continue_batch() {
+        let cancel = Arc::new(AtomicBool::new(false));
+        let client = AnthropicClient::new(String::new(), String::new());
+        let agent = GongbuShangshuAgent::new(client, "test", cancel);
+
+        {
+            let mut guard = agent.plan.lock().unwrap();
+            *guard = Some(PlanState {
+                batches: vec![PlanBatch {
+                    name: "b1".into(),
+                    goal: "g1".into(),
+                }],
+                current: 0,
+                complete: false,
+                fresh_batch: false,
+            });
+        }
+        agent.last_stopped.store(true, Ordering::SeqCst);
+
+        let decision = agent.after_execute(&AgentOutput::new(String::new()));
+        assert!(matches!(decision, LoopDecision::Done));
     }
 }

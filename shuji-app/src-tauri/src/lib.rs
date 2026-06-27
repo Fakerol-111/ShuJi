@@ -131,6 +131,7 @@ pub fn run() {
             runtime_config: Arc::new(RwLock::new(runtime_config)),
             compacting_roles: Arc::new(Mutex::new(HashSet::new())),
             discuss_cancel: Arc::new(AtomicBool::new(false)),
+            pipeline_supervisor: Arc::new(crate::pipeline::supervisor::PipelineSupervisor::new()),
         })
         // 注册所有 Tauri 命令 — 前端通过 invoke() 调用这些函数
         .invoke_handler(tauri::generate_handler![

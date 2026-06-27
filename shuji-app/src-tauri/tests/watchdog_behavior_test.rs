@@ -178,6 +178,11 @@ async fn test_watchdog_same_tool_triggers_intervention() {
         tool_text
     );
     assert!(
+        tool_text.contains("[playbook: repeated-tool]"),
+        "should inject repeated-tool playbook. tool results: {}",
+        tool_text
+    );
+    assert!(
         tool_text.contains("read_file"),
         "Intervention hint should contain tool name. tool results: {}",
         tool_text
@@ -235,6 +240,69 @@ async fn test_watchdog_consecutive_errors_stops_agent() {
         text_lower.contains("terminating"),
         "watchdog should terminate after 3 consecutive errors. Output: {}",
         text
+    );
+
+    // 终止前应在 tool result 中注入 consecutive-tool-errors playbook
+    let tool_text = extract_tool_results_text(&session);
+    assert!(
+        tool_text.contains("[playbook: consecutive-tool-errors]"),
+        "should inject consecutive-tool-errors playbook before stop. tool results: {}",
+        tool_text
+    );
+}
+
+// ── 测试 4: 只读不写 → read-without-write playbook ──
+
+#[tokio::test]
+async fn test_watchdog_read_without_write_triggers_playbook() {
+    let mock_server = wiremock::MockServer::start().await;
+    let runtime_config = Arc::new({
+        let mut c = RuntimeConfig::default();
+        c.checkpoint.interval_secs = 0;
+        c.api.max_retries = 0;
+        c.api.timeout_secs = 30;
+        c.watchdog.read_without_write_warning = 2;
+        c.watchdog.max_consecutive_errors = 10;
+        c
+    });
+    let tools = minimal_tools();
+    let cancel = AtomicBool::new(false);
+
+    let mut responses = Vec::new();
+    for path in ["a.txt", "b.txt", "c.txt"] {
+        responses.push(mock_api_tool(
+            "read_file",
+            serde_json::json!({"path": path}),
+        ));
+    }
+    responses.push(mock_api_text("完成"));
+
+    let queue = MockQueue::new(responses);
+    queue.clone().mount(&mock_server).await;
+
+    let mut session = make_session(&mock_server.uri(), &tools, &runtime_config);
+    let mut controller = AgentController::new();
+
+    let result = controller
+        .run(
+            &mut session,
+            &tool_exec_success,
+            &cancel,
+            &tools,
+            None,
+            &runtime_config,
+            None,
+        )
+        .await
+        .expect("run should succeed");
+
+    assert!(result.into_text().contains("完成"));
+
+    let tool_text = extract_tool_results_text(&session);
+    assert!(
+        tool_text.contains("[playbook: read-without-write]"),
+        "read-without-write playbook should be injected. tool results: {}",
+        tool_text
     );
 }
 
@@ -297,6 +365,11 @@ async fn test_watchdog_delete_create_cycle_triggers_intervention() {
     assert!(
         tool_text.contains("[Intervention]"),
         "delete-create cycle should inject [Intervention] after 2 cycles. tool results: {}",
+        tool_text
+    );
+    assert!(
+        tool_text.contains("[playbook: delete-create-cycle]"),
+        "delete-create cycle should inject playbook. tool results: {}",
         tool_text
     );
     assert!(

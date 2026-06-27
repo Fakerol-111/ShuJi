@@ -206,7 +206,9 @@ impl Agent for MenxiaShizhongAgent {
         crate::agent::runner::save_context(&session, &working_dir, self.role().name()).await;
 
         let clean = strip_skill_tag(result);
-        // route_to 已移除 —— PipelineEngine 负责所有调度
-        Ok(AgentOutput::new(clean))
+        let mut output = AgentOutput::new(clean);
+        crate::agent::runner::attach_run_documents(&mut output, &mut controller, &working_dir)
+            .await;
+        Ok(output)
     }
 }

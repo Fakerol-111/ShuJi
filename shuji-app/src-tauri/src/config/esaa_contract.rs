@@ -40,22 +40,267 @@ impl AgentContracts {
         })
     }
 
-    /// Get contract for a role, supporting both Chinese and English role names.
+    /// Resolve role name to contract key (supports Role::from_name aliases + sub-agents).
+    pub fn role_key(role: &str) -> Option<&'static str> {
+        if let Some(r) = crate::models::role::Role::from_name(role) {
+            return Some(match r {
+                crate::models::role::Role::Neige => "neige",
+                crate::models::role::Role::Zhongshuling => "zhongshuling",
+                crate::models::role::Role::MenxiaShizhong => "menxiashizhong",
+                crate::models::role::Role::Shangshuling => "shangshuling",
+                crate::models::role::Role::LiBuShangshu => "libushangshu",
+                crate::models::role::Role::BingbuShangshu => "bingbushangshu",
+                crate::models::role::Role::GongbuShangshu => "gongbushangshu",
+                crate::models::role::Role::XingbuShangshu => "xingbushangshu",
+                crate::models::role::Role::LiBuRShangshu => "liburshangshu",
+            });
+        }
+        match role.to_lowercase().as_str() {
+            "requirements_agent" => Some("requirements_agent"),
+            "survey_agent" => Some("survey_agent"),
+            _ => None,
+        }
+    }
+
+    /// Get YAML override for a role, if present.
     pub fn for_role(&self, role: &str) -> Option<&RoleContract> {
-        let role_key = match role.to_lowercase().as_str() {
-            "工部" | "gongbushangshu" => "gongbushangshu",
-            "刑部" | "xingbushangshu" => "xingbushangshu",
-            "内阁" | "neige" => "neige",
-            "吏部" | "libushangshu" => "libushangshu",
-            "兵部" | "bingbushangshu" => "bingbushangshu",
-            "礼部" | "liburshangshu" => "liburshangshu",
-            "中书令" | "zhongshuling" => "zhongshuling",
-            "门下侍中" | "menxiashizhong" => "menxiashizhong",
-            "尚书令" | "shangshuling" => "shangshuling",
-            _ => return None,
-        };
+        let role_key = Self::role_key(role)?;
         self.roles.get(role_key)
     }
+
+    /// Effective contract = built-in defaults merged with optional YAML override.
+    pub fn effective_for_role(&self, role: &str) -> Option<RoleContract> {
+        let key = Self::role_key(role)?;
+        let base = builtin_contract_for(key);
+        match self.roles.get(key) {
+            Some(overlay) => Some(merge_contracts(base, overlay)),
+            None => Some(base),
+        }
+    }
+}
+
+/// Built-in contracts used when ESAA is off or YAML has no entry for a role.
+pub fn builtin_agent_contracts() -> AgentContracts {
+    let mut roles = HashMap::new();
+    for key in [
+        "neige",
+        "zhongshuling",
+        "menxiashizhong",
+        "shangshuling",
+        "libushangshu",
+        "bingbushangshu",
+        "gongbushangshu",
+        "xingbushangshu",
+        "liburshangshu",
+        "requirements_agent",
+        "survey_agent",
+    ] {
+        roles.insert(key.to_string(), builtin_contract_for(key));
+    }
+    AgentContracts { roles }
+}
+
+fn merge_contracts(base: RoleContract, overlay: &RoleContract) -> RoleContract {
+    RoleContract {
+        allowed_tools: overlay.allowed_tools.clone().or(base.allowed_tools),
+        forbidden_tools: merge_string_lists(base.forbidden_tools, overlay.forbidden_tools.clone()),
+        allowed_paths: overlay.allowed_paths.clone().or(base.allowed_paths),
+        forbidden_routes: merge_string_lists(
+            base.forbidden_routes,
+            overlay.forbidden_routes.clone(),
+        ),
+        max_create_file_size: overlay.max_create_file_size.or(base.max_create_file_size),
+        max_tool_calls_per_round: overlay
+            .max_tool_calls_per_round
+            .or(base.max_tool_calls_per_round),
+    }
+}
+
+fn merge_string_lists(a: Option<Vec<String>>, b: Option<Vec<String>>) -> Option<Vec<String>> {
+    match (a, b) {
+        (None, None) => None,
+        (Some(x), None) => Some(x),
+        (None, Some(y)) => Some(y),
+        (Some(mut x), Some(y)) => {
+            for item in y {
+                if !x.contains(&item) {
+                    x.push(item);
+                }
+            }
+            Some(x)
+        }
+    }
+}
+
+const FILE_WRITE_TOOLS: &[&str] = &[
+    "create_file",
+    "edit_file",
+    "apply_patch",
+    "modify_file",
+    "append_file",
+    "delete_file",
+    "rename_file",
+];
+const EXEC_TOOLS: &[&str] = &["execute_command", "run_tests", "run_lint", "setup_test_env"];
+const APPROVAL_TOOLS: &[&str] = &["set_document_status"];
+const PIPELINE_PLAN_TOOLS: &[&str] = &["submit_pipeline_plan", "update_pipeline_plan"];
+const GONGBU_PLAN_TOOLS: &[&str] = &["submit_plan", "complete_task"];
+const DESIGN_FORBIDDEN: &[&str] = &[
+    "assign_task",
+    "cancel_agent",
+    "create_skill",
+    "update_soul",
+    "expand_requirements",
+    "survey_codebase",
+];
+
+fn forbidden(names: &[&str]) -> Option<Vec<String>> {
+    Some(names.iter().map(|s| (*s).to_string()).collect())
+}
+
+fn concat_forbidden(slices: &[&[&str]]) -> Option<Vec<String>> {
+    let mut out = Vec::new();
+    for slice in slices {
+        for name in *slice {
+            if !out.iter().any(|x: &String| x == name) {
+                out.push((*name).to_string());
+            }
+        }
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
+}
+
+pub fn builtin_contract_for(role_key: &str) -> RoleContract {
+    let design_doc = || RoleContract {
+        allowed_tools: None,
+        forbidden_tools: concat_forbidden(&[
+            FILE_WRITE_TOOLS,
+            EXEC_TOOLS,
+            APPROVAL_TOOLS,
+            PIPELINE_PLAN_TOOLS,
+            GONGBU_PLAN_TOOLS,
+            DESIGN_FORBIDDEN,
+        ]),
+        allowed_paths: None,
+        forbidden_routes: Some(vec!["内阁".into()]),
+        max_create_file_size: None,
+        max_tool_calls_per_round: None,
+    };
+
+    match role_key {
+        "neige" => RoleContract {
+            forbidden_tools: concat_forbidden(&[
+                FILE_WRITE_TOOLS,
+                EXEC_TOOLS,
+                APPROVAL_TOOLS,
+                GONGBU_PLAN_TOOLS,
+            ]),
+            forbidden_routes: Some(vec!["内阁".into()]),
+            ..RoleContract::default_empty()
+        },
+        "zhongshuling" | "menxiashizhong" | "libushangshu" => design_doc(),
+        "bingbushangshu" => design_doc(),
+        "shangshuling" => RoleContract {
+            forbidden_tools: concat_forbidden(&[
+                FILE_WRITE_TOOLS,
+                EXEC_TOOLS,
+                APPROVAL_TOOLS,
+                PIPELINE_PLAN_TOOLS,
+                GONGBU_PLAN_TOOLS,
+            ]),
+            ..RoleContract::default_empty()
+        },
+        "liburshangshu" => RoleContract {
+            forbidden_tools: concat_forbidden(&[
+                FILE_WRITE_TOOLS,
+                &["execute_command", "run_tests", "setup_test_env"],
+                APPROVAL_TOOLS,
+                PIPELINE_PLAN_TOOLS,
+                GONGBU_PLAN_TOOLS,
+                &["assign_task", "cancel_agent"],
+            ]),
+            ..RoleContract::default_empty()
+        },
+        "gongbushangshu" => RoleContract {
+            forbidden_tools: concat_forbidden(&[
+                &["execute_command"],
+                APPROVAL_TOOLS,
+                PIPELINE_PLAN_TOOLS,
+                &["assign_task", "cancel_agent", "route_to"],
+            ]),
+            ..RoleContract::default_empty()
+        },
+        "xingbushangshu" => RoleContract {
+            forbidden_tools: concat_forbidden(&[
+                &["execute_command"],
+                APPROVAL_TOOLS,
+                PIPELINE_PLAN_TOOLS,
+                GONGBU_PLAN_TOOLS,
+                &["assign_task", "cancel_agent", "route_to"],
+            ]),
+            ..RoleContract::default_empty()
+        },
+        "requirements_agent" | "survey_agent" => RoleContract {
+            forbidden_tools: forbidden(&[
+                "execute_command",
+                "run_tests",
+                "set_document_status",
+                "route_to",
+                "submit_pipeline_plan",
+            ]),
+            ..RoleContract::default_empty()
+        },
+        _ => RoleContract::default_empty(),
+    }
+}
+
+impl RoleContract {
+    fn default_empty() -> Self {
+        Self {
+            allowed_tools: None,
+            forbidden_tools: None,
+            allowed_paths: None,
+            forbidden_routes: None,
+            max_create_file_size: None,
+            max_tool_calls_per_round: None,
+        }
+    }
+}
+
+/// Minimum dispatch-layer gate (always on, even when ESAA is disabled).
+pub fn check_dispatch_tool_gate(dept: &str, tool: &str) -> Result<(), String> {
+    let contracts = builtin_agent_contracts();
+    let Some(contract) = contracts.effective_for_role(dept) else {
+        return Ok(());
+    };
+    if contract.is_tool_allowed(tool) {
+        Ok(())
+    } else {
+        Err(format_tool_denial(dept, tool))
+    }
+}
+
+pub fn format_tool_denial(role: &str, tool: &str) -> String {
+    let hint = match tool {
+        "create_file" | "edit_file" | "apply_patch" | "modify_file" | "append_file"
+        | "delete_file" | "rename_file" => {
+            "设计/审查部门不应直接改代码。请产出文档或 route/assign 给工部/兵部执行。"
+        }
+        "execute_command" | "run_tests" | "run_lint" | "setup_test_env" => {
+            "该部门不负责执行命令或跑测试。工部用 run_tests，刑部负责集成测试。"
+        }
+        "set_document_status" => "朱批仅由皇帝在 UI 中准奏，agent 不可调用 set_document_status。",
+        "submit_pipeline_plan" | "update_pipeline_plan" => "仅内阁可提交/修改 pipeline 计划。",
+        "submit_plan" | "complete_task" => "批次计划工具仅工部尚书可用。",
+        "assign_task" => "assign_task 仅尚书令可用。",
+        "route_to" => "执行部门应通过尚书令调度，不要自行 route_to。",
+        _ => "请改用本部门职责范围内的工具，或 route/assign 给对应部门。",
+    };
+    format!("角色「{role}」无权调用 {tool}。{hint}")
 }
 
 impl RoleContract {
@@ -187,12 +432,11 @@ impl ContractBoundaryChecker {
     pub fn check_tool(&self, role: &str, tool: &str) -> Result<(), String> {
         self.maybe_reload();
         let contracts = self.contracts.lock().unwrap();
-        let contract = match contracts.for_role(role) {
-            Some(c) => c,
-            None => return Ok(()),
+        let Some(contract) = contracts.effective_for_role(role) else {
+            return Ok(());
         };
         if !contract.is_tool_allowed(tool) {
-            return Err(format!("{} 被禁止使用工具 {}", role, tool));
+            return Err(format_tool_denial(role, tool));
         }
         Ok(())
     }
@@ -200,12 +444,14 @@ impl ContractBoundaryChecker {
     pub fn check_route(&self, role: &str, target: &str) -> Result<(), String> {
         self.maybe_reload();
         let contracts = self.contracts.lock().unwrap();
-        let contract = match contracts.for_role(role) {
-            Some(c) => c,
-            None => return Ok(()),
+        let Some(contract) = contracts.effective_for_role(role) else {
+            return Ok(());
         };
         if !contract.is_route_allowed(target) {
-            return Err(format!("{} 禁止路由到 {}", role, target));
+            return Err(format!(
+                "角色「{}」禁止路由到 {}。请 route/assign 给职责范围内的下游部门。",
+                role, target
+            ));
         }
         Ok(())
     }
@@ -213,12 +459,14 @@ impl ContractBoundaryChecker {
     pub fn check_path(&self, role: &str, path: &str) -> Result<(), String> {
         self.maybe_reload();
         let contracts = self.contracts.lock().unwrap();
-        let contract = match contracts.for_role(role) {
-            Some(c) => c,
-            None => return Ok(()),
+        let Some(contract) = contracts.effective_for_role(role) else {
+            return Ok(());
         };
         if !contract.is_path_allowed(path) {
-            return Err(format!("路径 {} 不在 {} 的白名单中", path, role));
+            return Err(format!(
+                "路径 {} 不在角色「{}」允许范围内。请检查 AGENT_CONTRACT.yaml 中的 allowed_paths。",
+                path, role
+            ));
         }
         Ok(())
     }
@@ -226,9 +474,8 @@ impl ContractBoundaryChecker {
     pub fn check_file_size(&self, role: &str, content: &str) -> Result<(), String> {
         self.maybe_reload();
         let contracts = self.contracts.lock().unwrap();
-        let contract = match contracts.for_role(role) {
-            Some(c) => c,
-            None => return Ok(()),
+        let Some(contract) = contracts.effective_for_role(role) else {
+            return Ok(());
         };
         if let Some(max) = contract.max_create_file_size {
             if content.len() > max {
@@ -327,7 +574,7 @@ roles:
 "#,
         );
         let contracts = AgentContracts::load(&dir.path().join(".shuji"));
-        let contract = contracts.for_role("gongbushangshu").unwrap();
+        let contract = contracts.effective_for_role("gongbushangshu").unwrap();
         assert!(contract.is_tool_allowed("create_file"));
         assert!(contract.is_tool_allowed("read_file"));
         assert!(!contract.is_tool_allowed("delete_file"));
@@ -352,15 +599,31 @@ roles:
         );
         let contracts = AgentContracts::load(&dir.path().join(".shuji"));
         assert!(contracts.for_role("Gongbushangshu").is_some());
-        assert!(contracts.for_role("GONGBUSHANGSHU").is_some());
+        let effective = contracts.effective_for_role("GONGBUSHANGSHU").unwrap();
+        assert!(effective.is_tool_allowed("create_file"));
     }
 
     #[test]
-    fn test_no_contract_fallback() {
+    fn test_no_contract_fallback_uses_builtin() {
         let contracts = AgentContracts {
             roles: HashMap::new(),
         };
         assert!(contracts.for_role("nonexistent").is_none());
+        let effective = contracts.effective_for_role("中书令").unwrap();
+        assert!(!effective.is_tool_allowed("create_file"));
+        assert!(effective.is_tool_allowed("read_document"));
+    }
+
+    #[test]
+    fn test_builtin_dispatch_gate_blocks_designer_code_write() {
+        let err = check_dispatch_tool_gate("中书令", "create_file").unwrap_err();
+        assert!(err.contains("create_file"));
+        assert!(check_dispatch_tool_gate("工部尚书", "create_file").is_ok());
+    }
+
+    #[test]
+    fn test_builtin_blocks_set_document_status() {
+        assert!(check_dispatch_tool_gate("工部尚书", "set_document_status").is_err());
     }
 
     #[test]

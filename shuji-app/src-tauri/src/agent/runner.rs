@@ -140,3 +140,12 @@ pub async fn save_context(session: &Session, working_dir: &Path, role_name: &str
     let ctx = PersistedContext::from_messages(&snap.messages);
     ctx.save_to(working_dir, role_name).await;
 }
+
+/// Attach documents collected during AgentController::run() to agent output.
+pub async fn attach_run_documents(
+    output: &mut crate::agent::r#trait::AgentOutput,
+    controller: &mut crate::api::control::AgentController,
+    working_dir: &Path,
+) {
+    output.documents = controller.take_documents(working_dir).await;
+}

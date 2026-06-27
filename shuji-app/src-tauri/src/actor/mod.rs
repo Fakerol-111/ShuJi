@@ -132,6 +132,9 @@ pub struct ActorMessage {
 
     /// Pipeline 引擎的回执通道
     pub reply_to: Option<mpsc::UnboundedSender<String>>,
+
+    /// 为 false 时，内阁不得提取或提交 pipeline plan（如 pipeline 完成后的 summary 回合）。
+    pub allow_pipeline_plan: bool,
 }
 
 impl ActorMessage {
@@ -143,6 +146,19 @@ impl ActorMessage {
             payload: None,
             doc_ids: Vec::new(),
             reply_to: None,
+            allow_pipeline_plan: true,
+        }
+    }
+
+    /// Pipeline 完成后的总结任务：禁止再次提交 plan。
+    pub fn pipeline_summary(subject: impl Into<String>) -> Self {
+        Self {
+            msg_type: RouteMsgType::Task,
+            subject: subject.into(),
+            payload: None,
+            doc_ids: Vec::new(),
+            reply_to: None,
+            allow_pipeline_plan: false,
         }
     }
 
@@ -155,6 +171,7 @@ impl ActorMessage {
             payload: None,
             doc_ids: Vec::new(),
             reply_to: None,
+            allow_pipeline_plan: true,
         }
     }
 }
@@ -248,6 +265,12 @@ pub struct ActorContext {
 
     /// 运行时配置（共享只读引用）
     pub runtime_config: Arc<RuntimeConfig>,
+
+    /// Pipeline 后台执行 supervisor（内阁 submit plan 时非阻塞启动）
+    pub pipeline_supervisor: Arc<crate::pipeline::supervisor::PipelineSupervisor>,
+
+    /// 与 AppState.actor_system 同一槽位，pipeline 恢复时读取完整 ActorSystem
+    pub actor_system_slot: Arc<tokio::sync::Mutex<Option<ActorSystem>>>,
 }
 
 // ============================================================================
@@ -311,6 +334,20 @@ impl ActorSystem {
             cancel_map,
             cancel,
             workflow_graph,
+        }
+    }
+
+    /// Duplicate channel handles for sharing with pipeline supervisor / AppState slot.
+    pub fn duplicate_handles(&self) -> Self {
+        Self {
+            senders: self.senders.clone(),
+            fast_txs: self.fast_txs.clone(),
+            emperor_tx: self.emperor_tx.clone(),
+            dept_log_tx: self.dept_log_tx.clone(),
+            dept_step_tx: self.dept_step_tx.clone(),
+            cancel_map: self.cancel_map.clone(),
+            cancel: self.cancel.clone(),
+            workflow_graph: self.workflow_graph.clone(),
         }
     }
 

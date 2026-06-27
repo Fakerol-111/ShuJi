@@ -359,6 +359,7 @@ async fn test_cancel_flag_stops_agent_execution() {
         discuss_mode: false,
         fast_cancel: Arc::new(AtomicBool::new(false)),
         dept_step_tx: None,
+        allow_pipeline_plan: true,
     };
 
     // First execute should succeed
@@ -465,6 +466,7 @@ async fn test_route_to_cross_actor() {
         discuss_mode: false,
         fast_cancel: Arc::new(AtomicBool::new(false)),
         dept_step_tx: None,
+        allow_pipeline_plan: true,
     };
 
     // Neige execute
@@ -505,6 +507,7 @@ async fn test_route_to_cross_actor() {
             discuss_mode: false,
             fast_cancel: Arc::new(AtomicBool::new(false)),
             dept_step_tx: None,
+            allow_pipeline_plan: true,
         };
 
         let gongbu_output = gongbu.execute(&gongbu_input).await.unwrap();

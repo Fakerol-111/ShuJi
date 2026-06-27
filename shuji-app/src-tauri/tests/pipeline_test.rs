@@ -9,6 +9,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use shuji_app_lib::actor::ActorMessage;
+use shuji_app_lib::actor::ActorSystem;
 use shuji_app_lib::config::{ApprovalMode, RuntimeConfig};
 use shuji_app_lib::models::role::Role;
 use shuji_app_lib::pipeline::engine::PipelineEngine;
@@ -88,6 +89,35 @@ impl MockActorHarness {
             Role::LiBuRShangshu,
         ])
     }
+}
+
+/// Minimal ActorSystem for resume-path tests (senders only; optional graph/cancel).
+fn mock_actor_system(harness: &MockActorHarness) -> ActorSystem {
+    let (emperor_tx, _) = mpsc::channel(1);
+    let (dept_log_tx, _) = mpsc::channel(1);
+    let graph = Arc::new(tokio::sync::Mutex::new(
+        shuji_app_lib::workflow::WorkflowGraph::default(),
+    ));
+    ActorSystem::new(
+        harness.senders.clone(),
+        HashMap::new(),
+        emperor_tx,
+        dept_log_tx,
+        None,
+        Arc::new(std::sync::Mutex::new(HashMap::new())),
+        Arc::new(AtomicBool::new(false)),
+        graph,
+    )
+}
+
+fn resume_engine(
+    runtime: PlanRuntime,
+    harness: &MockActorHarness,
+    dir: &Path,
+    runtime_config: Arc<RuntimeConfig>,
+) -> PipelineEngine {
+    let system = mock_actor_system(harness);
+    PipelineEngine::from_actor_system(runtime, &system, dir.to_path_buf(), runtime_config)
 }
 
 // ── Test Helpers ──────────────────────────────────────────────────
@@ -305,10 +335,10 @@ async fn approval_gate_pauses_and_resumes() {
                     .await;
 
             let loaded = PlanRuntime::load_from(tmp.path()).await.unwrap();
-            let engine2 = PipelineEngine::from_runtime(
+            let engine2 = resume_engine(
                 loaded,
-                harness.senders.clone(),
-                tmp.path().to_path_buf(),
+                &harness,
+                tmp.path(),
                 Arc::new(RuntimeConfig::default()),
             );
             let resume_result = engine2.resume_with_input(None).await;
@@ -352,10 +382,10 @@ async fn ask_user_pauses_and_resumes() {
 
             // Resume with input
             let loaded = PlanRuntime::load_from(tmp.path()).await.unwrap();
-            let engine2 = PipelineEngine::from_runtime(
+            let engine2 = resume_engine(
                 loaded,
-                harness.senders.clone(),
-                tmp.path().to_path_buf(),
+                &harness,
+                tmp.path(),
                 Arc::new(RuntimeConfig::default()),
             );
             let resume_result = engine2.resume_with_input(Some("Alice")).await;
@@ -623,10 +653,10 @@ async fn runtime_persist_and_reload() {
                     .await;
 
             // Resume and complete
-            let engine2 = PipelineEngine::from_runtime(
+            let engine2 = resume_engine(
                 loaded,
-                harness.senders.clone(),
-                tmp.path().to_path_buf(),
+                &harness,
+                tmp.path(),
                 Arc::new(RuntimeConfig::default()),
             );
             let resume_result = engine2.resume_with_input(None).await;
@@ -863,12 +893,7 @@ async fn manual_mode_approval_gate_resume_requires_approved_doc() {
             assert_eq!(doc_id, revw_id);
             runtime.save_to(root).await.unwrap();
             let loaded = PlanRuntime::load_from(root).await.unwrap();
-            let engine2 = PipelineEngine::from_runtime(
-                loaded,
-                harness.senders.clone(),
-                root.to_path_buf(),
-                Arc::new(RuntimeConfig::default()),
-            );
+            let engine2 = resume_engine(loaded, &harness, root, Arc::new(RuntimeConfig::default()));
             let resume_result = engine2.resume_with_input(None).await;
             match resume_result {
                 PipelineResult::AwaitingApproval {
@@ -946,12 +971,7 @@ async fn manual_mode_approval_gate_resume_after_approved() {
                 shuji_app_lib::tool::documents::tool_set_document_status(root, &approve_args).await;
 
             let loaded = PlanRuntime::load_from(root).await.unwrap();
-            let engine2 = PipelineEngine::from_runtime(
-                loaded,
-                harness.senders.clone(),
-                root.to_path_buf(),
-                Arc::new(RuntimeConfig::default()),
-            );
+            let engine2 = resume_engine(loaded, &harness, root, Arc::new(RuntimeConfig::default()));
             let resume_result = engine2.resume_with_input(None).await;
             match resume_result {
                 PipelineResult::Complete { runtime } => {
@@ -1138,5 +1158,37 @@ async fn artifact_doc_id_propagates_to_review_step() {
             assert_eq!(cap.doc_ids[0], vec!["dsgn_42".to_string()]);
         }
         other => panic!("expected Complete, got {:?}", other),
+    }
+}
+
+/// Resume via load_from_disk injects workflow_graph (unlike deprecated from_runtime-only senders).
+#[tokio::test]
+async fn load_from_disk_restores_actor_system_context() {
+    let harness = MockActorHarness::all_roles();
+    let tmp = tempfile::TempDir::new().unwrap();
+    let plan = simple_plan(
+        "load_disk",
+        "load from disk",
+        vec![ask_user_step("s1", "q", "Name?", vec![])],
+    );
+    let mut engine = make_engine(plan, &harness, tmp.path());
+    let result = engine.run().await;
+    match result {
+        PipelineResult::AwaitingUserInput { runtime, .. } => {
+            runtime.save_to(tmp.path()).await.unwrap();
+            let system = mock_actor_system(&harness);
+            assert!(system.workflow_graph.try_lock().is_ok());
+            let loaded = PipelineEngine::load_from_disk(
+                tmp.path(),
+                &system,
+                Arc::new(RuntimeConfig::default()),
+            )
+            .await
+            .expect("runtime on disk");
+            assert!(loaded.workflow_graph.is_some());
+            let resume = loaded.resume_with_input(Some("Bob")).await;
+            assert!(matches!(resume, PipelineResult::Complete { .. }));
+        }
+        other => panic!("expected AwaitingUserInput, got {:?}", other),
     }
 }

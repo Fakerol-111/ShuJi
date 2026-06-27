@@ -14,7 +14,7 @@ npm run tauri build    # 生产构建
 
 环境要求：Node.js >= 18，Rust >= 1.70。
 
-新人请先读 [ONBOARDING.md](ONBOARDING.md)。更完整的架构说明见 [shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md) 与 [CLAUDE.md](CLAUDE.md)。
+新人请先读 [ONBOARDING.md](ONBOARDING.md)。架构叙事见 [shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md)；后续 agent 任务边界见 [shuji-app/docs/AGENT_TASKS.md](shuji-app/docs/AGENT_TASKS.md)；文件级索引见 [CLAUDE.md](CLAUDE.md)。
 
 ## 仓库目录约定
 
@@ -26,7 +26,6 @@ ShuJi/                          # 仓库根
 ├── CHANGELOG.md
 ├── scripts/                    # 仓库级辅助脚本（非应用构建）
 ├── assets/                     # 答辩、演示等非代码资产
-├── docs/                       # 仓库级：images/ 进 Git；其余默认本地草稿
 └── shuji-app/                  # 唯一主应用
     ├── src/                    # React 前端
     ├── src-tauri/src/          # Rust 后端
@@ -39,7 +38,6 @@ ShuJi/                          # 仓库根
     │   ├── pipeline/           # Pipeline 引擎
     │   └── workflow/           # Workflow Profile
     ├── src-tauri/tests/        # Rust 集成测试
-    └── docs/                   # 应用文档（架构、测试流程、研读计划）
 ```
 
 ### 新增内容应放哪里
@@ -53,14 +51,11 @@ ShuJi/                          # 仓库根
 | React 页面 | `shuji-app/src/pages/` |
 | React 组件 | `shuji-app/src/components/`（通用 primitive → `components/ui/`） |
 | 前端 hook | `shuji-app/src/hooks/` |
-| 应用文档 | `shuji-app/docs/` |
-| README 截图 | `docs/images/` |
 | 一次性脚本 | `scripts/` |
 
 ### 不要做的事
 
 - 不要在仓库根再建第二个应用目录
-- 不要把 `design/future-mailbox.md` 当成现行架构阅读
 - 不要向 Git 提交 `api_config.json`、`.env`、`config.local.toml`（含密钥或本机覆盖）
 
 ## 配置文件
@@ -194,7 +189,7 @@ npm test
 - **批量计划循环** — 工部大任务分批执行，批间轻量恢复
 - **审计系统** — JSONL 日志、文档血缘、diff、双向引用索引
 
-完整技术栈与文件布局见 [CLAUDE.md](CLAUDE.md#architecture)；给人读的摘要见 [shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md)。
+完整技术栈与文件布局见 [CLAUDE.md](CLAUDE.md#architecture)。
 
 ### Checkpoint 系统
 

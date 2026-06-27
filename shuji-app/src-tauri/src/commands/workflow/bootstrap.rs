@@ -13,6 +13,7 @@ use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
+use tauri::{Emitter, Manager};
 use tokio::sync::mpsc;
 
 use crate::actor::ActorSystem;
@@ -28,9 +29,10 @@ use crate::agent::shangshuling::ShangshulingAgent;
 use crate::agent::xingbushangshu::XingbuShangshuAgent;
 use crate::agent::zhongshuling::ZhongshulingAgent;
 use crate::api::client::AnthropicClient;
+use crate::commands::project::AppState;
 use crate::commands::settings::AppConfig;
 use crate::models::chat::ChatMessage;
-use crate::models::dept_step::DeptStepSender;
+use crate::models::dept_step::{DeptStepEntry, DeptStepSender};
 use crate::models::role::Role;
 
 // ============================================================================
@@ -221,6 +223,8 @@ pub async fn start_actor_system(
     dept_step_tx: Option<DeptStepSender>,     // 步骤事件 → 前端（可选）
     plan_tx: mpsc::Sender<serde_json::Value>, // 计划更新 → 前端
     milestone_tx: mpsc::Sender<String>,       // 里程碑事件 → 持久化
+    pipeline_supervisor: Arc<crate::pipeline::supervisor::PipelineSupervisor>,
+    actor_system_slot: Arc<tokio::sync::Mutex<Option<ActorSystem>>>,
 ) -> ActorSystem {
     // ── Step 1: 初始化 CancelMap（每个角色一个 AtomicBool） ──
     let cancel_map: crate::CancelMap = Arc::new(std::sync::Mutex::new(HashMap::new()));
@@ -331,6 +335,22 @@ pub async fn start_actor_system(
     // ── Step 7: 为每个角色组装 ActorContext 并 spawn ──
     let all_senders = senders.clone();
 
+    let system = ActorSystem {
+        senders: all_senders.clone(),
+        fast_txs: (*fast_txs).clone(),
+        emperor_tx: emperor_tx.clone(),
+        dept_log_tx: dept_log_tx.clone(),
+        dept_step_tx: dept_step_tx.clone(),
+        cancel_map: cancel_map.clone(),
+        cancel: cancel.clone(),
+        workflow_graph: workflow_graph.clone(),
+    };
+
+    {
+        let mut slot = actor_system_slot.lock().await;
+        *slot = Some(system.duplicate_handles());
+    }
+
     // 跨 actor 共享的状态
     let shared_context: Arc<std::sync::Mutex<HashMap<Role, String>>> =
         Arc::new(std::sync::Mutex::new(HashMap::new()));
@@ -383,6 +403,8 @@ pub async fn start_actor_system(
             current_skill: Arc::new(std::sync::Mutex::new(None)), // 当前激活的技能
             workflow_graph: Some(workflow_graph.clone()),
             runtime_config: runtime_config.clone(),
+            pipeline_supervisor: pipeline_supervisor.clone(),
+            actor_system_slot: actor_system_slot.clone(),
         };
 
         // spawn: 每个 actor 在自己的 tokio task 中独立运行
@@ -390,19 +412,165 @@ pub async fn start_actor_system(
         tokio::spawn(crate::actor::run_actor(ctx));
     }
 
-    // ── Step 8: 返回 ActorSystem 句柄 ──
-    // 调用方通过 ActorSystem 可以：
-    //   - send(&role, msg) 向任意部门投递消息
-    //   - 通过 cancel_map 取消任意或全部部门
-    //   - 通过 emperor_tx / dept_log_tx 直接向前端发送事件
-    ActorSystem {
-        senders: all_senders,
-        fast_txs: (*fast_txs).clone(),
+    system
+}
+
+// ============================================================================
+// ensure_actor_system — 延迟初始化 actor 系统（send_message 等入口复用）
+// ============================================================================
+
+/// 启动 5 条事件转发通道：actor → 前端 emit + 内存缓存 + 持久化。
+///
+/// 普通消息路径与 pipeline 恢复路径共用此逻辑，避免 send.rs 内重复初始化。
+pub fn spawn_event_forwarders(
+    app: tauri::AppHandle,
+    state: &AppState,
+    working_dir: &str,
+    mut emperor_rx: mpsc::Receiver<ChatMessage>,
+    mut dept_log_rx: mpsc::Receiver<DeptLogEntry>,
+    mut dept_step_rx: mpsc::UnboundedReceiver<DeptStepEntry>,
+    mut plan_rx: mpsc::Receiver<serde_json::Value>,
+    mut milestone_rx: mpsc::Receiver<String>,
+) {
+    let chat_hist = state.chat_history.clone();
+    let dept_log_hist = state.dept_log_history.clone();
+    let chat_persist_dir = working_dir.to_string();
+    let app_handle = app.clone();
+
+    tokio::spawn(async move {
+        while let Some(msg) = emperor_rx.recv().await {
+            let _ = app_handle.emit("chat-message", &msg);
+            let mut hist = chat_hist.lock().await;
+            hist.push(msg.clone());
+            let log_dir = std::path::Path::new(&chat_persist_dir).join(".shuji");
+            let _ = tokio::fs::create_dir_all(&log_dir).await;
+            let chat_path = log_dir.join("chat.jsonl");
+            if let Ok(json) = serde_json::to_string(&msg) {
+                use tokio::io::AsyncWriteExt;
+                if let Ok(mut f) = tokio::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&chat_path)
+                    .await
+                {
+                    let _ = f.write_all(format!("{}\n", json).as_bytes()).await;
+                }
+            }
+        }
+    });
+
+    let app2 = app.clone();
+    let dept_log_dir = working_dir.to_string();
+    tokio::spawn(async move {
+        while let Some(entry) = dept_log_rx.recv().await {
+            let _ = app2.emit("dept-log", &entry);
+            let mut hist = dept_log_hist.lock().await;
+            hist.push(entry.clone());
+            let log_dir = std::path::Path::new(&dept_log_dir).join(".shuji");
+            let _ = tokio::fs::create_dir_all(&log_dir).await;
+            let log_path = log_dir.join("dept-log.jsonl");
+            if let Ok(json) = serde_json::to_string(&entry) {
+                use tokio::io::AsyncWriteExt;
+                if let Ok(mut f) = tokio::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&log_path)
+                    .await
+                {
+                    let _ = f.write_all(format!("{}\n", json).as_bytes()).await;
+                }
+            }
+        }
+    });
+
+    let app_step = app.clone();
+    tokio::spawn(async move {
+        while let Some(entry) = dept_step_rx.recv().await {
+            let _ = app_step.emit("dept-step", &entry);
+        }
+    });
+
+    let app_plan = app.clone();
+    tokio::spawn(async move {
+        while let Some(plan_json) = plan_rx.recv().await {
+            let _ = app_plan.emit("plan-update", &plan_json);
+        }
+    });
+
+    let app3 = app.clone();
+    let wd = working_dir.to_string();
+    tokio::spawn(async move {
+        let s = crate::storage::shuji_dir::ShujiDir::new(&wd);
+        while let Some(milestone) = milestone_rx.recv().await {
+            let st = app3.state::<AppState>();
+            let mut p_opt = st.current_project.lock().await;
+            if let Some(ref mut p) = *p_opt {
+                p.append_talk(&milestone);
+                p.summary = milestone.chars().take(120).collect();
+            }
+            let snapshot = p_opt.clone();
+            drop(p_opt);
+            if let Some(ref project) = snapshot {
+                let _ = s.save_project(project).await;
+            }
+            if let Some(ref project) = snapshot {
+                let _ = app3.emit("project-update", project);
+            }
+            let event = "milestone";
+            let role = milestone.split('|').next().unwrap_or("").trim();
+            let detail = milestone.chars().take(120).collect::<String>();
+            crate::audit::append(Path::new(&wd), event, role, "", &detail).await;
+        }
+    });
+}
+
+/// 确保 actor 系统已初始化；若已存在则直接返回。
+pub async fn ensure_actor_system(
+    app: tauri::AppHandle,
+    state: &AppState,
+    config: &AppConfig,
+    working_dir: &str,
+) -> Result<(), String> {
+    {
+        let guard = state.actor_system.lock().await;
+        if guard.is_some() {
+            return Ok(());
+        }
+    }
+
+    let (emperor_tx, emperor_rx) = mpsc::channel::<ChatMessage>(200);
+    let (dept_log_tx, dept_log_rx) = mpsc::channel::<DeptLogEntry>(500);
+    let (dept_step_tx, dept_step_rx) = mpsc::unbounded_channel::<DeptStepEntry>();
+    let (plan_tx, plan_rx) = mpsc::channel::<serde_json::Value>(50);
+    let (milestone_tx, milestone_rx) = mpsc::channel::<String>(50);
+
+    spawn_event_forwarders(
+        app,
+        state,
+        working_dir,
+        emperor_rx,
+        dept_log_rx,
+        dept_step_rx,
+        plan_rx,
+        milestone_rx,
+    );
+
+    let system = start_actor_system(
+        config,
+        crate::commands::project::snapshot_runtime_config(&state.runtime_config),
+        Path::new(working_dir),
+        Path::new(working_dir),
+        state.cancel_flag.clone(),
         emperor_tx,
         dept_log_tx,
-        dept_step_tx,
-        cancel_map,
-        cancel,
-        workflow_graph: workflow_graph.clone(),
-    }
+        Some(dept_step_tx),
+        plan_tx,
+        milestone_tx,
+        state.pipeline_supervisor.clone(),
+        state.actor_system.clone(),
+    )
+    .await;
+
+    *state.actor_system.lock().await = Some(system);
+    Ok(())
 }

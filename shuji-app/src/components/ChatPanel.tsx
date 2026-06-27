@@ -18,6 +18,7 @@ interface ChatPanelProps {
   onOption: (key: string, supplement?: string) => void;
   onSend: (text: string) => void;
   onRetrySend: (text: string, ts: string) => void;
+  onDocumentClick?: (path: string) => void;
   onDiscuss: (text: string) => void;
   onCancelDiscuss?: () => void;
   onConvertToCommand: (text: string) => void;
@@ -36,6 +37,7 @@ export default function ChatPanel(props: ChatPanelProps) {
     onOption,
     onSend,
     onRetrySend,
+    onDocumentClick,
     onDiscuss,
     onCancelDiscuss,
     onConvertToCommand,
@@ -74,6 +76,7 @@ export default function ChatPanel(props: ChatPanelProps) {
           messages={messages}
           onOption={onOption}
           onRetry={onRetrySend}
+          onDocumentClick={onDocumentClick}
           endRef={endRef}
           thinking={isProcessing}
           activeDepts={activeDepts}
@@ -135,6 +138,7 @@ function MessageList({
   messages,
   onOption,
   onRetry,
+  onDocumentClick,
   endRef,
   thinking,
   activeDepts,
@@ -142,6 +146,7 @@ function MessageList({
   messages: ChatMessage[];
   onOption: (key: string, supplement?: string) => void;
   onRetry?: (text: string, ts: string) => void;
+  onDocumentClick?: (path: string) => void;
   endRef: React.RefObject<HTMLDivElement | null>;
   thinking?: boolean;
   activeDepts?: string[];
@@ -153,7 +158,13 @@ function MessageList({
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
       {messages.map((msg, i) => (
-        <ChatBubble key={messageKey(msg, i)} msg={msg} onOption={onOption} onRetry={onRetry} />
+        <ChatBubble
+          key={messageKey(msg, i)}
+          msg={msg}
+          onOption={onOption}
+          onRetry={onRetry}
+          onDocumentClick={onDocumentClick}
+        />
       ))}
       {thinking && (
         <div className="relative overflow-hidden rounded-lg border border-fold bg-surface-parchment px-4 py-3">

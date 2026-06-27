@@ -149,4 +149,31 @@ describe('ChatBubble', () => {
     // No option buttons should be present
     expect(container.querySelector('button')).toBeFalsy();
   });
+
+  it('renders document cards and calls onDocumentClick', async () => {
+    const onDocumentClick = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ChatBubble
+        msg={deptMsg({
+          documents: [
+            {
+              id: 'revw_001',
+              doc_type: 'revw',
+              title: '总体设计审查',
+              status: 'in_review',
+              path: '.shuji/reviews/revw_001.md',
+            },
+          ],
+        })}
+        onOption={() => {}}
+        onDocumentClick={onDocumentClick}
+      />
+    );
+    expect(screen.getByText('相关牍章')).toBeTruthy();
+    expect(screen.getByText('revw_001')).toBeTruthy();
+    expect(screen.getByText('待朱批')).toBeTruthy();
+    await user.click(screen.getByText('点击在架阁中查看'));
+    expect(onDocumentClick).toHaveBeenCalledWith('.shuji/reviews/revw_001.md');
+  });
 });
