@@ -75,13 +75,21 @@ impl IntentChecker for ImmutabilityChecker {
         if refs.is_empty() {
             IntentVerdict::Allow
         } else {
+            let analysis = crate::audit::analyze_impact(wd, doc_id).await;
             IntentVerdict::Reject {
-                reason: format!(
-                    "文档 {} 被下游 {} 个文档引用，不可修改: {:?}",
-                    doc_id,
-                    refs.len(),
-                    refs
-                ),
+                reason: if !analysis.blocking_chain.is_empty() {
+                    format!(
+                        "文档 {} 修改将影响下游链路: {}",
+                        doc_id, analysis.blocking_chain
+                    )
+                } else {
+                    format!(
+                        "文档 {} 被下游 {} 个文档引用，不可修改: {:?}",
+                        doc_id,
+                        refs.len(),
+                        refs
+                    )
+                },
                 rule_id: "IMMUTABILITY".into(),
             }
         }

@@ -5,21 +5,6 @@ use tauri::State;
 use crate::commands::friendly_error::friendly_error;
 use crate::commands::project::AppState;
 
-/// Verify the SHA-256 hash chain integrity of the audit log.
-#[tauri::command]
-pub async fn verify_audit_trail(
-    state: State<'_, AppState>,
-) -> Result<crate::audit::VerificationReport, String> {
-    let working_dir = {
-        let project_opt = state.current_project.lock().await;
-        let p = project_opt
-            .as_ref()
-            .ok_or_else(|| friendly_error("没有加载项目"))?;
-        p.working_dir.clone()
-    };
-    crate::audit::verify_audit_trail(Path::new(&working_dir)).await
-}
-
 /// Get the document lineage tree for a given doc ID.
 #[tauri::command]
 pub async fn get_document_lineage(
@@ -216,4 +201,80 @@ pub async fn query_documents(
         p.working_dir.clone()
     };
     Ok(crate::audit::query_documents(Path::new(&working_dir), &filter).await)
+}
+
+/// Build the end-to-end document line for a pipeline run.
+#[tauri::command]
+pub async fn get_document_line_run(
+    state: State<'_, AppState>,
+    run_id: Option<String>,
+) -> Result<Option<crate::audit::DocumentLineRun>, String> {
+    let working_dir = {
+        let project_opt = state.current_project.lock().await;
+        let p = project_opt
+            .as_ref()
+            .ok_or_else(|| friendly_error("没有加载项目"))?;
+        p.working_dir.clone()
+    };
+    Ok(crate::audit::build_document_line(Path::new(&working_dir), run_id.as_deref()).await)
+}
+
+/// Build the document line containing a specific document.
+#[tauri::command]
+pub async fn get_document_line_for_doc(
+    state: State<'_, AppState>,
+    doc_id: String,
+) -> Result<Option<crate::audit::DocumentLineRun>, String> {
+    let working_dir = {
+        let project_opt = state.current_project.lock().await;
+        let p = project_opt
+            .as_ref()
+            .ok_or_else(|| friendly_error("没有加载项目"))?;
+        p.working_dir.clone()
+    };
+    Ok(crate::audit::build_document_line_for_doc(Path::new(&working_dir), &doc_id).await)
+}
+
+/// List known document line run IDs.
+#[tauri::command]
+pub async fn list_document_line_runs(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let working_dir = {
+        let project_opt = state.current_project.lock().await;
+        let p = project_opt
+            .as_ref()
+            .ok_or_else(|| friendly_error("没有加载项目"))?;
+        p.working_dir.clone()
+    };
+    Ok(crate::audit::list_document_line_runs(Path::new(&working_dir)).await)
+}
+
+/// Analyze downstream impact when modifying a document.
+#[tauri::command]
+pub async fn analyze_document_impact(
+    state: State<'_, AppState>,
+    doc_id: String,
+) -> Result<crate::audit::ImpactAnalysis, String> {
+    let working_dir = {
+        let project_opt = state.current_project.lock().await;
+        let p = project_opt
+            .as_ref()
+            .ok_or_else(|| friendly_error("没有加载项目"))?;
+        p.working_dir.clone()
+    };
+    Ok(crate::audit::analyze_impact(Path::new(&working_dir), &doc_id).await)
+}
+
+/// Verify the SHA-256 hash chain integrity of the audit log.
+#[tauri::command]
+pub async fn verify_audit_trail(
+    state: State<'_, AppState>,
+) -> Result<crate::audit::VerificationReport, String> {
+    let working_dir = {
+        let project_opt = state.current_project.lock().await;
+        let p = project_opt
+            .as_ref()
+            .ok_or_else(|| friendly_error("没有加载项目"))?;
+        p.working_dir.clone()
+    };
+    crate::audit::verify_audit_trail(Path::new(&working_dir)).await
 }

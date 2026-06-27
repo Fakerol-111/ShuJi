@@ -7,9 +7,20 @@ import {
   traceDocument,
   verifyAuditTrail,
   queryDocuments,
+  getDocumentLineRun,
+  getDocumentLineForDoc,
+  listDocumentLineRuns,
   type VerificationReport,
 } from '../api';
-import type { TimelineData, LineageNode, TraceResult, DocSummary, DocQuery } from '../types';
+import type {
+  TimelineData,
+  LineageNode,
+  TraceResult,
+  DocSummary,
+  DocQuery,
+  DocumentLineRun,
+  LineNode,
+} from '../types';
 import { formatError } from '../utils/error';
 import { DocCard, LineageTree, docIdToPath } from './audit/shared';
 
@@ -23,7 +34,16 @@ const EVENT_COLORS: Record<string, string> = {
   milestone: 'text-ink-500',
 };
 
-type SubTab = 'timeline' | 'lineage' | 'trace' | 'report' | 'dashboard' | 'search';
+const NODE_KIND_COLORS: Record<string, string> = {
+  document: 'border-jade/40 bg-jade/5',
+  pipeline_step: 'border-azure/40 bg-azure/5',
+  approval: 'border-gold/40 bg-gold/5',
+  diff: 'border-ink-300 bg-ink-50',
+  validation: 'border-jade/40 bg-jade/10',
+  checkpoint: 'border-info/40 bg-info/5',
+};
+
+type SubTab = 'timeline' | 'lineage' | 'trace' | 'docline' | 'report' | 'dashboard' | 'search';
 
 export default function AuditPanel({
   projectDir,
@@ -54,11 +74,17 @@ export default function AuditPanel({
   const [searchKeyword, setSearchKeyword] = useState('');
   const [searchResults, setSearchResults] = useState<DocSummary[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [docLineRuns, setDocLineRuns] = useState<string[]>([]);
+  const [docLineRunId, setDocLineRunId] = useState('');
+  const [docLineDocId, setDocLineDocId] = useState('');
+  const [docLine, setDocLine] = useState<DocumentLineRun | null>(null);
+  const [docLineLoading, setDocLineLoading] = useState(false);
 
   const TABS: { key: SubTab; label: string }[] = [
     { key: 'timeline', label: t('audit.timeline') },
     { key: 'lineage', label: t('audit.lineage') },
     { key: 'trace', label: t('audit.trace') },
+    { key: 'docline', label: '文档线' },
     { key: 'search', label: '检索' },
     { key: 'report', label: t('audit.report') },
     { key: 'dashboard', label: t('audit.dashboard') },
@@ -73,7 +99,41 @@ export default function AuditPanel({
       .then(setData)
       .catch((e) => setError(formatError(e)))
       .finally(() => setLoading(false));
+    listDocumentLineRuns()
+      .then((runs) => {
+        setDocLineRuns(runs);
+        if (runs.length > 0 && !docLineRunId) setDocLineRunId(runs[runs.length - 1]);
+      })
+      .catch(() => setDocLineRuns([]));
   }, [projectDir]);
+
+  function handleLoadDocLine(runId?: string, focusDocId?: string) {
+    setDocLineLoading(true);
+    setDocLine(null);
+    const load = focusDocId?.trim()
+      ? getDocumentLineForDoc(focusDocId.trim())
+      : getDocumentLineRun(runId?.trim() || undefined);
+    load
+      .then(setDocLine)
+      .catch((e) => {
+        console.error('文档线加载失败', e);
+        setDocLine(null);
+      })
+      .finally(() => setDocLineLoading(false));
+  }
+
+  function handleDocLineNodeClick(node: LineNode) {
+    if (node.kind === 'document') {
+      const docId = node.label;
+      onDocSelect?.(docIdToPath(docId));
+    } else if (node.kind === 'diff') {
+      const diffRef = node.evidence.find((e) => e.source === 'diff_filename');
+      if (diffRef) {
+        const docId = node.label.split(' ')[0];
+        handleShowDiff(docId);
+      }
+    }
+  }
 
   function handleShowDiff(docId: string) {
     const path = docIdToPath(docId);
@@ -325,6 +385,18 @@ export default function AuditPanel({
                   {t('audit.docNotFound', { id: traceDocId })}
                 </div>
               )}
+              {traceResult.target && (
+                <button
+                  onClick={() => {
+                    setTab('docline');
+                    setDocLineDocId(traceDocId);
+                    handleLoadDocLine(undefined, traceDocId);
+                  }}
+                  className="text-[10px] text-azure hover:underline"
+                >
+                  在文档线中查看
+                </button>
+              )}
               {traceResult.upstream.length > 0 && (
                 <div>
                   <div className="text-caption font-semibold text-ink-700 mb-1">
@@ -354,6 +426,108 @@ export default function AuditPanel({
                 traceResult.target && (
                   <div className="text-caption text-ink-300">{t('audit.noRelations')}</div>
                 )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Document Line Tab ── */}
+      {tab === 'docline' && (
+        <div className="p-3 space-y-2 flex-1 overflow-y-auto min-h-0">
+          <div className="flex flex-wrap gap-1 items-center">
+            {docLineRuns.length > 0 && (
+              <select
+                value={docLineRunId}
+                onChange={(e) => setDocLineRunId(e.target.value)}
+                className="px-2 py-1 text-caption rounded bg-ink-100 border border-fold text-ink-700 outline-none max-w-[140px]"
+              >
+                {docLineRuns.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button
+              onClick={() => handleLoadDocLine(docLineRunId)}
+              className="px-2 py-1 rounded bg-ink-700 text-white text-caption hover:bg-ink-600"
+            >
+              加载任务线
+            </button>
+            <input
+              type="text"
+              placeholder="按文档 ID 定位"
+              value={docLineDocId}
+              onChange={(e) => setDocLineDocId(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleLoadDocLine(undefined, docLineDocId)}
+              className="flex-1 min-w-[100px] px-2 py-1 text-caption rounded bg-ink-100 border border-fold text-ink-700 placeholder-ink-300 outline-none"
+            />
+            <button
+              onClick={() => handleLoadDocLine(undefined, docLineDocId)}
+              className="px-2 py-1 rounded bg-ink-700 text-white text-caption hover:bg-ink-600"
+            >
+              定位
+            </button>
+          </div>
+          {docLineLoading && <div className="text-caption text-ink-400">{t('common.loading')}</div>}
+          {!docLineLoading && !docLine && (
+            <div className="text-caption text-ink-300">选择 run 或输入文档 ID 查看端到端证据链</div>
+          )}
+          {docLine && (
+            <div className="space-y-2">
+              <div className="text-caption text-ink-600">
+                <span className="font-mono">{docLine.run_id}</span>
+                <span className="mx-1">·</span>
+                <span>{docLine.status}</span>
+                {docLine.session_label && (
+                  <span className="text-ink-400 ml-1">— {docLine.session_label}</span>
+                )}
+              </div>
+              <div className="space-y-1">
+                {docLine.nodes.map((node) => (
+                  <div
+                    key={node.node_id}
+                    className={`rounded border p-2 cursor-pointer transition-colors hover:opacity-90 ${
+                      NODE_KIND_COLORS[node.kind] || 'border-fold bg-ink-50'
+                    } ${node.highlight ? 'ring-2 ring-gold/50' : ''} ${node.stale ? 'opacity-80' : ''}`}
+                    onClick={() => handleDocLineNodeClick(node)}
+                  >
+                    <div className="flex items-center gap-1.5 text-caption flex-wrap">
+                      <span className="text-[9px] uppercase text-ink-400">{node.kind}</span>
+                      <span className="font-mono text-ink-700">{node.label}</span>
+                      {node.status && node.status !== '-' && (
+                        <span className="px-1 rounded text-[9px] bg-ink-100 text-ink-500">
+                          {node.status}
+                        </span>
+                      )}
+                      {node.stale && (
+                        <span className="px-1 rounded text-[9px] bg-vermillion/10 text-vermillion">
+                          stale
+                        </span>
+                      )}
+                      {node.role && <span className="text-[9px] text-ink-400">{node.role}</span>}
+                    </div>
+                    {node.timestamp && (
+                      <div className="text-[9px] text-ink-300 font-mono mt-0.5">
+                        {node.timestamp}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {docLine.edges.length > 0 && (
+                <div className="rounded border border-fold p-2 space-y-0.5">
+                  <div className="text-caption font-semibold text-ink-700 mb-1">关系</div>
+                  {docLine.edges.slice(0, 24).map((edge, i) => (
+                    <div key={i} className="text-[10px] font-mono text-ink-500 truncate">
+                      {edge.from.split(':').pop()} —{edge.relation}→ {edge.to.split(':').pop()}
+                    </div>
+                  ))}
+                  {docLine.edges.length > 24 && (
+                    <div className="text-[9px] text-ink-300">…共 {docLine.edges.length} 条边</div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

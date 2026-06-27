@@ -240,9 +240,9 @@ pub struct CheckpointConfig {
     pub interval_secs: u64,
 }
 
-/// Checkpoint 默认值
+/// Checkpoint 默认值：0 = 禁用周期性自动保存（改用语义锚点）
 fn default_checkpoint_interval() -> u64 {
-    300
+    0
 }
 
 /// 推理/思考模式配置

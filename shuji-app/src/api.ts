@@ -15,6 +15,8 @@ import type {
   TimelineData,
   DocDiffFile,
   TraceResult,
+  DocumentLineRun,
+  ImpactAnalysis,
   DocQuery,
   DocSummary,
   WorkflowConfig,
@@ -309,8 +311,12 @@ export async function clearSoul(): Promise<void> {
 
 // ── Checkpoint commands ──────────────────────────────────────
 
-export async function listCheckpoints(role?: string, limit?: number): Promise<CheckpointEntry[]> {
-  return invoke('list_checkpoints', { role, limit });
+export async function listCheckpoints(
+  role?: string,
+  limit?: number,
+  semanticOnly?: boolean
+): Promise<CheckpointEntry[]> {
+  return invoke('list_checkpoints', { role, limit, semanticOnly });
 }
 
 export async function restoreCheckpoint(commitHash: string): Promise<string> {
@@ -341,6 +347,22 @@ export async function readDocumentDiff(filename: string): Promise<string> {
 
 export async function traceDocument(docId: string): Promise<TraceResult> {
   return invoke('trace_document', { docId });
+}
+
+export async function getDocumentLineRun(runId?: string): Promise<DocumentLineRun | null> {
+  return invoke('get_document_line_run', { runId });
+}
+
+export async function getDocumentLineForDoc(docId: string): Promise<DocumentLineRun | null> {
+  return invoke('get_document_line_for_doc', { docId });
+}
+
+export async function listDocumentLineRuns(): Promise<string[]> {
+  return invoke('list_document_line_runs');
+}
+
+export async function analyzeDocumentImpact(docId: string): Promise<ImpactAnalysis> {
+  return invoke('analyze_document_impact', { docId });
 }
 
 export async function queryDocuments(filter: DocQuery): Promise<DocSummary[]> {

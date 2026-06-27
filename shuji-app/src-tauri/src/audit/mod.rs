@@ -1,5 +1,13 @@
 use std::path::Path;
 
+pub mod document_line;
+
+pub use document_line::{
+    active_run_id, analyze_impact, append_line_event, build_document_line,
+    build_document_line_for_doc, list_document_line_runs, DocumentLineRun, EvidenceRef,
+    ImpactAnalysis, ImpactNode, LineEdge, LineNode,
+};
+
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -822,7 +830,55 @@ pub async fn generate_report(working_dir: &Path) -> String {
 
     report.push_str("\n### Document Output\n\n");
     for doc in &docs_created {
-        report.push_str(&format!("- `{}` �?{}\n", doc.doc_id, doc.detail));
+        report.push_str(&format!("- `{}` — {}\n", doc.doc_id, doc.detail));
+    }
+
+    if let Some(line) = build_document_line(working_dir, None).await {
+        report.push_str("\n### Document Line Summary\n\n");
+        report.push_str(&format!(
+            "**Run**: {} ({}) — {}\n\n",
+            line.run_id,
+            line.status,
+            line.session_label.as_deref().unwrap_or("-")
+        ));
+        let key_docs: Vec<_> = line
+            .nodes
+            .iter()
+            .filter(|n| n.kind == "document")
+            .take(12)
+            .collect();
+        if !key_docs.is_empty() {
+            report.push_str(
+                "| Document | Type | Status | Stale |\n|----------|------|--------|-------|\n",
+            );
+            for n in key_docs {
+                let dtype = n.doc_type.as_deref().unwrap_or("-");
+                let stale = if n.stale { "yes" } else { "-" };
+                report.push_str(&format!(
+                    "| {} | {} | {} | {} |\n",
+                    n.label, dtype, n.status, stale
+                ));
+            }
+        }
+        let semantic_ckpts: Vec<_> = line
+            .nodes
+            .iter()
+            .filter(|n| n.kind == "checkpoint")
+            .collect();
+        if !semantic_ckpts.is_empty() {
+            report.push_str("\n**Semantic Checkpoints**:\n");
+            for c in semantic_ckpts {
+                report.push_str(&format!(
+                    "- {} ({}) — {}\n",
+                    c.label,
+                    c.status,
+                    c.role.as_deref().unwrap_or("-")
+                ));
+            }
+        }
+        if let Some(v) = line.nodes.iter().find(|n| n.kind == "validation") {
+            report.push_str(&format!("\n**Validation**: {}\n", v.status));
+        }
     }
 
     report
@@ -971,6 +1027,15 @@ async fn resolve_numeric_ref(working_dir: &Path, num: u64) -> String {
 /// Check immutability: returns the list of documents that reference `doc_id`.
 /// If non-empty, modifying `doc_id` would impact downstream documents.
 pub async fn check_immutability(working_dir: &Path, doc_id: &str) -> Vec<String> {
+    let analysis = analyze_impact(working_dir, doc_id).await;
+    if !analysis.blocking_chain.is_empty() && analysis.blocking_chain != doc_id {
+        // Return downstream doc IDs from impact analysis
+        return analysis
+            .impacted
+            .iter()
+            .map(|n| n.node_id.clone())
+            .collect();
+    }
     let index = RefIndex::load(working_dir).await;
     if index.entries.is_empty() {
         let index = build_ref_index(working_dir).await;

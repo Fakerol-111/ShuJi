@@ -891,3 +891,120 @@ fn test_sync_ref_index() {
         "sync_ref_index should create ref_index.json"
     );
 }
+
+// ═══════════════════════════════════════════════════════════════
+// 11. Document line (build_document_line / analyze_impact)
+// ═══════════════════════════════════════════════════════════════
+
+#[test]
+fn test_build_document_line_from_docs_and_refs() {
+    let dir = create_audit_dir();
+    create_document(
+        dir.path(),
+        &DocSpec {
+            id: "dsgn_001",
+            doc_type: "dsgn",
+            author: "中书令",
+            status: "-",
+            refs: "[-1]",
+            body: "Design root",
+        },
+    );
+    create_document(
+        dir.path(),
+        &DocSpec {
+            id: "revw_002",
+            doc_type: "revw",
+            author: "门下侍中",
+            status: "in_review",
+            refs: "[1]",
+            body: "Review",
+        },
+    );
+
+    block_on(audit::append(
+        dir.path(),
+        "create_document",
+        "中书令",
+        "dsgn_001",
+        "type=dsgn",
+    ));
+    block_on(audit::append(
+        dir.path(),
+        "create_document",
+        "门下侍中",
+        "revw_002",
+        "type=revw",
+    ));
+
+    let line = block_on(audit::build_document_line(dir.path(), None))
+        .expect("should build document line from existing docs");
+    assert!(!line.nodes.is_empty());
+    assert!(line
+        .nodes
+        .iter()
+        .any(|n| n.kind == "document" && n.label == "dsgn_001"));
+    assert!(line
+        .nodes
+        .iter()
+        .any(|n| n.kind == "document" && n.label == "revw_002"));
+    assert!(line.edges.iter().any(|e| e.relation == "references"));
+}
+
+#[test]
+fn test_analyze_impact_blocking_chain() {
+    let dir = create_audit_dir();
+    create_document(
+        dir.path(),
+        &DocSpec {
+            id: "dsgn_001",
+            doc_type: "dsgn",
+            author: "中书令",
+            status: "-",
+            refs: "[-1]",
+            body: "Design",
+        },
+    );
+    create_document(
+        dir.path(),
+        &DocSpec {
+            id: "revw_002",
+            doc_type: "revw",
+            author: "门下侍中",
+            status: "in_review",
+            refs: "[1]",
+            body: "Review pending",
+        },
+    );
+
+    let analysis = block_on(audit::analyze_impact(dir.path(), "dsgn_001"));
+    assert!(
+        !analysis.impacted.is_empty() || analysis.blocking_chain.contains("revw"),
+        "should detect downstream revw impact: {:?}",
+        analysis
+    );
+}
+
+#[test]
+fn test_build_document_line_for_doc() {
+    let dir = create_audit_dir();
+    create_document(
+        dir.path(),
+        &DocSpec {
+            id: "task_003",
+            doc_type: "task",
+            author: "工部",
+            status: "-",
+            refs: "[-1]",
+            body: "Task",
+        },
+    );
+
+    let line =
+        block_on(audit::build_document_line_for_doc(dir.path(), "task_003")).expect("line for doc");
+    assert_eq!(line.focus_doc_id.as_deref(), Some("task_003"));
+    assert!(line
+        .nodes
+        .iter()
+        .any(|n| n.highlight && n.label == "task_003"));
+}

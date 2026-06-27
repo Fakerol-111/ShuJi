@@ -162,6 +162,15 @@ pub async fn tool_create_document(
             }
             let detail = format!("type={}, refs={}", doc_type, meta.refs);
             crate::audit::append(working_dir, "create_document", dept, &doc_id, &detail).await;
+            let run_id = crate::audit::active_run_id(working_dir).await;
+            crate::audit::append_line_event(
+                working_dir,
+                &run_id,
+                "create_document",
+                &doc_id,
+                serde_json::json!({"type": doc_type, "author": dept}),
+            )
+            .await;
             ToolOutput::success(
                 "create_document",
                 &doc_id,
@@ -310,6 +319,15 @@ pub async fn tool_modify_document(
             );
             crate::audit::append(working_dir, "modify_document", dept, id, &detail).await;
             crate::audit::save_diff(working_dir, id, "modify_document", body, &new_body).await;
+            let run_id = crate::audit::active_run_id(working_dir).await;
+            crate::audit::append_line_event(
+                working_dir,
+                &run_id,
+                "modify_document",
+                id,
+                serde_json::json!({"author": dept}),
+            )
+            .await;
             let msg = revert_msg
                 .map(|m| format!("Modified successfully. {m}"))
                 .unwrap_or_else(|| "Modified successfully".to_string());
@@ -468,6 +486,15 @@ pub async fn tool_append_document(
             let detail = format!("append_parts={}, total_chars={}", append_parts.len(), total);
             crate::audit::append(working_dir, "append_document", dept, id, &detail).await;
             crate::audit::save_diff(working_dir, id, "append_document", body, &new_body).await;
+            let run_id = crate::audit::active_run_id(working_dir).await;
+            crate::audit::append_line_event(
+                working_dir,
+                &run_id,
+                "append_document",
+                id,
+                serde_json::json!({"author": dept}),
+            )
+            .await;
             let msg = revert_msg
                 .map(|m| format!("Appended successfully. {m}"))
                 .unwrap_or_else(|| "Appended successfully".to_string());

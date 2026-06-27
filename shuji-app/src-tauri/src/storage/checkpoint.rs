@@ -4,6 +4,45 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::session::SessionSnapshot;
 
+/// Semantic checkpoint kinds (audit anchor points).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CheckpointKind {
+    BeforeApproval,
+    AfterApproval,
+    BeforeExecution,
+    DeliveryComplete,
+    /// Periodic or actor-end snapshots — hidden in default UI.
+    WorkspaceOnly,
+}
+
+impl CheckpointKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::BeforeApproval => "before_approval",
+            Self::AfterApproval => "after_approval",
+            Self::BeforeExecution => "before_execution",
+            Self::DeliveryComplete => "delivery_complete",
+            Self::WorkspaceOnly => "workspace_only",
+        }
+    }
+}
+
+/// Optional metadata linking a checkpoint to pipeline / document context.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CheckpointMeta {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
 /// A single checkpoint entry stored in index.json.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CheckpointEntry {
@@ -11,6 +50,16 @@ pub struct CheckpointEntry {
     pub role: String,
     pub description: String,
     pub commit: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub doc_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 /// Full checkpoint data saved to disk (session + metadata).
@@ -21,20 +70,41 @@ struct CheckpointData {
     description: String,
     commit: String,
     session: Vec<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    step_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    doc_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
 }
 
-/// Save a checkpoint: git commit + persist session snapshot + update index.
-/// Returns the commit hash, or None if there was nothing to commit.
-pub async fn save(
+fn entry_from_data(data: &CheckpointData, commit: &str) -> CheckpointEntry {
+    CheckpointEntry {
+        ts: data.ts.clone(),
+        role: data.role.clone(),
+        description: data.description.clone(),
+        commit: commit.to_string(),
+        kind: data.kind.clone(),
+        run_id: data.run_id.clone(),
+        step_id: data.step_id.clone(),
+        doc_id: data.doc_id.clone(),
+        reason: data.reason.clone(),
+    }
+}
+
+async fn persist_checkpoint(
     working_dir: &Path,
     role: &str,
     description: &str,
-    session: &SessionSnapshot,
+    session: Vec<serde_json::Value>,
+    meta: CheckpointMeta,
 ) -> Option<String> {
-    // 1. git add -A && git commit
     let commit_hash = git_checkpoint(working_dir, role, description).await?;
 
-    // 2. Write session snapshot to disk
     let snapshot_path = working_dir
         .join(".shuji")
         .join("checkpoints")
@@ -46,7 +116,12 @@ pub async fn save(
         role: role.to_string(),
         description: description.to_string(),
         commit: commit_hash.clone(),
-        session: session.messages.clone(),
+        session,
+        kind: meta.kind.clone(),
+        run_id: meta.run_id.clone(),
+        step_id: meta.step_id.clone(),
+        doc_id: meta.doc_id.clone(),
+        reason: meta.reason.clone(),
     };
 
     if let Some(parent) = snapshot_path.parent() {
@@ -56,17 +131,13 @@ pub async fn save(
         let _ = tokio::fs::write(&snapshot_path, json).await;
     }
 
-    // 3. Append to index
-    let entry = CheckpointEntry {
-        ts: data.ts,
-        role: role.to_string(),
-        description: description.to_string(),
-        commit: commit_hash.clone(),
-    };
+    let entry = entry_from_data(&data, &commit_hash);
     append_index(working_dir, &entry).await;
 
+    let kind_label = meta.kind.as_deref().unwrap_or("checkpoint");
     log_console!(
-        "[checkpoint] saved: {} — {} (commit {})",
+        "[checkpoint] {} saved: {} — {} (commit {})",
+        kind_label,
         role,
         description,
         &commit_hash[..8]
@@ -76,12 +147,52 @@ pub async fn save(
         working_dir,
         "checkpoint",
         role,
-        "",
-        &format!("commit={}", &commit_hash[..8]),
+        meta.doc_id.as_deref().unwrap_or(""),
+        &format!(
+            "kind={}; commit={}",
+            kind_label,
+            &commit_hash[..8.min(commit_hash.len())]
+        ),
     )
     .await;
 
     Some(commit_hash)
+}
+
+/// Save a periodic checkpoint (workspace_only).
+pub async fn save(
+    working_dir: &Path,
+    role: &str,
+    description: &str,
+    session: &SessionSnapshot,
+) -> Option<String> {
+    persist_checkpoint(
+        working_dir,
+        role,
+        description,
+        session.messages.clone(),
+        CheckpointMeta {
+            kind: Some(CheckpointKind::WorkspaceOnly.as_str().into()),
+            reason: Some("periodic".into()),
+            ..Default::default()
+        },
+    )
+    .await
+}
+
+/// Save a semantic audit-anchor checkpoint.
+pub async fn save_semantic(
+    working_dir: &Path,
+    role: &str,
+    description: &str,
+    kind: CheckpointKind,
+    meta: CheckpointMeta,
+    session: Option<&SessionSnapshot>,
+) -> Option<String> {
+    let mut meta = meta;
+    meta.kind = Some(kind.as_str().into());
+    let messages = session.map(|s| s.messages.clone()).unwrap_or_default();
+    persist_checkpoint(working_dir, role, description, messages, meta).await
 }
 
 /// Read the checkpoint index.
@@ -98,7 +209,6 @@ pub async fn load_index(working_dir: &Path) -> Vec<CheckpointEntry> {
 }
 
 /// Find a checkpoint entry in the index by commit hash.
-/// Returns (role_name, entry) if found.
 pub async fn find_checkpoint(
     working_dir: &Path,
     commit_hash: &str,
@@ -129,12 +239,6 @@ pub async fn load_snapshot(
     Some(SessionSnapshot::from_messages(data.session))
 }
 
-// ── Git helpers for isolated .shuji/.git repo ─────────────────
-
-/// Build a git Command pre-configured with --git-dir and --work-tree
-/// pointing to the isolated `.shuji/.git` repo with project root as worktree.
-/// Build a git Command pre-configured with --git-dir and --work-tree
-/// pointing to the isolated `.shuji/.git` repo with project root as worktree.
 pub fn git_cmd(working_dir: &Path) -> tokio::process::Command {
     let git_dir = working_dir.join(".shuji/.git");
     let git_dir_str = git_dir.to_string_lossy().to_string();
@@ -145,10 +249,7 @@ pub fn git_cmd(working_dir: &Path) -> tokio::process::Command {
     cmd
 }
 
-// ── Internal helpers ─────────────────────────────────────
-
 async fn git_checkpoint(working_dir: &Path, role: &str, description: &str) -> Option<String> {
-    // git add -A
     let add = git_cmd(working_dir)
         .args(["add", "-A"])
         .output()
@@ -162,17 +263,15 @@ async fn git_checkpoint(working_dir: &Path, role: &str, description: &str) -> Op
         return None;
     }
 
-    // git diff-index --cached --quiet HEAD → 0 means nothing changed
     let diff = git_cmd(working_dir)
         .args(["diff-index", "--cached", "--quiet", "HEAD"])
         .output()
         .await
         .ok()?;
     if diff.status.success() {
-        return None; // nothing to commit
+        return None;
     }
 
-    // git commit
     let msg = format!("shuji: checkpoint {} — {}", role, description);
     let commit = git_cmd(working_dir)
         .args(["commit", "-m", &msg])
@@ -187,7 +286,6 @@ async fn git_checkpoint(working_dir: &Path, role: &str, description: &str) -> Op
         return None;
     }
 
-    // git rev-parse HEAD
     let rev = git_cmd(working_dir)
         .args(["rev-parse", "HEAD"])
         .output()
@@ -200,58 +298,21 @@ async fn git_checkpoint(working_dir: &Path, role: &str, description: &str) -> Op
     Some(hash)
 }
 
-/// Save a final checkpoint after agent execution completes.
-/// Unlike periodic checkpoints, this uses an empty session snapshot
-/// to ensure at least one checkpoint exists even for short runs.
+/// Deprecated: actor-end snapshots are no longer saved by default.
+#[allow(dead_code)]
 pub async fn save_final(working_dir: &Path, role: &str, description: &str) -> Option<String> {
-    let commit_hash = git_checkpoint(working_dir, role, description).await?;
-
-    // Write snapshot with empty session (no session context available at actor level)
-    let snapshot_path = working_dir
-        .join(".shuji")
-        .join("checkpoints")
-        .join(role)
-        .join(format!("{}.json", commit_hash));
-    let ts = chrono::Local::now().to_rfc3339();
-    let data = CheckpointData {
-        ts: ts.clone(),
-        role: role.to_string(),
-        description: description.to_string(),
-        commit: commit_hash.clone(),
-        session: vec![],
-    };
-    if let Some(parent) = snapshot_path.parent() {
-        let _ = tokio::fs::create_dir_all(parent).await;
-    }
-    if let Ok(json) = serde_json::to_string_pretty(&data) {
-        let _ = tokio::fs::write(&snapshot_path, json).await;
-    }
-
-    let entry = CheckpointEntry {
-        ts,
-        role: role.to_string(),
-        description: description.to_string(),
-        commit: commit_hash.clone(),
-    };
-    append_index(working_dir, &entry).await;
-
-    log_console!(
-        "[checkpoint] final saved: {} — {} (commit {})",
+    save_semantic(
+        working_dir,
         role,
         description,
-        &commit_hash[..8]
-    );
-
-    crate::audit::append(
-        working_dir,
-        "checkpoint",
-        role,
-        "",
-        &format!("commit={}", &commit_hash[..8]),
+        CheckpointKind::WorkspaceOnly,
+        CheckpointMeta {
+            reason: Some("actor_final".into()),
+            ..Default::default()
+        },
+        None,
     )
-    .await;
-
-    Some(commit_hash)
+    .await
 }
 
 async fn append_index(working_dir: &Path, entry: &CheckpointEntry) {
@@ -261,7 +322,6 @@ async fn append_index(working_dir: &Path, entry: &CheckpointEntry) {
         .join("index.json");
     let mut entries = load_index(working_dir).await;
 
-    // Cap index to last 500 entries to keep it manageable
     if entries.len() >= 500 {
         entries.remove(0);
     }

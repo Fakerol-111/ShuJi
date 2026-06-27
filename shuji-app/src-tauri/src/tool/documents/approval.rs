@@ -175,6 +175,32 @@ pub async fn tool_set_document_status(working_dir: &Path, args: &serde_json::Val
                 meta.approved_hash, emperor_note
             );
             crate::audit::append(working_dir, "set_document_status", "emperor", id, &detail).await;
+            let run_id = crate::audit::active_run_id(working_dir).await;
+            crate::storage::checkpoint::save_semantic(
+                working_dir,
+                "emperor",
+                &format!("朱批后: {}", id),
+                crate::storage::checkpoint::CheckpointKind::AfterApproval,
+                crate::storage::checkpoint::CheckpointMeta {
+                    run_id: Some(run_id.clone()),
+                    doc_id: Some(id.to_string()),
+                    reason: Some(format!("approved_hash={}", meta.approved_hash)),
+                    ..Default::default()
+                },
+                None,
+            )
+            .await;
+            crate::audit::append_line_event(
+                working_dir,
+                &run_id,
+                "approved_by",
+                id,
+                serde_json::json!({
+                    "approved_hash": meta.approved_hash,
+                    "note": emperor_note,
+                }),
+            )
+            .await;
             ToolOutput::success(
                 "set_document_status",
                 id,
