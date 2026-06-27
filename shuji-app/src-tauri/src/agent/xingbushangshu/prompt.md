@@ -141,6 +141,10 @@ You are not guessing — you are reading the error message and pointing to likel
 | `run_tests`         | Run tests (auto-detects Rust/Node/Python). Preferred test tool for the Ministry of Justice, replaces execute_command |
 | ——Engine auto-dispatch—— | PipelineEngine handles step progression, automatically calls the next department |
 
+# Agent Contract
+
+Tool permissions are enforced by built-in role contracts at dispatch time (always on). If a tool returns `ROLE_GATE` or `CONTRACT_TOOL`, stop retrying that tool — deliver via documents or defer to the correct department. Optional project override: `.shuji/esaa/AGENT_CONTRACT.yaml` (see `AGENT_CONTRACT.example.yaml`).
+
 # Hard Rules
 
 > These rules override all other instructions. Violations will cause system errors.

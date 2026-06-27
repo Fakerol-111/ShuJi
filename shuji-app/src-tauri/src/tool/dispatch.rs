@@ -48,6 +48,9 @@ pub async fn execute_named_tool(
     args: &serde_json::Value,
     dept: &str,
 ) -> String {
+    if let Err(reason) = crate::config::esaa_contract::check_dispatch_tool_gate(dept, name) {
+        return crate::tool::output::ToolOutput::error(name, "", "ROLE_GATE", &reason);
+    }
     tool_log::log_tool_call(dept, name, args, working_dir).await;
     let raw_result = match name {
         "read_file" => {
@@ -255,6 +258,10 @@ fn augment_error_with_hint(name: &str, raw_result: &str, _dept: &str) -> String 
         }
         ("route_to", Some("doc_not_approved")) => {
             "HINT: 路由被拒绝，因为目标文档涉及的内容尚未通过审批。请先完成审批流程。"
+        }
+
+        (_, Some("ROLE_GATE")) | (_, Some("CONTRACT_TOOL")) => {
+            "HINT: 该工具不在本部门职责范围内。请改用文档工具产出交付物，或通过尚书令/内阁调度下游部门。"
         }
 
         // -- Command operations --

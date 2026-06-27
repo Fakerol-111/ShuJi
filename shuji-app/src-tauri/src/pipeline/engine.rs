@@ -634,6 +634,7 @@ impl PipelineEngine {
             payload: None,
             doc_ids: upstream_doc_ids.clone(),
             reply_to: Some(output_tx),
+            allow_pipeline_plan: true,
         };
 
         let tx = match self.actor_txs.get(&role) {

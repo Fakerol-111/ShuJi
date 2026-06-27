@@ -333,6 +333,14 @@ export function getDeptMeta(key: string): DeptMeta | undefined {
   return undefined;
 }
 
+/** Bilingual dept label: EN shows role + Chinese; ZH shows Chinese short name. */
+export function getDeptDisplayLabel(meta: DeptMeta, lang: 'en' | 'zh'): string {
+  if (lang === 'en') {
+    return `${meta.shortLabelEn} · ${meta.shortLabel}`;
+  }
+  return meta.shortLabel;
+}
+
 /** Display order for departments (matches backend Role enum order) */
 export const DEPT_ORDER = DEPT_META_LIST.map((d) => d.label);
 

@@ -101,6 +101,7 @@ async fn tool_assign_task(args: &serde_json::Value, ctx: &ToolContext) -> String
         payload: None,
         doc_ids: Vec::new(),
         reply_to: Some(output_tx),
+        allow_pipeline_plan: true,
     };
 
     log_console!(

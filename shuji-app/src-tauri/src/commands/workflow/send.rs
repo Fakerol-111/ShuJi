@@ -22,8 +22,8 @@ use crate::commands::project::AppState;
 use crate::commands::workflow::bootstrap::ensure_actor_system;
 use crate::models::chat::ChatMessage;
 use crate::models::role::Role;
-use crate::pipeline::engine::PipelineEngine;
-use crate::pipeline::{PipelineResult, PlanRuntime};
+use crate::pipeline::supervisor::PipelineNotifyContext;
+use crate::pipeline::{should_resume_from_disk, PlanRuntime};
 
 // ============================================================================
 // send_message helpers
@@ -40,62 +40,6 @@ fn interrupt_active_departments_if_needed(system: &ActorSystem) {
             }
         }
     }
-}
-
-fn format_pipeline_result(result: &PipelineResult) -> String {
-    match result {
-        PipelineResult::Complete { runtime } => {
-            format!("✅ Pipeline execution complete: {}", runtime.plan.summary)
-        }
-        PipelineResult::AwaitingUserInput {
-            step_id, question, ..
-        } => {
-            format!(
-                "⏳ Pipeline waiting for user input (step {}): {}",
-                step_id, question
-            )
-        }
-        PipelineResult::AwaitingApproval {
-            doc_id, step_id, ..
-        } => {
-            format!(
-                "⏳ Pipeline waiting for approval (step {}, doc {})",
-                step_id, doc_id
-            )
-        }
-        PipelineResult::StepFailed {
-            step_id, reason, ..
-        } => {
-            format!("❌ Pipeline step {} failed: {}", step_id, reason)
-        }
-        PipelineResult::Aborted { .. } => "🛑 Pipeline execution aborted".to_string(),
-        PipelineResult::Deadlock { .. } => {
-            "❌ Pipeline deadlock: remaining steps have unmet dependencies.".to_string()
-        }
-    }
-}
-
-async fn resume_active_pipeline(
-    system: &ActorSystem,
-    project_dir: &Path,
-    message: &str,
-    runtime_config: Arc<crate::config::RuntimeConfig>,
-) -> Result<String, String> {
-    let Some(engine) = PipelineEngine::load_from_disk(project_dir, system, runtime_config).await
-    else {
-        return Err(friendly_error("pipeline runtime not found on disk"));
-    };
-
-    let result = engine.resume_with_input(Some(message)).await;
-
-    if matches!(result, PipelineResult::Aborted { .. }) {
-        PlanRuntime::cleanup(project_dir).await;
-    }
-
-    let msg = format_pipeline_result(&result);
-    let _ = system.emperor_tx.try_send(ChatMessage::new("System", &msg));
-    log_console!("[pipeline] result: {}", msg);
-    Ok(msg)
 }
 
 // ============================================================================
@@ -137,9 +81,28 @@ pub async fn send_message(
         .as_ref()
         .ok_or_else(|| friendly_error("actor system not initialized"))?;
 
-    if PlanRuntime::load_from(project_dir).await.is_some() {
-        log_console!("[pipeline] found active runtime on disk, resuming pipeline");
-        return resume_active_pipeline(system, project_dir, &message, runtime_config).await;
+    let has_paused_runtime = PlanRuntime::load_from(project_dir).await.is_some();
+
+    if should_resume_from_disk(has_paused_runtime, state.pipeline_supervisor.is_running()) {
+        log_console!("[pipeline] paused runtime on disk, resuming via supervisor");
+        let notify = PipelineNotifyContext {
+            project_dir: project_dir.to_path_buf(),
+            working_dir: project_dir.to_path_buf(),
+            runtime_config: runtime_config.clone(),
+            emperor_tx: system.emperor_tx.clone(),
+            talk_history: Arc::new(std::sync::Mutex::new(Vec::new())),
+        };
+        return state
+            .pipeline_supervisor
+            .resume_with_input(project_dir, system, notify, Some(&message))
+            .await
+            .map_err(friendly_error);
+    }
+
+    if has_paused_runtime {
+        log_console!(
+            "[pipeline] runtime exists but pipeline still running — message goes to neige"
+        );
     }
 
     drop(sys_lock);
@@ -156,6 +119,8 @@ pub async fn send_message(
     }
 
     interrupt_active_departments_if_needed(system);
+
+    state.pipeline_supervisor.clear_submission_guards();
 
     system
         .send(&Role::Neige, ActorMessage::new(message, RouteMsgType::Task))
@@ -230,6 +195,7 @@ pub async fn discuss_with_cabinet(
         discuss_mode: true,
         fast_cancel: state.discuss_cancel.clone(),
         dept_step_tx: None,
+        allow_pipeline_plan: true,
     };
 
     let output = neige.execute(&input).await.map_err(|e| {
@@ -260,6 +226,8 @@ pub async fn cancel_discuss(state: State<'_, AppState>) -> Result<(), String> {
 #[tauri::command]
 pub async fn cancel_processing(state: State<'_, AppState>) -> Result<(), String> {
     if let Some(sys) = state.actor_system.lock().await.as_ref() {
+        state.pipeline_supervisor.abort_current(sys).await;
+        log_console!("[commands] cancel_processing: pipeline supervisor aborted");
         if let Ok(map) = sys.cancel_map.lock() {
             for flag in map.values() {
                 flag.store(true, std::sync::atomic::Ordering::SeqCst);

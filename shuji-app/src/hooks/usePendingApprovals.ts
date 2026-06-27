@@ -1,27 +1,33 @@
 /**
  * Pending approvals hook — event-driven instead of polling.
  * Fetches on mount and on every `project-update` backend event.
+ * Also loads pipeline runtime for approval gate context (step / next step).
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { getPendingApprovals } from '../api';
+import { getPendingApprovals, getPipelineStatus } from '../api';
+import type { PipelineRuntime } from '../types';
+import { computeApprovalGateContext, type ApprovalGateContext } from '../utils/approvalGate';
 
 export function usePendingApprovals(project: { working_dir?: string } | null) {
   const [pendingApprovals, setPendingApprovals] = useState<string[]>([]);
+  const [pipeline, setPipeline] = useState<PipelineRuntime | null>(null);
 
   useEffect(() => {
     if (!project) {
       setPendingApprovals([]);
+      setPipeline(null);
       return;
     }
     const fetch = () => {
       getPendingApprovals()
         .then(setPendingApprovals)
-        .catch(() => {});
+        .catch(() => setPendingApprovals([]));
+      getPipelineStatus()
+        .then(setPipeline)
+        .catch(() => setPipeline(null));
     };
-    // Initial fetch
     fetch();
-    // Update on project-update events instead of polling every 3s
     const unlisten = listen('project-update', () => {
       fetch();
     });
@@ -30,5 +36,10 @@ export function usePendingApprovals(project: { working_dir?: string } | null) {
     };
   }, [project?.working_dir, project]);
 
-  return { pendingApprovals };
+  const gateContext: ApprovalGateContext = useMemo(
+    () => computeApprovalGateContext(pendingApprovals, pipeline),
+    [pendingApprovals, pipeline]
+  );
+
+  return { pendingApprovals, pipeline, gateContext };
 }

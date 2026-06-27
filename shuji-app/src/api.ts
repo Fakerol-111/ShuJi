@@ -20,6 +20,7 @@ import type {
   WorkflowConfig,
   WorkflowState,
   WorkflowGraph,
+  PipelineRuntime,
   ApprovalConfig,
   PricingConfig,
   PricingEntry,
@@ -267,6 +268,10 @@ export async function getWorkflowState(): Promise<WorkflowState | null> {
 
 export async function getWorkflowGraph(): Promise<WorkflowGraph | null> {
   return invoke('get_workflow_graph');
+}
+
+export async function getPipelineStatus(): Promise<PipelineRuntime | null> {
+  return invoke('get_pipeline_status');
 }
 
 export async function listWorkflowArchives(): Promise<[string, string][]> {

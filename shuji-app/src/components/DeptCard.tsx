@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import DeptGlyph from './DeptGlyph';
-import type { DeptMeta } from '../constants';
+import { getDeptDisplayLabel, type DeptMeta } from '../constants';
 import type { PlanInfo } from '../types';
 
 interface DeptCardProps {
@@ -24,7 +24,7 @@ export default function DeptCard({
 }: DeptCardProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith('en') ? 'en' : 'zh';
-  const displayLabel = lang === 'en' ? meta.shortLabelEn : meta.shortLabel;
+  const displayLabel = getDeptDisplayLabel(meta, lang);
   const showPlan = meta.key === 'gongbushangshu' && planInfo && planInfo.batches.length > 0;
   const progress =
     showPlan && planInfo

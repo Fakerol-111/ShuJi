@@ -199,6 +199,9 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
                 className="w-full px-3 py-1.5 border border-fold rounded-lg text-body bg-surface-parchment"
               />
             </div>
+            <p className="text-[11px] text-ink-400 mt-2 leading-relaxed">
+              {t('approval.notSatisfiedHint')}
+            </p>
             {approvalError && <p className="text-caption text-vermillion mt-1">{approvalError}</p>}
           </div>
         )}

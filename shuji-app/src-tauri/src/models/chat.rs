@@ -6,6 +6,17 @@
 
 use serde::{Deserialize, Serialize};
 
+/// 聊天消息附带的文档卡片元数据（不含正文）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ChatDocument {
+    pub id: String,
+    pub doc_type: String,
+    pub title: String,
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
 /// 单条聊天消息，从后端 actor 输出序列化后发送到前端。
 ///
 /// 每个字段同时实现 Serialize（后端 → 前端 Tauri 事件）和 Deserialize
@@ -35,6 +46,10 @@ pub struct ChatMessage {
     /// ISO 8601 时间戳（RFC 3339 格式），创建时自动生成。
     /// 前端用于按时间排序和显示消息时间。
     pub timestamp: String,
+
+    /// 本条消息关联的文档卡片（设计、审查、报告等）。
+    #[serde(default)]
+    pub documents: Vec<ChatDocument>,
 }
 
 /// 前端可点击的操作选项，源自内阁输出的 `<options>` 标签。
@@ -72,6 +87,7 @@ impl ChatMessage {
             content: content.to_string(),
             options: vec![],
             timestamp: chrono::Local::now().to_rfc3339(),
+            documents: vec![],
         }
     }
 }

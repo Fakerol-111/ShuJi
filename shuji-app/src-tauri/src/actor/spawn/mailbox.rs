@@ -35,6 +35,8 @@ pub(super) struct TaskPayload {
     pub doc_ids: Vec<String>,
     /// Pipeline 引擎等待结果的回执通道（可选）。
     pub reply_to: Option<mpsc::UnboundedSender<String>>,
+    /// 为 false 时，内阁不得提取或提交 pipeline plan。
+    pub allow_pipeline_plan: bool,
 }
 
 /// dispatch_mailbox_message 的返回结果。
@@ -128,5 +130,6 @@ pub(super) async fn dispatch_mailbox_message(
         content,
         doc_ids: msg.doc_ids.clone(),
         reply_to: msg.reply_to,
+        allow_pipeline_plan: msg.allow_pipeline_plan,
     })
 }

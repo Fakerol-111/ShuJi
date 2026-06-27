@@ -14,7 +14,7 @@ npm run tauri build    # 生产构建
 
 环境要求：Node.js >= 18，Rust >= 1.70。
 
-新人请先读 [ONBOARDING.md](ONBOARDING.md)。更完整的架构说明见 [CLAUDE.md](CLAUDE.md)。
+新人请先读 [ONBOARDING.md](ONBOARDING.md)。架构叙事见 [shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md)；后续 agent 任务边界见 [shuji-app/docs/AGENT_TASKS.md](shuji-app/docs/AGENT_TASKS.md)；文件级索引见 [CLAUDE.md](CLAUDE.md)。
 
 ## 仓库目录约定
 

@@ -44,6 +44,10 @@ Too fine: Complete function bodies (that is the Ministry of Works' job), file di
 | `set_document_status` | Update document status (approve/reject, etc.)        |
 | ——Engine auto-dispatch—— | PipelineEngine handles step progression, automatically calls the next department |
 
+# Agent Contract
+
+Tool permissions are enforced by built-in role contracts at dispatch time (always on). If a tool returns `ROLE_GATE` or `CONTRACT_TOOL`, stop retrying that tool — deliver via documents or defer to the correct department. Optional project override: `.shuji/esaa/AGENT_CONTRACT.yaml` (see `AGENT_CONTRACT.example.yaml`).
+
 # Hard Rules
 
 1. **At most 2 tool calls per turn. No comments.**

@@ -75,6 +75,15 @@ export interface Document {
   path: string | null;
 }
 
+/** Metadata attached to chat messages for in-thread document cards. */
+export interface ChatDocument {
+  id: string;
+  doc_type: string;
+  title: string;
+  status: string;
+  path: string | null;
+}
+
 // ── Role names (union of all possible ChatMessage.role values) ──
 /** Chinese role label used in ChatMessage.role and DeptMeta.label */
 export type RoleName =
@@ -96,7 +105,7 @@ export interface ChatMessage {
   role: RoleName;
   content: string;
   options: ChatOption[];
-  documents: Document[];
+  documents: ChatDocument[];
   timestamp: string;
   /** Optional status for emperor messages: 'failed' on send error, undefined = sent OK */
   status?: 'failed';
@@ -371,6 +380,51 @@ export interface WorkflowGraph {
   session_label: string;
   nodes: GraphNode[];
   edges: GraphEdge[];
+}
+
+// ── Pipeline runtime (from get_pipeline_status) ──────────────
+
+export interface PipelinePlanStep {
+  step_id: string;
+  description: string;
+  action: string;
+  action_params: Record<string, unknown>;
+  depends_on: string[];
+  require_approval: boolean;
+}
+
+export interface PipelineRuntime {
+  plan: {
+    plan_id: string;
+    summary: string;
+    estimated_complexity: string;
+    steps: PipelinePlanStep[];
+  };
+  step_status: Record<string, string>;
+  current_step: string | null;
+  artifacts: Record<string, string>;
+  error_log: string[];
+}
+
+export type TimelineNodeStatus = 'done' | 'active' | 'pending' | 'failed' | 'waiting';
+
+export interface TimelineNode {
+  id: string;
+  label: string;
+  sublabel?: string;
+  status: TimelineNodeStatus;
+  dept?: string;
+  docId?: string;
+  kind: 'pipeline' | 'graph' | 'stage';
+}
+
+export type TimelineNextActionType = 'approval' | 'input' | 'running' | 'idle';
+
+export interface TimelineNextAction {
+  type: TimelineNextActionType;
+  label: string;
+  docId?: string;
+  dept?: string;
 }
 
 // ── Validation Report (from Rust validate::report) ──────────────

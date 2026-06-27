@@ -151,6 +151,9 @@ impl Agent for LibuRShangshuAgent {
         crate::agent::runner::save_context(&session, &working_dir, &role_name).await;
 
         // route_to 已移除 —— PipelineEngine 负责所有调度
-        Ok(AgentOutput::new(result))
+        let mut output = AgentOutput::new(result);
+        crate::agent::runner::attach_run_documents(&mut output, &mut controller, &working_dir)
+            .await;
+        Ok(output)
     }
 }

@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import TabBar, { type TabInfo } from './TabBar';
 import DocPreview from './DocPreview';
 import ApprovalPromptCard from './ApprovalPromptCard';
+import type { ApprovalGateContext } from '../utils/approvalGate';
 
 interface ArtifactPanelProps {
   project: { working_dir: string };
@@ -10,6 +11,8 @@ interface ArtifactPanelProps {
   activeDoc: TabInfo | null;
   hasTabs: boolean;
   pendingApprovals: string[];
+  gateContext: ApprovalGateContext;
+  onApproveDoc: (docId: string, comment?: string) => Promise<void>;
   onSelectTab: (index: number) => void;
   onCloseTab: (index: number) => void;
   onClosePanel: () => void;
@@ -23,6 +26,8 @@ export default function ArtifactPanel({
   activeDoc,
   hasTabs,
   pendingApprovals,
+  gateContext,
+  onApproveDoc,
   onSelectTab,
   onCloseTab,
   onClosePanel,
@@ -57,8 +62,9 @@ export default function ArtifactPanel({
       ) : pendingApprovals.length > 0 ? (
         <ApprovalPromptCard
           docPaths={pendingApprovals}
-          projectDir={project.working_dir}
+          gateContext={gateContext}
           onSelect={onOpenApproval}
+          onApprove={onApproveDoc}
         />
       ) : (
         <div className="flex-1 flex items-center justify-center p-6 text-center min-w-0">

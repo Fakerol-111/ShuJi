@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import DeptGlyph from './DeptGlyph';
+import { ChatDocumentCards } from './ChatDocumentCards';
 import type { ChatMessage, ChatOption } from '../types';
 import { getDeptMeta } from '../constants';
 
@@ -11,10 +12,12 @@ export default function ChatBubble({
   msg,
   onOption,
   onRetry,
+  onDocumentClick,
 }: {
   msg: ChatMessage;
   onOption: (key: string, supplement?: string) => void;
   onRetry?: (text: string, ts: string) => void;
+  onDocumentClick?: (path: string) => void;
 }) {
   const { t } = useTranslation();
   const isEmperor = msg.role === '皇帝';
@@ -97,6 +100,7 @@ export default function ChatBubble({
           </>
         )}
 
+        <ChatDocumentCards documents={msg.documents} onDocumentClick={onDocumentClick} />
         {msg.options.length > 0 && <OptionGroup options={msg.options} onOption={onOption} />}
       </div>
     </div>

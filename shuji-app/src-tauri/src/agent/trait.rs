@@ -69,6 +69,9 @@ pub struct AgentInput {
     /// 为 Some 时，AgentController 在 run() 过程中发出步骤事件给前端 DeptInspector。
     /// 为 None 时（讨论模式），不发送步骤事件。
     pub dept_step_tx: Option<DeptStepSender>,
+
+    /// 为 false 时，内阁不得提取或提交 pipeline plan（如 pipeline 完成后的 summary 回合）。
+    pub allow_pipeline_plan: bool,
 }
 
 // ============================================================================
@@ -102,6 +105,9 @@ pub struct AgentOutput {
 
     /// 内阁 `request_decision` 工具产生的待选项（供前端渲染按钮）
     pub decision_options: Vec<String>,
+
+    /// 本次执行中创建/更新的文档，供聊天区展示卡片。
+    pub documents: Vec<crate::models::chat::ChatDocument>,
 }
 
 impl AgentOutput {
@@ -115,6 +121,7 @@ impl AgentOutput {
             paused: false,
             plan_json: None,
             decision_options: vec![],
+            documents: vec![],
         }
     }
 

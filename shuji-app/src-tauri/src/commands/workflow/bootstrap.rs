@@ -223,6 +223,8 @@ pub async fn start_actor_system(
     dept_step_tx: Option<DeptStepSender>,     // 步骤事件 → 前端（可选）
     plan_tx: mpsc::Sender<serde_json::Value>, // 计划更新 → 前端
     milestone_tx: mpsc::Sender<String>,       // 里程碑事件 → 持久化
+    pipeline_supervisor: Arc<crate::pipeline::supervisor::PipelineSupervisor>,
+    actor_system_slot: Arc<tokio::sync::Mutex<Option<ActorSystem>>>,
 ) -> ActorSystem {
     // ── Step 1: 初始化 CancelMap（每个角色一个 AtomicBool） ──
     let cancel_map: crate::CancelMap = Arc::new(std::sync::Mutex::new(HashMap::new()));
@@ -333,6 +335,22 @@ pub async fn start_actor_system(
     // ── Step 7: 为每个角色组装 ActorContext 并 spawn ──
     let all_senders = senders.clone();
 
+    let system = ActorSystem {
+        senders: all_senders.clone(),
+        fast_txs: (*fast_txs).clone(),
+        emperor_tx: emperor_tx.clone(),
+        dept_log_tx: dept_log_tx.clone(),
+        dept_step_tx: dept_step_tx.clone(),
+        cancel_map: cancel_map.clone(),
+        cancel: cancel.clone(),
+        workflow_graph: workflow_graph.clone(),
+    };
+
+    {
+        let mut slot = actor_system_slot.lock().await;
+        *slot = Some(system.duplicate_handles());
+    }
+
     // 跨 actor 共享的状态
     let shared_context: Arc<std::sync::Mutex<HashMap<Role, String>>> =
         Arc::new(std::sync::Mutex::new(HashMap::new()));
@@ -385,6 +403,8 @@ pub async fn start_actor_system(
             current_skill: Arc::new(std::sync::Mutex::new(None)), // 当前激活的技能
             workflow_graph: Some(workflow_graph.clone()),
             runtime_config: runtime_config.clone(),
+            pipeline_supervisor: pipeline_supervisor.clone(),
+            actor_system_slot: actor_system_slot.clone(),
         };
 
         // spawn: 每个 actor 在自己的 tokio task 中独立运行
@@ -392,21 +412,7 @@ pub async fn start_actor_system(
         tokio::spawn(crate::actor::run_actor(ctx));
     }
 
-    // ── Step 8: 返回 ActorSystem 句柄 ──
-    // 调用方通过 ActorSystem 可以：
-    //   - send(&role, msg) 向任意部门投递消息
-    //   - 通过 cancel_map 取消任意或全部部门
-    //   - 通过 emperor_tx / dept_log_tx 直接向前端发送事件
-    ActorSystem {
-        senders: all_senders,
-        fast_txs: (*fast_txs).clone(),
-        emperor_tx,
-        dept_log_tx,
-        dept_step_tx,
-        cancel_map,
-        cancel,
-        workflow_graph: workflow_graph.clone(),
-    }
+    system
 }
 
 // ============================================================================
@@ -525,9 +531,11 @@ pub async fn ensure_actor_system(
     config: &AppConfig,
     working_dir: &str,
 ) -> Result<(), String> {
-    let mut sys_lock = state.actor_system.lock().await;
-    if sys_lock.is_some() {
-        return Ok(());
+    {
+        let guard = state.actor_system.lock().await;
+        if guard.is_some() {
+            return Ok(());
+        }
     }
 
     let (emperor_tx, emperor_rx) = mpsc::channel::<ChatMessage>(200);
@@ -558,9 +566,11 @@ pub async fn ensure_actor_system(
         Some(dept_step_tx),
         plan_tx,
         milestone_tx,
+        state.pipeline_supervisor.clone(),
+        state.actor_system.clone(),
     )
     .await;
 
-    *sys_lock = Some(system);
+    *state.actor_system.lock().await = Some(system);
     Ok(())
 }

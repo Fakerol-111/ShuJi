@@ -1,0 +1,20 @@
+# Example project-level agent contract overrides.
+# Copy to `.shuji/esaa/AGENT_CONTRACT.yaml` to customize per role.
+# Built-in defaults always apply; this file merges on top (forbidden_tools union, etc.).
+
+roles:
+  gongbushangshu:
+    allowed_paths:
+      - "src/**"
+      - "tests/**"
+    forbidden_routes:
+      - "内阁"
+    max_create_file_size: 16000
+
+  zhongshuling:
+    forbidden_tools:
+      - route_to
+
+  liburshangshu:
+    forbidden_routes:
+      - "工部"

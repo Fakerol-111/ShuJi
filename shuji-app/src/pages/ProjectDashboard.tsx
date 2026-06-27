@@ -11,6 +11,7 @@ import { useProjectPicker } from '../hooks/useProjectPicker';
 import DashboardLayout from '../components/DashboardLayout';
 import AgentStreamPanel from '../components/AgentStreamPanel';
 import ArtifactPanel from '../components/ArtifactPanel';
+import ApprovalBanner from '../components/ApprovalBanner';
 import ProjectPicker from '../components/ProjectPicker';
 import SettingsMenu from '../components/SettingsMenu';
 import SettingsPage from './SettingsPage';
@@ -20,11 +21,20 @@ import WorkflowGraphView from '../components/WorkflowGraph';
 
 import { Button } from '../components/ui/Button';
 import { docIdToPath } from '../utils/docPath';
+import { approveDocumentAndResume } from '../utils/approveDocument';
 import type { Project } from '../types';
-import type { ActivitySelection } from '../components/ActivityBar';
+import {
+  loadUiPrefs,
+  saveUiPrefs,
+  getExperienceLevel,
+  isProjectOnboardingDone,
+  type ExperienceLevel,
+  type ActivitySelection,
+} from '../utils/uiPrefs';
+import ProjectOnboarding from '../components/ProjectOnboarding';
+import { GlossaryTerm } from '../components/GlossaryTerm';
 
 const STORAGE_KEY = 'shuji_chat';
-const STORAGE_UI_KEY = 'shuji_ui_prefs';
 
 function loadSession() {
   try {
@@ -35,26 +45,11 @@ function loadSession() {
   }
 }
 
-function loadUiPrefs() {
-  try {
-    const raw = localStorage.getItem(STORAGE_UI_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveUiPrefs(prefs: Record<string, unknown>) {
-  try {
-    localStorage.setItem(STORAGE_UI_KEY, JSON.stringify(prefs));
-  } catch {}
-}
-
 export default function ProjectDashboard() {
   const session = loadSession();
   const { activeDepts } = useDeptEvents();
   const activeDeptsArr = Array.from(activeDepts);
-  const uiPrefs = loadUiPrefs();
+  const initialUiPrefs = loadUiPrefs();
 
   const {
     project,
@@ -95,7 +90,7 @@ export default function ProjectDashboard() {
     setActiveIndex,
   } = useDocumentTabs();
 
-  const { pendingApprovals } = usePendingApprovals(project);
+  const { pendingApprovals, gateContext } = usePendingApprovals(project);
   const { showDemoTour, setShowDemoTour, demoCreating, mockScenario, handleDemoProject } =
     useDemoFlow(
       project,
@@ -109,12 +104,17 @@ export default function ProjectDashboard() {
     );
   const picker = useProjectPicker(loadProjectIntoState, setRecentDirs);
 
-  const [activity, setActivity] = useState<ActivitySelection>(uiPrefs.lastActivity ?? 'files');
+  const [activity, setActivity] = useState<ActivitySelection>(initialUiPrefs.lastActivity ?? null);
   const [uiMode, setUiMode] = useState<'focus' | 'review' | 'inspect'>(
-    uiPrefs.lastUiMode || 'focus'
+    initialUiPrefs.lastUiMode || 'focus'
+  );
+  const [experienceLevel, setExperienceLevel] = useState<ExperienceLevel>(
+    () => initialUiPrefs.experienceLevel ?? getExperienceLevel()
   );
   const [artifactOpen, setArtifactOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showProjectOnboarding, setShowProjectOnboarding] = useState(false);
+  const beginnerMode = experienceLevel === 'beginner';
 
   // When a document is selected from the sidebar (file tree), auto-open the artifact panel
   const handleDocSelectAndOpenPanel = useCallback(
@@ -158,6 +158,32 @@ export default function ProjectDashboard() {
       unlisten.then((f) => f());
     };
   }, [setProject]);
+
+  useEffect(() => {
+    if (!project || showDemoTour) return;
+    if (isProjectOnboardingDone()) return;
+    setShowProjectOnboarding(true);
+  }, [project?.id, showDemoTour]);
+
+  const handleExperienceLevelChange = useCallback(
+    (level: ExperienceLevel) => {
+      setExperienceLevel(level);
+      saveUiPrefs({ experienceLevel: level });
+      if (
+        level === 'beginner' &&
+        activity &&
+        (activity === 'stats' ||
+          activity === 'context' ||
+          activity === 'archives' ||
+          activity === 'audit' ||
+          activity === 'graph')
+      ) {
+        setActivity(null);
+        setUiMode('focus');
+      }
+    },
+    [activity]
+  );
 
   const error = projError || chatError;
   const clearError = useCallback(() => {
@@ -209,6 +235,10 @@ export default function ProjectDashboard() {
     openTab(docIdToPath(pendingApprovals[0]));
   }, [pendingApprovals, openTab]);
 
+  const handleApproveDoc = useCallback(async (docId: string, comment?: string) => {
+    await approveDocumentAndResume(docId, comment);
+  }, []);
+
   const handlePendingApproval = useCallback(
     (docPath: string) => {
       openTab(docPath);
@@ -238,6 +268,16 @@ export default function ProjectDashboard() {
         onDocSelect={handleDocSelectAndOpenPanel}
         onShowDiff={(path) => openTab(path, 'diff')}
         pendingApprovalsCount={pendingApprovals.length}
+        beginnerMode={beginnerMode}
+        approvalBanner={
+          gateContext.active ? (
+            <ApprovalBanner
+              context={gateContext}
+              onView={() => openArtifact(docIdToPath(gateContext.docId!))}
+              onApprove={(comment) => handleApproveDoc(gateContext.docId!, comment)}
+            />
+          ) : undefined
+        }
         headerRight={
           <>
             <Button
@@ -264,9 +304,13 @@ export default function ProjectDashboard() {
               }`}
               title={`${artifactOpen ? '关闭' : '打开'}架阁 (Ctrl+\)`}
             >
-              架阁
+              <GlossaryTerm term="artifact">架阁</GlossaryTerm>
             </button>
-            <HelpDrawer />
+            <HelpDrawer
+              experienceLevel={experienceLevel}
+              onExperienceLevelChange={handleExperienceLevelChange}
+              onReplayOnboarding={() => setShowProjectOnboarding(true)}
+            />
             <SettingsMenu onOpenSettings={() => setSettingsOpen(true)} />
           </>
         }
@@ -297,7 +341,9 @@ export default function ProjectDashboard() {
               }}
               onSelectDoc={(path) => openArtifact(path)}
               onOpenProject={picker.openPicker}
+              onOpenGraph={() => handleActivity('graph')}
               endRef={chatEndRef}
+              beginnerMode={beginnerMode}
             />
           )
         }
@@ -312,6 +358,8 @@ export default function ProjectDashboard() {
               activeDoc={activeDoc || null}
               hasTabs={hasTabs}
               pendingApprovals={pendingApprovals}
+              gateContext={gateContext}
+              onApproveDoc={handleApproveDoc}
               onSelectTab={setActiveIndex}
               onCloseTab={closeTab}
               onClosePanel={() => setArtifactOpen(false)}
@@ -340,6 +388,9 @@ export default function ProjectDashboard() {
           ) : undefined
         }
       />
+      {showProjectOnboarding && !showDemoTour && (
+        <ProjectOnboarding onClose={() => setShowProjectOnboarding(false)} />
+      )}
       {settingsOpen && (
         <div className="fixed inset-0 z-50 bg-surface-paper overflow-y-auto">
           <SettingsPage onClose={() => setSettingsOpen(false)} />

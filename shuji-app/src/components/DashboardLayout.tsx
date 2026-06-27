@@ -3,8 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { DeptEventsProvider } from '../hooks/useDeptEvents';
 import { UsageStatsProvider } from '../hooks/useUsageStats';
 import { SealLogo } from './SealLogo';
+import type { ActivitySelection } from '../utils/uiPrefs';
 import ActivityBar from './ActivityBar';
-import type { ActivitySelection } from './ActivityBar';
 import Sidebar from './Sidebar';
 import DutyBar from './DutyBar';
 import type { Project } from '../types';
@@ -41,6 +41,7 @@ interface Props {
   onDocSelect: (path: string) => void;
   onShowDiff: (path: string) => void;
   pendingApprovalsCount: number;
+  approvalBanner?: ReactNode;
   headerLeft?: ReactNode;
   headerRight?: ReactNode;
   agentStream: ReactNode;
@@ -48,6 +49,7 @@ interface Props {
   artifactOpen: boolean;
   picker?: ReactNode;
   demoTour?: ReactNode;
+  beginnerMode?: boolean;
 }
 
 export default function DashboardLayout({
@@ -60,6 +62,7 @@ export default function DashboardLayout({
   onDocSelect,
   onShowDiff,
   pendingApprovalsCount,
+  approvalBanner,
   headerLeft,
   headerRight,
   agentStream,
@@ -67,6 +70,7 @@ export default function DashboardLayout({
   artifactOpen,
   picker,
   demoTour,
+  beginnerMode = false,
 }: Props) {
   const { t } = useTranslation();
   const [artifactWidth, setArtifactWidth] = useState(loadArtifactWidth);
@@ -140,11 +144,14 @@ export default function DashboardLayout({
             </div>
           )}
 
+          {approvalBanner}
+
           <div className="flex-1 flex min-h-0 overflow-hidden">
             <ActivityBar
               selected={activity}
               onSelect={onActivity}
               pendingApprovalsCount={pendingApprovalsCount}
+              beginnerMode={beginnerMode}
             />
             {activity && activity !== 'graph' && project && (
               <Sidebar
@@ -178,7 +185,7 @@ export default function DashboardLayout({
             </div>
           </div>
 
-          <DutyBar />
+          <DutyBar projectDir={project?.working_dir} />
           {picker}
           {demoTour}
         </div>

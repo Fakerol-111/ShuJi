@@ -276,7 +276,24 @@
     "welcomeDiscuss": "What would you like to discuss? I'm ready.",
     "discussCancelled": "Discussion cancelled.",
     "discussError": "Discussion error: {{error}}",
-    "loadHistoryFailed": "Failed to load chat history: {{error}}"
+    "loadHistoryFailed": "Failed to load chat history: {{error}}",
+    "attachedDocuments": "Related documents",
+    "openInArtifact": "Click to open in Artifact panel",
+    "docPendingApproval": "Pending approval",
+    "docApproved": "Approved",
+    "docRejected": "Rejected",
+    "docType": {
+      "dsgn": "Design",
+      "plan": "Plan",
+      "pdsg": "Phase design",
+      "ddtl": "Detail design",
+      "revw": "Review",
+      "task": "Task",
+      "ctrt": "Contract",
+      "rprt": "Report",
+      "anls": "Analysis",
+      "reqs": "Requirements"
+    }
   },
   "activityBar": {
     "duty": "Duty",
@@ -288,7 +305,8 @@
     "graph": "Flow Graph",
     "logs": "Logs",
     "approval": "Approval",
-    "allQuiet": "All Quiet"
+    "allQuiet": "All Quiet",
+    "advancedView": "Advanced"
   },
   "sidebar": {
     "directory": "Directory",
@@ -493,7 +511,8 @@
     "noReport": "No Validation Report",
     "validating": "Validating...",
     "passCount": "{{pass}}/{{total}} passed",
-    "failedItems": "Failed"
+    "failedItems": "Failed",
+    "latestReport": "Delivery validation"
   },
   "demo": {
     "complete": "Demo Complete",
@@ -546,11 +565,20 @@
     "latestDocs": "Latest Documents",
     "noDocs": "No recent documents",
     "gongbuPlan": "Gongbu Plan: {{done}}/{{total}}",
-    "generateReport": "Generate Delivery Report"
+    "generateReport": "Generate Delivery Report",
+    "nextStep": "Next step",
+    "nextStepHint": "Type an edict below, or pick an example to get started:"
   },
   "helpDrawer": {
     "title": "System Help",
     "systemName": "Three Departments & Six Ministries",
+    "experience": "UI mode",
+    "beginnerMode": "Beginner",
+    "advancedMode": "Advanced",
+    "beginnerHint": "Shows chat, flow summary, and pending docs by default. Expand ▾ at the sidebar bottom for audit, checkpoints, flow graph, etc.",
+    "advancedHint": "Shows department cards and all sidebar tools.",
+    "replayOnboarding": "Replay getting started guide",
+    "glossary": "Glossary",
     "workflow": "Workflow",
     "departments": "Department Reference",
     "quickTips": "Quick Tips",
@@ -630,7 +658,9 @@
     "logs": "Logs",
     "summary": "Summary",
     "cacheHit": "Cache Hit",
-    "inputCacheHit": "Input Cache Hit"
+    "inputCacheHit": "Input Cache Hit",
+    "lastRun": "Last run",
+    "runId": "Run"
   },
   "commandBar": {
     "idle": "Awaiting imperial edict",
@@ -638,5 +668,71 @@
     "phase": "Phase",
     "collapse": "Collapse",
     "details": "Details"
+  },
+  "timeline": {
+    "noSteps": "No workflow steps yet",
+    "recentDocs": "Recent outputs",
+    "waitingApproval": "Awaiting approval: {{doc}}",
+    "waitingInput": "Awaiting reply (step {{step}})",
+    "waitingApprovalGate": "Awaiting approval to continue",
+    "deptWorking": "{{dept}} working",
+    "pipelineRunning": "Pipeline running"
+  },
+  "approval": {
+    "bannerTitle": "Workflow paused for approval",
+    "bannerPaused": "The review report is ready. Approve it to continue the pipeline.",
+    "pipelineStep": "Current step",
+    "afterApprove": "After approval: {{step}}",
+    "viewDocument": "View document",
+    "confirmApprove": "Confirm approval",
+    "morePending": "more pending",
+    "notSatisfiedHint": "If you disagree with the review: stop all departments, restore a checkpoint, and issue a new command — do not use reject."
+  },
+  "onboarding": {
+    "skip": "Skip",
+    "back": "Back",
+    "next": "Next",
+    "start": "Start",
+    "step1": {
+      "title": "Step 1: Issue an edict",
+      "body": "Describe your task in the input at the bottom and click Send. The Cabinet submits a Pipeline plan.",
+      "hint": "Try an example edict from the project overview."
+    },
+    "step2": {
+      "title": "Step 2: Approve documents",
+      "body": "When a review/plan is ready, an approval banner appears. Preview in Artifact panel and click Approve.",
+      "hint": "Pending docs show a gold dot on the Files sidebar icon."
+    },
+    "step3": {
+      "title": "Step 3: See results",
+      "body": "CommandBar shows step progress. After completion, check delivery validation and latest documents.",
+      "hint": "Hover ? or dotted terms in the UI for glossary hints."
+    }
+  },
+  "glossary": {
+    "cabinet": {
+      "label": "Cabinet (内阁)",
+      "hint": "Orchestrator — receives commands and submits Pipeline plans."
+    },
+    "artifact": {
+      "label": "Artifact (架阁)",
+      "hint": "Right-hand document panel for designs, reviews, contracts."
+    },
+    "approval": {
+      "label": "Imperial approval (朱批)",
+      "hint": "Your approve/reject on plan/revw docs — gates the pipeline."
+    },
+    "workflowGraph": {
+      "label": "Flow graph (文移图)",
+      "hint": "Visual Pipeline steps and department routing (advanced view)."
+    },
+    "edict": {
+      "label": "Edict (下诏)",
+      "hint": "Send a task command to drive the ministries."
+    },
+    "dutyBar": {
+      "label": "Duty bar (值事栏)",
+      "hint": "Bottom strip: active departments, tokens, run summary."
+    }
   }
 }

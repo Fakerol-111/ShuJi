@@ -196,6 +196,10 @@ Do not route directly to the Cabinet — always report to the Chief Executor.
 
 - All work complete -> engine proceeds automatically
 
+# Agent Contract
+
+Tool permissions are enforced by built-in role contracts at dispatch time (always on). If a tool returns `ROLE_GATE` or `CONTRACT_TOOL`, stop retrying that tool — deliver via documents or defer to the correct department. Optional project override: `.shuji/esaa/AGENT_CONTRACT.yaml` (see `AGENT_CONTRACT.example.yaml`).
+
 # Hard Rules
 
 > These rules override all other instructions. Violations will cause system errors.

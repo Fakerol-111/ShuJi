@@ -5,7 +5,8 @@ import CommandBar from './CommandBar';
 import DeptCardRail from './DeptCardRail';
 import DeptInspector from './DeptInspector';
 import ChatPanel from './ChatPanel';
-import AgentIdleState from './AgentIdleState';
+import { useDeliveryValidation } from '../hooks/useDeliveryValidation';
+import ProjectOverview from './ProjectOverview';
 import { getDeptMeta } from '../constants';
 import { useDeptEvents } from '../hooks/useDeptEvents';
 import { deptMatches, isDeptActive } from '../utils/deptLog';
@@ -37,7 +38,9 @@ interface AgentStreamPanelProps {
   onSelectDoc: (path: string) => void;
   onOpenProject?: () => void;
   onFillInput?: (text: string) => void;
+  onOpenGraph?: () => void;
   endRef: React.RefObject<HTMLDivElement | null>;
+  beginnerMode?: boolean;
 }
 
 export default function AgentStreamPanel({
@@ -62,7 +65,9 @@ export default function AgentStreamPanel({
   onConvertToCommand,
   onSelectDoc,
   onOpenProject,
+  onOpenGraph,
   endRef,
+  beginnerMode = false,
 }: AgentStreamPanelProps) {
   const { t } = useTranslation();
   const { latestLogs, logEntries } = useDeptEvents();
@@ -88,6 +93,10 @@ export default function AgentStreamPanel({
 
   const chatInputRef = useRef<ChatInputHandle>(null);
   const handleFillInput = (text: string) => chatInputRef.current?.setText(text);
+  const { report: validationReport, loading: validationLoading } = useDeliveryValidation(
+    project?.working_dir,
+    activeDepts
+  );
   const totalStageCount = phaseCount || phases.length;
   const completedStageCount = phases.filter(
     (p) => p.execution === 'Completed' || p.execution === 'MinorIssue'
@@ -105,20 +114,35 @@ export default function AgentStreamPanel({
         activeDepts={activeDepts}
         planInfo={planInfo}
         pendingApprovals={pendingApprovals}
+        validationReport={validationReport}
+        validationLoading={validationLoading}
         onSelectDoc={onSelectDoc}
+        onSelectDept={(dept) => {
+          const meta = getDeptMeta(dept);
+          const label = meta?.label ?? dept;
+          if (label === '内阁') {
+            setSelectedDept(null);
+          } else {
+            setSelectedDept(label);
+            setPinDept(true);
+          }
+        }}
+        onOpenGraph={onOpenGraph}
       />
 
       {project ? (
         <div className="flex-1 flex min-h-0">
-          <DeptCardRail
-            selected={selectedDept}
-            onSelect={setSelectedDept}
-            activeDepts={activeDepts}
-            latestLogs={latestLogs}
-            planInfo={planInfo}
-            pinDept={pinDept}
-            onTogglePin={() => setPinDept((p) => !p)}
-          />
+          {!beginnerMode && (
+            <DeptCardRail
+              selected={selectedDept}
+              onSelect={setSelectedDept}
+              activeDepts={activeDepts}
+              latestLogs={latestLogs}
+              planInfo={planInfo}
+              pinDept={pinDept}
+              onTogglePin={() => setPinDept((p) => !p)}
+            />
+          )}
           {showChat ? (
             <div className="flex-1 flex flex-col min-w-0 stage-edict">
               <div className="border-b border-fold bg-surface-elevated shrink-0 px-4 py-2 flex items-center justify-between">
@@ -136,11 +160,14 @@ export default function AgentStreamPanel({
               </div>
               {isIdle && tab === 'decision' ? (
                 <>
-                  <AgentIdleState
+                  <ProjectOverview
                     project={project}
+                    activeDepts={activeDepts}
+                    planInfo={planInfo}
+                    onOpenProject={onOpenProject ?? (() => {})}
                     onDocSelect={onSelectDoc}
-                    onOpenProject={onOpenProject}
                     onFillInput={handleFillInput}
+                    validationReport={validationReport}
                   />
                   <ChatPanel
                     tab={tab}
@@ -152,6 +179,7 @@ export default function AgentStreamPanel({
                     onOption={onOption}
                     onSend={onSend}
                     onRetrySend={onRetrySend}
+                    onDocumentClick={onSelectDoc}
                     onDiscuss={onDiscuss}
                     onCancelDiscuss={onCancelDiscuss}
                     onConvertToCommand={onConvertToCommand}
@@ -170,6 +198,7 @@ export default function AgentStreamPanel({
                   onOption={onOption}
                   onSend={onSend}
                   onRetrySend={onRetrySend}
+                  onDocumentClick={onSelectDoc}
                   onDiscuss={onDiscuss}
                   onCancelDiscuss={onCancelDiscuss}
                   onConvertToCommand={onConvertToCommand}

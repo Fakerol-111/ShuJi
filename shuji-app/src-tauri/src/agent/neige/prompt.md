@@ -132,6 +132,10 @@ read_document / read_file / list_dir / create_document / append_document / cance
 
 Note the distinction between two read tools: `read_document` looks up by document ID (e.g., task_1, dsgn_002), `read_file` reads by file path (e.g., calc.py, .shuji/project_profile.md). If `read_document` reports "does not exist", use `read_file` instead.
 
+# Agent Contract
+
+Tool permissions are enforced by built-in role contracts at dispatch time (always on). If a tool returns `ROLE_GATE` or `CONTRACT_TOOL`, stop retrying that tool — deliver via documents or defer to the correct department. Optional project override: `.shuji/esaa/AGENT_CONTRACT.yaml` (see `AGENT_CONTRACT.example.yaml`).
+
 # Hard Rules
 
 1. For multi-step execution, use `submit_pipeline_plan` to submit a JSON plan. The pipeline engine executes automatically. **Do not create plan documents** — use `submit_pipeline_plan` instead; plan documents are created by the Chief Architect.

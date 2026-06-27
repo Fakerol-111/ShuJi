@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import ArtifactPanel from './ArtifactPanel';
+import { computeApprovalGateContext } from '../utils/approvalGate';
 
 vi.mock('../api', () => ({
   readShujiDoc: vi.fn().mockResolvedValue({ content: '# doc', path: '.shuji/doc.md' }),
@@ -18,13 +19,17 @@ vi.mock('react-markdown', () => ({
 vi.mock('remark-gfm', () => ({ default: () => {} }));
 vi.mock('rehype-highlight', () => ({ default: () => {} }));
 
+const inactiveGate = computeApprovalGateContext([], null);
+
 const baseProps = {
   project: { working_dir: '/test' },
   tabs: [],
   activeIndex: 0,
   activeDoc: null,
   hasTabs: false,
-  pendingApprovals: [],
+  pendingApprovals: [] as string[],
+  gateContext: inactiveGate,
+  onApproveDoc: vi.fn().mockResolvedValue(undefined),
   onSelectTab: vi.fn(),
   onCloseTab: vi.fn(),
   onClosePanel: vi.fn(),
@@ -42,8 +47,12 @@ describe('ArtifactPanel', () => {
   });
 
   it('shows approval prompt when pending approvals exist', () => {
-    render(<ArtifactPanel {...baseProps} pendingApprovals={['revw_001']} />);
+    const gateContext = computeApprovalGateContext(['revw_001'], null);
+    render(
+      <ArtifactPanel {...baseProps} pendingApprovals={['revw_001']} gateContext={gateContext} />
+    );
     expect(screen.getByText('待陛下朱批')).toBeTruthy();
+    expect(screen.getByText('revw_001')).toBeTruthy();
   });
 
   it('shows TabBar and DocPreview when tabs exist', async () => {

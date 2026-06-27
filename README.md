@@ -9,6 +9,22 @@
 
 **枢机**是一款 Rust + Tauri v2 桌面应用：你说出需求，内阁调度各部门协作完成设计、审查、编码与测试，全程可审计、可回滚。
 
+与普通 Chat Coding 不同，枢机把**设计 / 审查 / 编码 / 测试**拆成独立 Agent，用 **`.shuji/` 文档**传递契约，在关键节点等你 **朱批** 后再继续——更像一条可治理的软件工程流水线，而不是单窗口无限对话。
+
+---
+
+## 界面一览
+
+> 以下为线框占位图，真实截图说明见 [docs/images/README.md](docs/images/README.md)。
+
+| 工作台总览 | 部门 Inspector |
+|:---:|:---:|
+| ![工作台总览](docs/images/dashboard-overview.svg) | ![部门 Inspector](docs/images/dept-inspector.svg) |
+
+| 朱批文档 | 文移图 / Pipeline |
+|:---:|:---:|
+| ![朱批文档](docs/images/approval-document.svg) | ![文移图](docs/images/workflow-graph.svg) |
+
 ---
 
 ## 特性
@@ -91,7 +107,21 @@ npm run tauri build
 
 内阁分析任务后提交结构化 **PipelinePlan**；引擎按依赖顺序驱动部门，关键文档需朱批后才能继续。Legacy `route_to` 仅用于计划步骤内部转发，不再是内阁主编排方式。
 
-架构细节见 [CLAUDE.md](CLAUDE.md)。
+```mermaid
+flowchart TB
+  U[皇帝下诏] --> N[内阁 submit_pipeline_plan]
+  N --> PE[PipelineEngine]
+  PE --> Z[中书令 · 设计]
+  PE --> M[门下侍中 · 审查]
+  PE --> AG{朱批 approval_gate}
+  AG -->|准奏| S[尚书令 · 调度]
+  AG -->|等待| U
+  S --> X[六部 · 设计/测试/编码/验证/审计]
+  X --> V[validate_delivery]
+  V --> R[交付报告 / 审计链]
+```
+
+架构细节见 **[shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md)**（对外叙事 + 分层说明）。文件级索引见 [CLAUDE.md](CLAUDE.md)。
 
 ---
 
@@ -109,12 +139,15 @@ npm run tauri build
 
 | 文档 | 说明 |
 |------|------|
-| [**ONBOARDING.md**](ONBOARDING.md) | **新人入口**：文档地图、目录约定、后端阅读路径 |
+| [**ONBOARDING.md**](ONBOARDING.md) | **新人入口**：先读什么、后读什么 |
+| [**shuji-app/docs/ARCHITECTURE.md**](shuji-app/docs/ARCHITECTURE.md) | **架构说明**：Pipeline-first 主流程、分层、朱批与观测 |
+| [**shuji-app/docs/AGENT_TASKS.md**](shuji-app/docs/AGENT_TASKS.md) | **Agent 协作**：任务边界、优化清单完成状态 |
+| [docs/images/README.md](docs/images/README.md) | 界面截图规范与占位资源 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 开发环境、测试、配置与贡献指南 |
-| [CLAUDE.md](CLAUDE.md) | 架构深度说明（面向维护者与 AI 辅助开发） |
+| [CLAUDE.md](CLAUDE.md) | 文件级索引与测试命令（维护者 / AI） |
 | [LICENSE](LICENSE) | MIT 许可证 |
 
-后端核心路径有 **291+** 自动化测试（单元 + 集成），详见 [CONTRIBUTING.md#测试](CONTRIBUTING.md#测试)。
+后端核心路径有 **400+** 自动化测试（Rust 单元/集成 + 前端 Vitest），详见 [CONTRIBUTING.md#测试](CONTRIBUTING.md#测试)。
 
 ---
 

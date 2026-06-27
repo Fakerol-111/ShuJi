@@ -104,6 +104,7 @@ pub(super) async fn run_exec_loop(
             discuss_mode: false,
             fast_cancel: fast_cancel.clone(),
             dept_step_tx: ctx.dept_step_tx.clone(),
+            allow_pipeline_plan: task.allow_pipeline_plan,
         };
 
         // 执行 agent（含 LLM API 调用 + 工具循环）
