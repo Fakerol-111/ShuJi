@@ -80,6 +80,36 @@ pub async fn validate_delivery(
     )
     .await;
 
+    let run_id = crate::audit::active_run_id(working_dir).await;
+    crate::storage::checkpoint::save_semantic(
+        working_dir,
+        "system",
+        &format!(
+            "交付完成: {}",
+            if report.overall_pass { "pass" } else { "fail" }
+        ),
+        crate::storage::checkpoint::CheckpointKind::DeliveryComplete,
+        crate::storage::checkpoint::CheckpointMeta {
+            run_id: Some(run_id.clone()),
+            doc_id: opts.ctrt_id.clone(),
+            reason: Some(format!("overall_pass={}", report.overall_pass)),
+            ..Default::default()
+        },
+        None,
+    )
+    .await;
+    crate::audit::append_line_event(
+        working_dir,
+        &run_id,
+        "delivery_complete",
+        "validation:latest",
+        serde_json::json!({
+            "overall_pass": report.overall_pass,
+            "checks": report.checks.len(),
+        }),
+    )
+    .await;
+
     Ok(report)
 }
 

@@ -112,14 +112,7 @@ pub(super) async fn run_exec_loop(
         log_console!("[actor] {} ← started executing: {}", role_name, preview);
         let step_result = ctx.agent.execute(&input).await;
 
-        // 执行后保存最终 checkpoint
-        let ckpt_desc = task.content.chars().take(80).collect::<String>();
-        if crate::storage::checkpoint::save_final(&ctx.working_dir, role_name, &ckpt_desc)
-            .await
-            .is_none()
-        {
-            log_console!("[actor] checkpoint save_final failed ({})", role_name);
-        }
+        // Actor-end checkpoints removed — semantic anchors saved at approval/execution gates.
 
         // 根据执行结果分派
         match step_result {

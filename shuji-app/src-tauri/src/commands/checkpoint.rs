@@ -14,6 +14,7 @@ pub async fn list_checkpoints(
     state: tauri::State<'_, AppState>,
     role: Option<String>,
     limit: Option<usize>,
+    semantic_only: Option<bool>,
 ) -> Result<Vec<CheckpointEntry>, String> {
     let dir = state
         .current_dir
@@ -28,6 +29,15 @@ pub async fn list_checkpoints(
 
     if let Some(r) = role {
         entries.retain(|e| e.role == r);
+    }
+
+    if semantic_only.unwrap_or(false) {
+        entries.retain(|e| {
+            e.kind
+                .as_deref()
+                .map(|k| k != "workspace_only")
+                .unwrap_or(false)
+        });
     }
 
     if let Some(l) = limit {

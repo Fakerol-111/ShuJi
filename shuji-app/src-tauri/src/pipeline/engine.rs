@@ -372,6 +372,31 @@ impl PipelineEngine {
                         break;
                     }
                     StepResultInner::ApprovalRequired { doc_id } => {
+                        let run_id = self.runtime.plan.plan_id.clone();
+                        let step_id = next.clone();
+                        crate::storage::checkpoint::save_semantic(
+                            &self.project_dir,
+                            "pipeline",
+                            &format!("朱批前: {}", doc_id),
+                            crate::storage::checkpoint::CheckpointKind::BeforeApproval,
+                            crate::storage::checkpoint::CheckpointMeta {
+                                run_id: Some(run_id.clone()),
+                                step_id: Some(step_id.clone()),
+                                doc_id: Some(doc_id.clone()),
+                                reason: Some("approval_gate".into()),
+                                ..Default::default()
+                            },
+                            None,
+                        )
+                        .await;
+                        crate::audit::append_line_event(
+                            &self.project_dir,
+                            &run_id,
+                            "approval_gate",
+                            &doc_id,
+                            serde_json::json!({"step_id": step_id, "status": "awaiting"}),
+                        )
+                        .await;
                         self.save().await.ok();
                         return PipelineResult::AwaitingApproval {
                             doc_id,
@@ -660,6 +685,33 @@ impl PipelineEngine {
             target,
             task.chars().take(80).collect::<String>()
         );
+
+        if EXEC_DEPTS.contains(&target) {
+            let run_id = self.runtime.plan.plan_id.clone();
+            crate::storage::checkpoint::save_semantic(
+                &self.project_dir,
+                target,
+                &format!("执行前: {}", step.description),
+                crate::storage::checkpoint::CheckpointKind::BeforeExecution,
+                crate::storage::checkpoint::CheckpointMeta {
+                    run_id: Some(run_id.clone()),
+                    step_id: Some(step.step_id.clone()),
+                    doc_id: upstream_doc_ids.first().cloned(),
+                    reason: Some(format!("route_to:{}", target)),
+                    ..Default::default()
+                },
+                None,
+            )
+            .await;
+            crate::audit::append_line_event(
+                &self.project_dir,
+                &run_id,
+                "before_execution",
+                &step.step_id,
+                serde_json::json!({"target": target, "doc_ids": upstream_doc_ids}),
+            )
+            .await;
+        }
 
         // ── 文移图：标记节点为 active（节点/边已由 preview 预创建） ──
         if let Some(ref graph_lock) = self.workflow_graph {

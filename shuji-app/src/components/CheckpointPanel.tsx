@@ -44,7 +44,7 @@ export default function CheckpointPanel() {
   const fetch = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await listCheckpoints();
+      const data = await listCheckpoints(undefined, undefined, true);
       setEntries(data);
       setError(null);
     } catch (e) {
@@ -136,6 +136,11 @@ export default function CheckpointPanel() {
               <span className="font-medium text-ink-700">{roleLabel(entry.role, lang)}</span>
               <span className="text-[10px] text-ink-400">{formatTime(entry.ts, lang)}</span>
             </div>
+            {entry.kind && entry.kind !== 'workspace_only' && (
+              <span className="inline-block px-1.5 py-0.5 rounded text-[9px] bg-gold/10 text-gold">
+                {entry.kind}
+              </span>
+            )}
             <div className="text-ink-600 truncate" title={entry.description}>
               {entry.description}
             </div>

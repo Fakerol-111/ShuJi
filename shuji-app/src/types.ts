@@ -208,6 +208,11 @@ export interface CheckpointEntry {
   role: string;
   description: string;
   commit: string;
+  kind?: string;
+  run_id?: string;
+  step_id?: string;
+  doc_id?: string;
+  reason?: string;
 }
 
 // 工部 plan progress (from plan-update Tauri event)
@@ -359,6 +364,58 @@ export interface TraceResult {
   target: ChainNode | null;
   downstream: ChainNode[];
   upstream: ChainNode[];
+}
+
+export interface EvidenceRef {
+  source: string;
+  ref_id: string;
+  label?: string;
+}
+
+export interface LineNode {
+  node_id: string;
+  kind: string;
+  label: string;
+  status: string;
+  role?: string;
+  timestamp?: string;
+  doc_type?: string;
+  evidence: EvidenceRef[];
+  stale: boolean;
+  highlight: boolean;
+}
+
+export interface LineEdge {
+  from: string;
+  to: string;
+  relation: string;
+}
+
+export interface DocumentLineRun {
+  run_id: string;
+  plan_id?: string;
+  session_label?: string;
+  started_at?: string;
+  completed_at?: string;
+  status: string;
+  nodes: LineNode[];
+  edges: LineEdge[];
+  focus_doc_id?: string;
+}
+
+export interface ImpactNode {
+  node_id: string;
+  kind: string;
+  status: string;
+  stale: boolean;
+  reason: string;
+}
+
+export interface ImpactAnalysis {
+  source_doc_id: string;
+  impacted: ImpactNode[];
+  blocking_chain: string;
+  chain_path: string[];
 }
 
 export interface DocQuery {
