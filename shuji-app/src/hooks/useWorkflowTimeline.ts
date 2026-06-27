@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import { getPipelineStatus, getWorkflowGraph, getWorkflowState } from '../api';
 import type {
@@ -14,7 +15,7 @@ import {
   computeNextAction,
 } from '../utils/workflowTimeline';
 
-const POLL_MS = 3000;
+const POLL_MS = 10000;
 
 export interface UseWorkflowTimelineInput {
   activeDepts: string[];
@@ -47,7 +48,11 @@ export function useWorkflowTimeline({
     };
     load();
     const timer = window.setInterval(load, POLL_MS);
-    return () => window.clearInterval(timer);
+    const unlisten = listen('project-update', () => load());
+    return () => {
+      window.clearInterval(timer);
+      unlisten.then((f) => f());
+    };
   }, []);
 
   const timelineNodes = useMemo(

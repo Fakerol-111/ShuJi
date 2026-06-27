@@ -234,6 +234,13 @@ export interface RoundMetrics {
   dept_iterations: Record<string, number>;
 }
 
+/** Live runtime snapshot pushed via `runtime-update` Tauri event. */
+export interface RuntimeUpdate {
+  active_roles: string[];
+  round_metrics: RoundMetrics | null;
+  trigger: string;
+}
+
 // ── Department Inspector (九司卡片 + 部门观察器) ─────────────
 
 export type SelectedDept = string | null;

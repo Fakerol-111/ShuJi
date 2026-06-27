@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getDeptMeta } from '../constants';
+import { summarizeDeptStep } from '../utils/deptStepSummary';
 import DeptActivityCard from './DeptActivityCard';
 import RouteContextBar from './RouteContextBar';
 import { SealLogo } from './SealLogo';
@@ -190,9 +191,27 @@ function PlanInfoCard({ info }: { info: PlanInfo }) {
   );
 }
 
-function StepCard({ entry }: { entry: DeptStepEntry }) {
-  const { t } = useTranslation();
+function StepCard({ entry, humanMode }: { entry: DeptStepEntry; humanMode: boolean }) {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language?.startsWith('en') ? 'en' : 'zh';
   const kind = entry.kind;
+
+  if (humanMode) {
+    const summary = summarizeDeptStep(entry, lang);
+    if (!summary) return null;
+    const isError = kind.type === 'tool_result' && !kind.ok;
+    return (
+      <div
+        className={`flex items-start gap-2 py-1.5 px-3 text-caption ${
+          isError ? 'text-vermillion bg-vermillion/5' : 'text-ink-600'
+        }`}
+      >
+        <span className="text-gold shrink-0 mt-0.5">▸</span>
+        <span className="leading-snug">{summary}</span>
+      </div>
+    );
+  }
+
   switch (kind.type) {
     case 'thinking': {
       const [expanded, setExpanded] = useState(false);
@@ -294,6 +313,7 @@ export default function DeptInspector({
 }: DeptInspectorProps) {
   const { t } = useTranslation();
   const { deptSteps } = useDeptEvents();
+  const [humanMode, setHumanMode] = useState(true);
   const isAllMode = mode === 'all';
   const showPlan =
     !isAllMode &&
@@ -333,10 +353,24 @@ export default function DeptInspector({
       {!isAllMode && <RouteContextBar entries={entries} />}
       {showPlan && planInfo && <PlanInfoCard info={planInfo} />}
       {steps.length > 0 && (
-        <div className="shrink-0 border-b border-fold divide-y divide-ink-100/30 max-h-[40vh] overflow-y-auto">
-          {steps.map((step, i) => (
-            <StepCard key={`${step.ts}-${i}`} entry={step} />
-          ))}
+        <div className="shrink-0 border-b border-fold">
+          <div className="flex items-center justify-between px-3 py-1.5 bg-surface-elevated/50">
+            <span className="text-caption text-ink-500 font-medium">
+              {humanMode ? t('inspector.activitySummary') : t('inspector.technicalSteps')}
+            </span>
+            <button
+              type="button"
+              onClick={() => setHumanMode((v) => !v)}
+              className="text-caption text-gold hover:text-gold-dark"
+            >
+              {humanMode ? t('inspector.showTechnical') : t('inspector.showSummary')}
+            </button>
+          </div>
+          <div className="divide-y divide-ink-100/30 max-h-[40vh] overflow-y-auto">
+            {steps.map((step, i) => (
+              <StepCard key={`${step.ts}-${i}`} entry={step} humanMode={humanMode} />
+            ))}
+          </div>
         </div>
       )}
       <DeptInspectorFeed entries={entries} onDocClick={onDocClick} />

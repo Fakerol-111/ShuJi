@@ -44,6 +44,7 @@ pub fn start_round() {
             dept_iterations: HashMap::new(),
         });
     }
+    crate::runtime_notify::notify("round_start");
 }
 
 /// Add token usage to the current round.
@@ -58,6 +59,7 @@ pub fn add_tokens(prompt: u64, cached: u64, completion: u64) {
             s.total_tokens += prompt + completion;
         }
     }
+    crate::runtime_notify::notify("tokens");
 }
 
 /// Set the currently active department.
@@ -67,6 +69,7 @@ pub fn set_role(role: &str) {
             s.current_role = role.to_string();
         }
     }
+    crate::runtime_notify::notify("role_set");
 }
 
 /// Set the current skill name.
@@ -120,6 +123,7 @@ pub fn mark_active(role: &str) {
     if let Ok(mut set) = ACTIVE_ROLES.lock() {
         set.insert(role.to_string());
     }
+    crate::runtime_notify::notify("role_active");
 }
 
 /// Mark a role as idle (no longer executing).
@@ -127,6 +131,7 @@ pub fn mark_idle(role: &str) {
     if let Ok(mut set) = ACTIVE_ROLES.lock() {
         set.remove(role);
     }
+    crate::runtime_notify::notify("role_idle");
 }
 
 /// Check whether a role is currently executing.

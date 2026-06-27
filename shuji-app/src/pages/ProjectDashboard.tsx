@@ -22,6 +22,7 @@ import WorkflowGraphView from '../components/WorkflowGraph';
 import { Button } from '../components/ui/Button';
 import { docIdToPath } from '../utils/docPath';
 import { approveDocumentAndResume } from '../utils/approveDocument';
+import { cancelProcessing } from '../api';
 import type { Project } from '../types';
 import {
   loadUiPrefs,
@@ -275,6 +276,7 @@ export default function ProjectDashboard() {
               context={gateContext}
               onView={() => openArtifact(docIdToPath(gateContext.docId!))}
               onApprove={(comment) => handleApproveDoc(gateContext.docId!, comment)}
+              onStop={() => cancelProcessing().catch(() => {})}
             />
           ) : undefined
         }

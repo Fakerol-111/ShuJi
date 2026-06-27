@@ -334,7 +334,11 @@
     "error": "Error",
     "executing": "Executing",
     "idle": "Idle",
-    "gongbuBatch": "Works Batch"
+    "gongbuBatch": "Works Batch",
+    "activitySummary": "Activity summary",
+    "technicalSteps": "Tool steps",
+    "showTechnical": "Show technical details",
+    "showSummary": "Show summary"
   },
   "deptActivity": {
     "viewDoc": "View",
@@ -686,7 +690,12 @@
     "viewDocument": "View document",
     "confirmApprove": "Confirm approval",
     "morePending": "more pending",
-    "notSatisfiedHint": "If you disagree with the review: stop all departments, restore a checkpoint, and issue a new command — do not use reject."
+    "notSatisfiedHint": "If you disagree with the review: stop all departments, restore a checkpoint, and issue a new command — do not use reject.",
+    "whyReview": "The reviewer has finished. Confirm the design and risks before execution.",
+    "whyDesign": "The designer has finished. Confirm the design direction before review or execution.",
+    "whyPlan": "The pipeline plan is ready. Confirm execution steps before dispatching departments.",
+    "whyDefault": "A key document is ready. Approve it to continue the workflow.",
+    "rejectConsequence": "If you do not approve: click Stop all departments, restore a checkpoint, and issue a revised command."
   },
   "onboarding": {
     "skip": "Skip",
