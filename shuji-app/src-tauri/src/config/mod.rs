@@ -41,6 +41,23 @@ pub struct ApiConfig {
     /// 推理/思考模式配置
     #[serde(default)]
     pub reasoning: ReasoningConfig,
+
+    /// LLM 流式响应（工具 agent）。默认关闭，失败时回退 step()。
+    #[serde(default)]
+    pub streaming: StreamingConfig,
+}
+
+/// Agent 流式输出配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamingConfig {
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+impl Default for StreamingConfig {
+    fn default() -> Self {
+        Self { enabled: false }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -341,6 +358,7 @@ impl Default for ApiConfig {
             length_max_retries: default_length_max_retries(),
             max_tokens: MaxTokensConfig::default(),
             reasoning: ReasoningConfig::default(),
+            streaming: StreamingConfig::default(),
         }
     }
 }
@@ -491,6 +509,9 @@ impl RuntimeConfig {
         }
         if other.api.reasoning.budget_tokens != default_reasoning_budget() {
             self.api.reasoning.budget_tokens = other.api.reasoning.budget_tokens;
+        }
+        if other.api.streaming.enabled {
+            self.api.streaming.enabled = other.api.streaming.enabled;
         }
 
         // Tool iterations

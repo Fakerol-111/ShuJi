@@ -4,7 +4,11 @@ import CommandBar from './CommandBar';
 import type { PhaseRuntime } from '../types';
 
 vi.mock('../hooks/useDeptEvents', () => ({
-  useDeptEvents: () => ({ latestLogs: new Map() }),
+  useDeptEvents: () => ({
+    latestLogs: new Map(),
+    latestHumanSummary: null,
+    roundMetrics: null,
+  }),
 }));
 
 const activeTimeline = {
@@ -55,6 +59,7 @@ vi.mock('../hooks/useWorkflowTimeline', () => ({
 
 vi.mock('../api', () => ({
   getRoundMetrics: vi.fn().mockResolvedValue(null),
+  listCheckpoints: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('./PlanPanel', () => ({

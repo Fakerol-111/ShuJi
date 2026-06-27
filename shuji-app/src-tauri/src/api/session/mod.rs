@@ -554,6 +554,200 @@ impl Session {
         } // end step loop
     }
 
+    /// One API round-trip with streaming text/reasoning deltas when supported.
+    /// OpenAI-compatible APIs only; falls back to [`step()`] on failure or Anthropic URLs.
+    pub async fn step_stream<F>(&mut self, mut on_chunk: F) -> anyhow::Result<StepResult>
+    where
+        F: FnMut(crate::api::stream::AgentStreamChunk),
+    {
+        if self.client.api_url.contains("anthropic.com") {
+            return self.step().await;
+        }
+
+        let mut body = self.build_step_body();
+        body["stream"] = serde_json::json!(true);
+
+        log_console!(
+            "[{}] step_stream: sending {} messages",
+            self.role,
+            self.messages.len()
+        );
+
+        let resp = match self
+            .client
+            .http_client
+            .post(&self.client.api_url)
+            .header("Authorization", format!("Bearer {}", self.client.api_key))
+            .header("content-type", "application/json")
+            .json(&body)
+            .timeout(self.config.api_timeout())
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                log_console!(
+                    "[{}] step_stream request failed: {}, fallback step()",
+                    self.role,
+                    e
+                );
+                return self.step().await;
+            }
+        };
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            log_console!(
+                "[{}] step_stream API {}: {}, fallback step()",
+                self.role,
+                status,
+                text.chars().take(120).collect::<String>()
+            );
+            return self.step().await;
+        }
+
+        let streamed =
+            match crate::api::stream::consume_openai_agent_stream(resp.bytes_stream(), |chunk| {
+                on_chunk(chunk);
+                Ok(())
+            })
+            .await
+            {
+                Ok(s) => s,
+                Err(e) => {
+                    log_console!(
+                        "[{}] step_stream parse failed: {}, fallback step()",
+                        self.role,
+                        e
+                    );
+                    return self.step().await;
+                }
+            };
+
+        if streamed.finish_reason == "length" {
+            log_console!(
+                "[{}] step_stream truncated (length), fallback step()",
+                self.role
+            );
+            return self.step().await;
+        }
+
+        if !streamed.reasoning_content.is_empty() {
+            log_console!(
+                "[{}] reasoning(stream): {} chars",
+                self.role,
+                streamed.reasoning_content.chars().count()
+            );
+        }
+
+        let msg = serde_json::json!({
+            "content": streamed.content,
+            "reasoning_content": streamed.reasoning_content,
+            "tool_calls": streamed.tool_calls,
+        });
+
+        self.process_assistant_message(&msg)
+    }
+
+    /// Build the JSON body shared by `step()` and `step_stream()`.
+    fn build_step_body(&self) -> serde_json::Value {
+        let mut body = serde_json::json!({
+            "model": self.model,
+            "messages": self.messages,
+            "temperature": 0.1,
+            "top_p": 0.9,
+            "frequency_penalty": 0.1,
+            "seed": 42,
+        });
+        if let Some(max_tokens) = self.max_tokens {
+            body["max_tokens"] = serde_json::json!(max_tokens);
+        }
+
+        let thinking_enabled = match self.reasoning_enabled {
+            Some(enabled) => enabled,
+            None => self.reasoning_config.enabled,
+        };
+        if thinking_enabled && !self.client.api_url.contains("anthropic.com") {
+            body["thinking"] = serde_json::json!({"type": "enabled"});
+        }
+
+        if self.tool_choice_none {
+            body["tool_choice"] = serde_json::json!("none");
+            if !self.tools.is_empty() {
+                body["tools"] = serde_json::to_value(&self.tools).unwrap_or_default();
+                body["parallel_tool_calls"] = serde_json::json!(false);
+                body["temperature"] = serde_json::json!(0.0);
+            }
+        } else if !self.tools.is_empty() {
+            body["tools"] = serde_json::to_value(&self.tools).unwrap_or_default();
+            body["tool_choice"] = serde_json::json!("auto");
+        }
+        body
+    }
+
+    /// Parse an assistant message (from stream or non-stream API) into StepResult.
+    fn process_assistant_message(&mut self, msg: &serde_json::Value) -> anyhow::Result<StepResult> {
+        if let Some(tcs) = msg["tool_calls"].as_array() {
+            if tcs.is_empty() {
+                return Ok(StepResult::Text(
+                    msg["content"].as_str().unwrap_or_default().to_string(),
+                ));
+            }
+
+            let mut calls = Vec::new();
+            for tc in tcs {
+                let id = tc["id"].as_str().unwrap_or("").to_string();
+                let name = tc["function"]["name"].as_str().unwrap_or("").to_string();
+                let args: serde_json::Value = match &tc["function"]["arguments"] {
+                    serde_json::Value::String(s) => match serde_json::from_str(s) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            log_console!("[{}] JSON parse error for {}: {}", self.role, name, e);
+                            serde_json::Value::Null
+                        }
+                    },
+                    v @ serde_json::Value::Object(_) => v.clone(),
+                    _ => serde_json::Value::Null,
+                };
+
+                if args.is_null() {
+                    log_console!(
+                        "[{}] skipping tool call {} due to broken arguments",
+                        self.role,
+                        name
+                    );
+                    continue;
+                }
+
+                calls.push(ToolCallInfo { id, name, args });
+            }
+
+            if calls.is_empty() {
+                return Ok(StepResult::Text(
+                    msg["content"].as_str().unwrap_or_default().to_string(),
+                ));
+            }
+
+            let valid_ids: std::collections::HashSet<&str> =
+                calls.iter().map(|c| c.id.as_str()).collect();
+            let mut filtered = msg.clone();
+            if let Some(arr) = filtered["tool_calls"].as_array_mut() {
+                arr.retain(|tc| valid_ids.contains(tc["id"].as_str().unwrap_or("")));
+            }
+            let assistant_text = msg["content"].as_str().unwrap_or_default().to_string();
+            self.messages.push(filtered);
+            return Ok(StepResult::ToolCalls {
+                calls,
+                text: assistant_text,
+            });
+        }
+
+        Ok(StepResult::Text(
+            msg["content"].as_str().unwrap_or_default().to_string(),
+        ))
+    }
+
     /// Inject a system-level message into the conversation.
     /// Used by AgentController for interrupt / restart signals.
     pub fn inject(&mut self, content: &str) {

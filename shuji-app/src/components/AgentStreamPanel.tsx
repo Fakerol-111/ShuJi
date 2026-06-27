@@ -93,10 +93,11 @@ export default function AgentStreamPanel({
 
   const chatInputRef = useRef<ChatInputHandle>(null);
   const handleFillInput = (text: string) => chatInputRef.current?.setText(text);
-  const { report: validationReport, loading: validationLoading } = useDeliveryValidation(
-    project?.working_dir,
-    activeDepts
-  );
+  const {
+    report: validationReport,
+    loading: validationLoading,
+    refresh: refreshValidation,
+  } = useDeliveryValidation(project?.working_dir, activeDepts);
   const totalStageCount = phaseCount || phases.length;
   const completedStageCount = phases.filter(
     (p) => p.execution === 'Completed' || p.execution === 'MinorIssue'
@@ -116,6 +117,7 @@ export default function AgentStreamPanel({
         pendingApprovals={pendingApprovals}
         validationReport={validationReport}
         validationLoading={validationLoading}
+        onRefreshValidation={refreshValidation}
         onSelectDoc={onSelectDoc}
         onSelectDept={(dept) => {
           const meta = getDeptMeta(dept);

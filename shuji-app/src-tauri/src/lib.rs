@@ -46,8 +46,9 @@ pub mod workflow; // 工作流系统：WorkflowProfile、Resolver、Gate、Chain
 mod commands; // Tauri 命令处理器：project、workflow、settings、checkpoint 等
 mod logging; // 日志系统：部门作用域的 JSONL 日志、控制台输出
 mod round_metrics; // 轮次指标：当前角色/skill 的实时 token 消耗追踪
+mod runtime_notify;
 mod token_tracker; // Token 追踪器：持久化记录、按时间窗口聚合统计
-mod usage_notify; // 度支/文脉面板刷新通知（usage-update 事件）
+mod usage_notify; // 度支/文脉面板刷新通知（usage-update 事件） //  cockpit 实时状态（runtime-update 事件）
 
 // ============================================================================
 // 类型别名
@@ -118,6 +119,16 @@ pub fn run() {
                     let _ = handle.emit("usage-update", &update);
                 }
             });
+
+            let (runtime_tx, mut runtime_rx) =
+                tokio::sync::mpsc::unbounded_channel::<runtime_notify::RuntimeUpdate>();
+            runtime_notify::set_sender(runtime_tx);
+            let runtime_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                while let Some(update) = runtime_rx.recv().await {
+                    let _ = runtime_handle.emit("runtime-update", &update);
+                }
+            });
             Ok(())
         })
         // 注入全局应用状态 — 所有字段均为 Arc 包装，支持跨线程安全共享
@@ -142,6 +153,7 @@ pub fn run() {
             commands::project::list_projects,
             commands::workflow::send_message,
             commands::workflow::discuss_with_cabinet,
+            commands::workflow::discuss_stream,
             commands::workflow::get_snapshot,
             commands::workflow::read_document,
             commands::workflow::list_documents,

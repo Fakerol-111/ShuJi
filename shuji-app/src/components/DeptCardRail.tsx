@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import { DEPT_META_LIST, DEPT_RAIL_GROUPS } from '../constants';
 import { isDeptActive } from '../utils/deptLog';
+import { deriveDeptActivitySummary } from '../utils/deptStepSummary';
+import { useDeptEvents } from '../hooks/useDeptEvents';
 import DeptCard from './DeptCard';
 import DeptGlyph from './DeptGlyph';
 import type { DeptLogEntry, PlanInfo } from '../types';
@@ -28,6 +30,7 @@ export default function DeptCardRail({
 }: DeptCardRailProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith('en') ? 'en' : 'zh';
+  const { deptSteps } = useDeptEvents();
   const metaByLabel = new Map(DEPT_META_LIST.map((d) => [d.label, d]));
 
   const renderDept = (label: string) => {
@@ -37,7 +40,10 @@ export default function DeptCardRail({
     const selectedDept = selected === label;
     const latestEntry = latestLogs.get(label) || latestLogs.get(meta.shortLabel);
     const hasError = latestEntry?.action?.startsWith(ERROR_PREFIX) ?? false;
-    const latestAction = latestEntry ? latestEntry.action.replace(/^[❌→]\s*/, '') : '';
+    const steps = deptSteps.get(label) || deptSteps.get(meta.shortLabel) || [];
+    const activity = deriveDeptActivitySummary(label, steps, active, hasError, lang);
+    const latestAction =
+      activity.latestAction || (latestEntry ? latestEntry.action.replace(/^[❌→]\s*/, '') : '');
 
     return (
       <DeptCard
@@ -47,6 +53,8 @@ export default function DeptCardRail({
         isSelected={selectedDept}
         hasError={hasError}
         latestAction={latestAction}
+        intent={activity.intent}
+        latestArtifact={activity.latestArtifact}
         planInfo={planInfo}
         onClick={() => onSelect(selectedDept ? null : label)}
       />

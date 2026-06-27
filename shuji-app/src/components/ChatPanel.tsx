@@ -46,7 +46,7 @@ export default function ChatPanel(props: ChatPanelProps) {
   } = props;
   const [toast, setToast] = useState('');
   const { t } = useTranslation();
-  const { activeDepts } = useDeptEvents();
+  const { activeDepts, recentHumanActions, latestHumanSummary } = useDeptEvents();
   const isProcessing = activeDeptsCount > 0;
 
   const showToast = (msg: string) => {
@@ -80,6 +80,8 @@ export default function ChatPanel(props: ChatPanelProps) {
           endRef={endRef}
           thinking={isProcessing}
           activeDepts={activeDepts}
+          recentActions={recentHumanActions}
+          latestAction={latestHumanSummary}
         />
         <div className="shrink-0 px-4 py-2 border-t border-fold bg-surface-elevated flex justify-end">
           <button
@@ -142,6 +144,8 @@ function MessageList({
   endRef,
   thinking,
   activeDepts,
+  recentActions,
+  latestAction,
 }: {
   messages: ChatMessage[];
   onOption: (key: string, supplement?: string) => void;
@@ -150,10 +154,18 @@ function MessageList({
   endRef: React.RefObject<HTMLDivElement | null>;
   thinking?: boolean;
   activeDepts?: string[];
+  recentActions?: Array<{ dept: string; summary: string; ts: string }>;
+  latestAction?: { dept: string; summary: string; ts: string } | null;
 }) {
   const { t } = useTranslation();
   const activeDept =
     activeDepts && activeDepts.length > 0 ? activeDepts[activeDepts.length - 1] : null;
+  const displayActions =
+    recentActions && recentActions.length > 0
+      ? recentActions.slice(-2)
+      : latestAction
+        ? [latestAction]
+        : [];
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
@@ -169,9 +181,24 @@ function MessageList({
       {thinking && (
         <div className="relative overflow-hidden rounded-lg border border-fold bg-surface-parchment px-4 py-3">
           <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-gold/10 to-transparent" />
-          <div className="flex items-center gap-2 relative">
-            {activeDept && <DeptGlyph deptKey={activeDept} size={16} stroke="#8B7355" />}
-            <span className="text-ui text-ink-600 font-display">{t('chat.processing')}</span>
+          <div className="relative space-y-1.5">
+            <div className="flex items-center gap-2">
+              {activeDept && <DeptGlyph deptKey={activeDept} size={16} stroke="#8B7355" />}
+              <span className="text-ui text-ink-600 font-display">{t('chat.processing')}</span>
+            </div>
+            {displayActions.length > 0 && (
+              <ul className="space-y-0.5 pl-1">
+                {displayActions.map((action) => (
+                  <li
+                    key={`${action.ts}|${action.dept}`}
+                    className="text-caption text-ink-600 flex items-start gap-1.5"
+                  >
+                    <span className="text-gold shrink-0 mt-0.5">▸</span>
+                    <span className="leading-snug">{action.summary}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       )}

@@ -217,7 +217,25 @@ impl AgentController {
 
             log_console!("[control] tool-call iter={}/{}", iter + 1, max_iter);
 
-            let step_result = session.step().await?;
+            let step_emit = &self.step_emit;
+            let step_result = if config.api.streaming.enabled {
+                session
+                    .step_stream(|chunk| {
+                        if let Some(emit) = step_emit {
+                            match chunk {
+                                crate::api::stream::AgentStreamChunk::TextDelta(delta) => {
+                                    emit(DeptStepKind::TextDelta { delta });
+                                }
+                                crate::api::stream::AgentStreamChunk::ReasoningDelta(delta) => {
+                                    emit(DeptStepKind::ReasoningDelta { delta });
+                                }
+                            }
+                        }
+                    })
+                    .await?
+            } else {
+                session.step().await?
+            };
 
             // 鈹€鈹€ Suspension point B: API just returned, don't process if cancelled 鈹€鈹€
             if cancel.load(Ordering::SeqCst) {

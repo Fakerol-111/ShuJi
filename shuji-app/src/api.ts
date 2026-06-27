@@ -72,6 +72,11 @@ export async function discussWithCabinet(message: string): Promise<ChatMessage> 
   return invoke('discuss_with_cabinet', { message });
 }
 
+/** Stream discuss reply — deltas arrive via `chat-delta`, final via `chat-complete`. */
+export async function discussStream(message: string, messageId: string): Promise<void> {
+  return invoke('discuss_stream', { message, messageId });
+}
+
 export async function cancelDiscuss(): Promise<void> {
   return invoke('cancel_discuss');
 }

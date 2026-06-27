@@ -18,13 +18,13 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 // Mock API
 const mockSendMessage = vi.fn();
-const mockDiscussWithCabinet = vi.fn();
+const mockDiscussStream = vi.fn();
 const mockGetChatHistory = vi.fn();
 const mockCancelDiscuss = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../api', () => ({
   sendMessage: (...args: unknown[]) => mockSendMessage(...args),
-  discussWithCabinet: (...args: unknown[]) => mockDiscussWithCabinet(...args),
+  discussStream: (...args: unknown[]) => mockDiscussStream(...args),
   getChatHistory: (...args: unknown[]) => mockGetChatHistory(...args),
   cancelDiscuss: (...args: unknown[]) => mockCancelDiscuss(...args),
 }));
@@ -199,7 +199,16 @@ describe('useChat', () => {
   });
 
   it('handleDiscuss adds emperor message then reply', async () => {
-    mockDiscussWithCabinet.mockResolvedValue(createMsg('同意你的方案', 't-reply', '内阁'));
+    mockDiscussStream.mockImplementation(async (_text: string, messageId: string) => {
+      mockListeners['chat-complete']?.({
+        id: messageId,
+        role: '内阁',
+        content: '同意你的方案',
+        options: [],
+        documents: [],
+        timestamp: 't-reply',
+      });
+    });
 
     const { result } = renderHook(() => useChat([]));
     expect(result.current.discussMsgs).toHaveLength(1);
@@ -217,8 +226,7 @@ describe('useChat', () => {
   });
 
   it('cancelDiscuss sets discussing to false and adds cancel message', async () => {
-    // Keep the promise pending to keep discussing=true
-    mockDiscussWithCabinet.mockReturnValue(new Promise(() => {}));
+    mockDiscussStream.mockReturnValue(new Promise(() => {}));
 
     const { result } = renderHook(() => useChat([]));
 

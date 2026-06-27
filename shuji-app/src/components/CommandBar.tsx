@@ -7,7 +7,7 @@ import { useWorkflowTimeline } from '../hooks/useWorkflowTimeline';
 import { docIdToPath } from '../utils/docPath';
 import WorkflowTimeline from './WorkflowTimeline';
 import PlanPanel from './PlanPanel';
-import { ValidationSummary } from './ValidationSummary';
+import DeliveryReceipt from './DeliveryReceipt';
 import type {
   RoundMetrics,
   PlanInfo,
@@ -28,6 +28,7 @@ export interface CommandBarProps {
   pendingApprovals: string[];
   validationReport?: ValidationReport | null;
   validationLoading?: boolean;
+  onRefreshValidation?: () => void;
   onSelectDoc: (docPath: string) => void;
   onSelectDept?: (dept: string) => void;
   onPendingClick?: () => void;
@@ -114,6 +115,7 @@ export default function CommandBar({
   pendingApprovals,
   validationReport = null,
   validationLoading = false,
+  onRefreshValidation,
   onSelectDoc,
   onSelectDept,
   onPendingClick,
@@ -121,7 +123,7 @@ export default function CommandBar({
 }: CommandBarProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith('en') ? 'en' : 'zh';
-  const { latestLogs } = useDeptEvents();
+  const { latestLogs, latestHumanSummary, roundMetrics: eventRoundMetrics } = useDeptEvents();
   const {
     wfState,
     timelineNodes,
@@ -139,8 +141,10 @@ export default function CommandBar({
   });
 
   const [expanded, setExpanded] = useState(() => loadWorkflowExpanded());
-  const [roundMetrics, setRoundMetrics] = useState<RoundMetrics | null>(null);
+  const [polledMetrics, setPolledMetrics] = useState<RoundMetrics | null>(null);
   const [elapsed, setElapsed] = useState('');
+
+  const roundMetrics = eventRoundMetrics ?? polledMetrics;
 
   useEffect(() => {
     if (hasFlowActivity && pendingApprovals.length > 0 && !loadWorkflowExpanded()) {
@@ -185,11 +189,11 @@ export default function CommandBar({
   useEffect(() => {
     const load = () => {
       getRoundMetrics()
-        .then((m) => setRoundMetrics(m))
+        .then((m) => setPolledMetrics(m))
         .catch(() => {});
     };
     load();
-    const timer = window.setInterval(load, 3000);
+    const timer = window.setInterval(load, 10000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -294,6 +298,24 @@ export default function CommandBar({
           </span>
         )}
 
+        {latestHumanSummary && (
+          <span
+            className="text-caption text-ink-600 truncate max-w-[200px] hidden md:inline shrink-0"
+            title={latestHumanSummary.summary}
+          >
+            {latestHumanSummary.summary}
+          </span>
+        )}
+
+        {recentDocIds.length > 0 && (
+          <span
+            className="text-caption text-ink-400 font-mono truncate max-w-[100px] hidden lg:inline shrink-0"
+            title={recentDocIds.join(', ')}
+          >
+            {recentDocIds[recentDocIds.length - 1]}
+          </span>
+        )}
+
         {nextAction && (
           <span
             className={`text-caption truncate min-w-0 ${
@@ -354,12 +376,15 @@ export default function CommandBar({
           {pipeline && <PlanPanel runtime={pipeline} defaultExpanded />}
 
           {(validationReport || validationLoading) && (
-            <div>
-              <span className="text-ink-500 font-medium block mb-1">
-                {t('validation.latestReport')}
-              </span>
-              <ValidationSummary report={validationReport} loading={validationLoading} />
-            </div>
+            <DeliveryReceipt
+              validationReport={validationReport}
+              validationLoading={validationLoading}
+              roundMetrics={roundMetrics}
+              recentDocIds={recentDocIds}
+              activeDeptsCount={activeDepts.length}
+              onSelectDoc={onSelectDoc}
+              onRefreshValidation={onRefreshValidation}
+            />
           )}
 
           <div>

@@ -9,6 +9,8 @@ interface DeptCardProps {
   isSelected: boolean;
   hasError: boolean;
   latestAction: string;
+  intent?: string;
+  latestArtifact?: string | null;
   planInfo?: PlanInfo | null;
   onClick: () => void;
 }
@@ -19,6 +21,8 @@ export default function DeptCard({
   isSelected,
   hasError,
   latestAction,
+  intent,
+  latestArtifact,
   planInfo,
   onClick,
 }: DeptCardProps) {
@@ -64,6 +68,9 @@ export default function DeptCard({
             />
           )}
         </div>
+        {isActive && intent && (
+          <div className="text-[10px] text-ink-400 uppercase tracking-wide mt-0.5">{intent}</div>
+        )}
         {showPlan && (
           <div className="mt-1.5 flex items-center gap-1.5">
             <div className="flex-1 h-1 bg-ink-200 rounded-full overflow-hidden">
@@ -81,6 +88,9 @@ export default function DeptCard({
         {latestAction && !showPlan && (
           <div className="mt-0.5 text-caption text-ink-600 truncate leading-tight">
             {latestAction}
+            {latestArtifact && (
+              <span className="ml-1 font-mono text-ink-400">{latestArtifact}</span>
+            )}
           </div>
         )}
       </div>

@@ -22,6 +22,7 @@ export default function ChatBubble({
   const { t } = useTranslation();
   const isEmperor = msg.role === '皇帝';
   const isFailed = msg.status === 'failed';
+  const isStreaming = msg.streaming === true;
   const meta = getDeptMeta(msg.role);
 
   return (
@@ -73,29 +74,36 @@ export default function ChatBubble({
               className="bg-surface-elevated border border-fold rounded-xl rounded-tl-sm px-4 py-2.5 text-body leading-relaxed"
               style={meta?.color ? { borderLeft: `3px solid ${meta.color}` } : undefined}
             >
-              <div className="prose prose-shuji max-w-none break-words">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  rehypePlugins={[rehypeHighlight]}
-                  components={{
-                    a: ({ href, children }) => (
-                      <a
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          if (href) window.open(href, '_blank');
-                        }}
-                      >
-                        {children}
-                      </a>
-                    ),
-                  }}
-                >
+              {isStreaming ? (
+                <p className="whitespace-pre-wrap break-words text-ink-800">
                   {msg.content}
-                </ReactMarkdown>
-              </div>
+                  <span className="inline-block w-0.5 h-4 bg-gold animate-pulse ml-0.5 align-middle" />
+                </p>
+              ) : (
+                <div className="prose prose-shuji max-w-none break-words">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeHighlight]}
+                    components={{
+                      a: ({ href, children }) => (
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            if (href) window.open(href, '_blank');
+                          }}
+                        >
+                          {children}
+                        </a>
+                      ),
+                    }}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
+                </div>
+              )}
             </div>
           </>
         )}

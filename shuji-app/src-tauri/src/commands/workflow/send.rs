@@ -10,17 +10,19 @@ use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 use crate::actor::{ActorMessage, ActorSystem, FastMessage};
 use crate::agent::neige::NeigeAgent;
 use crate::agent::r#trait::{Agent, AgentInput};
 use crate::api::client::AnthropicClient;
 use crate::api::control::RouteMsgType;
+use crate::api::stream::ChatDeltaEvent;
 use crate::commands::friendly_error::friendly_error;
 use crate::commands::project::AppState;
 use crate::commands::workflow::bootstrap::ensure_actor_system;
 use crate::models::chat::ChatMessage;
+use crate::models::message::Message;
 use crate::models::role::Role;
 use crate::pipeline::supervisor::PipelineNotifyContext;
 use crate::pipeline::{should_resume_from_disk, PlanRuntime};
@@ -208,6 +210,131 @@ pub async fn discuss_with_cabinet(
         .discuss_cancel
         .store(false, std::sync::atomic::Ordering::SeqCst);
     Ok(ChatMessage::new("内阁", &output.content))
+}
+
+/// Build system prompt + user content for discuss streaming (text-only, no tools).
+async fn build_discuss_stream_context(
+    state: &AppState,
+    message: &str,
+) -> Result<(String, String), String> {
+    let project_opt = state.current_project.lock().await;
+    let p = project_opt
+        .as_ref()
+        .ok_or_else(|| friendly_error("no open project"))?;
+
+    let working_dir = std::path::PathBuf::from(&p.working_dir);
+    let project_context = format!(
+        r#"━━ Project Goal ━━
+{}
+
+━━ Current Phase ━━
+{}
+
+━━ Milestones ━━
+{}
+
+━━ Recent Conversation ━━
+{}"#,
+        p.goal, p.summary, p.task, p.talk,
+    );
+
+    let user_content = format!(
+        "(Current project state for reference)\n{}\n\n━━ Emperor Discussion ━━\n{}",
+        project_context, message
+    );
+
+    let mut system_prompt = include_str!("../../agent/neige/prompt.md").to_string();
+
+    let soul_path = working_dir.join(".shuji").join("soul.md");
+    if let Ok(soul) = tokio::fs::read_to_string(&soul_path).await {
+        if !soul.trim().is_empty() {
+            system_prompt.push_str("\n\n[soul: neige]\n");
+            system_prompt.push_str(&soul);
+        }
+    }
+
+    let mut skill_content = NeigeAgent::load_skill("discuss", &working_dir).await;
+    if skill_content.is_empty() {
+        let fallback = if message.contains("bug") || message.contains("修复") {
+            "workflow_bugfix"
+        } else if message.contains("重构") {
+            "workflow_refactor"
+        } else if message.contains("优化") {
+            "workflow_optimize"
+        } else {
+            "clarify"
+        };
+        skill_content = NeigeAgent::load_skill(fallback, &working_dir).await;
+    }
+    if !skill_content.is_empty() {
+        system_prompt.push_str("\n\n[skill: discuss]\n");
+        system_prompt.push_str(&skill_content);
+    }
+
+    Ok((system_prompt, user_content))
+}
+
+/// Stream discuss-mode reply via SSE — emits `chat-delta` / `chat-complete` events.
+#[tauri::command]
+pub async fn discuss_stream(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    message: String,
+    message_id: String,
+) -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+
+    state.discuss_cancel.store(false, Ordering::SeqCst);
+
+    let config = crate::commands::settings::get_config()
+        .await
+        .map_err(friendly_error)?;
+
+    let (system_prompt, user_content) = build_discuss_stream_context(&state, &message).await?;
+
+    let ep = config.for_role("neige");
+    let client = AnthropicClient::new(ep.api_key, ep.api_url);
+    let cancel = state.discuss_cancel.clone();
+    let msgs = vec![Message::user(&user_content)];
+
+    let app_for_delta = app.clone();
+    let delta_id = message_id.clone();
+    let mut full_text = String::new();
+
+    let stream_result = client
+        .stream_message(&system_prompt, &msgs, &ep.model, cancel.clone(), |delta| {
+            if cancel.load(Ordering::SeqCst) {
+                return Ok(());
+            }
+            full_text.push_str(delta);
+            let _ = app_for_delta.emit(
+                "chat-delta",
+                ChatDeltaEvent {
+                    message_id: delta_id.clone(),
+                    role: "内阁".into(),
+                    delta: delta.to_string(),
+                },
+            );
+            Ok(())
+        })
+        .await;
+
+    state.discuss_cancel.store(false, Ordering::SeqCst);
+
+    if cancel.load(Ordering::SeqCst) {
+        log_console!("[commands] discuss_stream: cancelled");
+        return Ok(());
+    }
+
+    let text = stream_result.map_err(|e| friendly_error(&e.to_string()))?;
+    let final_content = if text.is_empty() { full_text } else { text };
+
+    let mut msg = ChatMessage::new("内阁", &final_content);
+    msg.id = message_id;
+    app.emit("chat-complete", &msg)
+        .map_err(|e| friendly_error(&e.to_string()))?;
+
+    Ok(())
 }
 
 // ============================================================================

@@ -8,13 +8,25 @@ const DOC_TYPE_KEYS: Record<string, string> = {
   plan: 'chat.docType.plan',
 };
 
+const WHY_KEYS: Record<string, string> = {
+  revw: 'approval.whyReview',
+  dsgn: 'approval.whyDesign',
+  plan: 'approval.whyPlan',
+};
+
 interface ApprovalBannerProps {
   context: ApprovalGateContext;
   onView: () => void;
   onApprove: (comment?: string) => Promise<void>;
+  onStop?: () => void;
 }
 
-export default function ApprovalBanner({ context, onView, onApprove }: ApprovalBannerProps) {
+export default function ApprovalBanner({
+  context,
+  onView,
+  onApprove,
+  onStop,
+}: ApprovalBannerProps) {
   const { t } = useTranslation();
   const [approving, setApproving] = useState(false);
   const [error, setError] = useState('');
@@ -25,6 +37,7 @@ export default function ApprovalBanner({ context, onView, onApprove }: ApprovalB
   const docTypeLabel = DOC_TYPE_KEYS[context.docType]
     ? t(DOC_TYPE_KEYS[context.docType])
     : context.docType;
+  const whyKey = WHY_KEYS[context.docType] ?? 'approval.whyDefault';
 
   const handleApprove = async () => {
     setApproving(true);
@@ -60,6 +73,7 @@ export default function ApprovalBanner({ context, onView, onApprove }: ApprovalB
             </span>
           </div>
           <p className="text-caption text-ink-700">{t('approval.bannerPaused')}</p>
+          <p className="text-caption text-ink-600 leading-relaxed">{t(whyKey)}</p>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-caption text-ink-600">
             <span>
               <span className="text-ink-400">{t('document.type')}：</span>
@@ -74,12 +88,12 @@ export default function ApprovalBanner({ context, onView, onApprove }: ApprovalB
             )}
           </div>
           {context.nextStepLabel && (
-            <p className="text-caption text-ink-500">
+            <p className="text-caption text-jade font-medium">
               {t('approval.afterApprove', { step: context.nextStepLabel })}
             </p>
           )}
           <p className="text-[11px] text-ink-400 leading-relaxed">
-            {t('approval.notSatisfiedHint')}
+            {t('approval.rejectConsequence')}
           </p>
         </div>
 
@@ -99,6 +113,15 @@ export default function ApprovalBanner({ context, onView, onApprove }: ApprovalB
             >
               {t('approval.viewDocument')}
             </button>
+            {onStop && (
+              <button
+                type="button"
+                onClick={onStop}
+                className="px-3 py-1.5 rounded-lg border border-vermillion/30 text-vermillion text-ui font-medium hover:bg-vermillion/10 transition-colors"
+              >
+                {t('chat.stopAllDepts')}
+              </button>
+            )}
             <button
               type="button"
               onClick={handleApprove}
