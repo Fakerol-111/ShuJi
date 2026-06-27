@@ -51,9 +51,6 @@ shuji-app/src-tauri/gen/
 docs/
 shuji-app/docs/
 
-# Non-code assets (presentations, screenshots, brand materials)
-assets/
-
 # Project meta files (local only)
 CLAUDE.md
 MEMORY.md
