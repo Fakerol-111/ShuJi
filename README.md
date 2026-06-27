@@ -15,15 +15,15 @@
 
 ## 界面一览
 
-> 以下为线框占位图，真实截图说明见 [docs/images/README.md](docs/images/README.md)。
+> 以下为线框占位图，真实截图放入 `assets/images/`（本地资源，不上库）。
 
 | 工作台总览 | 部门 Inspector |
 |:---:|:---:|
-| ![工作台总览](docs/images/dashboard-overview.svg) | ![部门 Inspector](docs/images/dept-inspector.svg) |
+| ![工作台总览](assets/images/dashboard-overview.svg) | ![部门 Inspector](assets/images/dept-inspector.svg) |
 
 | 朱批文档 | 文移图 / Pipeline |
 |:---:|:---:|
-| ![朱批文档](docs/images/approval-document.svg) | ![文移图](docs/images/workflow-graph.svg) |
+| ![朱批文档](assets/images/approval-document.svg) | ![文移图](assets/images/workflow-graph.svg) |
 
 ---
 
@@ -142,7 +142,7 @@ flowchart TB
 | [**ONBOARDING.md**](ONBOARDING.md) | **新人入口**：先读什么、后读什么 |
 | [**shuji-app/docs/ARCHITECTURE.md**](shuji-app/docs/ARCHITECTURE.md) | **架构说明**：Pipeline-first 主流程、分层、朱批与观测 |
 | [**shuji-app/docs/AGENT_TASKS.md**](shuji-app/docs/AGENT_TASKS.md) | **Agent 协作**：任务边界、优化清单完成状态 |
-| [docs/images/README.md](docs/images/README.md) | 界面截图规范与占位资源 |
+| `assets/images/` | 界面截图与占位资源（本地，不上库） |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 开发环境、测试、配置与贡献指南 |
 | [CLAUDE.md](CLAUDE.md) | 文件级索引与测试命令（维护者 / AI） |
 | [LICENSE](LICENSE) | MIT 许可证 |
