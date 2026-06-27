@@ -80,6 +80,14 @@ pub enum DeptStepKind {
     /// 这通常是给用户的回复或给下游部门的工作指令。
     #[serde(rename = "text")]
     Text { content: String },
+
+    /// 流式输出中的文本增量（工具 agent 真流式）。
+    #[serde(rename = "text_delta")]
+    TextDelta { delta: String },
+
+    /// 流式输出中的推理增量。
+    #[serde(rename = "reasoning_delta")]
+    ReasoningDelta { delta: String },
 }
 
 /// 部门步骤事件的发送端类型别名。

@@ -7,7 +7,7 @@ import { useWorkflowTimeline } from '../hooks/useWorkflowTimeline';
 import { docIdToPath } from '../utils/docPath';
 import WorkflowTimeline from './WorkflowTimeline';
 import PlanPanel from './PlanPanel';
-import { ValidationSummary } from './ValidationSummary';
+import DeliveryReceipt from './DeliveryReceipt';
 import type {
   RoundMetrics,
   PlanInfo,
@@ -28,6 +28,7 @@ export interface CommandBarProps {
   pendingApprovals: string[];
   validationReport?: ValidationReport | null;
   validationLoading?: boolean;
+  onRefreshValidation?: () => void;
   onSelectDoc: (docPath: string) => void;
   onSelectDept?: (dept: string) => void;
   onPendingClick?: () => void;
@@ -114,6 +115,7 @@ export default function CommandBar({
   pendingApprovals,
   validationReport = null,
   validationLoading = false,
+  onRefreshValidation,
   onSelectDoc,
   onSelectDept,
   onPendingClick,
@@ -374,12 +376,15 @@ export default function CommandBar({
           {pipeline && <PlanPanel runtime={pipeline} defaultExpanded />}
 
           {(validationReport || validationLoading) && (
-            <div>
-              <span className="text-ink-500 font-medium block mb-1">
-                {t('validation.latestReport')}
-              </span>
-              <ValidationSummary report={validationReport} loading={validationLoading} />
-            </div>
+            <DeliveryReceipt
+              validationReport={validationReport}
+              validationLoading={validationLoading}
+              roundMetrics={roundMetrics}
+              recentDocIds={recentDocIds}
+              activeDeptsCount={activeDepts.length}
+              onSelectDoc={onSelectDoc}
+              onRefreshValidation={onRefreshValidation}
+            />
           )}
 
           <div>

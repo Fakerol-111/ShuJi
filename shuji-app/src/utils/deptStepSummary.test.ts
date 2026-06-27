@@ -39,6 +39,11 @@ describe('summarizeDeptStep', () => {
     expect(summarizeDeptStep(entry)).toBe('刑部尚书正在运行测试');
   });
 
+  it('summarizes text_delta as responding', () => {
+    const entry = step('工部尚书', { type: 'text_delta', delta: 'hello' });
+    expect(summarizeDeptStep(entry)).toBe('工部尚书正在输出…');
+  });
+
   it('returns null for iteration events', () => {
     const entry = step('内阁', { type: 'iteration', n: 3 });
     expect(summarizeDeptStep(entry)).toBeNull();

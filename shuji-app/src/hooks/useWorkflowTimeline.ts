@@ -6,6 +6,7 @@ import type {
   DeptLogEntry,
   PlanInfo,
   PipelineRuntime,
+  RuntimeUpdate,
   WorkflowGraph,
   WorkflowState,
 } from '../types';
@@ -48,10 +49,19 @@ export function useWorkflowTimeline({
     };
     load();
     const timer = window.setInterval(load, POLL_MS);
-    const unlisten = listen('project-update', () => load());
+    const unlistenProject = listen('project-update', () => load());
+    const unlistenRuntime = listen<RuntimeUpdate>('runtime-update', (event) => {
+      const trigger = event.payload.trigger ?? '';
+      if (trigger.startsWith('pipeline') || event.payload.pipeline) {
+        getPipelineStatus()
+          .then(setPipeline)
+          .catch(() => setPipeline(null));
+      }
+    });
     return () => {
       window.clearInterval(timer);
-      unlisten.then((f) => f());
+      unlistenProject.then((f) => f());
+      unlistenRuntime.then((f) => f());
     };
   }, []);
 

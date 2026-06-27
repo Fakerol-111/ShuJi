@@ -517,6 +517,16 @@
     "failedItems": "失败",
     "latestReport": "交付验证"
   },
+  "deliveryReceipt": {
+    "title": "交付收据",
+    "artifacts": "本轮产物",
+    "tokens": "Token 消耗",
+    "cacheHit": "缓存命中",
+    "duration": "耗时",
+    "checkpoint": "恢复点",
+    "passHint": "验证已通过，可查看架阁中的最新文档并采纳变更。",
+    "failHint": "验证未完全通过。建议查看失败项、从检查点恢复后重试，或重新下诏调整需求。"
+  },
   "demo": {
     "complete": "Demo 完成",
     "summary": "汇总",

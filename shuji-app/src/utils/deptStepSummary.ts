@@ -184,6 +184,10 @@ export function summarizeDeptStepKind(
   switch (kind.type) {
     case 'tool_call':
       return summarizeToolCall(dept, kind.tool, kind.args, lang);
+    case 'text_delta':
+      return l === 'zh' ? `${deptLabel}正在输出…` : `${deptLabel} is responding…`;
+    case 'reasoning_delta':
+      return l === 'zh' ? `${deptLabel}正在思考…` : `${deptLabel} is thinking…`;
     case 'tool_result': {
       const result = summarizeToolResult(dept, kind.tool, kind.ok, kind.summary, lang);
       if (result) return result;

@@ -244,4 +244,141 @@ impl AnthropicClient {
         }
         api_messages
     }
+
+    /// Stream text-only chat completion. Falls back to non-streaming `send_message` on failure.
+    pub async fn stream_message<F>(
+        &self,
+        system_prompt: &str,
+        messages: &[crate::models::message::Message],
+        model: &str,
+        cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        mut on_delta: F,
+    ) -> anyhow::Result<String>
+    where
+        F: FnMut(&str) -> anyhow::Result<()>,
+    {
+        let result = if self.api_url.contains("anthropic.com") {
+            self.stream_anthropic(
+                system_prompt,
+                messages,
+                model,
+                cancel.clone(),
+                &mut on_delta,
+            )
+            .await
+        } else {
+            self.stream_openai(
+                system_prompt,
+                messages,
+                model,
+                cancel.clone(),
+                &mut on_delta,
+            )
+            .await
+        };
+
+        match result {
+            Ok(text) => Ok(text),
+            Err(e) => {
+                log_console!("[api] stream failed ({}), falling back to send_message", e);
+                let text = self.send_message(system_prompt, messages, model).await?;
+                on_delta(&text)?;
+                Ok(text)
+            }
+        }
+    }
+
+    async fn stream_openai<F>(
+        &self,
+        system_prompt: &str,
+        messages: &[crate::models::message::Message],
+        model: &str,
+        cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        on_delta: &mut F,
+    ) -> anyhow::Result<String>
+    where
+        F: FnMut(&str) -> anyhow::Result<()>,
+    {
+        let mut api_messages = Vec::new();
+        if !system_prompt.is_empty() {
+            api_messages.push(serde_json::json!({"role": "system", "content": system_prompt}));
+        }
+        for m in messages.iter().filter(|m| m.role != "system") {
+            api_messages.push(serde_json::json!({"role": m.role, "content": m.content}));
+        }
+        if api_messages.is_empty() {
+            api_messages.push(serde_json::json!({"role": "user", "content": "请继续"}));
+        }
+
+        let body = serde_json::json!({
+            "model": model,
+            "messages": api_messages,
+            "stream": true,
+        });
+
+        log_console!("[api] openai stream send (model={})", model);
+        let resp = self
+            .http_client
+            .post(&self.api_url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("content-type", "application/json")
+            .json(&body)
+            .timeout(API_TIMEOUT)
+            .send()
+            .await
+            .map_err(|e| map_reqwest_error(&self.api_url, e))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            anyhow::bail!("API error ({}): {}", status, text);
+        }
+
+        crate::api::stream::consume_openai_sse_stream(resp.bytes_stream(), cancel, on_delta).await
+    }
+
+    async fn stream_anthropic<F>(
+        &self,
+        system_prompt: &str,
+        messages: &[crate::models::message::Message],
+        model: &str,
+        cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        on_delta: &mut F,
+    ) -> anyhow::Result<String>
+    where
+        F: FnMut(&str) -> anyhow::Result<()>,
+    {
+        let api_messages: Vec<MessageItem> = self.build_messages(messages);
+        let body = serde_json::json!({
+            "model": model,
+            "max_tokens": 32768,
+            "stream": true,
+            "system": system_prompt,
+            "messages": api_messages.iter().map(|m| {
+                serde_json::json!({"role": m.role, "content": m.content})
+            }).collect::<Vec<_>>(),
+        });
+
+        log_console!("[api] anthropic stream send (model={})", model);
+        let resp = self
+            .http_client
+            .post(&self.api_url)
+            .header("x-api-key", &self.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("content-type", "application/json")
+            .json(&body)
+            .timeout(API_TIMEOUT)
+            .send()
+            .await
+            .map_err(|e| map_reqwest_error(&self.api_url, e))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            anyhow::bail!("API error ({}): {}", status, text);
+        }
+
+        crate::api::stream::consume_anthropic_sse_stream(resp.bytes_stream(), cancel, on_delta)
+            .await
+    }
 }

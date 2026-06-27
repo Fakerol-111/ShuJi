@@ -159,6 +159,7 @@ impl PlanRuntime {
         tokio::fs::write(&path, &content)
             .await
             .map_err(|e| format!("write runtime: {}", e))?;
+        crate::runtime_notify::update_pipeline(self);
         Ok(())
     }
 
@@ -176,6 +177,7 @@ impl PlanRuntime {
     pub async fn cleanup(project_dir: &std::path::Path) {
         let path = Self::runtime_file_path(project_dir);
         let _ = tokio::fs::remove_file(&path).await;
+        crate::runtime_notify::clear_pipeline();
     }
 
     /// Path to persisted runtime (`.shuji/pipeline/runtime.json`).

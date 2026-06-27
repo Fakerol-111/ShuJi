@@ -109,6 +109,15 @@ export interface ChatMessage {
   timestamp: string;
   /** Optional status for emperor messages: 'failed' on send error, undefined = sent OK */
   status?: 'failed';
+  /** True while discuss stream is in progress */
+  streaming?: boolean;
+}
+
+/** Incremental chunk from discuss_stream (`chat-delta` event). */
+export interface ChatDeltaEvent {
+  message_id: string;
+  role: RoleName;
+  delta: string;
 }
 
 export interface ChatOption {
@@ -238,6 +247,7 @@ export interface RoundMetrics {
 export interface RuntimeUpdate {
   active_roles: string[];
   round_metrics: RoundMetrics | null;
+  pipeline: PipelineSnapshot | null;
   trigger: string;
 }
 
@@ -258,7 +268,19 @@ export type DeptStepKind =
   | { type: 'thinking'; content: string }
   | { type: 'tool_call'; tool: string; args: Record<string, unknown> }
   | { type: 'tool_result'; tool: string; ok: boolean; summary: string }
-  | { type: 'text'; content: string };
+  | { type: 'text'; content: string }
+  | { type: 'text_delta'; delta: string }
+  | { type: 'reasoning_delta'; delta: string };
+
+/** Lightweight pipeline progress from `runtime-update`. */
+export interface PipelineSnapshot {
+  current_step: string | null;
+  current_step_label: string | null;
+  steps_done: number;
+  steps_total: number;
+  awaiting_approval: boolean;
+  plan_summary: string;
+}
 
 // ── Workflow Config (Intent × Governance) ───────────────────
 

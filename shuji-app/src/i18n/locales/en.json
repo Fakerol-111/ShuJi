@@ -518,6 +518,16 @@
     "failedItems": "Failed",
     "latestReport": "Delivery validation"
   },
+  "deliveryReceipt": {
+    "title": "Delivery receipt",
+    "artifacts": "Artifacts this round",
+    "tokens": "Tokens",
+    "cacheHit": "Cache hit",
+    "duration": "Duration",
+    "checkpoint": "Restore point",
+    "passHint": "Validation passed. Review latest documents in Artifact panel and adopt changes.",
+    "failHint": "Validation did not fully pass. Review failures, restore a checkpoint, or issue a revised command."
+  },
   "demo": {
     "complete": "Demo Complete",
     "summary": "Summary",

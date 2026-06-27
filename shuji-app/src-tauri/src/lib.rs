@@ -153,6 +153,7 @@ pub fn run() {
             commands::project::list_projects,
             commands::workflow::send_message,
             commands::workflow::discuss_with_cabinet,
+            commands::workflow::discuss_stream,
             commands::workflow::get_snapshot,
             commands::workflow::read_document,
             commands::workflow::list_documents,

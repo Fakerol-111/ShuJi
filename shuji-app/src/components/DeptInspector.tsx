@@ -198,7 +198,15 @@ function StepCard({ entry, humanMode }: { entry: DeptStepEntry; humanMode: boole
 
   if (humanMode) {
     const summary = summarizeDeptStep(entry, lang);
-    if (!summary) return null;
+    if (!summary && kind.type !== 'text_delta' && kind.type !== 'reasoning_delta') return null;
+    const display =
+      summary ??
+      (kind.type === 'text_delta'
+        ? kind.delta
+        : kind.type === 'reasoning_delta'
+          ? `💭 ${kind.delta}`
+          : '');
+    if (!display) return null;
     const isError = kind.type === 'tool_result' && !kind.ok;
     return (
       <div
@@ -207,7 +215,7 @@ function StepCard({ entry, humanMode }: { entry: DeptStepEntry; humanMode: boole
         }`}
       >
         <span className="text-gold shrink-0 mt-0.5">▸</span>
-        <span className="leading-snug">{summary}</span>
+        <span className="leading-snug">{display}</span>
       </div>
     );
   }

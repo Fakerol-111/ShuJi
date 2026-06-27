@@ -3,13 +3,13 @@ import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import {
   sendMessage,
-  discussWithCabinet,
+  discussStream,
   cancelDiscuss as cancelDiscussApi,
   getChatHistory,
 } from '../api';
 import { formatError } from '../utils/error';
 import { initialCabinetMessage, mergeMessages } from '../utils/chat';
-import type { ChatMessage, PlanInfo } from '../types';
+import type { ChatDeltaEvent, ChatMessage, PlanInfo } from '../types';
 
 export type Tab = 'decision' | 'discuss';
 
@@ -24,6 +24,8 @@ export function useChat(initialMessages: ChatMessage[]) {
   const [planInfo, setPlanInfo] = useState<PlanInfo | null>(null);
   const [error, setError] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const discussCancelRef = useRef(false);
+  const streamingIdRef = useRef<string | null>(null);
 
   // Scroll to end on new messages
   useEffect(() => {
@@ -46,6 +48,45 @@ export function useChat(initialMessages: ChatMessage[]) {
     );
     return () => {
       unlisten.then((f) => f());
+    };
+  }, []);
+
+  // Listen for discuss stream deltas and completion
+  useEffect(() => {
+    const unlistenDelta = listen<ChatDeltaEvent>('chat-delta', (event) => {
+      const { message_id, delta } = event.payload;
+      if (discussCancelRef.current) return;
+      setDiscussMsgs((prev) =>
+        prev.map((m) =>
+          m.id === message_id ? { ...m, content: m.content + delta, streaming: true } : m
+        )
+      );
+    });
+
+    const unlistenComplete = listen<ChatMessage>('chat-complete', (event) => {
+      const msg = { ...event.payload, streaming: false };
+      if (discussCancelRef.current && streamingIdRef.current === msg.id) {
+        return;
+      }
+      setDiscussMsgs((prev) => {
+        const idx = prev.findIndex((m) => m.id === msg.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = msg;
+          return next;
+        }
+        return [...prev, msg];
+      });
+      if (streamingIdRef.current === msg.id) {
+        streamingIdRef.current = null;
+        setDiscussing(false);
+        discussCancelRef.current = false;
+      }
+    });
+
+    return () => {
+      unlistenDelta.then((f) => f());
+      unlistenComplete.then((f) => f());
     };
   }, []);
 
@@ -75,7 +116,6 @@ export function useChat(initialMessages: ChatMessage[]) {
       await sendMessage(text);
     } catch (e) {
       setError(formatError(e));
-      // Mark the optimistic message as failed
       setMessages((prev) =>
         prev.map((m) => (m.timestamp === ts && m.role === '皇帝' ? { ...m, status: 'failed' } : m))
       );
@@ -83,17 +123,18 @@ export function useChat(initialMessages: ChatMessage[]) {
   };
 
   const retrySend = async (text: string, originalTs: string) => {
-    // Remove the failed message, then re-send
     setMessages((prev) => prev.filter((m) => m.timestamp !== originalTs || m.role !== '皇帝'));
     await handleSend(text);
   };
 
-  // ── Discuss cancellation support ──
-  const discussCancelRef = useRef(false);
-
   const handleDiscuss = async (text: string) => {
     discussCancelRef.current = false;
     setDiscussing(true);
+
+    const streamId = crypto.randomUUID();
+    streamingIdRef.current = streamId;
+    const ts = new Date().toISOString();
+
     setDiscussMsgs((prev) => [
       ...prev,
       {
@@ -102,23 +143,33 @@ export function useChat(initialMessages: ChatMessage[]) {
         content: text,
         options: [],
         documents: [],
-        timestamp: new Date().toISOString(),
+        timestamp: ts,
+      },
+      {
+        id: streamId,
+        role: '内阁',
+        content: '',
+        options: [],
+        documents: [],
+        timestamp: ts,
+        streaming: true,
       },
     ]);
+
     try {
-      const reply = await discussWithCabinet(text);
-      // If cancelled while in flight, ignore the result
-      if (discussCancelRef.current) {
-        setDiscussMsgs((prev) => [...prev, initialCabinetMessage(t('chat.discussCancelled'))]);
-        return;
-      }
-      setDiscussMsgs((prev) => [...prev, reply]);
+      await discussStream(text, streamId);
+      if (discussCancelRef.current) return;
     } catch (e) {
-      setDiscussMsgs((prev) => [
-        ...prev,
-        initialCabinetMessage(t('chat.discussError', { error: formatError(e) })),
-      ]);
-    } finally {
+      if (!discussCancelRef.current) {
+        setDiscussMsgs((prev) => {
+          const withoutPlaceholder = prev.filter((m) => m.id !== streamId);
+          return [
+            ...withoutPlaceholder,
+            initialCabinetMessage(t('chat.discussError', { error: formatError(e) })),
+          ];
+        });
+      }
+      streamingIdRef.current = null;
       setDiscussing(false);
       discussCancelRef.current = false;
     }
@@ -127,11 +178,17 @@ export function useChat(initialMessages: ChatMessage[]) {
   const cancelDiscuss = useCallback(() => {
     if (discussing) {
       discussCancelRef.current = true;
+      const cancelledId = streamingIdRef.current;
+      streamingIdRef.current = null;
       setDiscussing(false);
       cancelDiscussApi().catch(() => {});
-      setDiscussMsgs((prev) => [...prev, initialCabinetMessage(t('chat.discussCancelled'))]);
+      setDiscussMsgs((prev) => {
+        const withoutPartial =
+          cancelledId != null ? prev.filter((m) => m.id !== cancelledId) : prev;
+        return [...withoutPartial, initialCabinetMessage(t('chat.discussCancelled'))];
+      });
     }
-  }, [discussing]);
+  }, [discussing, t]);
 
   const resetDiscuss = () => setDiscussMsgs([initialCabinetMessage(t('chat.welcomeDiscuss'))]);
 
