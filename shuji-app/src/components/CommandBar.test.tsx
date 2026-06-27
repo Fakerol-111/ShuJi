@@ -45,7 +45,9 @@ const idleTimeline = {
   pipeline: null,
 };
 
-let timelineState = activeTimeline;
+type TimelineMock = typeof activeTimeline | typeof idleTimeline;
+
+let timelineState: TimelineMock = activeTimeline;
 
 vi.mock('../hooks/useWorkflowTimeline', () => ({
   useWorkflowTimeline: () => timelineState,

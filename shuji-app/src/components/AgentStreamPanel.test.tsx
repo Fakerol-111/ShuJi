@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import type { ComponentProps } from 'react';
 import AgentStreamPanel from './AgentStreamPanel';
-import type { Project } from '../types';
+import type { PhaseRuntime, Project } from '../types';
 
 vi.mock('./DeptCardRail', () => ({
   default: () => <div data-testid="dept-card-rail" />,
@@ -67,21 +68,23 @@ vi.mock('./PlanPanel', () => ({
   default: () => null,
 }));
 
+const phases: PhaseRuntime[] = [{ index: 0, design: 'PendingApproval', execution: 'NotStarted' }];
+
 const project: Project = {
   id: 'p1',
   name: 'Test',
   goal: 'goal',
   working_dir: '/tmp/test',
   overall: 'PendingApproval',
-  phases: [{ index: 0, design: 'PendingApproval', execution: 'NotStarted' }],
+  phases,
   phase_count: 1,
   created_at: '2026-06-26T00:00:00Z',
   updated_at: '2026-06-26T00:00:00Z',
 };
 
-const baseProps = {
+const baseProps: ComponentProps<typeof AgentStreamPanel> = {
   project,
-  tab: 'decision' as const,
+  tab: 'decision',
   setTab: () => {},
   messages: [],
   discussMsgs: [],
@@ -90,7 +93,7 @@ const baseProps = {
   activeDeptsCount: 0,
   activeDepts: ['gongbushangshu'],
   pendingApprovals: ['revw_001'],
-  phases: [{ index: 0, design: 'PendingApproval', execution: 'NotStarted' }],
+  phases,
   phaseCount: 1,
   overall: 'PendingApproval',
   onOption: () => {},
