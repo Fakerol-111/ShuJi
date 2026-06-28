@@ -14,7 +14,7 @@ export default function SettingsMenu({ onOpenSettings }: SettingsMenuProps) {
         onClick={onOpenSettings}
         className="text-xs px-2 py-1 text-ink-400 hover:text-ink-100 hover:bg-ink-800 rounded"
       >
-        {t('common.edit')}
+        {t('common.settings')}
       </button>
     </div>
   );

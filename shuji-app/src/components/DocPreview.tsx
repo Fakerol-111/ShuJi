@@ -1,29 +1,56 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+import { listen } from '@tauri-apps/api/event';
 import {
   readShujiDoc,
   setDocumentStatus as apiSetStatus,
   sendMessage,
   getDocumentDiff,
+  getDocumentDiffs,
+  readDocumentDiff,
   getDocumentLineage,
 } from '../api';
 import { formatError } from '../utils/error';
 import type { DocumentDiff } from '../api';
 import type { LineageNode } from '../types';
-import { Card } from './ui/Card';
 
 interface DocPreviewProps {
   projectDir: string;
   docPath: string;
   initialTab?: ViewMode;
-  onClose?: () => void;
 }
 
 type ViewMode = 'content' | 'diff' | 'lineage';
 
-export default function DocPreview({ projectDir, docPath, initialTab, onClose }: DocPreviewProps) {
+function countPatchStats(patch: string): { added: number; removed: number } {
+  let added = 0;
+  let removed = 0;
+  for (const line of patch.split('\n')) {
+    if (line.startsWith('+') && !line.startsWith('+++')) added++;
+    else if (line.startsWith('-') && !line.startsWith('---')) removed++;
+  }
+  return { added, removed };
+}
+
+async function loadAuditDiff(docId: string): Promise<DocumentDiff | null> {
+  const diffs = await getDocumentDiffs(docId);
+  if (diffs.length === 0) return null;
+  const latest = diffs.reduce((a, b) => (a.ts >= b.ts ? a : b));
+  const patch = await readDocumentDiff(latest.filename);
+  if (!patch.trim()) return null;
+  const { added, removed } = countPatchStats(patch);
+  return { diff: patch, has_previous: true, added, removed };
+}
+
+function docIdFromPath(docPath: string, metaId?: string): string {
+  if (metaId) return metaId;
+  return docPath.split('/').pop()?.replace(/\.md$/, '') || '';
+}
+
+export default function DocPreview({ projectDir, docPath, initialTab }: DocPreviewProps) {
   const { t } = useTranslation();
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
@@ -34,70 +61,132 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
   const [viewMode, setViewMode] = useState<ViewMode>(initialTab || 'content');
   const [diffData, setDiffData] = useState<DocumentDiff | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
+  const [diffSource, setDiffSource] = useState<'audit' | 'git' | null>(null);
   const [lineage, setLineage] = useState<LineageNode | null>(null);
   const [lineageLoading, setLineageLoading] = useState(false);
-
-  useEffect(() => {
-    setLoading(true);
-    setError('');
-    setApprovalError('');
-    setDiffData(null);
-    setLineage(null);
-    setViewMode(initialTab || 'content');
-    readShujiDoc(projectDir, docPath)
-      .then((doc) => setContent(doc.content))
-      .catch((e) => setError(formatError(e)))
-      .finally(() => setLoading(false));
-
-    // Fetch diff in parallel
-    setDiffLoading(true);
-    getDocumentDiff(projectDir, docPath)
-      .then((d) => setDiffData(d))
-      .catch((e) => {
-        console.error('获取文档差异失败', e);
-      })
-      .finally(() => setDiffLoading(false));
-
-    // Fetch lineage for .shuji documents
-    if (docPath.startsWith('.shuji/') && docPath.endsWith('.md')) {
-      setLineageLoading(true);
-      const parsedId = docPath.split('/').pop()?.replace(/\.md$/, '') || '';
-      getDocumentLineage(parsedId)
-        .then((l) => setLineage(l))
-        .catch((e) => {
-          console.error('获取文档血缘失败', e);
-        })
-        .finally(() => setLineageLoading(false));
-    }
-  }, [projectDir, docPath]);
+  const contentRef = useRef('');
 
   const isShujiMarkdown = docPath.startsWith('.shuji/') && docPath.endsWith('.md');
   const isMarkdown = docPath.endsWith('.md');
   const parsed = useMemo(() => parseFrontmatter(content), [content]);
   const parts = docPath.split('/');
-  const docId =
-    (isShujiMarkdown && parsed.meta?.id) || docPath.split('/').pop()?.replace(/\.md$/, '') || '';
+  const docId = isShujiMarkdown ? docIdFromPath(docPath, parsed.meta?.id) : '';
   const docStatus = parsed.meta?.status || '';
+
+  const loadDoc = useCallback(
+    async (silent = false) => {
+      if (!silent) {
+        setLoading(true);
+        setError('');
+      }
+      try {
+        const doc = await readShujiDoc(projectDir, docPath);
+        contentRef.current = doc.content;
+        setContent(doc.content);
+      } catch (e) {
+        if (!silent) setError(formatError(e));
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [projectDir, docPath]
+  );
+
+  const loadDiff = useCallback(
+    async (silent = false, metaId?: string) => {
+      if (!silent) setDiffLoading(true);
+      try {
+        if (isShujiMarkdown) {
+          const id = docIdFromPath(docPath, metaId);
+          const auditDiff = await loadAuditDiff(id);
+          setDiffData(auditDiff);
+          setDiffSource(auditDiff ? 'audit' : null);
+        } else {
+          const gitDiff = await getDocumentDiff(projectDir, docPath);
+          setDiffData(gitDiff.has_previous ? gitDiff : null);
+          setDiffSource(gitDiff.has_previous ? 'git' : null);
+        }
+      } catch (e) {
+        console.error('获取文档差异失败', e);
+        if (!silent) {
+          setDiffData(null);
+          setDiffSource(null);
+        }
+      } finally {
+        if (!silent) setDiffLoading(false);
+      }
+    },
+    [projectDir, docPath, isShujiMarkdown]
+  );
+
+  const loadLineage = useCallback(
+    async (silent = false, metaId?: string) => {
+      if (!isShujiMarkdown) return;
+      if (!silent) setLineageLoading(true);
+      try {
+        const id = docIdFromPath(docPath, metaId);
+        const l = await getDocumentLineage(id);
+        setLineage(l);
+      } catch (e) {
+        console.error('获取文档血缘失败', e);
+      } finally {
+        if (!silent) setLineageLoading(false);
+      }
+    },
+    [docPath, isShujiMarkdown]
+  );
+
+  useEffect(() => {
+    setApprovalError('');
+    setDiffData(null);
+    setDiffSource(null);
+    setLineage(null);
+    setViewMode(initialTab || 'content');
+    contentRef.current = '';
+    setContent('');
+
+    loadDoc(false);
+    loadDiff(false);
+    loadLineage(false);
+  }, [projectDir, docPath, loadDoc, loadDiff, loadLineage]);
+
+  useEffect(() => {
+    if (initialTab) setViewMode(initialTab);
+  }, [initialTab]);
+
+  useEffect(() => {
+    if (!content || !isShujiMarkdown) return;
+    const metaId = parsed.meta?.id;
+    loadDiff(true, metaId);
+    loadLineage(true, metaId);
+  }, [content, isShujiMarkdown, parsed.meta?.id, loadDiff, loadLineage]);
+
+  useEffect(() => {
+    const events = ['chat-message', 'dept-log', 'plan-update'];
+    const refresh = () => {
+      loadDoc(true);
+      loadDiff(true, parsed.meta?.id);
+    };
+    const unlistens = events.map((evt) => listen(evt, refresh));
+    return () => {
+      unlistens.forEach((p) => p.then((f) => f()));
+    };
+  }, [loadDoc, loadDiff, parsed.meta?.id]);
 
   const handleApproval = async () => {
     setApproving(true);
     setApprovalError('');
     try {
       const msg = `朕已御批。${comment ? ' ' + comment : ''}`;
-      // 1. Write judgment to document (must succeed)
       await apiSetStatus(docId, 'approved', comment || undefined);
-      // 2. Notify 内阁 (best-effort — judgment is already saved)
       try {
         await sendMessage(msg);
       } catch (e) {
         setApprovalError(t('docPreview.approvalNotifyFailed', { error: formatError(e) }));
-        // Still refresh the doc to show updated status
-        const doc = await readShujiDoc(projectDir, docPath);
-        setContent(doc.content);
+        await loadDoc(true);
         return;
       }
-      const doc = await readShujiDoc(projectDir, docPath);
-      setContent(doc.content);
+      await loadDoc(true);
     } catch (e) {
       setApprovalError(formatError(e));
     } finally {
@@ -105,37 +194,48 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
     }
   };
 
-  if (loading) return <div className="p-6 text-body text-ink-400">{t('docPreview.loading')}</div>;
-  if (error) return <div className="p-6 text-body text-vermillion">{error}</div>;
+  if (loading && !contentRef.current) {
+    return (
+      <div className="doc-preview-shell h-full min-w-0 overflow-hidden bg-surface-paper flex flex-col">
+        <div className="doc-preview-body flex-1 min-h-0 min-w-0 overflow-auto p-6 text-body text-ink-400">
+          {t('docPreview.loading')}
+        </div>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="doc-preview-shell h-full min-w-0 overflow-hidden bg-surface-paper flex flex-col">
+        <div className="doc-preview-body flex-1 min-h-0 min-w-0 overflow-auto p-6 text-body text-vermillion">
+          {error}
+        </div>
+      </div>
+    );
+  }
+
+  const showDiffTab = diffData?.has_previous;
+  const fileName = parts[parts.length - 1] || docPath;
 
   return (
-    <div className="h-full overflow-y-auto surface-paper">
-      <div className="px-6 py-6 lg:px-8 lg:py-8">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="text-caption text-ink-400 font-mono flex flex-wrap gap-1 flex-1 min-w-0">
+    <div className="doc-preview-shell h-full min-w-0 overflow-hidden bg-surface-paper flex flex-col">
+      <div className="doc-preview-toolbar shrink-0 min-w-0 border-b border-fold bg-surface-parchment/80">
+        <div className="flex items-center gap-2 px-3 py-2 min-w-0 border-b border-fold/60">
+          <span className="text-ui font-mono text-ink-800 truncate shrink-0 max-w-[40%]">
+            {fileName}
+          </span>
+          <div className="text-[10px] text-ink-400 font-mono flex flex-wrap gap-0.5 flex-1 min-w-0 truncate">
             {parts.map((p, i) => (
-              <span key={`${p}-${i}`}>
-                {i > 0 && <span className="mx-1 text-ink-300">/</span>}
+              <span key={`${p}-${i}`} className="truncate">
+                {i > 0 && <span className="mx-0.5 text-ink-300">/</span>}
                 {p}
               </span>
             ))}
           </div>
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="shrink-0 w-5 h-5 flex items-center justify-center rounded text-caption text-ink-400 hover:text-ink-900 hover:bg-ink-200/60 transition-colors"
-              title={t('common.close')}
-            >
-              ✕
-            </button>
-          )}
         </div>
-
-        {/* ── View toggle tabs ── */}
-        <div className="mb-4 flex gap-1 border-b border-fold">
+        <div className="flex gap-0.5 px-2 min-w-0 overflow-x-auto">
           <button
             onClick={() => setViewMode('content')}
-            className={`px-4 py-2 text-ui font-bold rounded-t-lg transition -mb-px border-b-2 ${
+            className={`px-3 py-1.5 text-ui font-medium whitespace-nowrap transition border-b-2 -mb-px ${
               viewMode === 'content'
                 ? 'border-vermillion text-ink-900'
                 : 'border-transparent text-ink-400 hover:text-ink-600'
@@ -143,25 +243,30 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
           >
             {t('document.fullText')}
           </button>
-          {diffData?.has_previous && (
+          {showDiffTab && (
             <button
               onClick={() => setViewMode('diff')}
-              className={`px-4 py-2 text-ui font-bold rounded-t-lg transition -mb-px border-b-2 ${
+              className={`px-3 py-1.5 text-ui font-medium whitespace-nowrap transition border-b-2 -mb-px ${
                 viewMode === 'diff'
                   ? 'border-vermillion text-ink-900'
                   : 'border-transparent text-ink-400 hover:text-ink-600'
               }`}
             >
               {t('document.diff')}
-              <span className="ml-1.5 text-caption text-ink-400">
+              {diffSource === 'audit' && (
+                <span className="ml-1 text-[10px] font-normal text-ink-400">
+                  {t('docPreview.auditDiff')}
+                </span>
+              )}
+              <span className="ml-1 text-caption text-ink-400">
                 {diffData ? `+${diffData.added}/-${diffData.removed}` : ''}
               </span>
             </button>
           )}
-          {docPath.startsWith('.shuji/') && docPath.endsWith('.md') && (
+          {isShujiMarkdown && (
             <button
               onClick={() => setViewMode('lineage')}
-              className={`px-4 py-2 text-ui font-bold rounded-t-lg transition -mb-px border-b-2 ${
+              className={`px-3 py-1.5 text-ui font-medium whitespace-nowrap transition border-b-2 -mb-px ${
                 viewMode === 'lineage'
                   ? 'border-vermillion text-ink-900'
                   : 'border-transparent text-ink-400 hover:text-ink-600'
@@ -171,12 +276,13 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
             </button>
           )}
         </div>
+      </div>
 
-        {/* ── "待陛下朱批" banner ── */}
+      <div className="doc-preview-body flex-1 min-h-0 min-w-0 overflow-auto px-4 py-4 lg:px-6 lg:py-5">
         {docStatus === 'in_review' && (
-          <div className="mb-4 rounded-xl border border-vermillion/30 bg-surface-elevated p-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
+          <div className="mb-4 rounded-lg border border-vermillion/40 bg-vermillion/5 px-3 py-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="min-w-0">
                 <h3 className="font-display text-sm font-bold text-ink-900">
                   {t('document.pendingApproval')}
                 </h3>
@@ -185,7 +291,7 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
               <button
                 onClick={handleApproval}
                 disabled={approving}
-                className="bg-jade hover:bg-jade/80 text-white text-ui font-bold px-4 py-2 rounded-lg transition disabled:opacity-50"
+                className="bg-jade hover:bg-jade/80 text-white text-ui font-bold px-3 py-1.5 rounded transition disabled:opacity-50 shrink-0"
               >
                 {approving ? t('common.loading') : t('document.approve')}
               </button>
@@ -196,7 +302,7 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
                 placeholder={t('document.imperialNote')}
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-                className="w-full px-3 py-1.5 border border-fold rounded-lg text-body bg-surface-parchment"
+                className="w-full min-w-0 px-3 py-1.5 border border-fold rounded text-body bg-surface-paper"
               />
             </div>
             <p className="text-[11px] text-ink-400 mt-2 leading-relaxed">
@@ -208,24 +314,26 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
 
         {viewMode === 'lineage' ? (
           lineageLoading ? (
-            <div className="p-6 text-body text-ink-400">{t('docPreview.loadingLineage')}</div>
+            <div className="text-body text-ink-400">{t('docPreview.loadingLineage')}</div>
           ) : lineage ? (
             <LineageTree node={lineage} depth={0} />
           ) : (
-            <div className="p-6 text-body text-ink-400 text-center">
-              {t('docPreview.noLineage')}
-            </div>
+            <div className="text-body text-ink-400 text-center">{t('docPreview.noLineage')}</div>
           )
-        ) : viewMode === 'diff' && diffData ? (
-          <DiffView diff={diffData.diff} />
-        ) : diffLoading ? (
-          <div className="p-6 text-body text-ink-400">{t('docPreview.loadingDiff')}</div>
+        ) : viewMode === 'diff' ? (
+          diffLoading && !diffData ? (
+            <div className="text-body text-ink-400">{t('docPreview.loadingDiff')}</div>
+          ) : diffData ? (
+            <DiffView diff={diffData.diff} audit={diffSource === 'audit'} />
+          ) : (
+            <div className="text-body text-ink-400 text-center">{t('docPreview.noDiff')}</div>
+          )
         ) : (
           <>
-            {isShujiMarkdown && parsed.meta && <FrontmatterCard meta={parsed.meta} />}
+            {isShujiMarkdown && parsed.meta && <FrontmatterMetadata meta={parsed.meta} />}
             {isMarkdown ? (
-              <article className="prose prose-shuji max-w-none">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              <article className="prose prose-shuji doc-preview-markdown max-w-none">
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
                   {(isShujiMarkdown ? parsed.body : content) || t('docPreview.fileEmpty')}
                 </ReactMarkdown>
               </article>
@@ -239,7 +347,7 @@ export default function DocPreview({ projectDir, docPath, initialTab, onClose }:
   );
 }
 
-function DiffView({ diff }: { diff: string }) {
+function DiffView({ diff, audit = false }: { diff: string; audit?: boolean }) {
   const { t } = useTranslation();
   if (!diff) {
     return <div className="p-6 text-body text-ink-400 text-center">{t('docPreview.noDiff')}</div>;
@@ -249,23 +357,23 @@ function DiffView({ diff }: { diff: string }) {
 
   return (
     <div
-      className="rounded-xl border overflow-hidden shadow-sm"
+      className="doc-preview-diff min-w-0 rounded-lg border overflow-hidden"
       style={{
         borderColor: 'var(--code-border)',
         backgroundColor: 'var(--code-bg)',
       }}
     >
       <div
-        className="h-9 flex items-center px-3 text-[11px] font-mono"
+        className="h-8 flex items-center px-3 text-[11px] font-mono shrink-0"
         style={{
           backgroundColor: 'var(--code-tab-bg)',
           borderBottom: '1px solid var(--code-border)',
           color: 'var(--code-muted)',
         }}
       >
-        <span>Unified Diff</span>
+        <span>{audit ? t('docPreview.auditDiffHeader') : 'Unified Diff'}</span>
       </div>
-      <div className="overflow-auto max-h-[calc(100vh-190px)] text-[13px] leading-[22px] font-[Cascadia_Code,JetBrains_Mono,Consolas,Menlo,Monaco,monospace]">
+      <div className="doc-preview-diff-scroll overflow-auto min-w-0 text-[13px] leading-[22px] font-[Cascadia_Code,JetBrains_Mono,Consolas,Menlo,Monaco,monospace]">
         <table className="w-full border-separate border-spacing-0">
           <tbody>
             {lines.map((line, i) => {
@@ -304,21 +412,21 @@ function CodePreview({ content, path }: { content: string; path: string }) {
 
   return (
     <div
-      className="rounded-xl border shadow-sm overflow-hidden"
+      className="doc-preview-code min-w-0 rounded-lg border overflow-hidden"
       style={{
         borderColor: 'var(--code-border)',
         backgroundColor: 'var(--code-bg)',
       }}
     >
       <div
-        className="h-9 flex items-center justify-between text-[11px]"
+        className="h-8 flex items-center justify-between text-[11px] shrink-0 min-w-0"
         style={{
           backgroundColor: 'var(--code-tab-bg)',
           borderBottom: '1px solid var(--code-border)',
         }}
       >
         <div
-          className="h-full px-3 flex items-center gap-2 font-mono"
+          className="h-full px-3 flex items-center gap-2 font-mono min-w-0"
           style={{
             backgroundColor: 'var(--code-bg)',
             borderRight: '1px solid var(--code-border)',
@@ -326,10 +434,10 @@ function CodePreview({ content, path }: { content: string; path: string }) {
           }}
         >
           <span style={{ color: 'var(--code-muted)' }}>{fileGlyph(path)}</span>
-          <span className="truncate max-w-[520px]">{path.split('/').pop()}</span>
+          <span className="truncate">{path.split('/').pop()}</span>
         </div>
         <div
-          className="px-3 font-mono flex items-center gap-3"
+          className="px-3 font-mono flex items-center gap-3 shrink-0"
           style={{ color: 'var(--code-muted)' }}
         >
           <span>{language}</span>
@@ -337,7 +445,7 @@ function CodePreview({ content, path }: { content: string; path: string }) {
           <span>{content.length.toLocaleString()} chars</span>
         </div>
       </div>
-      <div className="overflow-auto max-h-[calc(100vh-190px)] text-[13px] leading-[22px] font-[Cascadia_Code,JetBrains_Mono,Consolas,Menlo,Monaco,monospace]">
+      <div className="doc-preview-code-scroll overflow-auto min-w-0 text-[13px] leading-[22px] font-[Cascadia_Code,JetBrains_Mono,Consolas,Menlo,Monaco,monospace]">
         <table className="w-full border-separate border-spacing-0">
           <tbody>
             {lines.map((line, index) => (
@@ -402,7 +510,7 @@ function fileGlyph(path: string) {
   return 'TXT';
 }
 
-function FrontmatterCard({ meta }: { meta: Record<string, string> }) {
+function FrontmatterMetadata({ meta }: { meta: Record<string, string> }) {
   const { t } = useTranslation();
   const labels: Record<string, string> = {
     id: 'ID',
@@ -412,12 +520,18 @@ function FrontmatterCard({ meta }: { meta: Record<string, string> }) {
     refs: t('document.refs'),
     status: t('document.status'),
   };
+
+  const summaryParts = ['id', 'type', 'status'].map((key) => meta[key]).filter(Boolean);
+
   return (
-    <Card variant="parchment" className="mb-5 border-l-vermillion border-l-[3px] p-4">
-      <div className="font-display text-ui text-ink-600 font-semibold mb-2">
-        {t('document.ticket')}
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+    <details className="doc-preview-metadata mb-4 border-b border-fold pb-3 min-w-0">
+      <summary className="text-caption font-mono text-ink-500 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
+        <span className="text-ink-400">{t('docPreview.metadata')}</span>
+        {summaryParts.length > 0 && (
+          <span className="ml-2 text-ink-600">{summaryParts.join(' · ')}</span>
+        )}
+      </summary>
+      <dl className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-ui font-mono">
         {Object.entries(meta).map(([key, value]) => {
           const statusColor =
             key === 'status' && value === 'in_review'
@@ -430,14 +544,14 @@ function FrontmatterCard({ meta }: { meta: Record<string, string> }) {
           if (key === 'notes' && !value) return null;
           if (key === 'status' && !value) return null;
           return (
-            <div key={key} className="flex text-ui font-mono">
-              <span className="w-20 shrink-0 text-ink-400">{labels[key] || key}</span>
-              <span className={`break-all ${statusColor}`}>{value}</span>
+            <div key={key} className="flex min-w-0 gap-2">
+              <dt className="w-16 shrink-0 text-ink-400">{labels[key] || key}</dt>
+              <dd className={`break-all min-w-0 ${statusColor}`}>{value}</dd>
             </div>
           );
         })}
-      </div>
-    </Card>
+      </dl>
+    </details>
   );
 }
 

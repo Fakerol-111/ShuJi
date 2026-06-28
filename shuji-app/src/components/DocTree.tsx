@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { listen } from '@tauri-apps/api/event';
 import { listShujiTree } from '../api';
 import { formatError } from '../utils/error';
@@ -11,13 +12,61 @@ interface DocTreeProps {
   onSelect: (path: string) => void;
 }
 
+function filterShujiOnly(entries: ShujiEntry[]): ShujiEntry[] {
+  return entries
+    .map((entry) => {
+      if (entry.path === '.shuji' || entry.path.startsWith('.shuji/')) return entry;
+      if (!entry.is_dir) return null;
+      const children = filterShujiOnly(entry.children);
+      return children.length > 0 ? { ...entry, children } : null;
+    })
+    .filter(Boolean) as ShujiEntry[];
+}
+
+function formatTypeLabel(name: string, t: TFunction): string {
+  const base = name.replace(/\.md$/, '');
+  const prefix = base.split(/[-_]/)[0]?.toLowerCase();
+  const shujiTypes: Record<string, string> = {
+    reqs: t('docTree.typeReqs'),
+    dsgn: t('docTree.typeDsgn'),
+    plan: t('docTree.typePlan'),
+    pdsg: t('docTree.typePdsg'),
+    ddtl: t('docTree.typeDdtl'),
+    revw: t('docTree.typeRevw'),
+    task: t('docTree.typeTask'),
+    ctrt: t('docTree.typeCtrt'),
+    rprt: t('docTree.typeRprt'),
+    anls: t('docTree.typeAnls'),
+  };
+  if (prefix && shujiTypes[prefix]) return shujiTypes[prefix];
+
+  const ext = name.split('.').pop()?.toLowerCase();
+  const extLabels: Record<string, string> = {
+    md: 'MD',
+    ts: 'TS',
+    tsx: 'TSX',
+    js: 'JS',
+    jsx: 'JSX',
+    rs: 'RS',
+    py: 'PY',
+    json: 'JSON',
+    jsonl: 'JSONL',
+    toml: 'TOML',
+    yaml: 'YAML',
+    yml: 'YAML',
+    css: 'CSS',
+    html: 'HTML',
+  };
+  return ext ? extLabels[ext] || ext.toUpperCase() : '';
+}
+
 export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreeProps) {
   const { t } = useTranslation();
   const [tree, setTree] = useState<ShujiEntry[]>([]);
+  const [showAllFiles, setShowAllFiles] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Persist expanded state across tree refreshes so user-closed folders stay closed
   const expandedRef = useRef<Record<string, boolean>>({});
 
   const loadTree = useCallback(() => {
@@ -30,7 +79,6 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
       .finally(() => setLoading(false));
   }, [projectDir]);
 
-  // Debounced refresh — coalesces rapid events into one reload
   const debouncedRefresh = useCallback(() => {
     if (refreshTimer.current) clearTimeout(refreshTimer.current);
     refreshTimer.current = setTimeout(() => loadTree(), 400);
@@ -48,6 +96,11 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
     };
   }, [debouncedRefresh]);
 
+  const displayTree = useMemo(
+    () => (showAllFiles ? tree : filterShujiOnly(tree)),
+    [tree, showAllFiles]
+  );
+
   if (error) return <div className="p-3 text-ui text-vermillion">{error}</div>;
   if (loading && tree.length === 0)
     return (
@@ -56,32 +109,73 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
         <LoadingSkeleton />
       </div>
     );
-  if (tree.length === 0 && !loading)
-    return <div className="p-3 text-ui text-ink-400">{t('docTree.noPreviewFiles')}</div>;
 
   return (
     <div className="py-2 text-ui">
-      <div className="sticky top-0 z-10 bg-surface-parchment px-2 pb-2 flex justify-end items-center gap-2 border-b border-fold mb-1">
-        {loading && (
-          <span className="text-[10px] text-ink-400 animate-pulse">{t('docTree.refreshing')}</span>
-        )}
-        <button
-          onClick={loadTree}
-          className="px-2 py-1 rounded text-ui text-ink-500 hover:bg-ink-100 hover:text-ink-800"
-        >
-          {t('common.refresh')}
-        </button>
+      <div className="sticky top-0 z-10 bg-surface-parchment px-2 pb-2 flex justify-between items-center gap-2 border-b border-fold mb-1">
+        <div className="flex rounded border border-fold overflow-hidden shrink-0">
+          <button
+            onClick={() => setShowAllFiles(false)}
+            className={`px-2 py-0.5 text-[10px] transition-colors ${
+              !showAllFiles
+                ? 'bg-vermillion/10 text-vermillion font-medium'
+                : 'text-ink-500 hover:bg-ink-100'
+            }`}
+          >
+            {t('docTree.shujiDocs')}
+          </button>
+          <button
+            onClick={() => setShowAllFiles(true)}
+            className={`px-2 py-0.5 text-[10px] border-l border-fold transition-colors ${
+              showAllFiles
+                ? 'bg-vermillion/10 text-vermillion font-medium'
+                : 'text-ink-500 hover:bg-ink-100'
+            }`}
+          >
+            {t('docTree.allFiles')}
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          {loading && (
+            <span className="text-[10px] text-ink-400 animate-pulse">
+              {t('docTree.refreshing')}
+            </span>
+          )}
+          <button
+            onClick={loadTree}
+            className="px-2 py-1 rounded text-ui text-ink-500 hover:bg-ink-100 hover:text-ink-800"
+          >
+            {t('common.refresh')}
+          </button>
+        </div>
       </div>
-      {tree.map((entry) => (
-        <DocNode
-          key={entry.path}
-          entry={entry}
-          selectedDoc={selectedDoc}
-          onSelect={onSelect}
-          depth={0}
-          expandedRef={expandedRef}
-        />
-      ))}
+
+      {displayTree.length === 0 && !loading ? (
+        <div className="p-3 text-center text-ink-400">
+          <p className="text-ui">
+            {showAllFiles ? t('docTree.noPreviewFiles') : t('docTree.noShujiDocs')}
+          </p>
+          {!showAllFiles && (
+            <button
+              onClick={() => setShowAllFiles(true)}
+              className="mt-2 text-ui text-vermillion hover:underline"
+            >
+              {t('docTree.viewAllFiles')}
+            </button>
+          )}
+        </div>
+      ) : (
+        displayTree.map((entry) => (
+          <DocNode
+            key={entry.path}
+            entry={entry}
+            selectedDoc={selectedDoc}
+            onSelect={onSelect}
+            depth={0}
+            expandedRef={expandedRef}
+          />
+        ))
+      )}
     </div>
   );
 }
@@ -99,11 +193,11 @@ function DocNode({
   depth: number;
   expandedRef: React.MutableRefObject<Record<string, boolean>>;
 }) {
+  const { t } = useTranslation();
   const initialState = expandedRef.current[entry.path] ?? true;
   const [open, setOpen] = useState(initialState);
   const active = selectedDoc === entry.path;
 
-  // Sync toggle changes back to ref (survives remounts from loading state)
   const handleToggle = () => {
     const next = !open;
     expandedRef.current[entry.path] = next;
@@ -137,6 +231,8 @@ function DocNode({
     );
   }
 
+  const typeLabel = formatTypeLabel(entry.name, t);
+
   return (
     <button
       onClick={() => onSelect(entry.path)}
@@ -150,7 +246,7 @@ function DocNode({
     >
       <span className="text-caption">{fileIcon(entry.name)}</span>
       <span className="truncate font-mono text-ui">{entry.name}</span>
-      <span className="ml-auto text-caption text-ink-400 shrink-0">{entry.type_label}</span>
+      {typeLabel && <span className="ml-auto text-caption text-ink-400 shrink-0">{typeLabel}</span>}
     </button>
   );
 }
@@ -162,7 +258,6 @@ function fileIcon(name: string) {
   return '·';
 }
 
-/** Skeleton placeholder for loading state */
 function LoadingSkeleton() {
   return (
     <div className="flex items-center gap-2 px-3 py-2 animate-pulse">

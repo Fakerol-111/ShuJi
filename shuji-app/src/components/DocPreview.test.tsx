@@ -3,23 +3,26 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import DocPreview from './DocPreview';
 
-// Mock the api module
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn().mockResolvedValue(() => {}),
+}));
+
 vi.mock('../api', () => ({
   readShujiDoc: vi.fn(),
   setDocumentStatus: vi.fn(),
   sendMessage: vi.fn(),
   getDocumentDiff: vi.fn(),
+  getDocumentDiffs: vi.fn(),
+  readDocumentDiff: vi.fn(),
   getDocumentLineage: vi.fn(),
 }));
 
-// Mock react-markdown + plugins
 vi.mock('react-markdown', () => ({
   default: ({ children }: { children: string }) => <div data-testid="markdown">{children}</div>,
 }));
 vi.mock('remark-gfm', () => ({ default: () => {} }));
 vi.mock('rehype-highlight', () => ({ default: () => {} }));
 
-// Import the mocked module
 import * as api from '../api';
 
 const mockedApi = vi.mocked(api);
@@ -35,6 +38,10 @@ describe('DocPreview', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedApi.readShujiDoc.mockResolvedValue(shujiDoc());
+    mockedApi.getDocumentDiffs.mockResolvedValue([
+      { filename: 'doc-001_modify_2026.patch', event: 'modify', ts: '2026-01-02T00:00:00Z' },
+    ]);
+    mockedApi.readDocumentDiff.mockResolvedValue('+new line\n-old line');
     mockedApi.getDocumentDiff.mockResolvedValue({
       diff: '+new code\n-old code',
       has_previous: true,
@@ -53,7 +60,6 @@ describe('DocPreview', () => {
   });
 
   it('renders loading state initially', () => {
-    // Keep the promise pending
     mockedApi.readShujiDoc.mockReturnValue(new Promise(() => {}));
     render(<DocPreview projectDir="/test" docPath=".shuji/reviews/doc-001.md" />);
     expect(screen.getByText('开卷中…')).toBeTruthy();
@@ -115,18 +121,65 @@ describe('DocPreview', () => {
     await waitFor(() => {
       expect(screen.getByText('准奏')).toBeTruthy();
     });
-    // Type a comment
     await user.type(screen.getByPlaceholderText('御批备注（可选）...'), '甚好，准');
     await user.click(screen.getByText('准奏'));
     expect(mockedApi.setDocumentStatus).toHaveBeenCalledWith('doc-001', 'approved', '甚好，准');
     expect(mockedApi.sendMessage).toHaveBeenCalledWith(expect.stringContaining('甚好，准'));
   });
 
-  it('renders diff tab when has_previous is true', async () => {
+  it('uses audit diff for .shuji markdown files', async () => {
     render(<DocPreview projectDir="/test" docPath=".shuji/reviews/doc-001.md" />);
+    await waitFor(() => {
+      expect(mockedApi.getDocumentDiffs).toHaveBeenCalledWith('doc-001');
+      expect(mockedApi.readDocumentDiff).toHaveBeenCalled();
+      expect(mockedApi.getDocumentDiff).not.toHaveBeenCalled();
+    });
     await waitFor(() => {
       expect(screen.getByText('差异')).toBeTruthy();
       expect(screen.getByText('+1/-1')).toBeTruthy();
+    });
+  });
+
+  it('uses git diff for non-shuji files', async () => {
+    mockedApi.readShujiDoc.mockResolvedValue({ content: 'fn main() {}', path: 'src/main.rs' });
+    render(<DocPreview projectDir="/test" docPath="src/main.rs" />);
+    await waitFor(() => {
+      expect(mockedApi.getDocumentDiff).toHaveBeenCalledWith('/test', 'src/main.rs');
+      expect(mockedApi.getDocumentDiffs).not.toHaveBeenCalled();
+    });
+  });
+
+  it('switches view when initialTab updates on same path', async () => {
+    const { rerender } = render(
+      <DocPreview projectDir="/test" docPath=".shuji/reviews/doc-001.md" initialTab="content" />
+    );
+    await waitFor(() => {
+      expect(screen.getByText(/审查报告/)).toBeTruthy();
+    });
+    rerender(
+      <DocPreview projectDir="/test" docPath=".shuji/reviews/doc-001.md" initialTab="diff" />
+    );
+    await waitFor(() => {
+      expect(screen.getByText('+new line')).toBeTruthy();
+    });
+  });
+
+  it('does not hide content during silent refresh', async () => {
+    render(<DocPreview projectDir="/test" docPath=".shuji/reviews/doc-001.md" />);
+    await waitFor(() => {
+      expect(screen.getByText(/审查报告/)).toBeTruthy();
+    });
+    mockedApi.readShujiDoc.mockResolvedValue({
+      ...shujiDoc(),
+      content: shujiDoc().content.replace('审查报告', '更新后的审查报告'),
+    });
+    const { listen } = await import('@tauri-apps/api/event');
+    const handler = vi.mocked(listen).mock.calls[0]?.[1] as (() => void) | undefined;
+    expect(handler).toBeTruthy();
+    handler!();
+    await waitFor(() => {
+      expect(screen.getByText(/更新后的审查报告/)).toBeTruthy();
+      expect(screen.queryByText('开卷中…')).toBeFalsy();
     });
   });
 
@@ -138,9 +191,9 @@ describe('DocPreview', () => {
   });
 
   it('does not render lineage tab for non-shuji files', async () => {
+    mockedApi.readShujiDoc.mockResolvedValue({ content: 'fn main() {}', path: 'src/main.rs' });
     render(<DocPreview projectDir="/test" docPath="src/main.rs" />);
     await waitFor(() => {
-      // Wait for loading to finish
       expect(screen.queryByText('血缘')).toBeFalsy();
     });
   });
@@ -152,5 +205,30 @@ describe('DocPreview', () => {
       expect(screen.getByText('准奏')).toBeTruthy();
     });
     expect(screen.queryByText('驳回模板')).toBeFalsy();
+  });
+
+  it('uses IDE-style shell with overflow scroll containers', async () => {
+    const { container } = render(
+      <DocPreview projectDir="/test" docPath=".shuji/reviews/doc-001.md" />
+    );
+    await waitFor(() => {
+      expect(screen.getByText(/审查报告/)).toBeTruthy();
+    });
+    expect(container.querySelector('.doc-preview-shell')).toBeTruthy();
+    expect(container.querySelector('.doc-preview-body')).toBeTruthy();
+    expect(container.querySelector('.doc-preview-markdown')).toBeTruthy();
+    const body = container.querySelector('.doc-preview-body');
+    expect(body?.className).toMatch(/overflow-auto/);
+  });
+
+  it('renders collapsible metadata instead of frontmatter card', async () => {
+    const { container } = render(
+      <DocPreview projectDir="/test" docPath=".shuji/reviews/doc-001.md" />
+    );
+    await waitFor(() => {
+      expect(screen.getByText(/审查报告/)).toBeTruthy();
+    });
+    expect(container.querySelector('.doc-preview-metadata')).toBeTruthy();
+    expect(container.querySelector('details')).toBeTruthy();
   });
 });

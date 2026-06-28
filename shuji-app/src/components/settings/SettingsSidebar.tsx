@@ -102,7 +102,7 @@ export default function SettingsSidebar({ activeCategory, onSelect }: SettingsSi
   return (
     <nav className="w-52 shrink-0 bg-surface-parchment border-r border-fold flex flex-col">
       <div className="h-9 px-4 border-b border-fold flex items-center font-display text-ui font-semibold text-ink-700">
-        {t('common.edit')}
+        {t('common.settings')}
       </div>
       <div className="p-2 space-y-0.5 flex-1">
         {NAV_ITEMS.map((item) => {

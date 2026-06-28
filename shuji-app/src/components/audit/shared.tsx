@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { readDocumentDiff } from '../../api';
+import { docIdToPath } from '../../utils/docPath';
 import type { LineageNode, ChainNode } from '../../types';
+
+export { docIdToPath };
 
 // ── DiffViewer ───────────────────────────────────────────────
 
@@ -50,24 +53,6 @@ const STAGE_COLORS: Record<string, string> = {
   contract: 'text-ink-600 bg-ink-100',
   other: 'text-ink-400 bg-ink-100',
 };
-
-export function docIdToPath(docId: string): string {
-  const prefix = docId.split('_')[0];
-  const dirMap: Record<string, string> = {
-    dsgn: 'designs',
-    plan: 'designs',
-    pdsg: 'designs',
-    ddtl: 'designs/detail',
-    revw: 'reviews',
-    task: 'tasks',
-    ctrt: 'contracts',
-    rprt: 'reports',
-    anls: 'analysis',
-    reqs: 'requirements',
-  };
-  const dir = dirMap[prefix] || '';
-  return `.shuji/${dir ? dir + '/' : ''}${docId}.md`;
-}
 
 export function DocCard({
   node,

@@ -1,7 +1,7 @@
 //! 向前端发送皇帝消息、解析 `<options>`、部门日志。
 //!
 //! 三个辅助函数：
-//! - `emit_to_emperor` — 将 agent 输出经选项解析后发往前端
+//! - `emit_to_emperor_with_options` — 将 agent 输出经选项解析后发往前端
 //! - `parse_options`   — 提取 `<options>` 标签生成可点击按钮
 //! - `log_dept`        — 向 DeptStatusPanel 发送状态日志
 
@@ -11,18 +11,6 @@ use crate::models::chat::{ChatDocument, ChatMessage, ChatOption};
 use crate::models::role::Role;
 
 use super::super::{ActorContext, DeptLogEntry};
-
-/// 将 agent 输出 emit 到皇帝的前端面板。
-///
-/// 处理步骤：
-/// 1. 从 content 中解析 `<options>` 标签 → `ChatOption` 按钮列表
-/// 2. 用去除 options 标签后的干净内容构造 `ChatMessage`
-/// 3. 通过 `emperor_tx` try_send 发送（不阻塞）
-///
-/// 空内容直接返回（不 emit 空白消息）。
-pub(super) fn emit_to_emperor(tx: &mpsc::Sender<ChatMessage>, role: Role, content: &str) {
-    emit_to_emperor_with_options(tx, role, content, &[], &[]);
-}
 
 /// 将 agent 输出 emit 到皇帝的前端面板，优先使用 `request_decision` 工具选项。
 pub(super) fn emit_to_emperor_with_options(
