@@ -38,7 +38,7 @@ export default function ArtifactPanel({
     <div className="h-full flex flex-col min-h-0 min-w-0">
       <div className="shrink-0 flex items-center justify-between px-3 py-1.5 border-b border-fold bg-surface-parchment">
         <span className="text-caption font-medium text-ink-600 font-display">
-          {t('sidebar.directory')}
+          {t('glossary.artifact.label')}
         </span>
         <button
           onClick={onClosePanel}
@@ -52,13 +52,14 @@ export default function ArtifactPanel({
         <TabBar tabs={tabs} activeIndex={activeIndex} onSelect={onSelectTab} onClose={onCloseTab} />
       )}
       {hasTabs && activeDoc ? (
-        <DocPreview
-          key={activeDoc.path}
-          projectDir={project.working_dir}
-          docPath={activeDoc.path}
-          initialTab={activeDoc.initialView}
-          onClose={onClosePanel}
-        />
+        <div className="flex-1 min-h-0 min-w-0">
+          <DocPreview
+            key={activeDoc.path}
+            projectDir={project.working_dir}
+            docPath={activeDoc.path}
+            initialTab={activeDoc.initialView}
+          />
+        </div>
       ) : pendingApprovals.length > 0 ? (
         <ApprovalPromptCard
           docPaths={pendingApprovals}

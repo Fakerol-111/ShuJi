@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   CODE_THEMES,
@@ -13,16 +13,18 @@ import { SettingsSection, SettingsChip, SettingsHint } from './SettingsPrimitive
 export default function AppearanceTab() {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith('en') ? 'en' : 'zh';
-  const fontSize = getFontSize();
-  const codeTheme = getCodeTheme();
+  const [fontSize, setFontSize] = useState(getFontSize);
+  const [codeTheme, setCodeTheme] = useState(getCodeTheme);
 
   const setFontSizeLocal = (key: string) => {
     persistFontSize(key);
+    setFontSize(key);
     document.documentElement.dataset.fontSize = key;
   };
 
   const setCodeThemeLocal = (key: string) => {
     persistCodeTheme(key);
+    setCodeTheme(key);
     document.documentElement.dataset.codeTheme = key;
   };
 
@@ -42,10 +44,7 @@ export default function AppearanceTab() {
             <SettingsChip
               key={key}
               selected={fontSize === key}
-              onClick={() => {
-                setFontSizeLocal(key);
-                persistFontSize(key);
-              }}
+              onClick={() => setFontSizeLocal(key)}
               title={tier.description}
             >
               {lang === 'en' ? tier.labelEn : tier.label}
@@ -65,10 +64,7 @@ export default function AppearanceTab() {
             <SettingsChip
               key={key}
               selected={codeTheme === key}
-              onClick={() => {
-                setCodeThemeLocal(key);
-                persistCodeTheme(key);
-              }}
+              onClick={() => setCodeThemeLocal(key)}
             >
               {theme.label}
             </SettingsChip>

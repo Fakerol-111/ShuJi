@@ -10,8 +10,8 @@ import DutyBar from './DutyBar';
 import type { Project } from '../types';
 
 const ARTIFACT_MIN = 320;
-const ARTIFACT_MAX = 480;
-const ARTIFACT_DEFAULT = 380;
+const ARTIFACT_MAX = 680;
+const ARTIFACT_DEFAULT = 520;
 const ARTIFACT_PREF_KEY = 'shuji_artifact_width';
 
 function loadArtifactWidth(): number {

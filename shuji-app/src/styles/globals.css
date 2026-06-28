@@ -114,6 +114,56 @@
   --code-line-hover: rgba(255, 255, 255, 0.03);
 }
 
+[data-code-theme='vscode-dark'] {
+  --code-bg: #1e1e1e;
+  --code-tab-bg: #252526;
+  --code-border: #3c3c3c;
+  --code-text: #d4d4d4;
+  --code-line-num: #858585;
+  --code-muted: #9b9b9b;
+  --code-line-hover: rgba(255, 255, 255, 0.04);
+}
+
+[data-code-theme='gruvbox'] {
+  --code-bg: #282828;
+  --code-tab-bg: #1d2021;
+  --code-border: #504945;
+  --code-text: #ebdbb2;
+  --code-line-num: #7c6f64;
+  --code-muted: #928374;
+  --code-line-hover: rgba(235, 219, 178, 0.06);
+}
+
+[data-code-theme='dracula'] {
+  --code-bg: #282a36;
+  --code-tab-bg: #21222c;
+  --code-border: #44475a;
+  --code-text: #f8f8f2;
+  --code-line-num: #6272a4;
+  --code-muted: #8be9fd;
+  --code-line-hover: rgba(255, 255, 255, 0.04);
+}
+
+[data-code-theme='nord'] {
+  --code-bg: #2e3440;
+  --code-tab-bg: #242933;
+  --code-border: #434c5e;
+  --code-text: #d8dee9;
+  --code-line-num: #4c566a;
+  --code-muted: #81a1c1;
+  --code-line-hover: rgba(216, 222, 233, 0.05);
+}
+
+[data-code-theme='monokai'] {
+  --code-bg: #272822;
+  --code-tab-bg: #1f201b;
+  --code-border: #49483e;
+  --code-text: #f8f8f2;
+  --code-line-num: #75715e;
+  --code-muted: #a59f85;
+  --code-line-hover: rgba(248, 248, 242, 0.05);
+}
+
 [data-code-theme='one-light'] {
   --code-bg: #fafafa;
   --code-tab-bg: #f0f0f0;
@@ -132,6 +182,26 @@
   --code-line-num: #6e7781;
   --code-muted: #656d76;
   --code-line-hover: rgba(0, 0, 0, 0.03);
+}
+
+[data-code-theme='solarized-light'] {
+  --code-bg: #fdf6e3;
+  --code-tab-bg: #eee8d5;
+  --code-border: #d6cfb8;
+  --code-text: #657b83;
+  --code-line-num: #93a1a1;
+  --code-muted: #839496;
+  --code-line-hover: rgba(101, 123, 131, 0.08);
+}
+
+[data-code-theme='parchment'] {
+  --code-bg: #fbf7ef;
+  --code-tab-bg: #f1e7d6;
+  --code-border: #d8c8aa;
+  --code-text: #3d3328;
+  --code-line-num: #a8926d;
+  --code-muted: #8b7355;
+  --code-line-hover: rgba(92, 79, 62, 0.06);
 }
 
 /* ── highlight.js — syntax colors ── */
@@ -241,6 +311,202 @@
 [data-code-theme='one-light'] .hljs-type,
 [data-code-theme='github-light'] .hljs-type {
   color: #c18401;
+}
+
+[data-code-theme='vscode-dark'] .hljs {
+  color: #d4d4d4;
+}
+[data-code-theme='vscode-dark'] .hljs-keyword,
+[data-code-theme='vscode-dark'] .hljs-literal,
+[data-code-theme='vscode-dark'] .hljs-selector-tag {
+  color: #c586c0;
+}
+[data-code-theme='vscode-dark'] .hljs-string {
+  color: #ce9178;
+}
+[data-code-theme='vscode-dark'] .hljs-comment {
+  color: #6a9955;
+  font-style: italic;
+}
+[data-code-theme='vscode-dark'] .hljs-function,
+[data-code-theme='vscode-dark'] .hljs-title {
+  color: #dcdcaa;
+}
+[data-code-theme='vscode-dark'] .hljs-number,
+[data-code-theme='vscode-dark'] .hljs-attr {
+  color: #b5cea8;
+}
+[data-code-theme='vscode-dark'] .hljs-built_in,
+[data-code-theme='vscode-dark'] .hljs-type {
+  color: #4ec9b0;
+}
+
+[data-code-theme='gruvbox'] .hljs {
+  color: #ebdbb2;
+}
+[data-code-theme='gruvbox'] .hljs-keyword,
+[data-code-theme='gruvbox'] .hljs-literal,
+[data-code-theme='gruvbox'] .hljs-selector-tag {
+  color: #fb4934;
+}
+[data-code-theme='gruvbox'] .hljs-string {
+  color: #b8bb26;
+}
+[data-code-theme='gruvbox'] .hljs-comment {
+  color: #928374;
+  font-style: italic;
+}
+[data-code-theme='gruvbox'] .hljs-function,
+[data-code-theme='gruvbox'] .hljs-title {
+  color: #fabd2f;
+}
+[data-code-theme='gruvbox'] .hljs-number,
+[data-code-theme='gruvbox'] .hljs-attr {
+  color: #d3869b;
+}
+[data-code-theme='gruvbox'] .hljs-built_in,
+[data-code-theme='gruvbox'] .hljs-type {
+  color: #fe8019;
+}
+
+[data-code-theme='dracula'] .hljs {
+  color: #f8f8f2;
+}
+[data-code-theme='dracula'] .hljs-keyword,
+[data-code-theme='dracula'] .hljs-literal,
+[data-code-theme='dracula'] .hljs-selector-tag {
+  color: #ff79c6;
+}
+[data-code-theme='dracula'] .hljs-string {
+  color: #f1fa8c;
+}
+[data-code-theme='dracula'] .hljs-comment {
+  color: #6272a4;
+  font-style: italic;
+}
+[data-code-theme='dracula'] .hljs-function,
+[data-code-theme='dracula'] .hljs-title {
+  color: #50fa7b;
+}
+[data-code-theme='dracula'] .hljs-number,
+[data-code-theme='dracula'] .hljs-attr {
+  color: #bd93f9;
+}
+[data-code-theme='dracula'] .hljs-built_in,
+[data-code-theme='dracula'] .hljs-type {
+  color: #8be9fd;
+}
+
+[data-code-theme='nord'] .hljs {
+  color: #d8dee9;
+}
+[data-code-theme='nord'] .hljs-keyword,
+[data-code-theme='nord'] .hljs-literal,
+[data-code-theme='nord'] .hljs-selector-tag {
+  color: #81a1c1;
+}
+[data-code-theme='nord'] .hljs-string {
+  color: #a3be8c;
+}
+[data-code-theme='nord'] .hljs-comment {
+  color: #616e88;
+  font-style: italic;
+}
+[data-code-theme='nord'] .hljs-function,
+[data-code-theme='nord'] .hljs-title {
+  color: #88c0d0;
+}
+[data-code-theme='nord'] .hljs-number,
+[data-code-theme='nord'] .hljs-attr {
+  color: #b48ead;
+}
+[data-code-theme='nord'] .hljs-built_in,
+[data-code-theme='nord'] .hljs-type {
+  color: #d08770;
+}
+
+[data-code-theme='monokai'] .hljs {
+  color: #f8f8f2;
+}
+[data-code-theme='monokai'] .hljs-keyword,
+[data-code-theme='monokai'] .hljs-literal,
+[data-code-theme='monokai'] .hljs-selector-tag {
+  color: #f92672;
+}
+[data-code-theme='monokai'] .hljs-string {
+  color: #e6db74;
+}
+[data-code-theme='monokai'] .hljs-comment {
+  color: #75715e;
+  font-style: italic;
+}
+[data-code-theme='monokai'] .hljs-function,
+[data-code-theme='monokai'] .hljs-title {
+  color: #a6e22e;
+}
+[data-code-theme='monokai'] .hljs-number,
+[data-code-theme='monokai'] .hljs-attr {
+  color: #ae81ff;
+}
+[data-code-theme='monokai'] .hljs-built_in,
+[data-code-theme='monokai'] .hljs-type {
+  color: #fd971f;
+}
+
+[data-code-theme='solarized-light'] .hljs {
+  color: #657b83;
+}
+[data-code-theme='solarized-light'] .hljs-keyword,
+[data-code-theme='solarized-light'] .hljs-literal,
+[data-code-theme='solarized-light'] .hljs-selector-tag {
+  color: #859900;
+}
+[data-code-theme='solarized-light'] .hljs-string {
+  color: #2aa198;
+}
+[data-code-theme='solarized-light'] .hljs-comment {
+  color: #93a1a1;
+  font-style: italic;
+}
+[data-code-theme='solarized-light'] .hljs-function,
+[data-code-theme='solarized-light'] .hljs-title {
+  color: #268bd2;
+}
+[data-code-theme='solarized-light'] .hljs-number,
+[data-code-theme='solarized-light'] .hljs-attr {
+  color: #d33682;
+}
+[data-code-theme='solarized-light'] .hljs-built_in,
+[data-code-theme='solarized-light'] .hljs-type {
+  color: #b58900;
+}
+
+[data-code-theme='parchment'] .hljs {
+  color: #3d3328;
+}
+[data-code-theme='parchment'] .hljs-keyword,
+[data-code-theme='parchment'] .hljs-literal,
+[data-code-theme='parchment'] .hljs-selector-tag {
+  color: #9b172e;
+}
+[data-code-theme='parchment'] .hljs-string {
+  color: #2d5a3f;
+}
+[data-code-theme='parchment'] .hljs-comment {
+  color: #a8926d;
+  font-style: italic;
+}
+[data-code-theme='parchment'] .hljs-function,
+[data-code-theme='parchment'] .hljs-title {
+  color: #8a5a00;
+}
+[data-code-theme='parchment'] .hljs-number,
+[data-code-theme='parchment'] .hljs-attr {
+  color: #7a3f8c;
+}
+[data-code-theme='parchment'] .hljs-built_in,
+[data-code-theme='parchment'] .hljs-type {
+  color: #0d7a6e;
 }
 
 /* ── Code preview row hover ── */
@@ -471,6 +737,24 @@
     font-weight: 600;
     color: var(--color-text-primary, var(--color-ink-900));
     letter-spacing: 0.02em;
+    margin-top: 1.25em;
+    margin-bottom: 0.5em;
+  }
+
+  .prose-shuji :where(h1) {
+    margin-top: 0;
+  }
+
+  .prose-shuji :where(table) {
+    display: block;
+    overflow-x: auto;
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  .prose-shuji :where(th, td) {
+    border: 1px solid var(--color-fold, var(--code-border));
+    padding: 0.4em 0.65em;
   }
 
   .prose-shuji :where(p, li, td) {
@@ -506,5 +790,42 @@
     padding: 0.75rem 1rem;
     font-style: normal;
     color: var(--color-ink-700);
+  }
+
+  .doc-preview-markdown :where(pre) {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  .doc-preview-markdown :where(table) {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .doc-preview-markdown :where(p, li, blockquote) {
+    overflow-wrap: anywhere;
+  }
+
+  .doc-preview-code,
+  .doc-preview-diff {
+    min-width: 0;
+  }
+
+  .doc-preview-code-scroll,
+  .doc-preview-diff-scroll {
+    min-width: 0;
+    overflow: auto;
+  }
+
+  .doc-preview-metadata summary::before {
+    content: '▸ ';
+    display: inline-block;
+    transition: transform 0.15s ease;
+  }
+
+  .doc-preview-metadata[open] summary::before {
+    transform: rotate(90deg);
   }
 }

@@ -158,7 +158,7 @@ pub struct StreamedAssistantMessage {
 }
 
 #[derive(Default)]
-struct PartialToolCall {
+pub(crate) struct PartialToolCall {
     id: Option<String>,
     name: Option<String>,
     arguments: String,
