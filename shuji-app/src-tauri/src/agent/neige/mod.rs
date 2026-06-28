@@ -101,31 +101,9 @@ impl NeigeAgent {
         session.inject(&parts.join("\n"));
     }
 
-    /// Load soul from `.shuji/soul/neige.md`. If the file doesn't exist,
-    /// bootstrap it from the compile-time default. This allows the soul to
-    /// evolve at runtime (via `update_soul` tool or manual editing).
-    /// Enforces ≤4000 chars to keep prompt injection size bounded.
+    /// Load soul via the shared learning store (project + optional global).
     async fn load_soul(working_dir: &Path) -> String {
-        let soul_dir = working_dir.join(".shuji").join("soul");
-        let soul_path = soul_dir.join("neige.md");
-        if let Ok(content) = tokio::fs::read_to_string(&soul_path).await {
-            if !content.trim().is_empty() {
-                if content.len() > 4000 {
-                    log_console!(
-                        "[soul] soul length {} exceeds 4000 limit, truncating to 4000",
-                        content.len()
-                    );
-                    let truncated: String = content.chars().take(4000).collect();
-                    return truncated;
-                }
-                return content;
-            }
-        }
-        // Bootstrap from compile-time default
-        let default = include_str!("soul.md");
-        let _ = tokio::fs::create_dir_all(&soul_dir).await;
-        let _ = tokio::fs::write(&soul_path, default).await;
-        default.to_string()
+        crate::agent::runner::load_role_soul(working_dir, "Neige").await
     }
 
     /// Load skill content. Checks `.shuji/skills/{name}.md` on disk only.
@@ -315,6 +293,9 @@ impl Agent for NeigeAgent {
                         messages,
                     ));
                     session.inject(&format!("[皇帝回复] {}", input.task_description));
+                    let latest_soul =
+                        crate::agent::runner::load_role_soul(&working_dir, "Neige").await;
+                    session.replace_soul("Neige", &latest_soul);
                     true
                 }
                 None => {
@@ -354,6 +335,10 @@ impl Agent for NeigeAgent {
                     &role_name,
                 )
                 .await;
+
+                let latest_soul =
+                    crate::agent::runner::load_role_soul(&working_dir, &role_name).await;
+                ctx = ctx.with_refreshed_soul(&role_name, &latest_soul);
 
                 let mut msgs = ctx.to_messages();
                 msgs.push(serde_json::json!({"role": "user", "content": format!("New instruction from Emperor: {}", input.task_description)}));

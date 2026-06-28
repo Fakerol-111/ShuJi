@@ -116,6 +116,10 @@ impl Agent for GongbuShangshuAgent {
             &input.runtime_config,
         )
         .with_role(self.role().name())
+        .with_soul(
+            self.role().name(),
+            &crate::agent::runner::load_role_soul(&working_dir, &role_name).await,
+        )
         .with_debug_dir(input.working_dir.clone());
 
         // Phase-based reasoning control
@@ -166,6 +170,9 @@ impl Agent for GongbuShangshuAgent {
                     crate::api::session::PersistedContext::load_from(&working_dir, &role_name).await
                 {
                     ctx.trim_tool_results(2000);
+                    let latest_soul =
+                        crate::agent::runner::load_role_soul(&working_dir, &role_name).await;
+                    ctx = ctx.with_refreshed_soul(&role_name, &latest_soul);
                     let mut msgs = ctx.to_messages();
                     if is_fresh {
                         if let (Some(ref name), Some(ref goal)) = (batch_name, batch_goal) {

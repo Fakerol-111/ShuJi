@@ -338,6 +338,13 @@ pub async fn report_pipeline_result(
             ));
             PlanRuntime::cleanup(&notify.project_dir).await;
 
+            if let Err(e) =
+                crate::learning::LearningExtractor::from_pipeline_complete(&notify.project_dir)
+                    .await
+            {
+                log_console!("[learning] pipeline extract skipped: {}", e);
+            }
+
             if let Some(tx) = neige_tx {
                 let summary_task = format!(
                     "Pipeline plan \"{}\" has been fully executed. Please review documents and reports produced by all departments, and present a complete task summary to the Emperor, explaining what was accomplished and what output was produced.",

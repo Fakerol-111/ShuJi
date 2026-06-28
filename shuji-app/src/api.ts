@@ -301,12 +301,57 @@ export async function setDocumentStatus(
 
 // ── Soul management ────────────────────────────────────────────
 
-export async function getSoulContent(): Promise<string> {
-  return invoke('get_soul_content');
+export interface LearningEntry {
+  id: string;
+  role: string;
+  scope: string;
+  kind: string;
+  content: string;
+  evidence: string[];
+  tags: string[];
+  confidence: number;
+  created_at: string;
+  last_seen: string;
 }
 
-export async function clearSoul(): Promise<void> {
-  return invoke('clear_soul');
+export interface LearningConfig {
+  project_enabled: boolean;
+  global_enabled: boolean;
+  max_injected_chars_per_role: number;
+  auto_extract: boolean;
+  global_requires_approval: boolean;
+}
+
+export async function getSoulContent(role?: string, scope?: string): Promise<string> {
+  return invoke('get_soul_content', { role, scope });
+}
+
+export async function clearSoul(role?: string, scope?: string): Promise<void> {
+  return invoke('clear_soul', { role, scope });
+}
+
+export async function listSoulRoles(): Promise<string[]> {
+  return invoke('list_soul_roles');
+}
+
+export async function listGlobalLearningCandidates(): Promise<LearningEntry[]> {
+  return invoke('list_global_learning_candidates');
+}
+
+export async function approveGlobalLearning(candidateId: string): Promise<void> {
+  return invoke('approve_global_learning', { candidateId });
+}
+
+export async function rejectGlobalLearning(candidateId: string): Promise<void> {
+  return invoke('reject_global_learning', { candidateId });
+}
+
+export async function getLearningConfig(): Promise<LearningConfig> {
+  return invoke('get_learning_config');
+}
+
+export async function setLearningGlobalEnabled(enabled: boolean): Promise<void> {
+  return invoke('set_learning_global_enabled', { enabled });
 }
 
 // ── Checkpoint commands ──────────────────────────────────────

@@ -154,7 +154,7 @@ pub async fn set_document_status(
         "id": id,
         "status": status,
     });
-    if let Some(note) = emperor_note {
+    if let Some(note) = emperor_note.clone() {
         args["emperor_note"] = serde_json::Value::String(note);
     }
 
@@ -165,6 +165,18 @@ pub async fn set_document_status(
         serde_json::from_str(&result).map_err(|_| "解析结果失败".to_string())?;
     if v["ok"].as_bool().unwrap_or(false) {
         crate::audit::sync_ref_index(Path::new(&working_dir), &id).await;
+        if let Some(note) = emperor_note {
+            if !note.trim().is_empty() {
+                let _ = crate::learning::LearningExtractor::from_user_decision(
+                    Path::new(&working_dir),
+                    "Neige",
+                    true,
+                    &note,
+                    &id,
+                )
+                .await;
+            }
+        }
         Ok(v["message"].as_str().unwrap_or("ok").to_string())
     } else {
         Err(v["message"].as_str().unwrap_or("未知错误").to_string())
