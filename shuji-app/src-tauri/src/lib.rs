@@ -30,6 +30,7 @@ pub mod agent; // Agent trait + 通用执行框架 (runner) + 9 部门 + 2 子 a
 pub mod api; // LLM API 层：双格式 HTTP client、会话管理、AgentController、上下文压缩
 pub mod audit; // 审计系统：事件日志、引用索引、文档谱系、diff 追踪、合规检查单
 pub mod config; // 配置系统：RuntimeConfig (TOML)、优先级合并、阈值解析
+pub mod learning; // 角色化学习记忆：soul 读写、注入、结构化索引
 pub mod metrics; // 运行指标收集与查询
 pub mod models; // 数据模型：Role、ChatMessage、Project、WorkflowState 等
 pub mod pipeline; // Pipeline 引擎：阶段编排、验证、恢复、死锁检测
@@ -185,6 +186,12 @@ pub fn run() {
             commands::settings::set_workflow_config,
             commands::settings::get_soul_content,
             commands::settings::clear_soul,
+            commands::settings::list_soul_roles,
+            commands::settings::list_global_learning_candidates,
+            commands::settings::approve_global_learning,
+            commands::settings::reject_global_learning,
+            commands::settings::get_learning_config,
+            commands::settings::set_learning_global_enabled,
             commands::settings::get_model_preset,
             commands::settings::set_model_preset,
             commands::settings::get_approval_config,

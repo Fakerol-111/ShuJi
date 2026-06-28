@@ -72,6 +72,11 @@ pub fn build_checkpoint_handler(
     })
 }
 
+/// Load soul markdown for the given role (project + optional global).
+pub async fn load_role_soul(working_dir: &Path, role_name: &str) -> String {
+    crate::learning::load_role_soul(working_dir, role_name).await
+}
+
 /// Load persisted context for the role, compact if needed, and restore into the session.
 ///
 /// Returns true if context was loaded + restored (i.e. this is a continuation),
@@ -99,6 +104,9 @@ pub async fn load_and_compact_context(
         )
         .await;
 
+        let latest_soul = load_role_soul(working_dir, role_name).await;
+        ctx = ctx.with_refreshed_soul(role_name, &latest_soul);
+
         let mut msgs = ctx.to_messages();
         // 防止双份注入：检查末尾是否已有相同 task
         let last_is_task = msgs
@@ -114,6 +122,10 @@ pub async fn load_and_compact_context(
         session.restore(&snap);
         true
     } else {
+        let soul_content = load_role_soul(working_dir, role_name).await;
+        if !soul_content.trim().is_empty() {
+            session.replace_soul(role_name, &soul_content);
+        }
         false
     }
 }

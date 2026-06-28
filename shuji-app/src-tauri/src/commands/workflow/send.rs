@@ -245,12 +245,10 @@ async fn build_discuss_stream_context(
 
     let mut system_prompt = include_str!("../../agent/neige/prompt.md").to_string();
 
-    let soul_path = working_dir.join(".shuji").join("soul.md");
-    if let Ok(soul) = tokio::fs::read_to_string(&soul_path).await {
-        if !soul.trim().is_empty() {
-            system_prompt.push_str("\n\n[soul: neige]\n");
-            system_prompt.push_str(&soul);
-        }
+    let soul_content = crate::learning::load_role_soul(&working_dir, "Neige").await;
+    if !soul_content.trim().is_empty() {
+        system_prompt.push_str("\n\n[soul: Neige]\n");
+        system_prompt.push_str(&soul_content);
     }
 
     let mut skill_content = NeigeAgent::load_skill("discuss", &working_dir).await;

@@ -591,56 +591,111 @@ pub async fn set_workflow_config() -> Result<String, String> {
 
 // ── Soul management ─────────────────────────────────────────────────
 
-fn soul_path(project_dir: &str) -> std::path::PathBuf {
-    std::path::Path::new(project_dir)
-        .join(".shuji")
-        .join("soul")
-        .join("neige.md")
+async fn resolve_project_dir(
+    state: &tauri::State<'_, crate::commands::project::AppState>,
+) -> Result<String, String> {
+    state
+        .current_dir
+        .lock()
+        .await
+        .clone()
+        .ok_or_else(|| "no open project".to_string())
 }
 
-/// Read soul content for the current project.
+/// Read soul content for a role and scope (`project` default).
 #[tauri::command]
 pub async fn get_soul_content(
     state: tauri::State<'_, crate::commands::project::AppState>,
+    role: Option<String>,
+    scope: Option<String>,
 ) -> Result<String, String> {
-    let dir = state
-        .current_dir
-        .lock()
-        .await
-        .clone()
-        .ok_or("no open project")?;
-    let path = soul_path(&dir);
-    if path.exists() {
-        tokio::fs::read_to_string(&path)
+    let dir = resolve_project_dir(&state).await?;
+    let role_name = crate::learning::normalize_role_name(role.as_deref())?;
+    let content = match scope.as_deref().unwrap_or("project") {
+        "global" => crate::learning::SoulStore::load_global_markdown(&role_name)
             .await
-            .map_err(friendly_error)
-    } else {
-        Ok(String::new())
-    }
+            .unwrap_or_default(),
+        _ => {
+            crate::learning::SoulStore::read_project_soul(std::path::Path::new(&dir), &role_name)
+                .await
+        }
+    };
+    Ok(content)
 }
 
-/// Reset soul to the default template (embedded in source).
+/// Reset a role's project soul to the default template.
 #[tauri::command]
 pub async fn clear_soul(
     state: tauri::State<'_, crate::commands::project::AppState>,
+    role: Option<String>,
+    scope: Option<String>,
 ) -> Result<(), String> {
-    let dir = state
-        .current_dir
-        .lock()
-        .await
-        .clone()
-        .ok_or("no open project")?;
-    let path = soul_path(&dir);
-    let default = include_str!("../agent/neige/soul.md");
-    if let Some(parent) = path.parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .map_err(friendly_error)?;
+    let dir = resolve_project_dir(&state).await?;
+    let role_name = crate::learning::normalize_role_name(role.as_deref())?;
+    match scope.as_deref().unwrap_or("project") {
+        "global" => {
+            if let Some(path) = crate::learning::SoulStore::global_soul_path(&role_name) {
+                let default = if role_name == "Neige" {
+                    include_str!("../agent/neige/soul.md")
+                } else {
+                    "## Experience\n\n## Lessons\n\n## Preferences\n"
+                };
+                if let Some(parent) = path.parent() {
+                    tokio::fs::create_dir_all(parent)
+                        .await
+                        .map_err(friendly_error)?;
+                }
+                tokio::fs::write(&path, default)
+                    .await
+                    .map_err(friendly_error)?;
+            }
+        }
+        _ => {
+            crate::learning::SoulStore::clear_project_soul(std::path::Path::new(&dir), &role_name)
+                .await?;
+        }
     }
-    tokio::fs::write(&path, default)
-        .await
-        .map_err(friendly_error)?;
-    log_console!("[settings] soul cleared to default");
+    log_console!("[settings] soul cleared for {} ({:?})", role_name, scope);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn list_soul_roles() -> Result<Vec<String>, String> {
+    Ok(crate::learning::SoulStore::list_soul_roles())
+}
+
+#[tauri::command]
+pub async fn list_global_learning_candidates() -> Result<Vec<crate::learning::LearningEntry>, String>
+{
+    crate::learning::SoulStore::list_global_candidates().await
+}
+
+#[tauri::command]
+pub async fn approve_global_learning(candidate_id: String) -> Result<(), String> {
+    crate::learning::SoulStore::approve_global_candidate(&candidate_id).await
+}
+
+#[tauri::command]
+pub async fn reject_global_learning(candidate_id: String) -> Result<(), String> {
+    crate::learning::SoulStore::reject_global_candidate(&candidate_id).await
+}
+
+#[tauri::command]
+pub async fn get_learning_config() -> Result<serde_json::Value, String> {
+    let cfg = crate::learning::SoulStore::config();
+    Ok(serde_json::json!({
+        "project_enabled": cfg.project_enabled,
+        "global_enabled": cfg.global_enabled,
+        "max_injected_chars_per_role": cfg.max_injected_chars_per_role,
+        "auto_extract": cfg.auto_extract,
+        "global_requires_approval": cfg.global_requires_approval,
+    }))
+}
+
+#[tauri::command]
+pub async fn set_learning_global_enabled(enabled: bool) -> Result<(), String> {
+    crate::learning::set_global_enabled(enabled)?;
+    log_console!("[settings] global learning enabled={}", enabled);
     Ok(())
 }
 

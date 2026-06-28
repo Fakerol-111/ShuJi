@@ -89,104 +89,92 @@ async fn tool_update_soul(args: &serde_json::Value, ctx: &ToolContext) -> String
     if content.is_empty() {
         return r#"{"ok": false, "message": "content cannot be empty"}"#.to_string();
     }
-    if content.len() > 500 {
-        return r#"{"ok": false, "message": "Content too long (max 500 chars)"}"#.to_string();
-    }
-    let section = args["section"].as_str();
-    let soul_dir = ctx.working_dir.join(".shuji").join("soul");
-    let soul_path = soul_dir.join("neige.md");
-    let _ = tokio::fs::create_dir_all(&soul_dir).await;
 
-    let entry = format!("- {}\n", content);
-    let result = if let Some(sec) = section {
-        match tokio::fs::read_to_string(&soul_path).await {
-            Ok(existing) => {
-                let heading = format!("## {}", sec);
-                if let Some(pos) = existing.find(&heading) {
-                    let after_heading = &existing[pos + heading.len()..];
-                    let next_heading = after_heading.find("\n## ");
-                    let insert_pos =
-                        pos + heading.len() + next_heading.unwrap_or(after_heading.len());
-                    let mut new_content = existing[..insert_pos].to_string();
-                    if !new_content.ends_with('\n') {
-                        new_content.push('\n');
-                    }
-                    if !new_content.ends_with("\n\n") {
-                        new_content.push('\n');
-                    }
-                    new_content.push_str(&entry);
-                    new_content.push_str(&existing[insert_pos..]);
-                    match tokio::fs::write(&soul_path, &new_content).await {
-                        Ok(_) => Ok(format!("Recorded under section \"{}\"", sec)),
-                        Err(e) => Err(e),
-                    }
-                } else {
-                    use tokio::io::AsyncWriteExt;
-                    match tokio::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .write(true)
-                        .open(&soul_path)
-                        .await
-                    {
-                        Ok(mut f) => {
-                            let line = format!("\n## {}\n\n{}", sec, entry);
-                            f.write_all(line.as_bytes()).await.ok();
-                            Ok("Created section and recorded".to_string())
-                        }
-                        Err(e) => Err(e),
-                    }
-                }
-            }
-            Err(_) => {
-                let default = include_str!("../agent/neige/soul.md");
-                let with_entry = format!("{}\n{}", default, entry);
-                match tokio::fs::write(&soul_path, &with_entry).await {
-                    Ok(_) => Ok("Recorded".to_string()),
-                    Err(e) => Err(e),
-                }
-            }
-        }
-    } else {
-        use tokio::io::AsyncWriteExt;
-        match tokio::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .write(true)
-            .open(&soul_path)
-            .await
-        {
-            Ok(mut f) => {
-                f.write_all(entry.as_bytes()).await.ok();
-                Ok("Recorded".to_string())
-            }
-            Err(e) => Err(e),
+    let target_role = match crate::learning::normalize_role_name(args["role"].as_str()) {
+        Ok(r) => r,
+        Err(e) => {
+            return serde_json::json!({"ok": false, "message": e}).to_string();
         }
     };
 
-    match result {
+    let evidence: Vec<String> = args["evidence"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if target_role != "Neige" && evidence.is_empty() {
+        return r#"{"ok": false, "message": "Writing for another role requires evidence"}"#
+            .to_string();
+    }
+
+    let tags: Vec<String> = args["tags"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let kind = crate::learning::LearningKind::from_section_or_kind(
+        args["section"].as_str(),
+        args["kind"].as_str(),
+    )
+    .unwrap_or(crate::learning::LearningKind::Experience);
+
+    let scope = match args["scope"].as_str().unwrap_or("project") {
+        "global_candidate" => crate::learning::LearningScope::GlobalCandidate,
+        "global" => crate::learning::LearningScope::Global,
+        _ => crate::learning::LearningScope::Project,
+    };
+
+    match crate::learning::SoulStore::append_entry(
+        &ctx.working_dir,
+        &target_role,
+        kind,
+        scope,
+        content,
+        evidence,
+        tags,
+    )
+    .await
+    {
         Ok(msg) => {
             log_console!(
-                "[tool] update_soul → {} (section={})",
+                "[tool] update_soul → {} (role={}, kind={:?})",
                 content,
-                section.unwrap_or("end")
+                target_role,
+                kind
             );
 
-            // Check soul file size and auto-compact if > 8KB
-            if let Ok(metadata) = tokio::fs::metadata(&soul_path).await {
-                if metadata.len() > 8 * 1024 {
-                    log_console!(
-                        "[tool] soul exceeds 8KB ({}), auto-compacting",
-                        metadata.len()
-                    );
-                    match compact_soul_file(ctx).await {
-                        Ok(compact_msg) => {
-                            let full_msg = format!("{}. {}", msg, compact_msg);
-                            return serde_json::json!({"ok": true, "message": full_msg})
-                                .to_string();
-                        }
-                        Err(e) => {
-                            log_console!("[tool] soul compaction failed: {}", e);
+            if scope == crate::learning::LearningScope::Project {
+                let soul_path =
+                    crate::learning::SoulStore::project_soul_path(&ctx.working_dir, &target_role);
+                if let Ok(metadata) = tokio::fs::metadata(&soul_path).await {
+                    if metadata.len() > crate::learning::MAX_SOUL_FILE_BYTES as u64 {
+                        if let (Some(client), Some(model)) =
+                            (ctx.client.as_ref(), ctx.model.as_ref())
+                        {
+                            match crate::learning::SoulStore::compact_project_soul_with_llm(
+                                &ctx.working_dir,
+                                &target_role,
+                                client,
+                                model,
+                            )
+                            .await
+                            {
+                                Ok(compact_msg) => {
+                                    return serde_json::json!({"ok": true, "message": format!("{}. {}", msg, compact_msg)})
+                                        .to_string();
+                                }
+                                Err(e) => {
+                                    log_console!("[tool] soul compaction failed: {}", e);
+                                }
+                            }
                         }
                     }
                 }
@@ -194,75 +182,8 @@ async fn tool_update_soul(args: &serde_json::Value, ctx: &ToolContext) -> String
 
             serde_json::json!({"ok": true, "message": msg}).to_string()
         }
-        Err(e) => {
-            serde_json::json!({"ok": false, "message": format!("Write failed: {}", e)}).to_string()
-        }
+        Err(e) => serde_json::json!({"ok": false, "message": e}).to_string(),
     }
-}
-
-/// Compact soul file using LLM when it exceeds 8KB.
-/// Summarizes into a concise version with core 10 items max.
-async fn compact_soul_file(ctx: &ToolContext) -> Result<String, String> {
-    let soul_path = ctx.working_dir.join(".shuji").join("soul").join("neige.md");
-    let content = tokio::fs::read_to_string(&soul_path)
-        .await
-        .map_err(|e| format!("Failed to read soul: {}", e))?;
-
-    let client = ctx
-        .client
-        .clone()
-        .ok_or("LLM client not configured, cannot compact soul")?;
-    let model = ctx.model.clone().ok_or("LLM model not configured")?;
-
-    let prompt = format!(
-        r#"You are a soul compaction tool. The soul records the Grand Secretariat's experiences/lessons/preferences.
-
-Current soul {} bytes, exceeds 8KB limit. Please distill into a concise version, preserving the most valuable entries.
-
-Requirements:
-- Keep the three sections: ## Experience / ## Lessons / ## Preferences
-- No more than 5 entries per section
-- Maintain the original format (each entry prefixed with `- `)
-- Remove duplicate or similar entries
-- Total characters not exceeding 4000
-
-Original soul:
-{}"#,
-        content.len(),
-        content
-    );
-
-    let msg = crate::models::message::Message::user(&prompt);
-    let compacted = client
-        .send_message(
-            "Please compact the soul content, output a concise Markdown version (containing ## Experience / ## Lessons / ## Preferences)",
-            &[msg],
-            &model,
-        )
-        .await
-        .map_err(|e| format!("LLM compaction request failed: {}", e))?
-        .trim()
-        .to_string();
-
-    if compacted.is_empty() || compacted.len() >= content.len() {
-        return Err("Compaction result is invalid or did not reduce size".to_string());
-    }
-
-    tokio::fs::write(&soul_path, &compacted)
-        .await
-        .map_err(|e| format!("Failed to write compacted soul: {}", e))?;
-
-    log_console!(
-        "[tool] soul compaction complete: {} -> {} bytes",
-        content.len(),
-        compacted.len()
-    );
-
-    Ok(format!(
-        "soul auto-compacted ({} -> {} bytes)",
-        content.len(),
-        compacted.len()
-    ))
 }
 
 /// Extract 内阁's cancel flag from the ToolContext's cancel_map.

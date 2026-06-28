@@ -275,3 +275,17 @@ fn run_result_stopped_text() {
     assert_eq!(result.text(), "中断");
     assert!(result.into_route().is_none());
 }
+
+#[test]
+fn with_refreshed_soul_updates_soul_prompt_layer() {
+    let ctx = PersistedContext {
+        base_prompt: "base".into(),
+        soul_prompt: Some("[soul: Neige]\nold".into()),
+        context_messages: vec![],
+    };
+    let updated = ctx.with_refreshed_soul("Neige", "updated soul markdown");
+    assert_eq!(
+        updated.soul_prompt.as_deref(),
+        Some("[soul: Neige]\nupdated soul markdown")
+    );
+}

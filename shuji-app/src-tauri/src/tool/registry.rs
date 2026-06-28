@@ -263,7 +263,7 @@ pub fn update_soul_tool() -> ToolDefinition {
         tool_type: "function".into(),
         function: crate::api::client::ToolFunction {
             name: "update_soul".into(),
-            description: "Write one entry of experience/lesson/preference to the soul file. One entry per call.".into(),
+            description: "Write one learning entry to the role soul file. One entry per call. Neige may queue global candidates.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -271,10 +271,34 @@ pub fn update_soul_tool() -> ToolDefinition {
                         "type": "string",
                         "description": "Content in format: [context] description. ≤500 chars."
                     },
+                    "kind": {
+                        "type": "string",
+                        "enum": ["experience", "lesson", "preference", "project_fact", "command", "review_rule"],
+                        "description": "Learning category (English). Preferred over section."
+                    },
                     "section": {
                         "type": "string",
                         "enum": ["经验", "教训", "偏好"],
-                        "description": "Section to write to: experience/lesson/preference. If omitted, appends to the end."
+                        "description": "Legacy Chinese section mapping (experience/lesson/preference)."
+                    },
+                    "scope": {
+                        "type": "string",
+                        "enum": ["project", "global_candidate"],
+                        "description": "project (default) or global_candidate (Neige only, requires evidence)."
+                    },
+                    "role": {
+                        "type": "string",
+                        "description": "Target role name. Default Neige. Other roles require evidence."
+                    },
+                    "evidence": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Evidence references (required for other roles or global_candidate)."
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Optional tags for indexing."
                     }
                 },
                 "required": ["content"]

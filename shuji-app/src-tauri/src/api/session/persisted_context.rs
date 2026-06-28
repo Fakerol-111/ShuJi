@@ -50,12 +50,34 @@ impl PersistedContext {
         }
     }
 
+    /// Replace the soul layer with freshly loaded content.
+    pub fn with_refreshed_soul(mut self, role: &str, soul_content: &str) -> Self {
+        if soul_content.trim().is_empty() {
+            self.soul_prompt = None;
+        } else {
+            self.soul_prompt = Some(format!("[soul: {role}]\n{soul_content}"));
+        }
+        self
+    }
+
     /// Rebuild flat messages array from the 3 layers, preserving
     /// the original ordering: base → soul → context.
     pub fn to_messages(&self) -> Vec<serde_json::Value> {
+        self.to_messages_with_soul_override(None)
+    }
+
+    /// Rebuild messages, optionally overriding the soul layer with latest content.
+    pub fn to_messages_with_soul_override(
+        &self,
+        soul_override: Option<(&str, &str)>,
+    ) -> Vec<serde_json::Value> {
         let mut msgs: Vec<serde_json::Value> = Vec::new();
         msgs.push(serde_json::json!({"role": "system", "content": self.base_prompt}));
-        if let Some(ref soul) = self.soul_prompt {
+        if let Some((role, content)) = soul_override {
+            if !content.trim().is_empty() {
+                msgs.push(serde_json::json!({"role": "system", "content": format!("[soul: {role}]\n{content}")}));
+            }
+        } else if let Some(ref soul) = self.soul_prompt {
             msgs.push(serde_json::json!({"role": "system", "content": soul}));
         }
         for m in &self.context_messages {

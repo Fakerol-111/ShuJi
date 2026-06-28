@@ -160,6 +160,35 @@ impl Session {
         self
     }
 
+    /// Replace or insert the soul system message with latest content from disk.
+    pub fn replace_soul(&mut self, role: &str, content: &str) {
+        if content.trim().is_empty() {
+            self.messages.retain(|m| {
+                m["role"].as_str() != Some("system")
+                    || !m["content"]
+                        .as_str()
+                        .is_some_and(|c| c.starts_with("[soul:"))
+            });
+            return;
+        }
+        let soul_msg = serde_json::json!({
+            "role": "system",
+            "content": format!("[soul: {}]\n{}", role, content)
+        });
+        if let Some(idx) = self.messages.iter().position(|m| {
+            m["role"].as_str() == Some("system")
+                && m["content"]
+                    .as_str()
+                    .is_some_and(|c| c.starts_with("[soul:"))
+        }) {
+            self.messages[idx] = soul_msg;
+        } else if self.messages.len() > 1 {
+            self.messages.insert(1, soul_msg);
+        } else {
+            self.messages.push(soul_msg);
+        }
+    }
+
     /// Override the auto-detected max_tokens value.
     pub fn with_max_tokens(mut self, tokens: u32) -> Self {
         self.max_tokens = (tokens != 0).then_some(tokens);
