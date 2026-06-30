@@ -6,6 +6,7 @@ use crate::agent::r#trait::{Agent, AgentInput, AgentOutput, LoopDecision};
 use crate::api::client::{AnthropicClient, ToolDefinition};
 use crate::models::message::Message;
 use crate::models::role::Role;
+use crate::util::lock::lock_or_recover;
 
 // ── Plan state ───────────────────────────────────────────────
 
@@ -123,7 +124,9 @@ impl Agent for GongbuShangshuAgent {
         .with_debug_dir(input.working_dir.clone());
 
         // Phase-based reasoning control
-        let has_plan = self.plan.lock().unwrap().is_some();
+        let has_plan = lock_or_recover(&self.plan)
+            .map(|g| g.is_some())
+            .unwrap_or(false);
         if has_plan {
             session.set_reasoning_phase(crate::config::ReasoningPhase::Execution);
         } else {
@@ -132,7 +135,10 @@ impl Agent for GongbuShangshuAgent {
 
         // Track and consume fresh_batch flag atomically
         let is_fresh = {
-            let mut plan_guard = self.plan.lock().unwrap();
+            let mut plan_guard = match lock_or_recover(&self.plan) {
+                Ok(g) => g,
+                Err(e) => return Err(anyhow::anyhow!("工部 plan 锁获取失败: {}", e)),
+            };
             if let Some(ref mut plan) = *plan_guard {
                 if plan.fresh_batch {
                     plan.fresh_batch = false;
@@ -147,7 +153,10 @@ impl Agent for GongbuShangshuAgent {
 
         // Extract plan info before any async operations
         let (plan_complete, plan_current, plan_total, batch_name, batch_goal) = {
-            let plan_guard = self.plan.lock().unwrap();
+            let plan_guard = match lock_or_recover(&self.plan) {
+                Ok(g) => g,
+                Err(e) => return Err(anyhow::anyhow!("工部 plan 锁获取失败: {}", e)),
+            };
             match *plan_guard {
                 Some(ref p) => (
                     p.complete,
@@ -247,7 +256,13 @@ impl Agent for GongbuShangshuAgent {
                 match name.as_str() {
                     "submit_plan" => {
                         {
-                            let guard = plan_ref.lock().unwrap();
+                            let guard = match lock_or_recover(&plan_ref) {
+                                Ok(g) => g,
+                                Err(_) => {
+                                    return r#"{"ok":false,"message":"plan lock failed"}"#
+                                        .to_string()
+                                }
+                            };
                             if guard.is_some() {
                                 return r#"{"ok":false,"message":"A plan already exists. Use complete_task to advance batches, do not resubmit a plan."}"#.to_string();
                             }
@@ -261,7 +276,12 @@ impl Agent for GongbuShangshuAgent {
                                 .to_string();
                         }
                         let count = batches.len();
-                        let mut guard = plan_ref.lock().unwrap();
+                        let mut guard = match lock_or_recover(&plan_ref) {
+                            Ok(g) => g,
+                            Err(_) => {
+                                return r#"{"ok":false,"message":"plan lock failed"}"#.to_string()
+                            }
+                        };
                         *guard = Some(PlanState::from_batches(batches));
                         force_stop_clone.store(true, Ordering::SeqCst);
                         log_console!(
@@ -271,7 +291,12 @@ impl Agent for GongbuShangshuAgent {
                         serde_json::json!({"ok":true,"message":format!("Plan submitted: {} batches. Waiting for system to advance to the first batch.", count)}).to_string()
                     }
                     "complete_task" => {
-                        let mut guard = plan_ref.lock().unwrap();
+                        let mut guard = match lock_or_recover(&plan_ref) {
+                            Ok(g) => g,
+                            Err(_) => {
+                                return r#"{"ok":false,"message":"plan lock failed"}"#.to_string()
+                            }
+                        };
                         match *guard {
                             Some(ref mut plan) => {
                                 if plan.complete {
@@ -341,7 +366,10 @@ impl Agent for GongbuShangshuAgent {
         if self.last_stopped.swap(false, Ordering::SeqCst) {
             return LoopDecision::Done;
         }
-        let plan_guard = self.plan.lock().unwrap();
+        let plan_guard = match lock_or_recover(&self.plan) {
+            Ok(g) => g,
+            Err(_) => return LoopDecision::Done,
+        };
         match *plan_guard {
             Some(ref p) if !p.complete => LoopDecision::Continue(
                 "Please continue with the current batch task. Call complete_task when done."
@@ -352,14 +380,23 @@ impl Agent for GongbuShangshuAgent {
     }
 
     fn reset_plan(&self) {
-        let mut guard = self.plan.lock().unwrap();
+        let mut guard = match lock_or_recover(&self.plan) {
+            Ok(g) => g,
+            Err(e) => {
+                log_console!("[工部] reset_plan: plan lock failed: {}", e);
+                return;
+            }
+        };
         *guard = None;
         self.last_stopped.store(false, Ordering::SeqCst);
         log_console!("[工部] plan cleared for new task");
     }
 
     fn plan_display(&self) -> String {
-        let guard = self.plan.lock().unwrap();
+        let guard = match lock_or_recover(&self.plan) {
+            Ok(g) => g,
+            Err(_) => return "null".to_string(),
+        };
         match *guard {
             Some(ref plan) => {
                 let batches: Vec<serde_json::Value> = plan

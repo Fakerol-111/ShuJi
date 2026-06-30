@@ -5,6 +5,7 @@ import { getDeptMeta, getDeptDisplayLabel } from '../constants';
 import { useDeptEvents } from '../hooks/useDeptEvents';
 import { useWorkflowTimeline } from '../hooks/useWorkflowTimeline';
 import { docIdToPath } from '../utils/docPath';
+import { swallowError } from '../utils/error';
 import WorkflowTimeline from './WorkflowTimeline';
 import PlanPanel from './PlanPanel';
 import DeliveryReceipt from './DeliveryReceipt';
@@ -190,7 +191,7 @@ export default function CommandBar({
     const load = () => {
       getRoundMetrics()
         .then((m) => setPolledMetrics(m))
-        .catch(() => {});
+        .catch(swallowError('CommandBar.loadRoundMetrics'));
     };
     load();
     const timer = window.setInterval(load, 10000);

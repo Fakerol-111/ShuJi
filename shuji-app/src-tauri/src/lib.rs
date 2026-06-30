@@ -40,8 +40,9 @@ pub mod pricing; // API 定价计算与统计
 pub mod scenario; // 场景定义与回放测试框架
 pub mod storage; // 存储层：.shuji/ 目录管理、checkpoint 持久化
 pub mod tool; // 工具系统：工具注册表、分发、文件操作、文档操作、审计工具
+pub mod util;
 pub mod validate; // 交付验证模块：端到端验证流程与验证器
-pub mod workflow; // 工作流系统：WorkflowProfile、Resolver、Gate、Chain 组合器
+pub mod workflow; // 工作流系统：WorkflowProfile、Resolver、Gate、Chain 组合器 // 通用工具：锁辅助等
 
 // --- 内部模块 (非 pub — 仅供 crate 内部使用) ---
 mod commands; // Tauri 命令处理器：project、workflow、settings、checkpoint 等

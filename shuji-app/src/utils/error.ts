@@ -48,3 +48,20 @@ export function classifyError(e: unknown): ErrorSeverity {
   if (msg.includes('timeout') || msg.includes('network')) return 'warning';
   return 'info';
 }
+
+/**
+ * Create a swallow-error handler for fire-and-forget promise chains.
+ *
+ * Use in `.catch(swallowError('contextName'))` instead of `.catch(() => {})`
+ * to preserve debug logs without breaking fire-and-forget semantics.
+ *
+ * @example
+ *   cancelDiscussApi().catch(swallowError('cancelDiscuss'));
+ *   getReasoningConfig().then(setReasoningConfig).catch(swallowError('loadReasoningConfig'));
+ */
+export function swallowError(context: string): (e: unknown) => void {
+  return (e: unknown) => {
+    const msg = typeof e === 'string' ? e : e instanceof Error ? e.message : String(e);
+    console.error(`[${context}]`, msg, e);
+  };
+}

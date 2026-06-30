@@ -5,6 +5,8 @@ use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 
+use crate::util::lock::lock_or_recover;
+
 /// Loaded from `.shuji/esaa/AGENT_CONTRACT.yaml` — defines tool/route/path
 /// permissions for each role. Replaces the hardcoded BoundaryChecker in Phase 3.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -421,9 +423,21 @@ impl ContractBoundaryChecker {
     }
 
     fn maybe_reload(&self) {
-        let mut last = self.last_load.lock().unwrap();
+        let mut last = match lock_or_recover(&self.last_load) {
+            Ok(g) => g,
+            Err(e) => {
+                log_console!("[esaa] maybe_reload last_load failed: {}", e);
+                return;
+            }
+        };
         if last.elapsed() >= self.reload_interval {
-            let mut contracts = self.contracts.lock().unwrap();
+            let mut contracts = match lock_or_recover(&self.contracts) {
+                Ok(g) => g,
+                Err(e) => {
+                    log_console!("[esaa] maybe_reload contracts failed: {}", e);
+                    return;
+                }
+            };
             *contracts = AgentContracts::load(&self.shuji_dir);
             *last = Instant::now();
         }
@@ -431,7 +445,8 @@ impl ContractBoundaryChecker {
 
     pub fn check_tool(&self, role: &str, tool: &str) -> Result<(), String> {
         self.maybe_reload();
-        let contracts = self.contracts.lock().unwrap();
+        let contracts =
+            lock_or_recover(&self.contracts).map_err(|e| format!("合约锁获取失败: {}", e))?;
         let Some(contract) = contracts.effective_for_role(role) else {
             return Ok(());
         };
@@ -443,7 +458,8 @@ impl ContractBoundaryChecker {
 
     pub fn check_route(&self, role: &str, target: &str) -> Result<(), String> {
         self.maybe_reload();
-        let contracts = self.contracts.lock().unwrap();
+        let contracts =
+            lock_or_recover(&self.contracts).map_err(|e| format!("合约锁获取失败: {}", e))?;
         let Some(contract) = contracts.effective_for_role(role) else {
             return Ok(());
         };
@@ -458,7 +474,8 @@ impl ContractBoundaryChecker {
 
     pub fn check_path(&self, role: &str, path: &str) -> Result<(), String> {
         self.maybe_reload();
-        let contracts = self.contracts.lock().unwrap();
+        let contracts =
+            lock_or_recover(&self.contracts).map_err(|e| format!("合约锁获取失败: {}", e))?;
         let Some(contract) = contracts.effective_for_role(role) else {
             return Ok(());
         };
@@ -473,7 +490,8 @@ impl ContractBoundaryChecker {
 
     pub fn check_file_size(&self, role: &str, content: &str) -> Result<(), String> {
         self.maybe_reload();
-        let contracts = self.contracts.lock().unwrap();
+        let contracts =
+            lock_or_recover(&self.contracts).map_err(|e| format!("合约锁获取失败: {}", e))?;
         let Some(contract) = contracts.effective_for_role(role) else {
             return Ok(());
         };

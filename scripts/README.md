@@ -5,6 +5,7 @@
 | 脚本 | 说明 |
 |------|------|
 | [`add_speaker_notes.py`](add_speaker_notes.py) | 为验收答辩 `.pptx` 批量写入演讲者备注（需 `python-pptx`） |
+| [`count_tests.sh`](count_tests.sh) | 统计 Rust + 前端测试数量，输出 JSON（文档引用，CI 调用） |
 | [`../shuji-app/scripts/i18n-patch.mjs`](../shuji-app/scripts/i18n-patch.mjs) | 应用内 i18n 补丁（归属 `shuji-app`，非仓库根脚本） |
 
 ## 运行示例

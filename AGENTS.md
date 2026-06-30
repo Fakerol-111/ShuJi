@@ -23,8 +23,8 @@ npm run tauri build             # Production build
 
 ```bash
 # Rust — run from shuji-app/src-tauri/
-cargo test --lib                 # 202 unit tests (config, routing, token counting, agent/util, etc.)
-cargo test --tests               # 481 integration tests
+cargo test --lib                 # unit tests (config, routing, token counting, agent/util, etc.)
+cargo test --tests               # integration tests
 cargo test --tests -- --skip expand_requirements --test-threads=1  # Skip real-API test
 cargo test --test <file> <test_name> -- --nocapture  # Single test
 
@@ -63,7 +63,7 @@ cargo clippy --all-targets
 
 **Test pattern**: Async tools use `block_on()` wrapper (current-thread tokio). Async-only tests use `#[tokio::test]`. All tests use `tempfile::TempDir` via `common::create_test_project()` for isolation. Run with `--test-threads=1` to avoid state contention.
 
-**Total**: 202 unit + 481 integration = 683 Rust tests. Frontend: 36 Vitest test files.
+**Total**: 约 730 个测试（Rust 单元 + 集成 + 前端 Vitest，以 `scripts/count_tests.sh` 输出为准）。
 
 **Pre-commit**: `cargo fmt --check && cargo clippy --all-targets && cargo test --lib && cargo test --tests -- --skip expand_requirements --test-threads=1`
 
@@ -203,8 +203,8 @@ Skills and summaries are stored inside `context_messages` as regular system/user
 
 ### Session / AgentController Split
 
-- **Session** (`api/session.rs`): Pure LLM layer. Owns message history. `step()` = one API round-trip. Auto-retries on `finish_reason=length` (halving max_tokens). Handles: tool call truncation, ID validation, orphaned tool message cleanup (two-pass sanitize). `PersistedContext` for 3-layer save/load (base, soul, context). `trim_tool_results()` truncates verbose tool outputs on save.
-- **AgentController** (`api/control.rs`): Drive loop. Calls `step()`, executes tools, feeds results back, handles cancel/interrupt/restart. Supports `CompactFn` (persist compressed context) and `CheckpointFn` (git commit + snapshot). Watchdog: same-tool repetition, read-without-write patterns, consecutive error tracking (5 → auto-stop). Watchdog injects intervention hints into tool results to guide LLM self-correction.
+- **Session** (`api/session/mod.rs`): Pure LLM layer. Owns message history. `step()` = one API round-trip. Auto-retries on `finish_reason=length` (halving max_tokens). Handles: tool call truncation, ID validation, orphaned tool message cleanup (two-pass sanitize). `PersistedContext` for 3-layer save/load (base, soul, context). `trim_tool_results()` truncates verbose tool outputs on save.
+- **AgentController** (`api/control/mod.rs`): Drive loop. Calls `step()`, executes tools, feeds results back, handles cancel/interrupt/restart. Supports `CompactFn` (persist compressed context) and `CheckpointFn` (git commit + snapshot). Watchdog: same-tool repetition, read-without-write patterns, consecutive error tracking (5 → auto-stop). Watchdog injects intervention hints into tool results to guide LLM self-correction.
 
 ### Context Compaction
 
@@ -446,4 +446,4 @@ shuji-app/
 
 ### Project Status
 
-Prototype phase. Core actor system, collaboration flow, document system, audit system, checkpoint system, pipeline engine, and frontend work end-to-end. 202 unit + 481 integration = 683 Rust tests. Frontend: 36 Vitest test files.
+Prototype phase. Core actor system, collaboration flow, document system, audit system, checkpoint system, pipeline engine, and frontend work end-to-end. 约 730 个测试（以 `scripts/count_tests.sh` 输出为准）。

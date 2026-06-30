@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { DEPT_META_LIST, DEPT_RAIL_GROUPS } from '../constants';
 import { getReasoningConfig, setReasoningConfig as setReasoningConfigApi } from '../api';
 import { isDeptActive } from '../utils/deptLog';
+import { swallowError } from '../utils/error';
 import { deriveDeptActivitySummary } from '../utils/deptStepSummary';
 import { useDeptEvents } from '../hooks/useDeptEvents';
 import DeptCard from './DeptCard';
@@ -39,7 +40,7 @@ export default function DeptCardRail({
   useEffect(() => {
     getReasoningConfig()
       .then(setReasoningConfig)
-      .catch(() => {});
+      .catch(swallowError('DeptCardRail.loadReasoningConfig'));
   }, []);
 
   const handleReasoningChange = useCallback(async (newConfig: ReasoningConfig) => {

@@ -4,6 +4,7 @@ import { ALL_ROLES } from '../../constants';
 import { EFFORT_LABELS, EFFORT_ORDER, ROLE_BUILTIN_EFFORT } from '../../constants/reasoning';
 import type { ReasoningEffort, RoleReasoningConfig } from '../../types';
 import { getReasoningConfig, setReasoningConfig } from '../../api';
+import { swallowError } from '../../utils/error';
 import {
   SettingsSection,
   SettingsChip,
@@ -59,7 +60,7 @@ export default function ReasoningSettingsTab({
         setRoleOverrides(overrides);
         setRoleUseDefault(useDefault);
       })
-      .catch(() => {})
+      .catch(swallowError('ReasoningSettingsTab.loadConfig'))
       .finally(() => setLoading(false));
   }, []);
 

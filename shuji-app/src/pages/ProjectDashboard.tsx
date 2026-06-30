@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { classifyError } from '../utils/error';
+import { classifyError, swallowError } from '../utils/error';
 import { useDeptEvents } from '../hooks/useDeptEvents';
 import { useProject } from '../hooks/useProject';
 import { useChat } from '../hooks/useChat';
@@ -276,7 +276,9 @@ export default function ProjectDashboard() {
               context={gateContext}
               onView={() => openArtifact(docIdToPath(gateContext.docId!))}
               onApprove={(comment) => handleApproveDoc(gateContext.docId!, comment)}
-              onStop={() => cancelProcessing().catch(() => {})}
+              onStop={() =>
+                cancelProcessing().catch(swallowError('ProjectDashboard.cancelProcessing'))
+              }
             />
           ) : undefined
         }
