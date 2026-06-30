@@ -14,6 +14,21 @@ npm run tauri build    # 生产构建
 
 环境要求：Node.js >= 18，Rust >= 1.70。
 
+### Linux 系统依赖
+
+在 Ubuntu/Debian 上运行 Tauri 桌面应用需安装 GTK/WebKit 开发库（与 CI 一致）：
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
+  libgtk-3-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
+```
+
+构建 AppImage 还需 `libfuse2`。其他发行版见 [Tauri Linux prerequisites](https://v2.tauri.app/start/prerequisites/)。
+
+Python 项目测试需系统安装 `python3`（或 `python`）。
+
 新人请先读 [ONBOARDING.md](ONBOARDING.md)。架构叙事见 [shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md)；后续 agent 任务边界见 [shuji-app/docs/AGENT_TASKS.md](shuji-app/docs/AGENT_TASKS.md)；文件级索引见 [CLAUDE.md](CLAUDE.md)。
 
 ## 仓库目录约定
@@ -133,7 +148,7 @@ cargo clippy --manifest-path shuji-app/src-tauri/Cargo.toml --all-targets
 | Session | `cargo test --test session_test` | ❌ |
 | Session 控制 | `cargo test --test session_control_test` | ❌ |
 | 配置覆盖 | `cargo test --test config_test` | ❌ |
-| Workflow Profile | `cargo test --test workflow_profile_test` | ❌ |
+| Workflow mock | `cargo test --test workflow_mock_test` | ❌ |
 | E2E 工作流 | `cargo test --test workflow_demo_test` | ❌（Mock LLM） |
 | 审计 | `cargo test --test audit_test` | ❌ |
 | Checkpoint | `cargo test --test checkpoint_test` | ❌ |

@@ -6,6 +6,7 @@ use std::path::Path;
 use crate::tool::command_ops::{
     detect_project_type, execute_with_timeout, get_shell, parse_test_output,
 };
+use crate::tool::python_cmd::pytest_cmd;
 use crate::validate::report::{CheckResult, ValidateConfig};
 
 /// Run test gate: execute tests and produce a structured CheckResult.
@@ -129,11 +130,7 @@ fn build_test_cmd(project_type: &str, scope: &str, working_dir: &Path) -> String
                 "npm test".to_string()
             }
         }
-        "python" => match scope {
-            "unit" => "python -m pytest tests/ -v".to_string(),
-            "integration" => "python -m pytest tests/integration/ -v".to_string(),
-            _ => "python -m pytest -v".to_string(),
-        },
+        "python" => pytest_cmd(scope),
         _ => {
             // unknown project type — try common commands
             "cargo test".to_string()

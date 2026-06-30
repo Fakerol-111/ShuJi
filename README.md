@@ -45,6 +45,21 @@
 - Node.js >= 18
 - Rust >= 1.70
 
+#### Linux 额外依赖（Tauri 桌面应用）
+
+在 Ubuntu/Debian 上构建或运行 `npm run tauri dev` / `npm run tauri build` 前，需安装 Tauri 系统依赖：
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
+  libgtk-3-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
+```
+
+构建 AppImage 时还需 `libfuse2`。其他发行版请参考 [Tauri Linux 前置依赖](https://v2.tauri.app/start/prerequisites/)。
+
+Python 项目测试依赖 `python3`（或 `python`）；多数 Linux 发行版默认仅提供 `python3`。
+
 ### 安装与运行
 
 ```bash

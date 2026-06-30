@@ -5,8 +5,10 @@
 import { useState, useCallback } from 'react';
 import type { TabInfo } from '../components/TabBar';
 
+import { basenameFromPath } from '../utils/pathBasename';
+
 function tabLabelFromPath(path: string): string {
-  const name = path.split('/').pop() || path;
+  const name = basenameFromPath(path);
   return name.replace(/\.md$/, '');
 }
 

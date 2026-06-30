@@ -17,6 +17,7 @@ import {
 import { formatError } from '../utils/error';
 import { useEditorConfig } from '../hooks/useEditorConfig';
 import { openInEditorLabel, openLineInEditorLabel } from '../utils/editorLabel';
+import { basenameFromPath, splitPathParts } from '../utils/pathBasename';
 import type { DocumentDiff } from '../api';
 import type { LineageNode } from '../types';
 
@@ -50,7 +51,7 @@ async function loadAuditDiff(docId: string): Promise<DocumentDiff | null> {
 
 function docIdFromPath(docPath: string, metaId?: string): string {
   if (metaId) return metaId;
-  return docPath.split('/').pop()?.replace(/\.md$/, '') || '';
+  return basenameFromPath(docPath).replace(/\.md$/, '') || '';
 }
 
 export default function DocPreview({ projectDir, docPath, initialTab }: DocPreviewProps) {
@@ -80,7 +81,7 @@ export default function DocPreview({ projectDir, docPath, initialTab }: DocPrevi
   const isShujiMarkdown = docPath.startsWith('.shuji/') && docPath.endsWith('.md');
   const isMarkdown = docPath.endsWith('.md');
   const parsed = useMemo(() => parseFrontmatter(content), [content]);
-  const parts = docPath.split('/');
+  const parts = splitPathParts(docPath);
   const docId = isShujiMarkdown ? docIdFromPath(docPath, parsed.meta?.id) : '';
   const docStatus = parsed.meta?.status || '';
 
@@ -495,7 +496,7 @@ function CodePreview({
           }}
         >
           <span style={{ color: 'var(--code-muted)' }}>{fileGlyph(path)}</span>
-          <span className="truncate">{path.split('/').pop()}</span>
+          <span className="truncate">{basenameFromPath(path)}</span>
         </div>
         <div
           className="px-3 font-mono flex items-center gap-3 shrink-0"

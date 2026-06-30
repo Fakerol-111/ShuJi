@@ -279,7 +279,17 @@ async fn test_execute_command_block_dangerous() {
     let temp = common::create_test_project("tool_exec_danger");
     let root = temp.path();
 
-    let dangerous_commands = vec!["format c:", "sudo rm -rf /", "shutdown -h now"];
+    let dangerous_commands = vec![
+        "format c:",
+        "sudo rm -rf /",
+        "shutdown -h now",
+        #[cfg(not(windows))]
+        "rm -rf /",
+        #[cfg(not(windows))]
+        "cat /etc/passwd",
+        #[cfg(not(windows))]
+        "dd if=/dev/zero of=/dev/sda",
+    ];
 
     for cmd in dangerous_commands {
         let args = serde_json::json!({

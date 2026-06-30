@@ -2,7 +2,8 @@ use std::path::Path;
 use std::process::Stdio;
 use tokio::io::AsyncReadExt;
 
-use crate::tool::path::{PATH_ESCAPE, SYSTEM_BLOCKS};
+use crate::tool::path::check_command_safety;
+use crate::tool::python_cmd::pytest_cmd;
 use crate::tool::ToolOutput;
 
 /// Get the current platform's shell command.
@@ -125,38 +126,7 @@ pub async fn execute_with_timeout(
 /// Check if a command is safe to execute.
 /// Blocks dangerous system commands and path escape patterns.
 fn check_safe_command(cmd: &str) -> Result<(), &'static str> {
-    let c = cmd.trim();
-    let tokens: Vec<&str> = c.split_whitespace().collect();
-    if tokens.is_empty() {
-        return Ok(());
-    }
-
-    for &(keyword, reason) in SYSTEM_BLOCKS {
-        let kw_tokens: Vec<&str> = keyword.split_whitespace().collect();
-
-        let matched = if kw_tokens.len() == 1 {
-            // Single-token: match first command token (exact, or prefix for mkfs).
-            if keyword == "mkfs" {
-                tokens[0].starts_with("mkfs")
-            } else {
-                tokens[0] == keyword
-            }
-        } else {
-            // Multi-token: match prefix of command tokens.
-            tokens.len() >= kw_tokens.len() && tokens[..kw_tokens.len()] == kw_tokens[..]
-        };
-
-        if matched {
-            return Err(reason);
-        }
-    }
-
-    for &pattern in PATH_ESCAPE {
-        if c.to_lowercase().contains(pattern) {
-            return Err("Operation on files outside the project directory is prohibited");
-        }
-    }
-    Ok(())
+    check_command_safety(cmd)
 }
 
 // ── run_tests ─────────────────────────────────────────────────
@@ -187,11 +157,7 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
                 "npm test".to_string()
             }
         }
-        "python" => match scope {
-            "unit" => "python -m pytest tests/ -v".to_string(),
-            "integration" => "python -m pytest tests/integration/ -v".to_string(),
-            _ => "python -m pytest -v".to_string(),
-        },
+        "python" => pytest_cmd(scope),
         _ => {
             return ToolOutput::success_raw(
                 "run_tests",

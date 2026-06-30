@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { getDeptMeta } from '../constants';
 import { extractDocPath, stripActionPrefix, classifyDeptAction } from '../utils/deptLog';
+import { basenameFromPath } from '../utils/pathBasename';
 import type { DeptLogEntry } from '../types';
 
 const ACTION_CLASS_COLORS: Record<string, string> = {
@@ -45,7 +46,7 @@ export default function DeptActivityCard({ entry, onDocClick }: DeptActivityCard
             onClick={() => onDocClick(docPath)}
             className="text-caption text-gold hover:text-gold-dark mt-0.5 transition-opacity font-mono"
           >
-            {t('deptActivity.viewDoc')} → {docPath.split('/').pop()}
+            {t('deptActivity.viewDoc')} → {basenameFromPath(docPath)}
           </button>
         )}
       </div>
