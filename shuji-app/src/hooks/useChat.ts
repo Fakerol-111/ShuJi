@@ -7,7 +7,7 @@ import {
   cancelDiscuss as cancelDiscussApi,
   getChatHistory,
 } from '../api';
-import { formatError } from '../utils/error';
+import { formatError, swallowError } from '../utils/error';
 import { initialCabinetMessage, mergeMessages } from '../utils/chat';
 import type { ChatDeltaEvent, ChatMessage, PlanInfo } from '../types';
 
@@ -181,7 +181,7 @@ export function useChat(initialMessages: ChatMessage[]) {
       const cancelledId = streamingIdRef.current;
       streamingIdRef.current = null;
       setDiscussing(false);
-      cancelDiscussApi().catch(() => {});
+      cancelDiscussApi().catch(swallowError('useChat.cancelDiscuss'));
       setDiscussMsgs((prev) => {
         const withoutPartial =
           cancelledId != null ? prev.filter((m) => m.id !== cancelledId) : prev;

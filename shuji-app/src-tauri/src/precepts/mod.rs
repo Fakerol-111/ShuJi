@@ -49,26 +49,38 @@ pub fn detect_precept_files(working_dir: &Path) -> Vec<PreceptFile> {
 
     let mut result = Vec::new();
 
-    for detector in detectors.unwrap() {
+    // 已在上方检查 detectors.is_none()，此处安全 unwrap 或改用 if let
+    let detectors = match detectors {
+        Some(d) => d,
+        None => return vec![],
+    };
+
+    for detector in detectors {
         let files = detector["files"].as_array();
         let precepts = detector["precepts"].as_array();
         if files.is_none() || precepts.is_none() {
             continue;
         }
 
-        let matched = files.unwrap().iter().any(|f| {
-            let fname = f.as_str().unwrap_or("");
-            working_dir.join(fname).exists()
-        });
+        let matched = files
+            .map(|fs| {
+                fs.iter().any(|f| {
+                    let fname = f.as_str().unwrap_or("");
+                    working_dir.join(fname).exists()
+                })
+            })
+            .unwrap_or(false);
 
         if matched {
-            for p in precepts.unwrap() {
-                let name = p.as_str().unwrap_or("");
-                if !name.is_empty() {
-                    result.push(PreceptFile {
-                        file_name: name.to_string(),
-                        path: format!("assets/precepts/{}", name),
-                    });
+            if let Some(ps) = precepts {
+                for p in ps {
+                    let name = p.as_str().unwrap_or("");
+                    if !name.is_empty() {
+                        result.push(PreceptFile {
+                            file_name: name.to_string(),
+                            path: format!("assets/precepts/{}", name),
+                        });
+                    }
                 }
             }
         }
