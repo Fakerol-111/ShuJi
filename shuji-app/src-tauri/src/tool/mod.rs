@@ -19,6 +19,7 @@ pub mod lint_ops;
 pub mod neige_special;
 pub mod output;
 pub mod path;
+pub mod python_cmd;
 pub mod registry;
 pub mod shangshuling_special;
 pub mod test_env;

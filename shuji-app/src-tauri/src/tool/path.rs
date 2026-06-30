@@ -138,3 +138,124 @@ pub const PATH_ESCAPE: &[&str] = &[
     "%appdata%",
     "%programfiles%",
 ];
+
+/// Unix/Linux system path patterns for string-based detection.
+pub const UNIX_PATH_ESCAPE: &[&str] = &[
+    "/etc/",
+    "/root/",
+    "/proc/",
+    "/sys/",
+    "/dev/",
+    "/boot/",
+    "/sbin/",
+    "/usr/sbin/",
+];
+
+/// Destructive command substrings checked on all platforms.
+pub const DESTRUCTIVE_PATTERNS: &[&str] = &[
+    "rm -rf /",
+    "rm -fr /",
+    "rm -rf /*",
+    "rm -fr /*",
+    ":(){ :|:& };:",
+];
+
+/// Unix-specific command blocklist extensions.
+pub const UNIX_SYSTEM_BLOCKS: &[(&str, &str)] = &[
+    ("dd", "disk write operation forbidden"),
+    ("chroot", "chroot privilege escalation forbidden"),
+];
+
+/// Check if a shell command is safe to execute.
+pub fn check_command_safety(cmd: &str) -> Result<(), &'static str> {
+    let c = cmd.trim();
+    let tokens: Vec<&str> = c.split_whitespace().collect();
+    if tokens.is_empty() {
+        return Ok(());
+    }
+
+    let blocklists: &[&[(&str, &str)]] = if cfg!(windows) {
+        &[SYSTEM_BLOCKS]
+    } else {
+        &[SYSTEM_BLOCKS, UNIX_SYSTEM_BLOCKS]
+    };
+
+    for blocks in blocklists {
+        for &(keyword, reason) in *blocks {
+            let kw_tokens: Vec<&str> = keyword.split_whitespace().collect();
+
+            let matched = if kw_tokens.len() == 1 {
+                if keyword == "mkfs" {
+                    tokens[0].starts_with("mkfs")
+                } else {
+                    tokens[0] == keyword
+                }
+            } else {
+                tokens.len() >= kw_tokens.len() && tokens[..kw_tokens.len()] == kw_tokens[..]
+            };
+
+            if matched {
+                return Err(reason);
+            }
+        }
+    }
+
+    let path_patterns: Vec<&str> = if cfg!(windows) {
+        PATH_ESCAPE.to_vec()
+    } else {
+        PATH_ESCAPE
+            .iter()
+            .chain(UNIX_PATH_ESCAPE.iter())
+            .copied()
+            .collect()
+    };
+
+    let lower = c.to_lowercase();
+    for pattern in path_patterns {
+        if lower.contains(pattern) {
+            return Err("Operation on files outside the project directory is prohibited");
+        }
+    }
+
+    for pattern in DESTRUCTIVE_PATTERNS {
+        if lower.contains(pattern) {
+            return Err("destructive system operation forbidden");
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod command_safety_tests {
+    use super::check_command_safety;
+
+    #[test]
+    fn blocks_sudo() {
+        assert!(check_command_safety("sudo rm -rf /").is_err());
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn blocks_rm_rf_root() {
+        assert!(check_command_safety("rm -rf /").is_err());
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn blocks_dd() {
+        assert!(check_command_safety("dd if=/dev/zero of=/dev/sda").is_err());
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn blocks_etc_access() {
+        assert!(check_command_safety("cat /etc/passwd").is_err());
+    }
+
+    #[test]
+    fn allows_project_relative_commands() {
+        assert!(check_command_safety("cargo test --lib").is_ok());
+        assert!(check_command_safety("npm test").is_ok());
+    }
+}

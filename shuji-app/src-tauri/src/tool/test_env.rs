@@ -1,13 +1,14 @@
 //! `setup_test_env` tool: prepares test environment for different project types.
 //!
 //! Supports:
-//! - python: `python -m venv .venv` + pip install
+//! - python: `python3 -m venv .venv` (or `python`) + pip install
 //! - node: `npm ci` or `npm install`
 //! - rust: `cargo fetch` (optional, skip by default)
 
 use std::path::Path;
 
 use crate::tool::command_ops::{execute_with_timeout, get_shell};
+use crate::tool::python_cmd::{python_command, venv_create_cmd};
 use crate::tool::ToolOutput;
 
 /// Set up test environment for the project.
@@ -82,18 +83,16 @@ pub async fn tool_setup_test_env(working_dir: &Path, args: &serde_json::Value) -
             }
 
             // Create venv
-            let venv_cmd = "python -m venv .venv";
+            let venv_cmd = venv_create_cmd();
+            let py = python_command();
             let timeout = std::time::Duration::from_secs(300);
-            match execute_with_timeout(shell, &shell_args, venv_cmd, working_dir, timeout).await {
+            match execute_with_timeout(shell, &shell_args, &venv_cmd, working_dir, timeout).await {
                 Ok(o) if !o.status.success() => {
                     return ToolOutput::error(
                         "setup_test_env",
                         "",
                         "venv_failed",
-                        &format!(
-                            "python -m venv failed exit={}",
-                            o.status.code().unwrap_or(-1)
-                        ),
+                        &format!("{py} -m venv failed exit={}", o.status.code().unwrap_or(-1)),
                     );
                 }
                 Err(e) => {

@@ -1,4 +1,5 @@
 import { getDeptMeta } from '../constants';
+import { basenameFromPath } from './pathBasename';
 import type { DeptStepEntry, DeptStepKind } from '../types';
 
 export type Lang = 'zh' | 'en';
@@ -79,11 +80,11 @@ function extractArtifact(
         if (docMatch) return docMatch[1];
         const pathMatch = val.match(SHUJI_DOC_RE);
         if (pathMatch) {
-          const base = pathMatch[0].split('/').pop() || pathMatch[0];
+          const base = basenameFromPath(pathMatch[0]);
           return base.replace('.md', '');
         }
         if (val.includes('.shuji/')) {
-          const base = val.split('/').pop() || val;
+          const base = basenameFromPath(val);
           return base.replace('.md', '');
         }
       }

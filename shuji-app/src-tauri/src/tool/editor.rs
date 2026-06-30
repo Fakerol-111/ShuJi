@@ -343,6 +343,45 @@ fn well_known_editor_bins(kind: &EditorKind) -> Vec<PathBuf> {
         }
     }
 
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(home) = env_path("HOME") {
+            // Flatpak user exports
+            bins.push(home.join(".local/share/flatpak/exports/bin/com.visualstudio.code"));
+            bins.push(home.join(".local/share/flatpak/exports/bin/cursor"));
+        }
+
+        match kind {
+            EditorKind::Vscode => {
+                bins.push(PathBuf::from("/usr/bin/code"));
+                bins.push(PathBuf::from("/usr/local/bin/code"));
+                bins.push(PathBuf::from("/snap/bin/code"));
+                bins.push(PathBuf::from(
+                    "/var/lib/flatpak/exports/bin/com.visualstudio.code",
+                ));
+            }
+            EditorKind::Cursor => {
+                bins.push(PathBuf::from("/usr/bin/cursor"));
+                bins.push(PathBuf::from("/usr/local/bin/cursor"));
+                bins.push(PathBuf::from("/snap/bin/cursor"));
+                bins.push(PathBuf::from("/var/lib/flatpak/exports/bin/cursor"));
+            }
+            EditorKind::Zed => {
+                bins.push(PathBuf::from("/usr/bin/zed"));
+                bins.push(PathBuf::from("/usr/local/bin/zed"));
+            }
+            EditorKind::Sublime => {
+                bins.push(PathBuf::from("/usr/bin/subl"));
+                bins.push(PathBuf::from("/usr/local/bin/subl"));
+            }
+            EditorKind::Jetbrains => {
+                bins.push(PathBuf::from("/usr/bin/idea"));
+                bins.push(PathBuf::from("/usr/local/bin/idea"));
+            }
+            EditorKind::Trae | EditorKind::Custom => {}
+        }
+    }
+
     bins
 }
 
@@ -631,6 +670,38 @@ mod tests {
                     && path.to_string_lossy().to_lowercase().ends_with("code.cmd")
             }),
             "expected VS Code well-known path, got: {bins:?}"
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn well_known_vscode_includes_linux_paths() {
+        let bins = well_known_editor_bins(&EditorKind::Vscode);
+        let paths: Vec<String> = bins
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect();
+        assert!(
+            paths
+                .iter()
+                .any(|p| p.contains("/usr/bin/code") || p.contains("/snap/bin/code")),
+            "expected Linux VS Code paths, got: {paths:?}"
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn well_known_cursor_includes_linux_paths() {
+        let bins = well_known_editor_bins(&EditorKind::Cursor);
+        let paths: Vec<String> = bins
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect();
+        assert!(
+            paths
+                .iter()
+                .any(|p| p.contains("/usr/bin/cursor") || p.contains("/snap/bin/cursor")),
+            "expected Linux Cursor paths, got: {paths:?}"
         );
     }
 
