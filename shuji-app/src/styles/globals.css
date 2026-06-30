@@ -26,7 +26,7 @@
   --color-jade-light: #edf5f0;
 
   /* ── Cockpit layout ── */
-  --cockpit-rail-width: 280px;
+  --cockpit-rail-width: clamp(220px, 20vw, 280px);
   --cockpit-command-height: 40px;
   --cockpit-command-expanded-max: 240px;
   --cockpit-stage-padding: 1rem;
@@ -722,6 +722,13 @@
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* Suppress transitions/animations during artifact drag to reduce WebView reflow */
+.is-resizing,
+.is-resizing * {
+  transition: none !important;
+  animation: none !important;
 }
 
 @layer components {

@@ -62,8 +62,8 @@ export default function DeptCardRail({
   };
 
   return (
-    <div className="w-[var(--cockpit-rail-width)] shrink-0 overflow-y-auto overflow-x-hidden border-r border-fold bg-surface-parchment/40 flex flex-col">
-      <div className="flex-1 min-h-0">
+    <div className="w-[var(--cockpit-rail-width)] shrink-0 min-h-0 overflow-hidden border-r border-fold bg-surface-parchment/40 flex flex-col">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         {DEPT_RAIL_GROUPS.map((group, gi) => (
           <div key={gi}>
             {gi > 0 && <div className="border-b border-fold/50 mx-2" />}
@@ -83,7 +83,7 @@ export default function DeptCardRail({
         ))}
       </div>
 
-      <div className="border-t border-fold">
+      <div className="shrink-0 border-t border-fold">
         <button
           onClick={() => onSelect(selected === '__all__' ? null : '__all__')}
           className={`

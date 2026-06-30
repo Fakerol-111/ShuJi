@@ -12,7 +12,15 @@ import type { Project } from '../types';
 const ARTIFACT_MIN = 320;
 const ARTIFACT_MAX = 680;
 const ARTIFACT_DEFAULT = 520;
+const RESERVED_MIN_MAIN = 420;
 const ARTIFACT_PREF_KEY = 'shuji_artifact_width';
+
+function clampArtifactWidth(width: number, available: number): number {
+  const maxByViewport = Math.max(0, available - RESERVED_MIN_MAIN);
+  const max = Math.min(ARTIFACT_MAX, maxByViewport);
+  if (max < ARTIFACT_MIN) return 0;
+  return Math.max(ARTIFACT_MIN, Math.min(max, width));
+}
 
 function loadArtifactWidth(): number {
   try {
@@ -74,50 +82,72 @@ export default function DashboardLayout({
 }: Props) {
   const { t } = useTranslation();
   const [artifactWidth, setArtifactWidth] = useState(loadArtifactWidth);
-  const dragRef = useRef(false);
-  const startXRef = useRef(0);
-  const startWidthRef = useRef(0);
+  const [isResizing, setIsResizing] = useState(false);
 
-  const onDragStart = useCallback(
-    (e: React.MouseEvent) => {
-      dragRef.current = true;
-      startXRef.current = e.clientX;
-      startWidthRef.current = artifactWidth;
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-    },
-    [artifactWidth]
-  );
+  const mainContainerRef = useRef<HTMLDivElement>(null);
+  const latestWidthRef = useRef(artifactWidth);
+  const rafIdRef = useRef(0);
 
+  // Sync latestWidthRef with state
+  latestWidthRef.current = artifactWidth;
+
+  // ResizeObserver: clamp artifact width when available space changes
   useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      if (!dragRef.current) return;
-      const delta = e.clientX - startXRef.current;
+    const el = mainContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const available = entry.contentRect.width;
+      const clamped = clampArtifactWidth(latestWidthRef.current, available);
+      if (clamped !== latestWidthRef.current) {
+        latestWidthRef.current = clamped;
+        setArtifactWidth(clamped);
+        saveArtifactWidth(clamped);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Pointer-based drag with RAF throttling
+  const onDragStart = useCallback((e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setIsResizing(true);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, []);
+
+  const onDragMove = useCallback((e: React.PointerEvent) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+    rafIdRef.current = requestAnimationFrame(() => {
+      const delta = e.movementX;
       const newWidth = Math.max(
         ARTIFACT_MIN,
-        Math.min(ARTIFACT_MAX, startWidthRef.current - delta)
+        Math.min(ARTIFACT_MAX, latestWidthRef.current - delta)
       );
+      latestWidthRef.current = newWidth;
       setArtifactWidth(newWidth);
-    };
-    const onUp = () => {
-      if (!dragRef.current) return;
-      dragRef.current = false;
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      saveArtifactWidth(artifactWidth);
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-  }, [artifactWidth]);
+    });
+  }, []);
+
+  const onDragEnd = useCallback((e: React.PointerEvent) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+    setIsResizing(false);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    saveArtifactWidth(latestWidthRef.current);
+  }, []);
 
   return (
     <DeptEventsProvider>
       <UsageStatsProvider>
-        <div className="h-screen bg-surface-paper flex flex-col overflow-hidden">
+        <div
+          className={`h-screen bg-surface-paper flex flex-col overflow-hidden${isResizing ? ' is-resizing' : ''}`}
+        >
           <header className="bg-ink-900 border-b border-gold/30 shrink-0 h-12 px-4 flex items-center justify-between">
             <div className="flex items-center gap-3 min-w-0">
               <SealLogo size={20} />
@@ -146,7 +176,7 @@ export default function DashboardLayout({
 
           {approvalBanner}
 
-          <div className="flex-1 flex min-h-0 overflow-hidden">
+          <div className="flex-1 flex min-h-0 min-w-0 overflow-hidden">
             <ActivityBar
               selected={activity}
               onSelect={onActivity}
@@ -162,9 +192,9 @@ export default function DashboardLayout({
                 onShowDiff={onShowDiff}
               />
             )}
-            <div className="flex-1 flex min-h-0">
+            <div ref={mainContainerRef} className="flex-1 flex min-w-0 min-h-0 overflow-hidden">
               {activity === 'graph' ? (
-                <div className="flex-1 min-h-0">{artifactPanel}</div>
+                <div className="flex-1 min-w-0 min-h-0 overflow-hidden">{artifactPanel}</div>
               ) : (
                 <div className="flex-1 min-w-0 min-h-0 flex flex-col">{agentStream}</div>
               )}
@@ -172,11 +202,13 @@ export default function DashboardLayout({
                 <>
                   <div
                     className="w-1 shrink-0 cursor-col-resize bg-fold hover:bg-gold/40 active:bg-gold/60 transition-colors"
-                    onMouseDown={onDragStart}
+                    onPointerDown={onDragStart}
+                    onPointerMove={onDragMove}
+                    onPointerUp={onDragEnd}
                   />
                   <aside
                     className="shrink-0 flex flex-col min-h-0 min-w-0 bg-surface-paper overflow-hidden"
-                    style={{ width: artifactWidth }}
+                    style={{ width: artifactWidth, maxWidth: ARTIFACT_MAX }}
                   >
                     {artifactPanel}
                   </aside>

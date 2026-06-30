@@ -50,10 +50,10 @@ export default function DutyBar({ projectDir }: DutyBarProps) {
   const validationReport = runMetrics?.validation ?? null;
 
   return (
-    <div className="shrink-0">
+    <div className="shrink-0 min-w-0 overflow-hidden">
       <div className="h-7 bg-ink-900 border-t border-ink-800 flex items-center px-2 text-caption gap-0">
-        <div className="flex items-center gap-1 min-w-0 shrink-0">
-          <span className="text-gold/60 text-caption font-serif font-semibold tracking-wider mr-0.5">
+        <div className="flex items-center gap-1 min-w-0 flex-1 overflow-x-auto">
+          <span className="text-gold/60 text-caption font-serif font-semibold tracking-wider mr-0.5 shrink-0">
             {t('duty.title')}
           </span>
           {deptArray.length === 0 ? (
@@ -179,7 +179,7 @@ export default function DutyBar({ projectDir }: DutyBarProps) {
       )}
 
       {logsExpanded && (
-        <div className="h-48 border-t border-ink-800 overflow-hidden">
+        <div className="max-h-48 border-t border-ink-800 overflow-hidden">
           <DeptStatusPanel />
         </div>
       )}
