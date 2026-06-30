@@ -11,3 +11,13 @@ i18n.use(initReactI18next).init({
   fallbackLng: 'zh',
   interpolation: { escapeValue: false },
 });
+
+// jsdom lacks ResizeObserver — provide a minimal stub used by DashboardLayout
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class {
+    constructor(_cb: ResizeObserverCallback) {}
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
