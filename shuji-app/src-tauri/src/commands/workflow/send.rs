@@ -36,7 +36,7 @@ fn interrupt_active_departments_if_needed(system: &ActorSystem) {
         if current_role != Role::Neige.name() {
             if let Some(role) = Role::from_name(&current_role) {
                 if let Some(tx) = system.fast_txs.get(&role) {
-                    let _ = tx.send(FastMessage::Interrupt);
+                    let _ = tx.try_send(FastMessage::Interrupt);
                     log_console!("[commands] send_message: fast-interrupted {}", current_role);
                 }
             }
@@ -204,7 +204,7 @@ pub async fn discuss_with_cabinet(
         state
             .discuss_cancel
             .store(false, std::sync::atomic::Ordering::SeqCst);
-        friendly_error(&e.to_string())
+        friendly_error(e.to_string())
     })?;
     state
         .discuss_cancel
@@ -324,13 +324,13 @@ pub async fn discuss_stream(
         return Ok(());
     }
 
-    let text = stream_result.map_err(|e| friendly_error(&e.to_string()))?;
+    let text = stream_result.map_err(|e| friendly_error(e.to_string()))?;
     let final_content = if text.is_empty() { full_text } else { text };
 
     let mut msg = ChatMessage::new("内阁", &final_content);
     msg.id = message_id;
     app.emit("chat-complete", &msg)
-        .map_err(|e| friendly_error(&e.to_string()))?;
+        .map_err(|e| friendly_error(e.to_string()))?;
 
     Ok(())
 }
@@ -360,7 +360,7 @@ pub async fn cancel_processing(state: State<'_, AppState>) -> Result<(), String>
             log_console!("[commands] cancel_processing: all per-actor flags set");
         }
         for tx in sys.fast_txs.values() {
-            let _ = tx.send(FastMessage::Interrupt);
+            let _ = tx.try_send(FastMessage::Interrupt);
         }
         log_console!("[commands] cancel_processing: FastMessage::Interrupt sent to all actors");
         for tx in sys.senders.values() {

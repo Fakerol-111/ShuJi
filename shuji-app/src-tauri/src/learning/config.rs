@@ -44,7 +44,7 @@ static CONFIG_CACHE: RwLock<Option<LearningConfig>> = RwLock::new(None);
 static TEST_HOME_DIR: RwLock<Option<PathBuf>> = RwLock::new(None);
 
 thread_local! {
-    static TEST_CONFIG_PATH_OVERRIDE: RefCell<Option<PathBuf>> = RefCell::new(None);
+    static TEST_CONFIG_PATH_OVERRIDE: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
 }
 
 fn test_overrides_active() -> bool {

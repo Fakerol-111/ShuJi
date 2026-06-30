@@ -28,7 +28,7 @@ use super::emit::log_dept;
 use super::fallback::fallback_to_dispatcher;
 use super::mailbox::TaskPayload;
 use super::neige::append_neige_talk_and_build_context;
-use super::output::{handle_successful_output, ExecStepOutcome};
+use super::output::{handle_successful_output, ExecStepOutcome, SuccessfulOutputContext};
 
 /// 运行单条 Task 对应的内层 exec 循环。
 ///
@@ -118,15 +118,17 @@ pub(super) async fn run_exec_loop(
         match step_result {
             Ok(output) => {
                 match handle_successful_output(
-                    ctx,
-                    role_name,
-                    &task.content,
+                    SuccessfulOutputContext {
+                        ctx,
+                        role_name,
+                        task_content: &task.content,
+                        reply_to: &task.reply_to,
+                        context_msgs: &mut context_msgs,
+                        context_config: &context_config,
+                        fast_cancel: &fast_cancel,
+                        paused_for_decision,
+                    },
                     output,
-                    &task.reply_to,
-                    &mut context_msgs,
-                    &context_config,
-                    &fast_cancel,
-                    paused_for_decision,
                 )
                 .await
                 {

@@ -19,5 +19,5 @@ pub async fn validate_delivery_cmd(
         test_scope: test_scope.unwrap_or_else(|| "all".to_string()),
     };
 
-    validate_delivery(&std::path::Path::new(&project_dir), &opts).await
+    validate_delivery(std::path::Path::new(&project_dir), &opts).await
 }

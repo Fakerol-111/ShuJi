@@ -33,12 +33,12 @@ impl LearningKind {
 
     pub fn from_section_or_kind(section: Option<&str>, kind: Option<&str>) -> Option<Self> {
         if let Some(k) = kind {
-            return Self::from_str(k);
+            return Self::parse(k);
         }
         section.and_then(Self::from_section)
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "experience" | "经验" => Some(Self::Experience),
             "lesson" | "lessons" | "教训" => Some(Self::Lesson),
@@ -53,7 +53,7 @@ impl LearningKind {
     }
 
     fn from_section(section: &str) -> Option<Self> {
-        Self::from_str(section)
+        Self::parse(section)
     }
 }
 

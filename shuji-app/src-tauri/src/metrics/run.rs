@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn test_run_metrics_start_and_finalize() {
-        let mut m = RunMetrics::start("plan-test-001");
+        let m = RunMetrics::start("plan-test-001");
         assert_eq!(m.status, "running");
         assert!(m.completed_at.is_none());
         assert!(m.run_id.starts_with("plan-test-001_"));

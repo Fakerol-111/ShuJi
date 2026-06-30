@@ -60,29 +60,67 @@ pub struct PipelineEngine {
     runtime_config: Arc<RuntimeConfig>,
 }
 
-impl PipelineEngine {
-    /// Create a new engine from a freshly-submitted plan.
-    pub fn new(
-        plan: PipelinePlan,
-        actor_txs: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
-        fast_txs: crate::FastTxMap,
-        cancel_map: crate::CancelMap,
-        cancel: Arc<AtomicBool>,
+pub struct PipelineEngineContext {
+    pub actor_txs: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
+    pub fast_txs: crate::FastTxMap,
+    pub cancel_map: crate::CancelMap,
+    pub cancel: Arc<AtomicBool>,
+    pub project_dir: PathBuf,
+    pub workflow_graph: Option<Arc<tokio::sync::Mutex<WorkflowGraph>>>,
+    pub runtime_config: Arc<RuntimeConfig>,
+}
+
+impl PipelineEngineContext {
+    pub fn from_actor_system(
+        actor_system: &crate::actor::ActorSystem,
         project_dir: PathBuf,
-        workflow_graph: Option<Arc<tokio::sync::Mutex<WorkflowGraph>>>,
         runtime_config: Arc<RuntimeConfig>,
     ) -> Self {
         Self {
-            runtime: PlanRuntime::new(plan),
-            actor_txs,
-            fast_txs,
-            cancel_map,
-            cancel,
+            actor_txs: actor_system.senders.clone(),
+            fast_txs: Arc::new(actor_system.fast_txs.clone()),
+            cancel_map: actor_system.cancel_map.clone(),
+            cancel: actor_system.cancel.clone(),
             project_dir,
-            workflow_graph,
+            workflow_graph: Some(actor_system.workflow_graph.clone()),
+            runtime_config,
+        }
+    }
+
+    pub fn lightweight_for_tests(
+        actor_txs: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
+        project_dir: PathBuf,
+        runtime_config: Arc<RuntimeConfig>,
+    ) -> Self {
+        Self {
+            actor_txs,
+            fast_txs: Arc::new(HashMap::new()),
+            cancel_map: Arc::new(Mutex::new(HashMap::<
+                crate::models::role::Role,
+                Arc<AtomicBool>,
+            >::new())),
+            cancel: Arc::new(AtomicBool::new(false)),
+            project_dir,
+            workflow_graph: None,
+            runtime_config,
+        }
+    }
+}
+
+impl PipelineEngine {
+    /// Create a new engine from a freshly-submitted plan.
+    pub fn new(plan: PipelinePlan, context: PipelineEngineContext) -> Self {
+        Self {
+            runtime: PlanRuntime::new(plan),
+            actor_txs: context.actor_txs,
+            fast_txs: context.fast_txs,
+            cancel_map: context.cancel_map,
+            cancel: context.cancel,
+            project_dir: context.project_dir,
+            workflow_graph: context.workflow_graph,
             graph_last_role: "内阁".to_string(),
             run_metrics: None,
-            runtime_config,
+            runtime_config: context.runtime_config,
         }
     }
 
@@ -101,18 +139,9 @@ impl PipelineEngine {
         project_dir: PathBuf,
         runtime_config: Arc<RuntimeConfig>,
     ) -> Self {
-        Self {
-            runtime,
-            actor_txs: actor_system.senders.clone(),
-            fast_txs: Arc::new(actor_system.fast_txs.clone()),
-            cancel_map: actor_system.cancel_map.clone(),
-            cancel: actor_system.cancel.clone(),
-            project_dir,
-            workflow_graph: Some(actor_system.workflow_graph.clone()),
-            graph_last_role: "内阁".to_string(),
-            run_metrics: None,
-            runtime_config,
-        }
+        let context =
+            PipelineEngineContext::from_actor_system(actor_system, project_dir, runtime_config);
+        Self::from_runtime_context(runtime, context)
     }
 
     /// Legacy resume helper — only actor senders, no cancel/graph context.
@@ -126,20 +155,23 @@ impl PipelineEngine {
         project_dir: PathBuf,
         runtime_config: Arc<RuntimeConfig>,
     ) -> Self {
+        let context =
+            PipelineEngineContext::lightweight_for_tests(actor_txs, project_dir, runtime_config);
+        Self::from_runtime_context(runtime, context)
+    }
+
+    pub fn from_runtime_context(runtime: PlanRuntime, context: PipelineEngineContext) -> Self {
         Self {
             runtime,
-            actor_txs,
-            fast_txs: Arc::new(HashMap::new()),
-            cancel_map: Arc::new(Mutex::new(HashMap::<
-                crate::models::role::Role,
-                Arc<AtomicBool>,
-            >::new())),
-            cancel: Arc::new(AtomicBool::new(false)),
-            project_dir,
-            workflow_graph: None,
+            actor_txs: context.actor_txs,
+            fast_txs: context.fast_txs,
+            cancel_map: context.cancel_map,
+            cancel: context.cancel,
+            project_dir: context.project_dir,
+            workflow_graph: context.workflow_graph,
             graph_last_role: "内阁".to_string(),
             run_metrics: None,
-            runtime_config,
+            runtime_config: context.runtime_config,
         }
     }
 
@@ -155,7 +187,7 @@ impl PipelineEngine {
                 }
             }
             // Also check step artifacts for validate_delivery steps
-            for (step_id, _artifact) in &self.runtime.artifacts {
+            for step_id in self.runtime.artifacts.keys() {
                 if step_id.contains("validate") || step_id == "v1" {
                     // Try to read the validation report from .shuji/validate/latest.json
                     let report_path = self

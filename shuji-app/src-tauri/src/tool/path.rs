@@ -97,6 +97,11 @@ pub async fn resolve_scoped_path(root: &Path, rel: &str) -> Result<PathBuf, Stri
 
 /// Command blocklist: (keyword, reason) tuples
 pub const SYSTEM_BLOCKS: &[(&str, &str)] = &[
+    ("del", "file deletion command forbidden"),
+    ("erase", "file deletion command forbidden"),
+    ("rd", "directory deletion command forbidden"),
+    ("rmdir", "directory deletion command forbidden"),
+    ("remove-item", "PowerShell recursive deletion forbidden"),
     ("format", "formatting disk forbidden"),
     ("mkfs", "formatting disk forbidden"),
     ("fdisk", "modifying partition table forbidden"),
@@ -117,7 +122,14 @@ pub const SYSTEM_BLOCKS: &[(&str, &str)] = &[
     ("net localgroup", "managing user groups forbidden"),
     ("cacls", "modifying file permissions forbidden"),
     ("wget", "remote download/execution forbidden"),
+    ("curl", "remote download/execution forbidden"),
+    ("iwr", "remote download forbidden"),
+    ("invoke-webrequest", "remote download forbidden"),
     ("powershell -enc", "encoded PowerShell execution forbidden"),
+    (
+        "powershell -encodedcommand",
+        "encoded PowerShell execution forbidden",
+    ),
     ("certutil -urlcache", "remote download forbidden"),
     ("bitsadmin /transfer", "remote download forbidden"),
     ("mshta", "MSHTA script execution forbidden"),
@@ -137,6 +149,11 @@ pub const PATH_ESCAPE: &[&str] = &[
     "%windir%",
     "%appdata%",
     "%programfiles%",
+    "$env:",
+    "$home",
+    "c:\\windows",
+    "c:/windows",
+    "\\\\",
 ];
 
 /// Unix/Linux system path patterns for string-based detection.
@@ -157,6 +174,8 @@ pub const DESTRUCTIVE_PATTERNS: &[&str] = &[
     "rm -fr /",
     "rm -rf /*",
     "rm -fr /*",
+    "remove-item",
+    " -recurse",
     ":(){ :|:& };:",
 ];
 
@@ -164,14 +183,64 @@ pub const DESTRUCTIVE_PATTERNS: &[&str] = &[
 pub const UNIX_SYSTEM_BLOCKS: &[(&str, &str)] = &[
     ("dd", "disk write operation forbidden"),
     ("chroot", "chroot privilege escalation forbidden"),
+    ("chmod", "permission modification forbidden"),
 ];
+
+const SHELL_CONTROL_PATTERNS: &[&str] = &["&&", "||", "|", ";", ">", "<", "`", "$("];
+
+const ALLOWED_COMMAND_PREFIXES: &[&str] = &[
+    "cargo test",
+    "cargo check",
+    "cargo clippy",
+    "cargo fmt --check",
+    "cargo build",
+    "cargo --version",
+    "rustc --version",
+    "npm test",
+    "npm run lint",
+    "npm run format:check",
+    "npm run build",
+    "npm --version",
+    "node --version",
+    "npx vitest run",
+    "npx jest",
+    "python -m pytest",
+    "python --version",
+    "py -m pytest",
+    "py --version",
+    "ruff check",
+    "ruff --version",
+];
+
+fn normalized_command(cmd: &str) -> String {
+    cmd.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
+
+fn is_allowed_command(lower: &str) -> bool {
+    ALLOWED_COMMAND_PREFIXES.iter().any(|prefix| {
+        lower == *prefix
+            || lower
+                .strip_prefix(prefix)
+                .is_some_and(|rest| rest.starts_with(' '))
+    })
+}
 
 /// Check if a shell command is safe to execute.
 pub fn check_command_safety(cmd: &str) -> Result<(), &'static str> {
     let c = cmd.trim();
-    let tokens: Vec<&str> = c.split_whitespace().collect();
+    let lower = normalized_command(c);
+    let tokens: Vec<&str> = lower.split_whitespace().collect();
     if tokens.is_empty() {
         return Ok(());
+    }
+
+    for pattern in SHELL_CONTROL_PATTERNS {
+        if lower.contains(pattern) {
+            return Err("shell control operators are forbidden");
+        }
     }
 
     let blocklists: &[&[(&str, &str)]] = if cfg!(windows) {
@@ -210,7 +279,6 @@ pub fn check_command_safety(cmd: &str) -> Result<(), &'static str> {
             .collect()
     };
 
-    let lower = c.to_lowercase();
     for pattern in path_patterns {
         if lower.contains(pattern) {
             return Err("Operation on files outside the project directory is prohibited");
@@ -221,6 +289,12 @@ pub fn check_command_safety(cmd: &str) -> Result<(), &'static str> {
         if lower.contains(pattern) {
             return Err("destructive system operation forbidden");
         }
+    }
+
+    if !is_allowed_command(&lower) {
+        return Err(
+            "command is not in the restricted allowlist; use run_tests/run_lint or an approved build/format command",
+        );
     }
 
     Ok(())
@@ -257,5 +331,25 @@ mod command_safety_tests {
     fn allows_project_relative_commands() {
         assert!(check_command_safety("cargo test --lib").is_ok());
         assert!(check_command_safety("npm test").is_ok());
+    }
+
+    #[test]
+    fn blocks_shell_control_operators() {
+        assert!(check_command_safety("cargo test && del important.txt").is_err());
+        assert!(check_command_safety("npm test; Remove-Item file").is_err());
+        assert!(check_command_safety("cargo test | powershell -enc aaa").is_err());
+    }
+
+    #[test]
+    fn blocks_case_insensitive_dangerous_commands() {
+        assert!(check_command_safety("SUDO rm -rf /").is_err());
+        assert!(check_command_safety("PoWeRsHeLl -EncodedCommand AAA").is_err());
+        assert!(check_command_safety("Invoke-WebRequest https://example.com/a.ps1").is_err());
+    }
+
+    #[test]
+    fn blocks_unknown_commands_by_default() {
+        assert!(check_command_safety("python setup.py install").is_err());
+        assert!(check_command_safety("git status").is_err());
     }
 }

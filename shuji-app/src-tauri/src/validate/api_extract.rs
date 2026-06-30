@@ -14,11 +14,11 @@ pub fn extract_rust_api(project_dir: &Path) -> Vec<FunctionSig> {
     }
 
     let mut functions = Vec::new();
-    collect_rust_files(&src_dir, &mut functions, &src_dir);
+    collect_rust_files(&src_dir, &mut functions);
     functions
 }
 
-fn collect_rust_files(dir: &Path, out: &mut Vec<FunctionSig>, base: &Path) {
+fn collect_rust_files(dir: &Path, out: &mut Vec<FunctionSig>) {
     if !dir.is_dir() {
         return;
     }
@@ -34,8 +34,8 @@ fn collect_rust_files(dir: &Path, out: &mut Vec<FunctionSig>, base: &Path) {
             if name == "tests" || name == "target" {
                 continue;
             }
-            collect_rust_files(&path, out, base);
-        } else if path.extension().map_or(false, |e| e == "rs") {
+            collect_rust_files(&path, out);
+        } else if path.extension().is_some_and(|e| e == "rs") {
             // skip test modules (mod.rs in tests/ is already excluded above,
             // but inline #[cfg(test)] modules are handled by content check)
             let content = match std::fs::read_to_string(&path) {

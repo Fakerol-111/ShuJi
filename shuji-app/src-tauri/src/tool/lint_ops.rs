@@ -63,7 +63,7 @@ pub async fn tool_run_lint(working_dir: &Path, args: &serde_json::Value) -> Stri
             let pass = if strict {
                 exit_code == 0
             } else {
-                exit_code == 0 || (exit_code != 0 && error_count == 0)
+                exit_code == 0 || error_count == 0
             };
 
             if pass {

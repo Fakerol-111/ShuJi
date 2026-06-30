@@ -4,17 +4,16 @@ use std::sync::LazyLock;
 use std::sync::Mutex;
 use std::time::SystemTime;
 
+type ProjectReadCache = HashMap<PathBuf, (SystemTime, String)>;
+type ReadCache = HashMap<PathBuf, ProjectReadCache>;
+
 // ── P2-2: In-memory read cache (per-project bucketed) ────
 /// Per-project read cache: working_dir → (path → (mtime, cached result)).
 /// Keying by working_dir isolates projects so switching projects doesn't
 /// require clearing the entire cache. Multi-project concurrent use is safe.
-static READ_CACHE: LazyLock<Mutex<HashMap<PathBuf, HashMap<PathBuf, (SystemTime, String)>>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+static READ_CACHE: LazyLock<Mutex<ReadCache>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
-fn bucket<'a>(
-    cache: &'a mut HashMap<PathBuf, HashMap<PathBuf, (SystemTime, String)>>,
-    working_dir: &Path,
-) -> &'a mut HashMap<PathBuf, (SystemTime, String)> {
+fn bucket<'a>(cache: &'a mut ReadCache, working_dir: &Path) -> &'a mut ProjectReadCache {
     cache.entry(working_dir.to_path_buf()).or_default()
 }
 

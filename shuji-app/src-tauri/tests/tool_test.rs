@@ -5,8 +5,8 @@
 mod common;
 
 use shuji_app_lib::tool::{
-    tool_append_file, tool_create_file, tool_delete_file, tool_execute_command, tool_list_dir,
-    tool_modify_file, tool_read_file, tool_rename_file,
+    execute_with_timeout, tool_append_file, tool_create_file, tool_delete_file,
+    tool_execute_command, tool_list_dir, tool_modify_file, tool_read_file, tool_rename_file,
 };
 
 /// Sync wrapper for async tool functions in tests.
@@ -297,17 +297,9 @@ async fn test_execute_command_block_dangerous() {
         });
 
         let result = tool_execute_command(root, &args, "test").await;
-        // Command should either be blocked by safety check OR fail to execute
-        // Both outcomes are safe - we just don't want it to succeed
-        assert!(
-            result.contains("Security block")
-                || result.contains("prohibited")
-                || result.contains("failed")
-                || result.contains("error"),
-            "Command '{}' should be blocked or fail: {}",
-            cmd,
-            result
-        );
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed["ok"], false, "Command '{cmd}' should be blocked");
+        assert_eq!(parsed["error_code"], "command_not_allowed");
     }
 }
 
@@ -322,26 +314,42 @@ async fn test_execute_command_non_blocking() {
     use std::time::Instant;
 
     let wd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let cmd = if cfg!(target_os = "windows") {
-        "timeout /t 2 /nobreak >nul"
+    let (shell, shell_args, cmd) = if cfg!(target_os = "windows") {
+        ("powershell", vec!["-Command"], "Start-Sleep -Seconds 2")
     } else {
-        "sleep 2"
+        ("sh", vec!["-c"], "sleep 2")
     };
-    let args = serde_json::json!({"command": cmd});
-    let dept = "_test";
 
     let start = Instant::now();
 
-    let args1 = args.clone();
     let wd1 = wd.clone();
-    let h1 = tokio::spawn(async move { tool_execute_command(&wd1, &args1, dept).await });
-    let h2 = tokio::spawn(async move { tool_execute_command(&wd, &args, dept).await });
+    let shell_args1 = shell_args.clone();
+    let h1 = tokio::spawn(async move {
+        execute_with_timeout(
+            shell,
+            &shell_args1,
+            cmd,
+            &wd1,
+            std::time::Duration::from_secs(5),
+        )
+        .await
+    });
+    let h2 = tokio::spawn(async move {
+        execute_with_timeout(
+            shell,
+            &shell_args,
+            cmd,
+            &wd,
+            std::time::Duration::from_secs(5),
+        )
+        .await
+    });
 
     let (r1, r2) = tokio::join!(h1, h2);
     let elapsed = start.elapsed();
 
-    r1.expect("task1 panicked");
-    r2.expect("task2 panicked");
+    r1.expect("task1 panicked").expect("task1 failed");
+    r2.expect("task2 panicked").expect("task2 failed");
 
     // If both ran concurrently, total ~2.5s (2s + overhead).
     // If serial (the bug), total ~4.5s (2s*2 + overhead).

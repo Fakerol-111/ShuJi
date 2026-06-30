@@ -231,7 +231,7 @@ mod tests {
         assert!(
             result.details["failed_tests"]
                 .as_array()
-                .map_or(false, |a| !a.is_empty()),
+                .is_some_and(|a| !a.is_empty()),
             "should list failed test names"
         );
     }

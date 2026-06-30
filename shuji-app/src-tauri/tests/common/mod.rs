@@ -4,7 +4,6 @@ pub mod fixtures;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use shuji_app_lib::actor::ActorMessage;
@@ -258,16 +257,21 @@ pub fn make_pipeline_engine(
     harness: &MockActorHarness,
     dir: &Path,
 ) -> PipelineEngine {
-    PipelineEngine::new(
-        plan,
+    make_pipeline_engine_with_config(plan, harness, dir, Arc::new(RuntimeConfig::default()))
+}
+
+pub fn make_pipeline_engine_with_config(
+    plan: PipelinePlan,
+    harness: &MockActorHarness,
+    dir: &Path,
+    runtime_config: Arc<RuntimeConfig>,
+) -> PipelineEngine {
+    let context = shuji_app_lib::pipeline::engine::PipelineEngineContext::lightweight_for_tests(
         harness.senders.clone(),
-        Arc::new(HashMap::new()),
-        Arc::new(std::sync::Mutex::new(HashMap::new())),
-        Arc::new(AtomicBool::new(false)),
         dir.to_path_buf(),
-        None,
-        Arc::new(RuntimeConfig::default()),
-    )
+        runtime_config,
+    );
+    PipelineEngine::new(plan, context)
 }
 
 /// Build a PipelinePlan with a single self_execute step.

@@ -321,8 +321,8 @@ fn test_plan_not_in_review() {
         .as_str()
         .unwrap_or(parsed["path"].as_str().unwrap_or(""));
     let bare_id = doc_id
-        .split('/')
-        .last()
+        .rsplit('/')
+        .next()
         .unwrap_or(doc_id)
         .trim_end_matches(".md");
 
@@ -343,8 +343,8 @@ fn test_revw_created_in_review() {
 
     let doc_path = parsed["path"].as_str().unwrap();
     let bare_id = doc_path
-        .split('/')
-        .last()
+        .rsplit('/')
+        .next()
         .unwrap_or(doc_path)
         .trim_end_matches(".md");
 
@@ -365,8 +365,8 @@ fn test_design_not_in_review() {
 
     let doc_path = parsed["path"].as_str().unwrap();
     let bare_id = doc_path
-        .split('/')
-        .last()
+        .rsplit('/')
+        .next()
         .unwrap_or(doc_path)
         .trim_end_matches(".md");
 
@@ -426,8 +426,8 @@ fn test_set_approved_removes_pending() {
         parsed["path"]
             .as_str()
             .unwrap_or("")
-            .split('/')
-            .last()
+            .rsplit('/')
+            .next()
             .unwrap_or("")
             .trim_end_matches(".md"),
     );
@@ -473,8 +473,8 @@ fn test_approved_revw_modify_reverts_to_in_review() {
         parsed["path"]
             .as_str()
             .unwrap_or("")
-            .split('/')
-            .last()
+            .rsplit('/')
+            .next()
             .unwrap_or("")
             .trim_end_matches(".md"),
     );
@@ -509,8 +509,8 @@ fn test_set_rejected_fails() {
         parsed["path"]
             .as_str()
             .unwrap_or("")
-            .split('/')
-            .last()
+            .rsplit('/')
+            .next()
             .unwrap_or("")
             .trim_end_matches(".md"),
     );
@@ -544,8 +544,8 @@ fn test_multiple_notes_roundtrip() {
         parsed["doc_id"]
             .as_str()
             .unwrap_or("")
-            .split('/')
-            .last()
+            .rsplit('/')
+            .next()
             .unwrap_or("")
             .trim_end_matches(".md"),
     );
@@ -600,8 +600,8 @@ fn test_set_status_plan_fails() {
         parsed["path"]
             .as_str()
             .unwrap_or("")
-            .split('/')
-            .last()
+            .rsplit('/')
+            .next()
             .unwrap_or("")
             .trim_end_matches(".md"),
     );
@@ -627,8 +627,8 @@ fn test_set_status_wrong_type_fails() {
         parsed["path"]
             .as_str()
             .unwrap_or("")
-            .split('/')
-            .last()
+            .rsplit('/')
+            .next()
             .unwrap_or("")
             .trim_end_matches(".md"),
     );
@@ -670,8 +670,8 @@ fn test_set_status_invalid_value_fails() {
         parsed["path"]
             .as_str()
             .unwrap_or("")
-            .split('/')
-            .last()
+            .rsplit('/')
+            .next()
             .unwrap_or("")
             .trim_end_matches(".md"),
     );
@@ -705,8 +705,8 @@ fn test_gate_blocks_unapproved_ref() {
         revw_parsed["path"]
             .as_str()
             .unwrap_or("")
-            .split('/')
-            .last()
+            .rsplit('/')
+            .next()
             .unwrap_or("")
             .trim_end_matches(".md"),
     );
@@ -722,8 +722,8 @@ fn test_gate_blocks_unapproved_ref() {
         dsgn_parsed["path"]
             .as_str()
             .unwrap_or("")
-            .split('/')
-            .last()
+            .rsplit('/')
+            .next()
             .unwrap_or("")
             .trim_end_matches(".md"),
     );
@@ -758,8 +758,8 @@ fn test_gate_passes_approved_ref() {
         revw_parsed["path"]
             .as_str()
             .unwrap_or("")
-            .split('/')
-            .last()
+            .rsplit('/')
+            .next()
             .unwrap_or("")
             .trim_end_matches(".md"),
     );
@@ -779,8 +779,8 @@ fn test_gate_passes_approved_ref() {
         dsgn_parsed["path"]
             .as_str()
             .unwrap_or("")
-            .split('/')
-            .last()
+            .rsplit('/')
+            .next()
             .unwrap_or("")
             .trim_end_matches(".md"),
     );
@@ -809,8 +809,8 @@ fn test_gate_blocks_rejected_ref() {
         revw_parsed["path"]
             .as_str()
             .unwrap_or("")
-            .split('/')
-            .last()
+            .rsplit('/')
+            .next()
             .unwrap_or("")
             .trim_end_matches(".md"),
     );
@@ -831,8 +831,8 @@ fn test_gate_blocks_rejected_ref() {
         dsgn_parsed["path"]
             .as_str()
             .unwrap_or("")
-            .split('/')
-            .last()
+            .rsplit('/')
+            .next()
             .unwrap_or("")
             .trim_end_matches(".md"),
     );
@@ -862,8 +862,8 @@ fn test_gate_no_refs_passes() {
         parsed["path"]
             .as_str()
             .unwrap_or("")
-            .split('/')
-            .last()
+            .rsplit('/')
+            .next()
             .unwrap_or("")
             .trim_end_matches(".md"),
     );
@@ -872,6 +872,73 @@ fn test_gate_no_refs_passes() {
     assert!(
         gate_result.is_ok(),
         "Gate should pass for docs with no refs"
+    );
+}
+
+#[test]
+fn test_gate_blocks_missing_subject_doc() {
+    let temp = common::create_test_project("gate_missing_subject");
+    let root = temp.path();
+
+    let gate_result = block_on(check_doc_refs_approved_for_route(root, "dsgn_999"));
+    assert!(
+        gate_result.is_err(),
+        "Gate should fail closed on missing subject"
+    );
+    assert!(
+        gate_result.unwrap_err().contains("does not exist"),
+        "Error should explain missing subject"
+    );
+}
+
+#[test]
+fn test_gate_blocks_unparseable_subject_doc() {
+    let temp = common::create_test_project("gate_bad_subject");
+    let root = temp.path();
+    let doc_dir = root.join(".shuji/designs");
+    std::fs::create_dir_all(&doc_dir).unwrap();
+    std::fs::write(doc_dir.join("dsgn_404.md"), "not valid frontmatter").unwrap();
+
+    let gate_result = block_on(check_doc_refs_approved_for_route(root, "dsgn_404"));
+    assert!(
+        gate_result.is_err(),
+        "Gate should fail closed on unparseable subject"
+    );
+    assert!(
+        gate_result.unwrap_err().contains("cannot be parsed"),
+        "Error should explain parse failure"
+    );
+}
+
+#[test]
+fn test_gate_blocks_unknown_revw_status() {
+    let temp = common::create_test_project("gate_unknown_status");
+    let root = temp.path();
+
+    let revw_args = serde_json::json!({"type": "revw", "refs": []});
+    let revw_result = block_on(tool_create_document(root, &revw_args, "menxiashizhong"));
+    let revw_parsed: serde_json::Value = serde_json::from_str(&revw_result).unwrap();
+    let revw_doc_id = revw_parsed["path"].as_str().unwrap();
+
+    let revw_path = root.join(format!(".shuji/reviews/{revw_doc_id}.md"));
+    let content = std::fs::read_to_string(&revw_path).unwrap();
+    let updated = content.replace("status: in_review", "status: unknown");
+    std::fs::write(&revw_path, updated).unwrap();
+
+    let revw_num = doc_num(revw_doc_id);
+    let dsgn_args = serde_json::json!({"type": "dsgn", "refs": [revw_num]});
+    let dsgn_result = block_on(tool_create_document(root, &dsgn_args, "zhongshuling"));
+    let dsgn_parsed: serde_json::Value = serde_json::from_str(&dsgn_result).unwrap();
+    let dsgn_doc_id = dsgn_parsed["path"].as_str().unwrap();
+
+    let gate_result = block_on(check_doc_refs_approved_for_route(root, dsgn_doc_id));
+    assert!(
+        gate_result.is_err(),
+        "Gate should fail closed on unknown revw status"
+    );
+    assert!(
+        gate_result.unwrap_err().contains("not approved yet"),
+        "Unknown status should be treated as not approved"
     );
 }
 
@@ -894,8 +961,8 @@ fn test_pending_approval_add_remove() {
         parsed["path"]
             .as_str()
             .unwrap_or("")
-            .split('/')
-            .last()
+            .rsplit('/')
+            .next()
             .unwrap_or("")
             .trim_end_matches(".md"),
     );
