@@ -300,21 +300,32 @@ pub async fn discuss_stream(
     let mut full_text = String::new();
 
     let stream_result = client
-        .stream_message(&system_prompt, &msgs, &ep.model, cancel.clone(), |delta| {
-            if cancel.load(Ordering::SeqCst) {
-                return Ok(());
-            }
-            full_text.push_str(delta);
-            let _ = app_for_delta.emit(
-                "chat-delta",
-                ChatDeltaEvent {
-                    message_id: delta_id.clone(),
-                    role: "内阁".into(),
-                    delta: delta.to_string(),
-                },
-            );
-            Ok(())
-        })
+        .stream_message_with_reasoning(
+            &system_prompt,
+            &msgs,
+            &ep.model,
+            cancel.clone(),
+            crate::config::ResolvedReasoningPolicy {
+                enabled: true,
+                effort: crate::config::ReasoningEffort::Low,
+                budget_tokens: 0,
+            },
+            |delta| {
+                if cancel.load(Ordering::SeqCst) {
+                    return Ok(());
+                }
+                full_text.push_str(delta);
+                let _ = app_for_delta.emit(
+                    "chat-delta",
+                    ChatDeltaEvent {
+                        message_id: delta_id.clone(),
+                        role: "内阁".into(),
+                        delta: delta.to_string(),
+                    },
+                );
+                Ok(())
+            },
+        )
         .await;
 
     state.discuss_cancel.store(false, Ordering::SeqCst);

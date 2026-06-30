@@ -5,8 +5,9 @@
 mod common;
 
 use shuji_app_lib::tool::documents::{
-    check_doc_refs_approved_for_route, get_first_pending_approval, tool_append_document,
-    tool_create_document, tool_find_document, tool_modify_document, tool_set_document_status,
+    check_doc_refs_approved_for_append, check_doc_refs_approved_for_route,
+    get_first_pending_approval, tool_append_document, tool_create_document, tool_find_document,
+    tool_modify_document, tool_set_document_status,
 };
 use std::path::Path;
 
@@ -1108,4 +1109,156 @@ fn test_neige_can_create_task() {
         .join(".shuji/tasks")
         .join(format!("{doc_id}.md"))
         .exists());
+}
+
+// ── append_document on in_review revw (bug fix) ───────────────
+
+/// Helper: read a .shuji document's body text (everything after the --- separator).
+fn read_doc_body(root: &Path, doc_id: &str) -> Option<String> {
+    let prefix = doc_id.split('_').next()?;
+    let dir = match prefix {
+        "plan" | "dsgn" | "pdsg" | "ddtl" => "designs",
+        "revw" => "reviews",
+        "ctrt" => "contracts",
+        _ => "",
+    };
+    let path = root.join(".shuji").join(dir).join(format!("{}.md", doc_id));
+    let content = std::fs::read_to_string(&path).ok()?;
+    // Body is after the first `---` line
+    let idx = content.find("---\n")?;
+    Some(content[idx + 4..].trim().to_string())
+}
+
+/// 15. append_document succeeds on in_review revw (core bug fix).
+///
+/// Before the fix, append_document used check_doc_refs_approved_for_route
+/// which required the revw to be already approved — an impossible condition
+/// since approval requires content that can't be written.
+#[test]
+fn test_append_document_succeeds_on_in_review_revw() {
+    let temp = common::create_test_project("append_revw_in_review");
+    let root = temp.path();
+
+    // Create a revw document (auto status=in_review)
+    let create_args = serde_json::json!({"type": "revw", "refs": []});
+    let result = block_on(tool_create_document(root, &create_args, "menxiashizhong"));
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+    assert_eq!(parsed["ok"], true, "create should succeed: {}", result);
+    let doc_id = parsed["path"].as_str().unwrap();
+
+    // Verify status is in_review
+    assert_eq!(read_doc_status(root, doc_id).as_deref(), Some("in_review"));
+
+    // Append content to the revw — this must succeed
+    let append_args =
+        serde_json::json!({"id": doc_id, "content": "## Review\nOverall the design is solid."});
+    let append_result = block_on(tool_append_document(root, &append_args, "menxiashizhong"));
+    let append_parsed: serde_json::Value = serde_json::from_str(&append_result).unwrap();
+    assert_eq!(
+        append_parsed["ok"], true,
+        "append to in_review revw must succeed: {}",
+        append_result
+    );
+
+    // Verify body was written
+    let body = read_doc_body(root, doc_id).unwrap();
+    assert!(
+        body.contains("Overall the design is solid"),
+        "Body should contain appended text: {}",
+        body
+    );
+}
+
+/// 16. append on in_review revw preserves in_review status.
+#[test]
+fn test_append_revw_preserves_in_review_status() {
+    let temp = common::create_test_project("append_revw_status");
+    let root = temp.path();
+
+    let create_args = serde_json::json!({"type": "revw", "refs": []});
+    let result = block_on(tool_create_document(root, &create_args, "menxiashizhong"));
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+    assert_eq!(parsed["ok"], true);
+    let doc_id = parsed["path"].as_str().unwrap();
+
+    assert_eq!(read_doc_status(root, doc_id).as_deref(), Some("in_review"));
+
+    // Append content
+    let append_args = serde_json::json!({"id": doc_id, "content": "Some review body."});
+    let _ = block_on(tool_append_document(root, &append_args, "menxiashizhong"));
+
+    // Status should still be in_review (not auto-approved)
+    assert_eq!(
+        read_doc_status(root, doc_id).as_deref(),
+        Some("in_review"),
+        "append must not auto-approve a revw"
+    );
+}
+
+/// 17. check_doc_refs_approved_for_append allows in_review revw.
+#[test]
+fn test_append_gate_allows_in_review_revw() {
+    let temp = common::create_test_project("append_gate_in_review");
+    let root = temp.path();
+
+    // Create a revw → in_review
+    let create_args = serde_json::json!({"type": "revw", "refs": []});
+    let result = block_on(tool_create_document(root, &create_args, "menxiashizhong"));
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+    assert_eq!(parsed["ok"], true);
+    let doc_id = parsed["path"].as_str().unwrap();
+
+    // The append-level gate must allow this revw
+    let gate_result = block_on(check_doc_refs_approved_for_append(root, doc_id));
+    assert!(
+        gate_result.is_ok(),
+        "append gate must allow in_review revw, got: {:?}",
+        gate_result
+    );
+}
+
+/// 18. append stays blocked when revw refs an unapproved upstream revw.
+#[test]
+fn test_append_gate_blocks_unapproved_upstream_ref() {
+    let temp = common::create_test_project("append_gate_unapproved_ref");
+    let root = temp.path();
+
+    // Create upstream revw (in_review)
+    let upstream_args = serde_json::json!({"type": "revw", "refs": []});
+    let up_result = block_on(tool_create_document(root, &upstream_args, "menxiashizhong"));
+    let up_parsed: serde_json::Value = serde_json::from_str(&up_result).unwrap();
+    assert_eq!(up_parsed["ok"], true);
+    let up_id = up_parsed["path"].as_str().unwrap();
+    let up_num = doc_num(up_id);
+
+    // Create a downstream revw referencing the unapproved upstream
+    let down_args = serde_json::json!({"type": "revw", "refs": [up_num]});
+    let down_result = block_on(tool_create_document(root, &down_args, "menxiashizhong"));
+    let down_parsed: serde_json::Value = serde_json::from_str(&down_result).unwrap();
+    assert_eq!(down_parsed["ok"], true);
+    let down_id = down_parsed["path"].as_str().unwrap();
+
+    // Append gate should block: upstream revw is not approved
+    let gate_result = block_on(check_doc_refs_approved_for_append(root, down_id));
+    assert!(
+        gate_result.is_err(),
+        "append gate should block when referenced revw is unapproved"
+    );
+}
+
+/// 19. append on revw with [-1] refs always succeeds.
+#[test]
+fn test_append_gate_allows_default_refs() {
+    let temp = common::create_test_project("append_gate_default_refs");
+    let root = temp.path();
+
+    let create_args = serde_json::json!({"type": "revw", "refs": []});
+    let result = block_on(tool_create_document(root, &create_args, "menxiashizhong"));
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+    assert_eq!(parsed["ok"], true);
+    let doc_id = parsed["path"].as_str().unwrap();
+
+    // Default refs ([-1]) should always be allowed
+    let gate_result = block_on(check_doc_refs_approved_for_append(root, doc_id));
+    assert!(gate_result.is_ok(), "default refs should be allowed");
 }

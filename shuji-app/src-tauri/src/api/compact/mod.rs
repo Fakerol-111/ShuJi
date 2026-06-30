@@ -76,7 +76,15 @@ async fn maybe_compact_with_prompt(
         token_count::count_messages_tokens(&old_messages)
     );
 
-    match client.send_message(compact_prompt, &msgs, model).await {
+    match client
+        .send_message_with_reasoning(
+            compact_prompt,
+            &msgs,
+            model,
+            crate::config::ResolvedReasoningPolicy::disabled(),
+        )
+        .await
+    {
         Ok(summary) => {
             let trimmed = summary.trim();
             if trimmed.is_empty() || trimmed.len() < 20 {

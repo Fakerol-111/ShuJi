@@ -381,6 +381,117 @@ pub async fn check_doc_refs_approved_for_route(
     Ok(())
 }
 
+/// Check approval status for an `append_document` operation.
+///
+/// Unlike `check_doc_refs_approved_for_route`, this does **not** require the
+/// subject document itself to be `approved`.  A `revw` must be appendable
+/// while it is still `in_review` so the reviewer can actually write the body
+/// before the emperor approves it.
+///
+/// Rules:
+/// - `[-1]` or empty refs → always allowed.
+/// - Referenced must-approve docs (e.g. upstream `revw`) must be `approved`.
+/// - One-level transitive refs are checked (same as route).
+pub async fn check_doc_refs_approved_for_append(
+    working_dir: &Path,
+    subject_doc_id: &str,
+) -> Result<(), String> {
+    let full = match resolve_doc_path(working_dir, subject_doc_id).await {
+        Ok(p) => p,
+        Err(e) => {
+            return Err(format!(
+                "Document {} cannot be resolved for append gate: {}",
+                subject_doc_id, e
+            ))
+        }
+    };
+    if !full.exists() {
+        return Err(format!(
+            "Document {} does not exist; approval chain cannot be verified.",
+            subject_doc_id
+        ));
+    }
+
+    let content = match tokio::fs::read_to_string(&full).await {
+        Ok(c) => c,
+        Err(e) => {
+            return Err(format!(
+                "Document {} cannot be read for append gate: {}",
+                subject_doc_id, e
+            ))
+        }
+    };
+
+    let (meta, _body) = match parse_doc(&content) {
+        Ok(m) => m,
+        Err(e) => {
+            return Err(format!(
+                "Document {} cannot be parsed for append gate: {}",
+                subject_doc_id, e
+            ))
+        }
+    };
+
+    // NOTE: We intentionally do NOT check the subject itself here.
+    // append_document's job is to write content — a revw must be writable
+    // while it is still in_review, before the emperor has approved it.
+
+    let ref_nums = parse_refs(&meta.refs);
+    if ref_nums.is_empty() {
+        return Ok(());
+    }
+
+    for num in ref_nums {
+        let ref_id = match resolve_ref_doc_id(working_dir, num).await {
+            Some(id) => id,
+            None => {
+                return Err(format!(
+                    "断链：文档 {} 引用的 {} 不存在",
+                    subject_doc_id, num
+                ))
+            }
+        };
+
+        if MUST_APPROVE_TYPES.contains(&ref_id.split('_').next().unwrap_or("")) {
+            check_must_approve_status(working_dir, &ref_id, subject_doc_id).await?;
+        }
+
+        // One-level transitive: check revw refs of the resolved document
+        let ref_path = resolve_doc_path(working_dir, &ref_id).await.map_err(|e| {
+            format!(
+                "Document {} references {}, but the referenced document cannot be resolved: {}",
+                subject_doc_id, ref_id, e
+            )
+        })?;
+        let ref_content = tokio::fs::read_to_string(&ref_path).await.map_err(|e| {
+            format!(
+                "Document {} references {}, but the referenced document cannot be read: {}",
+                subject_doc_id, ref_id, e
+            )
+        })?;
+        let (ref_meta, _) = parse_doc(&ref_content).map_err(|e| {
+            format!(
+                "Document {} references {}, but the referenced document cannot be parsed: {}",
+                subject_doc_id, ref_id, e
+            )
+        })?;
+        for indirect_num in parse_refs(&ref_meta.refs) {
+            if let Some(indirect_id) = resolve_ref_doc_id(working_dir, indirect_num).await {
+                if MUST_APPROVE_TYPES.contains(&indirect_id.split('_').next().unwrap_or("")) {
+                    check_must_approve_status(working_dir, &indirect_id, subject_doc_id).await?;
+                }
+            } else {
+                return Err(format!(
+                    "断链：文档 {} 间接引用的 {} 不存在",
+                    subject_doc_id, indirect_num
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Read the `status` field from a document's YAML frontmatter.
 /// Returns `None` if the document does not exist or cannot be parsed.
 pub async fn get_document_status(working_dir: &Path, doc_id: &str) -> Option<String> {
@@ -391,4 +502,16 @@ pub async fn get_document_status(working_dir: &Path, doc_id: &str) -> Option<Str
     let content = tokio::fs::read_to_string(&full).await.ok()?;
     let (meta, _) = parse_doc(&content).ok()?;
     Some(meta.status)
+}
+
+/// Read a document and return its body text.
+/// Returns `None` if the document does not exist or cannot be parsed.
+pub async fn get_document_body(working_dir: &Path, doc_id: &str) -> Option<String> {
+    let full = resolve_doc_path(working_dir, doc_id).await.ok()?;
+    if !full.exists() {
+        return None;
+    }
+    let content = tokio::fs::read_to_string(&full).await.ok()?;
+    let (_, body) = parse_doc(&content).ok()?;
+    Some(body.to_string())
 }

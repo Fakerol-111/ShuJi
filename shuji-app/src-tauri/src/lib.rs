@@ -196,6 +196,8 @@ pub fn run() {
             commands::settings::set_model_preset,
             commands::settings::get_approval_config,
             commands::settings::set_approval_config,
+            commands::settings::get_reasoning_config,
+            commands::settings::set_reasoning_config,
             commands::shuji_docs::list_shuji_tree,
             commands::shuji_docs::read_shuji_doc,
             commands::shuji_docs::get_document_diff,

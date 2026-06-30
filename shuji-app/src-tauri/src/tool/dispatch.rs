@@ -111,11 +111,12 @@ pub async fn execute_named_tool(
             ),
         },
         "append_document" => {
-            // Gate: check refs before appending to a document
+            // Gate: check refs before appending to a document.
+            // Uses append-level check which allows in_review revw docs to be written.
             let id = args["id"].as_str().unwrap_or("");
             if !id.is_empty() {
                 if let Err(msg) =
-                    documents::check_doc_refs_approved_for_route(working_dir, id).await
+                    documents::check_doc_refs_approved_for_append(working_dir, id).await
                 {
                     ToolOutput::error("append_document", id, "doc_not_approved", &msg)
                 } else {
@@ -244,7 +245,7 @@ fn augment_error_with_hint(name: &str, raw_result: &str, _dept: &str) -> String 
             "HINT: 文档 ID 不存在。先用 list_dir 浏览 .shuji/designs，使用返回行中的 id=\"...\" 参数调用 read_document。"
         }
         ("append_document", Some("doc_not_approved")) => {
-            "HINT: 该文档引用的内容尚未通过审批。请先完成审批流程（使用 set_document_status 工具），然后再追加内容。"
+            "HINT: 该文档引用的审批文档尚未通过审批。这是系统门禁异常——如果目标是 revw 文档，请勿创建新的 revw 重试。如果是非 revw 文档引用了未审批的 revw，请等待审批完成后再操作。"
         }
         ("append_document", _) if msg_lower.contains("not found") => {
             "HINT: 要追加的文档 ID 不存在。请先使用 create_document 创建文档，然后再追加内容。"

@@ -554,7 +554,16 @@ Original soul:
 
         let msg = crate::models::message::Message::user(&prompt);
         let compacted = client
-            .send_message("Output compact Markdown soul only.", &[msg], model)
+            .send_message_with_reasoning(
+                "Output compact Markdown soul only.",
+                &[msg],
+                model,
+                crate::config::ResolvedReasoningPolicy {
+                    enabled: true,
+                    effort: crate::config::ReasoningEffort::Low,
+                    budget_tokens: 0,
+                },
+            )
             .await
             .map_err(|e| format!("LLM compaction failed: {e}"))?
             .trim()

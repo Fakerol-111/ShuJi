@@ -125,11 +125,9 @@ impl Agent for GongbuShangshuAgent {
         // Phase-based reasoning control
         let has_plan = self.plan.lock().unwrap().is_some();
         if has_plan {
-            session.set_reasoning(false);
-            log_console!("[工部] execute phase: reasoning disabled, max_tokens unlimited");
+            session.set_reasoning_phase(crate::config::ReasoningPhase::Execution);
         } else {
-            session.set_reasoning(true);
-            log_console!("[工部] planning phase: reasoning enabled, max_tokens unlimited");
+            session.set_reasoning_phase(crate::config::ReasoningPhase::Planning);
         }
 
         // Track and consume fresh_batch flag atomically

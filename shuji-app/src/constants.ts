@@ -211,6 +211,11 @@ export function setFontSize(tier: string): void {
 
 // ── Department metadata (single source of truth) ──────────
 
+/** Convert snake_case dept key to PascalCase matching Rust Role::name() */
+export function deptKeyToRoleName(key: string): string {
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
+
 export interface DeptMeta {
   key: string; // English key matching backend Role enum: "neige", "zhongshuling", ...
   label: string; // Chinese full name: "内阁", "中书令", ...

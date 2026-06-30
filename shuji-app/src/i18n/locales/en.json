@@ -194,6 +194,7 @@
     "backToProject": "Back to Project",
     "apiConfig": "API Configuration",
     "contextWindow": "Context Window",
+    "reasoning": "Reasoning",
     "soulManagement": "Soul Management",
     "soulDescription": "Project memory at .shuji/soul/{Role}.md; global memory at ~/.shuji/soul/{Role}.md",
     "soulRoleLabel": "Role",

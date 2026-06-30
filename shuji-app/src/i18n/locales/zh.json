@@ -193,6 +193,7 @@
     "backToProject": "返回项目",
     "apiConfig": "服务配置",
     "contextWindow": "上下文窗口",
+    "reasoning": "思考模式",
     "soulManagement": "灵魂管理",
     "soulDescription": "项目级记忆位于 .shuji/soul/{Role}.md，全局记忆位于 ~/.shuji/soul/{Role}.md",
     "soulRoleLabel": "角色",

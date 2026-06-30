@@ -4,7 +4,8 @@ use std::time::Duration;
 
 use crate::api::client::AnthropicClient;
 use crate::api::client::ToolDefinition;
-use crate::config::RuntimeConfig;
+use crate::api::reasoning::{self, LlmProvider};
+use crate::config::{ReasoningEffort, ReasoningPhase, ResolvedReasoningPolicy, RuntimeConfig};
 
 pub mod persisted_context;
 pub use persisted_context::*;
@@ -68,10 +69,10 @@ pub struct Session {
     debug_dir: Option<PathBuf>,
     /// Runtime configuration
     config: Arc<RuntimeConfig>,
-    /// Control reasoning/thinking output (None = use config default, Some = override)
-    reasoning_enabled: Option<bool>,
-    /// Reasoning config from RuntimeConfig
-    reasoning_config: crate::config::ReasoningConfig,
+    /// Resolved reasoning/thinking policy
+    reasoning_policy: ResolvedReasoningPolicy,
+    /// Detected LLM provider (used by reasoning adapter)
+    provider: LlmProvider,
 }
 
 impl Session {
@@ -114,6 +115,9 @@ impl Session {
         // (expand_requirements, survey_codebase) intentionally lack it.
         let all_tools = tools.to_vec();
 
+        let provider = reasoning::detect_provider("", model);
+        let reasoning_policy = config.resolve_reasoning_policy("session", ReasoningPhase::Default);
+
         Self {
             messages,
             model: model.to_string(),
@@ -125,14 +129,18 @@ impl Session {
             tool_choice_none: false,
             debug_dir: None,
             config: config.clone(),
-            reasoning_enabled: None,
-            reasoning_config: config.api.reasoning.clone(),
+            reasoning_policy,
+            provider,
         }
     }
 
-    /// Set a role label for logging.
+    /// Set a role label for logging, and re-resolve the reasoning policy for this role.
     pub fn with_role(mut self, role: &str) -> Self {
         self.role = role.to_string();
+        self.provider = reasoning::detect_provider(&self.client.api_url, &self.model);
+        self.reasoning_policy = self
+            .config
+            .resolve_reasoning_policy(role, ReasoningPhase::Default);
         self
     }
 
@@ -201,12 +209,37 @@ impl Session {
         self.max_tokens = (tokens != 0).then_some(tokens);
     }
 
-    /// Enable or disable reasoning/thinking output.
-    /// - None: auto-detect based on API URL (enabled for non-Anthropic)
-    /// - Some(true): force enable
-    /// - Some(false): force disable
+    /// Enable or disable reasoning/thinking output (backward-compatible).
+    /// - true: enable with current effort level
+    /// - false: disable reasoning entirely
     pub fn set_reasoning(&mut self, enabled: bool) {
-        self.reasoning_enabled = Some(enabled);
+        if enabled {
+            self.reasoning_policy = ResolvedReasoningPolicy {
+                enabled: true,
+                effort: self.reasoning_policy.effort.max(ReasoningEffort::Low),
+                budget_tokens: self.reasoning_policy.budget_tokens,
+            };
+        } else {
+            self.reasoning_policy = ResolvedReasoningPolicy::disabled();
+        }
+    }
+
+    /// Set an explicit reasoning policy (full control).
+    pub fn set_reasoning_policy(&mut self, policy: ResolvedReasoningPolicy) {
+        self.reasoning_policy = policy;
+    }
+
+    /// Re-resolve reasoning policy for the given phase (e.g. Planning/Execution for 工部).
+    pub fn set_reasoning_phase(&mut self, phase: ReasoningPhase) {
+        self.reasoning_policy = self.config.resolve_reasoning_policy(&self.role, phase);
+        log_console!(
+            "[{}] reasoning phase {:?}: enabled={} effort={} budget={}",
+            self.role,
+            phase,
+            self.reasoning_policy.enabled,
+            self.reasoning_policy.effort,
+            self.reasoning_policy.budget_tokens,
+        );
     }
 
     /// Enable truncation debug output to `.shuji/debug/truncated.md`.
@@ -232,6 +265,7 @@ impl Session {
         let max_length_retries = self.config.api.length_max_retries;
         let mut api_retries = 0u32;
         let max_api_retries = self.config.api.max_retries;
+        let mut reasoning_stripped = false;
 
         loop {
             let mut body = serde_json::json!({
@@ -246,28 +280,8 @@ impl Session {
                 body["max_tokens"] = serde_json::json!(max_tokens);
             }
 
-            // Enable thinking/reasoning mode based on config (configurable per API type).
-            // - Anthropic: `thinking` field with optional budget_tokens
-            // - DeepSeek/OpenAI-compatible: `thinking` field in body (works for models that support it)
-            let thinking_enabled = match self.reasoning_enabled {
-                Some(enabled) => enabled,
-                None => self.reasoning_config.enabled,
-            };
-            if thinking_enabled {
-                if self.client.api_url.contains("anthropic.com") {
-                    // Anthropic format: extended thinking with optional budget
-                    #[allow(unused_mut)]
-                    let mut thinking = serde_json::json!({"type": "enabled"});
-                    if self.reasoning_config.budget_tokens > 0 {
-                        thinking["budget_tokens"] =
-                            serde_json::json!(self.reasoning_config.budget_tokens);
-                    }
-                    body["thinking"] = thinking;
-                } else {
-                    // OpenAI-compatible (DeepSeek etc.): thinking parameter
-                    body["thinking"] = serde_json::json!({"type": "enabled"});
-                }
-            }
+            // Apply reasoning/thinking fields via the centralized adapter
+            reasoning::apply_reasoning_to_body(&mut body, self.provider, self.reasoning_policy);
 
             if self.tool_choice_none {
                 body["tool_choice"] = serde_json::json!("none");
@@ -291,6 +305,41 @@ impl Session {
             {
                 Ok(d) => d,
                 Err(e) => {
+                    // Check if this is a reasoning-unsupported error — strip reasoning and retry once
+                    let err_str = e.to_string();
+                    if self.reasoning_policy.enabled
+                        && !reasoning_stripped
+                        && (err_str.contains("400") || err_str.contains("422"))
+                    {
+                        let status_code = err_str
+                            .split("API error (")
+                            .nth(1)
+                            .and_then(|s| s.split(')').next())
+                            .and_then(|s| s.split(',').next())
+                            .and_then(|s| s.trim().parse::<u16>().ok())
+                            .unwrap_or(0);
+                        let error_body = err_str
+                            .split("API error (")
+                            .nth(1)
+                            .and_then(|s| s.split("): ").nth(1))
+                            .unwrap_or("");
+                        if reasoning::looks_like_unsupported_reasoning_error(
+                            status_code,
+                            error_body,
+                        ) {
+                            log_console!(
+                                "[{}] reasoning not supported by provider, retrying without",
+                                self.role
+                            );
+                            if let Some(obj) = body.as_object_mut() {
+                                obj.remove("thinking");
+                                obj.remove("reasoning_effort");
+                            }
+                            reasoning_stripped = true;
+                            continue;
+                        }
+                    }
+
                     api_retries += 1;
                     if api_retries < max_api_retries {
                         log_console!(
@@ -693,13 +742,8 @@ impl Session {
             body["max_tokens"] = serde_json::json!(max_tokens);
         }
 
-        let thinking_enabled = match self.reasoning_enabled {
-            Some(enabled) => enabled,
-            None => self.reasoning_config.enabled,
-        };
-        if thinking_enabled && !self.client.api_url.contains("anthropic.com") {
-            body["thinking"] = serde_json::json!({"type": "enabled"});
-        }
+        // Apply reasoning/thinking fields via the centralized adapter
+        reasoning::apply_reasoning_to_body(&mut body, self.provider, self.reasoning_policy);
 
         if self.tool_choice_none {
             body["tool_choice"] = serde_json::json!("none");

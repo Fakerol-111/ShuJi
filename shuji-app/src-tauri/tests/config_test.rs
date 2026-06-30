@@ -154,3 +154,43 @@ auto_retries = 5
     assert_eq!(cfg.mode, shuji_app_lib::config::ApprovalMode::Auto);
     assert_eq!(cfg.auto_retries, 5);
 }
+
+// ── Local config with only [api.reasoning] must parse ─────────────
+
+#[test]
+fn test_local_config_with_reasoning_only_parses() {
+    // Simulates config.local.toml that only has [api.reasoning] section
+    // (written by save_reasoning_to_local). Previously this would fail
+    // because ApiConfig.max_tokens was required without serde(default).
+    let toml_str = r#"
+[api.reasoning]
+enabled = true
+effort = "high"
+budget_tokens = 0
+"#;
+    let cfg: RuntimeConfig = toml::from_str(toml_str).unwrap();
+    assert!(cfg.api.reasoning.enabled);
+    assert_eq!(
+        cfg.api.reasoning.effort,
+        shuji_app_lib::config::ReasoningEffort::High
+    );
+}
+
+#[test]
+fn test_local_config_with_reasoning_and_approval_parses() {
+    let toml_str = r#"
+[api.reasoning]
+enabled = false
+effort = "low"
+budget_tokens = 1024
+
+[approval]
+mode = "auto"
+auto_retries = 5
+"#;
+    let cfg: RuntimeConfig = toml::from_str(toml_str).unwrap();
+    assert!(!cfg.api.reasoning.enabled);
+    assert_eq!(cfg.api.reasoning.budget_tokens, 1024);
+    assert_eq!(cfg.approval.mode, shuji_app_lib::config::ApprovalMode::Auto);
+    assert_eq!(cfg.approval.auto_retries, 5);
+}

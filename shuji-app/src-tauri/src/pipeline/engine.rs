@@ -249,6 +249,28 @@ impl PipelineEngine {
                             runtime: self.runtime.clone(),
                         };
                     };
+                    // Reject empty revw on resume path as well
+                    if doc_id.starts_with("revw_") {
+                        if let Some(body) =
+                            crate::tool::documents::get_document_body(&self.project_dir, &doc_id)
+                                .await
+                        {
+                            if body.trim().is_empty() {
+                                log_console!(
+                                    "[pipeline] approval_gate blocked: doc {} body is empty",
+                                    doc_id
+                                );
+                                return PipelineResult::StepFailed {
+                                    step_id: current,
+                                    reason: format!(
+                                        "approval_gate requires a non-empty revw document body, but {} is empty.",
+                                        doc_id
+                                    ),
+                                    runtime: self.runtime.clone(),
+                                };
+                            }
+                        }
+                    }
                     let status =
                         crate::tool::documents::get_document_status(&self.project_dir, &doc_id)
                             .await;
@@ -523,7 +545,28 @@ impl PipelineEngine {
             "approval_gate" => {
                 let doc_id = approval_doc_from_upstream(&self.runtime.artifacts, &step.depends_on);
                 match doc_id.filter(|id| !id.is_empty()) {
-                    Some(id) => StepResultInner::ApprovalRequired { doc_id: id },
+                    Some(id) => {
+                        // Reject empty revw documents — they should never be presented
+                        // to the user for approval. This prevents the bug where an empty
+                        // revw (created but never appended to) reaches the approval gate.
+                        if id.starts_with("revw_") {
+                            let body =
+                                crate::tool::documents::get_document_body(&self.project_dir, &id)
+                                    .await;
+                            match body {
+                                Some(b) if !b.trim().is_empty() => {}
+                                _ => {
+                                    return StepResultInner::Failed {
+                                        reason: format!(
+                                            "approval_gate requires a non-empty revw document body, but {} is empty or missing. This indicates the reviewer did not write content before the pipeline reached this step.",
+                                            id
+                                        ),
+                                    };
+                                }
+                            }
+                        }
+                        StepResultInner::ApprovalRequired { doc_id: id }
+                    }
                     None => StepResultInner::Failed {
                         reason:
                             "approval_gate requires an upstream revw document, but none was found."
@@ -908,8 +951,12 @@ impl PipelineEngine {
                 crate::tool::documents::find_latest_design_doc_id(&self.project_dir).await
             }
             Some(Role::MenxiaShizhong) => {
-                crate::tool::documents::find_latest_doc_with_prefixes(&self.project_dir, &["revw"])
-                    .await
+                // Only pick up non-empty revw docs — skip empty shells created but never written to
+                crate::tool::documents::find_latest_non_empty_doc_with_prefixes(
+                    &self.project_dir,
+                    &["revw"],
+                )
+                .await
             }
             _ => None,
         }
