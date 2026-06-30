@@ -163,7 +163,7 @@ flowchart TB
 | [CLAUDE.md](CLAUDE.md) | 文件级索引与测试命令（维护者 / AI） |
 | [LICENSE](LICENSE) | MIT 许可证 |
 
-后端核心路径有 **683** 自动化测试（Rust 单元/集成 + 前端 Vitest），详见 [CONTRIBUTING.md#测试](CONTRIBUTING.md#测试)。
+后端核心路径有约 730 个自动化测试（Rust 单元/集成 + 前端 Vitest，具体以 `scripts/count_tests.sh` 输出为准），详见 [CONTRIBUTING.md#测试](CONTRIBUTING.md#测试)。
 
 ---
 

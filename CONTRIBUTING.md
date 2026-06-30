@@ -121,7 +121,7 @@ API 密钥，模板见 `shuji-app/.env.template` 或 `shuji-app/src-tauri/.env.t
 
 ## 测试
 
-Rust 后端提供 **683 测试**（202 单元 + 481 集成），覆盖 token 计数、路由规则、文档系统、Actor 消息、Session、配置、E2E 工作流（Mock LLM）、审计、Checkpoint 等。所有测试使用临时目录隔离，建议 `--test-threads=1` 规避并发状态竞争。
+Rust 后端与前端合计约 730 个测试（Rust 单元 + 集成 + 前端 Vitest，具体数量以 `scripts/count_tests.sh` 输出为准），覆盖 token 计数、路由规则、文档系统、Actor 消息、Session、配置、E2E 工作流（Mock LLM）、审计、Checkpoint 等。所有测试使用临时目录隔离，建议 `--test-threads=1` 规避并发状态竞争。
 
 ### 快速验证（PR 前推荐）
 

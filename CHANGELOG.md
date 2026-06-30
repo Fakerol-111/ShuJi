@@ -1,42 +1,63 @@
 # Changelog
 
-## [0.3.0] - 2026-06-01
+所有重要变更记录于此文件。格式遵循 [Keep a Changelog](https://keepachangelog.com/)，版本号对应 git tag。
+
+## [Unreleased]
+
+v0.8.0 之后已合并到 main 但未发布 tag 的变更。
 
 ### Added
-- Demo 上手漏斗强化（OPT-001）：
-  - 工作区选择页「体验枢机」按钮进入 Dashboard 后自动发送指令
-  - 引导浮层 DemoTour（四步引导：部门栏 → 文档树 → 工部修 bug → 测试验证）
-  - 完成后展示小结卡片（耗时、Token 消耗、下一步建议）
-- 内阁自动 workflow 选择（OPT-002）：
-  - 新增 `routing.rs` 轻量规则引擎，纯文本匹配自动建议 workflow skill
-  - 按优先级：显式 skill 名 > 关键词匹配（bug/refactor/optimize/audit）> 复杂度分析
-  - 高置信度直接注入建议，低置信度提示内阁用 `<options>` 让皇帝选择
-  - 16 个单元测试覆盖所有 routing 分支
-  - HelpDrawer 添加「自动选流程」提示
-- 流程地图置顶与待办可见（OPT-003）：
-  - 重写 WorkflowTimeline 为 WorkflowStatus 组件，使用项目设计系统色板
-  - 在 Dashboard 主区域顶部固定展示整体进度条与阶段状态
-  - 阻塞原因 badge：待朱批文档 ID（⚑）、活跃部门（● 脉冲动画）、工部计划批次
-  - 新增 `get_pending_approvals` 后端命令，前端 3 秒轮询
-  - 点击待朱批 badge 可直接跳转到对应文档
-  - 空阶段时显示「尚未启动流程」
-- 模型分级预设三档（OPT-005）：
-  - 新增 `preset` 字段到 `api_config.json`：`balanced`（默认）/ `economy` / `quality` / `custom`
-  - 后端单一真相源映射表：economy → 审查/检查角色用轻量模型；quality → 设计/编码角色用强模型
-  - 自动派生模型名（支持 DeepSeek / Anthropic / OpenAI 模型家族自动匹配 cheap/strong）
-  - SetupPage 增加预设选择器；SettingsMenu 增加预设切换（手动改覆盖 → 自动标记 custom）
-  - 旧版 `api_config.json` 无 `preset` 字段时默认 `balanced`（`#[serde(default)]`）
-- `/project` 路由将工作区选择与 Dashboard 分离
-- 任务级短路规则（OPT-007）：
-  - workflow_demo/bugfix 模式下禁止 route_to 中书令和门下侍中
-  - 在 内阁 tool exec 闭包中注入技能感知拦截，返回结构化错误
-  - 支持 `--override-skill-gate` 用户强制绕行
-  - 2 个集成测试覆盖拦截与放行两种路径
-- 朱批文档 diff 体验（OPT-008）：
-  - 新增 `get_document_diff` 后端命令，使用 git HEAD 版本比较生成 unified diff
-  - DocPreview 增加「全文/差异」Tab 切换，差异视图着色显示 +/- 行
-  - 驳回时提供快捷理由模板下拉（缺少 API 定义/测试策略/范围过大需拆分）
-  - 无上一版时自动隐藏差异 Tab
+- LLM 推理/思考链支持（`feature/llm-reasoning-policy`）— per-vendor reasoning 注入、UI 展示、文档同步
+- 角色化学习记忆系统（multi-role soul + global learning）— `feat/soul-learning-system`
+- 文档线审计 + 语义检查点体系 — `feat/audit-document-line`
+- 外部 IDE 集成 — 架阁一键打开文件/行号/项目
+- Linux 平台适配 — 跨平台路径解析、命令安全、Python 检测、编辑器路径
+- 文档预览增强 + 7 套代码主题 + TabBar 交互优化
+- 流式讨论 + Pipeline 进度推送 + DeliveryReceipt 收据
+- 实时运行状态推送 + 部门活动摘要增强
+- 仓库优化 P0 — playbook 系统 + pipeline supervisor + 前端审批增强
+- English i18n support — react-i18next, bilingual LLM prompts, LangSwitcher
+- pipeline 引擎增强 + validate/metrics/playbook/precepts 新模块 + UI 重构
+- 独立设置页面 + 离线演示模式 + ESAA 契约 & 意图拦截
+- 九部门卡片 + inspector + 实时步骤流式
+
+### Changed
+- Priority Six 优化 — 架构重构、命令安全加固、审批门禁硬化（`codex/priority-six-optimizations`）
+- Dashboard 布局重构：AgentStreamPanel + ArtifactPanel 左右分栏
+
+### Fixed
+- 前端窗口布局拉伸崩溃 — flex 约束 / 动态 clamp / pointer 拖拽 / 滚动隔离
+- 审批模式重构 + pipeline artifacts + options render 修复
+- resolve_scoped_path Windows CI 路径比较与符号链接逃逸
+- 部门状态栏追踪不显示、Token 统计不显示
+- MockActorHarness mock 输出补充文档 ID 用于 pipeline artifact 提取
+- CommandBar 测试补充 listCheckpoints mock
+
+## [0.8.0] - 2026-06-12
+
+### Added
+- ESAA 架构改造 — hash 链审计 + 意图拦截层 + 边界契约
+- 多平台构建目标启用（MSI / DMG / DEB / AppImage）
+- README 重写 + CONTRIBUTING + docs 目录
+
+## [0.7.0] - 2026-06-12
+
+### Added
+- Pipeline 引擎实现（Phase 1 引擎 / Phase 2 cleanup + prompt rewrite / Phase 3 前端 PlanPanel）
+- 路由管道经尚书省分配六部 + 双文移图
+- 定价系统重构 — pricing 模块 + 双货币 + Web 刷新 + 批量配置入口
+- 费用透明 + 文档更新 + 进度增强
+- 降低上手门槛 + 前端重构
+
+### Changed
+- 拆分 session/tool/actor 单文件为模块化结构
+- Prettier 格式化前端文件
+
+### Fixed
+- send_message 管道恢复路径（T6）
+- 静默 catch + skill fallback + README 下载区（P0-2）
+- cargo fmt 格式化问题
+- CI 跳过预存的 workflow_demo 测试
 
 ## [0.6.0] - 2026-06-08
 
@@ -98,6 +119,44 @@
   - 后端暴露 `get_active_roles` 命令
   - 前端轮询替代 5 秒超时推断
 - 部门最终存档：agent 执行完成后强制 git commit + checkpoint
+
+## [0.3.0] - 2026-06-01
+
+### Added
+- Demo 上手漏斗强化（OPT-001）：
+  - 工作区选择页「体验枢机」按钮进入 Dashboard 后自动发送指令
+  - 引导浮层 DemoTour（四步引导：部门栏 → 文档树 → 工部修 bug → 测试验证）
+  - 完成后展示小结卡片（耗时、Token 消耗、下一步建议）
+- 内阁自动 workflow 选择（OPT-002）：
+  - 新增 `routing.rs` 轻量规则引擎，纯文本匹配自动建议 workflow skill
+  - 按优先级：显式 skill 名 > 关键词匹配（bug/refactor/optimize/audit）> 复杂度分析
+  - 高置信度直接注入建议，低置信度提示内阁用 `<options>` 让皇帝选择
+  - 16 个单元测试覆盖所有 routing 分支
+  - HelpDrawer 添加「自动选流程」提示
+- 流程地图置顶与待办可见（OPT-003）：
+  - 重写 WorkflowTimeline 为 WorkflowStatus 组件，使用项目设计系统色板
+  - 在 Dashboard 主区域顶部固定展示整体进度条与阶段状态
+  - 阻塞原因 badge：待朱批文档 ID（⚑）、活跃部门（● 脉冲动画）、工部计划批次
+  - 新增 `get_pending_approvals` 后端命令，前端 3 秒轮询
+  - 点击待朱批 badge 可直接跳转到对应文档
+  - 空阶段时显示「尚未启动流程」
+- 模型分级预设三档（OPT-005）：
+  - 新增 `preset` 字段到 `api_config.json`：`balanced`（默认）/ `economy` / `quality` / `custom`
+  - 后端单一真相源映射表：economy → 审查/检查角色用轻量模型；quality → 设计/编码角色用强模型
+  - 自动派生模型名（支持 DeepSeek / Anthropic / OpenAI 模型家族自动匹配 cheap/strong）
+  - SetupPage 增加预设选择器；SettingsMenu 增加预设切换（手动改覆盖 → 自动标记 custom）
+  - 旧版 `api_config.json` 无 `preset` 字段时默认 `balanced`（`#[serde(default)]`）
+- `/project` 路由将工作区选择与 Dashboard 分离
+- 任务级短路规则（OPT-007）：
+  - workflow_demo/bugfix 模式下禁止 route_to 中书令和门下侍中
+  - 在 内阁 tool exec 闭包中注入技能感知拦截，返回结构化错误
+  - 支持 `--override-skill-gate` 用户强制绕行
+  - 2 个集成测试覆盖拦截与放行两种路径
+- 朱批文档 diff 体验（OPT-008）：
+  - 新增 `get_document_diff` 后端命令，使用 git HEAD 版本比较生成 unified diff
+  - DocPreview 增加「全文/差异」Tab 切换，差异视图着色显示 +/- 行
+  - 驳回时提供快捷理由模板下拉（缺少 API 定义/测试策略/范围过大需拆分）
+  - 无上一版时自动隐藏差异 Tab
 
 ## [0.2.0] - 2026-05-28
 
