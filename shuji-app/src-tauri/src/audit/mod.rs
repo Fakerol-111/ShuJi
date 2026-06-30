@@ -212,7 +212,7 @@ pub async fn verify_audit_trail(working_dir: &Path) -> Result<VerificationReport
     }
 
     let chain_intact = broken_links.is_empty();
-    let last_entry = entries.iter().filter(|e| !e.hash.is_empty()).next_back();
+    let last_entry = entries.iter().rfind(|e| !e.hash.is_empty());
     let first_entry = entries.iter().find(|e| !e.hash.is_empty());
 
     Ok(VerificationReport {

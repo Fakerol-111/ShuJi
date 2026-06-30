@@ -29,6 +29,17 @@ pub(super) enum ExecStepOutcome {
     },
 }
 
+pub(super) struct SuccessfulOutputContext<'a> {
+    pub ctx: &'a ActorContext,
+    pub role_name: &'a str,
+    pub task_content: &'a str,
+    pub reply_to: &'a Option<mpsc::UnboundedSender<String>>,
+    pub context_msgs: &'a mut Vec<crate::models::message::Message>,
+    pub context_config: &'a Arc<HashMap<String, crate::config::RoleContextConfig>>,
+    pub fast_cancel: &'a Arc<AtomicBool>,
+    pub paused_for_decision: &'a mut bool,
+}
+
 /// 处理 agent 的成功的输出。
 ///
 /// **执行顺序**:
@@ -46,16 +57,20 @@ pub(super) enum ExecStepOutcome {
 ///    └─ Done     → 最终 plan 推送 + pipeline reply
 /// ```
 pub(super) async fn handle_successful_output(
-    ctx: &ActorContext,
-    role_name: &str,
-    task_content: &str,
+    args: SuccessfulOutputContext<'_>,
     output: AgentOutput,
-    reply_to: &Option<mpsc::UnboundedSender<String>>,
-    context_msgs: &mut Vec<crate::models::message::Message>,
-    context_config: &Arc<HashMap<String, crate::config::RoleContextConfig>>,
-    fast_cancel: &Arc<AtomicBool>,
-    paused_for_decision: &mut bool,
 ) -> ExecStepOutcome {
+    let SuccessfulOutputContext {
+        ctx,
+        role_name,
+        task_content,
+        reply_to,
+        context_msgs,
+        context_config,
+        fast_cancel,
+        paused_for_decision,
+    } = args;
+
     // 空输出：agent 执行异常但没有明确失败 → 退出
     if output.content.trim().is_empty() {
         return ExecStepOutcome::Break;

@@ -48,16 +48,10 @@ pub struct ApiConfig {
 }
 
 /// Agent 流式输出配置
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StreamingConfig {
     #[serde(default)]
     pub enabled: bool,
-}
-
-impl Default for StreamingConfig {
-    fn default() -> Self {
-        Self { enabled: false }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

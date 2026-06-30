@@ -470,7 +470,7 @@ pub async fn tool_append_document(
     } else {
         let mut b = body.to_string();
         for part in &append_parts {
-            b.push_str("\n");
+            b.push('\n');
             b.push_str(part);
         }
         b

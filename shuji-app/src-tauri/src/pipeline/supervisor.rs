@@ -15,7 +15,7 @@ use crate::config::RuntimeConfig;
 use crate::models::chat::ChatMessage;
 use crate::models::role::Role;
 
-use super::engine::PipelineEngine;
+use super::engine::{PipelineEngine, PipelineEngineContext};
 use super::{PipelinePlan, PipelineResult, PlanRuntime};
 
 /// Shared context for pipeline status reporting (chat + optional neige wake).
@@ -42,6 +42,14 @@ pub struct PipelineSupervisor {
 
 /// How long after cancel to reject plan submissions from stale LLM tail responses.
 const CANCEL_LATCH_SECS: u64 = 3;
+
+struct PipelineSpawnContext {
+    notify: PipelineNotifyContext,
+    neige_tx: Option<tokio::sync::mpsc::UnboundedSender<ActorMessage>>,
+    plan_id: String,
+    running_plan_id: Arc<Mutex<Option<String>>>,
+    last_completed: Arc<Mutex<Option<String>>>,
+}
 
 impl PipelineSupervisor {
     pub fn new() -> Self {
@@ -128,7 +136,7 @@ impl PipelineSupervisor {
             }
         }
         for tx in system.fast_txs.values() {
-            let _ = tx.send(crate::actor::FastMessage::Interrupt);
+            let _ = tx.try_send(crate::actor::FastMessage::Interrupt);
         }
         if let Some(handle) = self.task.lock().await.take() {
             handle.abort();
@@ -170,16 +178,12 @@ impl PipelineSupervisor {
             }
         }
 
-        let mut engine = PipelineEngine::new(
-            plan,
-            system.senders.clone(),
-            Arc::new(system.fast_txs.clone()),
-            system.cancel_map.clone(),
-            system.cancel.clone(),
+        let context = PipelineEngineContext::from_actor_system(
+            system,
             notify.project_dir.clone(),
-            Some(system.workflow_graph.clone()),
             notify.runtime_config.clone(),
         );
+        let mut engine = PipelineEngine::new(plan, context);
         engine.save().await.ok();
         engine.preview_pipeline_on_graph().await;
 
@@ -242,16 +246,15 @@ impl PipelineSupervisor {
         last_completed: Arc<Mutex<Option<String>>>,
     ) {
         let neige_tx = system.senders.get(&Role::Neige).cloned();
-        self.spawn_task(
-            system,
+        let context = PipelineSpawnContext {
             notify,
             neige_tx,
             plan_id,
             running_plan_id,
             last_completed,
-            async move { engine.run().await },
-        )
-        .await;
+        };
+        self.spawn_task(system, context, async move { engine.run().await })
+            .await;
     }
 
     async fn spawn_resume(
@@ -265,32 +268,32 @@ impl PipelineSupervisor {
         let plan_id = engine.runtime.plan.plan_id.clone();
         let running_plan_id = self.running_plan_id.clone();
         let last_completed = self.last_completed_plan_id.clone();
-        self.spawn_task(
-            system,
+        let context = PipelineSpawnContext {
             notify,
             neige_tx,
             plan_id,
             running_plan_id,
             last_completed,
-            async move { engine.resume_with_input(user_input.as_deref()).await },
-        )
+        };
+        self.spawn_task(system, context, async move {
+            engine.resume_with_input(user_input.as_deref()).await
+        })
         .await;
     }
 
-    async fn spawn_task<F>(
-        &self,
-        _system: &ActorSystem,
-        notify: PipelineNotifyContext,
-        neige_tx: Option<tokio::sync::mpsc::UnboundedSender<ActorMessage>>,
-        plan_id: String,
-        running_plan_id: Arc<Mutex<Option<String>>>,
-        last_completed: Arc<Mutex<Option<String>>>,
-        run: F,
-    ) where
+    async fn spawn_task<F>(&self, _system: &ActorSystem, context: PipelineSpawnContext, run: F)
+    where
         F: std::future::Future<Output = PipelineResult> + Send + 'static,
     {
         self.running.store(true, Ordering::SeqCst);
         let running = self.running.clone();
+        let PipelineSpawnContext {
+            notify,
+            neige_tx,
+            plan_id,
+            running_plan_id,
+            last_completed,
+        } = context;
         let project_dir = notify.project_dir.clone();
 
         let handle = tokio::spawn(async move {

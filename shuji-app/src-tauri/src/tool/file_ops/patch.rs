@@ -182,11 +182,7 @@ pub async fn tool_apply_patch(working_dir: &Path, args: &serde_json::Value) -> S
 fn parse_search_replace_blocks(input: &str) -> Result<Vec<(String, String)>, String> {
     let mut blocks = Vec::new();
     let mut remaining = input;
-    loop {
-        let search_start = match remaining.find("<<<<<<< SEARCH") {
-            Some(idx) => idx,
-            None => break,
-        };
+    while let Some(search_start) = remaining.find("<<<<<<< SEARCH") {
         let after_marker = &remaining[search_start + 14..];
         let body = after_marker.strip_prefix('\n').unwrap_or(after_marker);
         let (search_text, rest) = if let Some(idx) = body.find("\n=======\n") {

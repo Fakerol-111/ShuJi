@@ -692,7 +692,7 @@ mod tests {
             }]
         });
         let before_len = 1;
-        let all = vec![old, new_msg];
+        let all = [old, new_msg];
         let plan = extract_plan_json_from_messages(all.iter().skip(before_len));
         assert_eq!(plan.as_deref(), Some(r#"{"plan_id":"new-plan"}"#));
     }

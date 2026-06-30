@@ -2,6 +2,7 @@
 //!
 //! Tests complex multi-step workflows without real LLM calls.
 
+use shuji_app_lib::config::{ApprovalMode, RuntimeConfig};
 use shuji_app_lib::pipeline::schema::validate_plan_json;
 use shuji_app_lib::pipeline::templates::pipeline_from_profile;
 use shuji_app_lib::pipeline::{PipelineResult, StepStatus};
@@ -40,7 +41,14 @@ async fn workflow_bugfix_profile_completes() {
 
     let plan = pipeline_from_profile("bugfix", "plan-wfb-001", "fix bug")
         .expect("bugfix profile should generate a plan");
-    let mut engine = make_pipeline_engine(plan, &harness, tmp.path());
+    let mut config = RuntimeConfig::default();
+    config.approval.mode = ApprovalMode::Auto;
+    let mut engine = common::make_pipeline_engine_with_config(
+        plan,
+        &harness,
+        tmp.path(),
+        std::sync::Arc::new(config),
+    );
     let result = engine.run().await;
     match result {
         PipelineResult::Complete { runtime } => assert!(runtime.all_done()),

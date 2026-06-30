@@ -1,4 +1,4 @@
-//! Pipeline integration tests — 15 cases covering validation, execution,
+﻿//! Pipeline integration tests — 15 cases covering validation, execution,
 //! approval, failure modes, persistence, and deadlock detection.
 //!
 //! Uses a MockActorHarness to simulate department actors without real LLM calls.
@@ -9,10 +9,10 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use shuji_app_lib::actor::ActorMessage;
-use shuji_app_lib::actor::ActorSystem;
+use shuji_app_lib::actor::{ActorSystem, ActorSystemParts};
 use shuji_app_lib::config::{ApprovalMode, RuntimeConfig};
 use shuji_app_lib::models::role::Role;
-use shuji_app_lib::pipeline::engine::PipelineEngine;
+use shuji_app_lib::pipeline::engine::{PipelineEngine, PipelineEngineContext};
 use shuji_app_lib::pipeline::schema::validate_plan_json;
 use shuji_app_lib::pipeline::{PipelinePlan, PipelineResult, PlanRuntime, PlanStep, StepStatus};
 use tokio::sync::mpsc;
@@ -98,16 +98,16 @@ fn mock_actor_system(harness: &MockActorHarness) -> ActorSystem {
     let graph = Arc::new(tokio::sync::Mutex::new(
         shuji_app_lib::workflow::WorkflowGraph::default(),
     ));
-    ActorSystem::new(
-        harness.senders.clone(),
-        HashMap::new(),
+    ActorSystem::new(ActorSystemParts {
+        senders: harness.senders.clone(),
+        fast_txs: HashMap::new(),
         emperor_tx,
         dept_log_tx,
-        None,
-        Arc::new(std::sync::Mutex::new(HashMap::new())),
-        Arc::new(AtomicBool::new(false)),
-        graph,
-    )
+        dept_step_tx: None,
+        cancel_map: Arc::new(std::sync::Mutex::new(HashMap::new())),
+        cancel: Arc::new(AtomicBool::new(false)),
+        workflow_graph: graph,
+    })
 }
 
 fn resume_engine(
@@ -132,16 +132,12 @@ fn make_engine_with_config(
     dir: &Path,
     runtime_config: Arc<RuntimeConfig>,
 ) -> PipelineEngine {
-    PipelineEngine::new(
-        plan,
+    let context = PipelineEngineContext::lightweight_for_tests(
         harness.senders.clone(),
-        Arc::new(HashMap::new()),
-        Arc::new(std::sync::Mutex::new(HashMap::new())),
-        Arc::new(AtomicBool::new(false)),
         dir.to_path_buf(),
-        None,
         runtime_config,
-    )
+    );
+    PipelineEngine::new(plan, context)
 }
 
 fn simple_plan(plan_id: &str, summary: &str, steps: Vec<PlanStep>) -> PipelinePlan {
@@ -261,7 +257,9 @@ async fn single_route_to_completes() {
             vec![],
         )],
     );
-    let mut engine = make_engine(plan, &harness, tmp.path());
+    let mut config = RuntimeConfig::default();
+    config.approval.mode = ApprovalMode::Auto;
+    let mut engine = make_engine_with_config(plan, &harness, tmp.path(), Arc::new(config));
     let result = engine.run().await;
     match result {
         PipelineResult::Complete { runtime } => {
@@ -287,7 +285,9 @@ async fn route_to_unknown_role_fails() {
             vec![],
         )],
     );
-    let mut engine = make_engine(plan, &harness, tmp.path());
+    let mut config = RuntimeConfig::default();
+    config.approval.mode = ApprovalMode::Auto;
+    let mut engine = make_engine_with_config(plan, &harness, tmp.path(), Arc::new(config));
     let result = engine.run().await;
     match result {
         PipelineResult::StepFailed { step_id, .. } => {
@@ -509,7 +509,9 @@ async fn depends_on_order_respected() {
             ),
         ],
     );
-    let mut engine = make_engine(plan, &harness, tmp.path());
+    let mut config = RuntimeConfig::default();
+    config.approval.mode = ApprovalMode::Auto;
+    let mut engine = make_engine_with_config(plan, &harness, tmp.path(), Arc::new(config));
     let result = engine.run().await;
     match result {
         PipelineResult::Complete { runtime } => {
@@ -772,8 +774,8 @@ fn extract_doc_id(parsed: &serde_json::Value) -> String {
         .as_str()
         .or_else(|| parsed["path"].as_str())
         .unwrap_or("");
-    raw.split('/')
-        .last()
+    raw.rsplit('/')
+        .next()
         .unwrap_or(raw)
         .trim_end_matches(".md")
         .to_string()
@@ -1125,16 +1127,12 @@ async fn artifact_doc_id_propagates_to_review_step() {
         ],
     );
 
-    let mut engine = PipelineEngine::new(
-        plan,
+    let context = PipelineEngineContext::lightweight_for_tests(
         senders,
-        Arc::new(HashMap::new()),
-        Arc::new(Mutex::new(HashMap::new())),
-        Arc::new(AtomicBool::new(false)),
         tmp.path().to_path_buf(),
-        None,
         Arc::new(RuntimeConfig::default()),
     );
+    let mut engine = PipelineEngine::new(plan, context);
 
     let result = engine.run().await;
     match result {

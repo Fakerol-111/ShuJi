@@ -262,10 +262,11 @@ async fn check_must_approve_status(
     }
     let content = tokio::fs::read_to_string(&full)
         .await
-        .map_err(|e| e.to_string())?;
-    let (ref_meta, _) = parse_doc(&content)?;
+        .map_err(|e| format!("无法读取审批文档 {}: {}", doc_id, e))?;
+    let (ref_meta, _) =
+        parse_doc(&content).map_err(|e| format!("无法解析审批文档 {}: {}", doc_id, e))?;
 
-    if ref_meta.status == "in_review" || ref_meta.status == "rejected" {
+    if ref_meta.status != "approved" {
         return Err(format!(
             "Document {} references {}, which is not approved yet. Please approve the review document before proceeding.",
             subject_doc_id, doc_id
@@ -282,30 +283,46 @@ pub async fn check_doc_refs_approved_for_route(
 ) -> Result<(), String> {
     let full = match resolve_doc_path(working_dir, subject_doc_id).await {
         Ok(p) => p,
-        Err(_) => return Ok(()),
+        Err(e) => {
+            return Err(format!(
+                "Document {} cannot be resolved for approval gate: {}",
+                subject_doc_id, e
+            ))
+        }
     };
     if !full.exists() {
-        return Ok(());
+        return Err(format!(
+            "Document {} does not exist; approval chain cannot be verified.",
+            subject_doc_id
+        ));
     }
 
     let content = match tokio::fs::read_to_string(&full).await {
         Ok(c) => c,
-        Err(_) => return Ok(()),
+        Err(e) => {
+            return Err(format!(
+                "Document {} cannot be read for approval gate: {}",
+                subject_doc_id, e
+            ))
+        }
     };
 
     let (meta, _body) = match parse_doc(&content) {
         Ok(m) => m,
-        Err(_) => return Ok(()),
+        Err(e) => {
+            return Err(format!(
+                "Document {} cannot be parsed for approval gate: {}",
+                subject_doc_id, e
+            ))
+        }
     };
 
     // Subject itself must be approved if revw
-    if MUST_APPROVE_TYPES.contains(&meta.doc_type.as_str()) {
-        if meta.status == "in_review" || meta.status == "rejected" {
-            return Err(format!(
-                "Document {} is not approved yet. Please approve the review document before proceeding.",
-                subject_doc_id
-            ));
-        }
+    if MUST_APPROVE_TYPES.contains(&meta.doc_type.as_str()) && meta.status != "approved" {
+        return Err(format!(
+            "Document {} is not approved yet. Please approve the review document before proceeding.",
+            subject_doc_id
+        ));
     }
 
     let ref_nums = parse_refs(&meta.refs);
@@ -329,31 +346,34 @@ pub async fn check_doc_refs_approved_for_route(
         }
 
         // One-level transitive: check revw refs of the resolved document
-        if let Ok(ref_path) = resolve_doc_path(working_dir, &ref_id).await {
-            if let Ok(ref_content) = tokio::fs::read_to_string(&ref_path).await {
-                if let Ok((ref_meta, _)) = parse_doc(&ref_content) {
-                    for indirect_num in parse_refs(&ref_meta.refs) {
-                        if let Some(indirect_id) =
-                            resolve_ref_doc_id(working_dir, indirect_num).await
-                        {
-                            if MUST_APPROVE_TYPES
-                                .contains(&indirect_id.split('_').next().unwrap_or(""))
-                            {
-                                check_must_approve_status(
-                                    working_dir,
-                                    &indirect_id,
-                                    subject_doc_id,
-                                )
-                                .await?;
-                            }
-                        } else {
-                            return Err(format!(
-                                "断链：文档 {} 间接引用的 {} 不存在",
-                                subject_doc_id, indirect_num
-                            ));
-                        }
-                    }
+        let ref_path = resolve_doc_path(working_dir, &ref_id).await.map_err(|e| {
+            format!(
+                "Document {} references {}, but the referenced document cannot be resolved: {}",
+                subject_doc_id, ref_id, e
+            )
+        })?;
+        let ref_content = tokio::fs::read_to_string(&ref_path).await.map_err(|e| {
+            format!(
+                "Document {} references {}, but the referenced document cannot be read: {}",
+                subject_doc_id, ref_id, e
+            )
+        })?;
+        let (ref_meta, _) = parse_doc(&ref_content).map_err(|e| {
+            format!(
+                "Document {} references {}, but the referenced document cannot be parsed: {}",
+                subject_doc_id, ref_id, e
+            )
+        })?;
+        for indirect_num in parse_refs(&ref_meta.refs) {
+            if let Some(indirect_id) = resolve_ref_doc_id(working_dir, indirect_num).await {
+                if MUST_APPROVE_TYPES.contains(&indirect_id.split('_').next().unwrap_or("")) {
+                    check_must_approve_status(working_dir, &indirect_id, subject_doc_id).await?;
                 }
+            } else {
+                return Err(format!(
+                    "断链：文档 {} 间接引用的 {} 不存在",
+                    subject_doc_id, indirect_num
+                ));
             }
         }
     }

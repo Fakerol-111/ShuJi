@@ -345,7 +345,7 @@ impl WorkflowGraph {
     /// 下次新命令启动时调用，确保每次命令对应一张独立的图
     pub async fn archive_and_new(&mut self, working_dir: &Path, new_label: &str) {
         // 如果当前图有实际内容（非仅有初始内阁节点），先归档
-        if self.edges.len() > 0 || self.nodes.len() > 1 {
+        if !self.edges.is_empty() || self.nodes.len() > 1 {
             let ts = Local::now().format("%Y%m%d_%H%M%S");
             // 生成文件名校友好标签
             let safe_label: String = self
@@ -385,8 +385,8 @@ impl WorkflowGraph {
                     let label = name
                         .strip_suffix(".json")
                         .unwrap_or(&name)
-                        .splitn(2, '_')
-                        .nth(1)
+                        .split_once('_')
+                        .map(|x| x.1)
                         .unwrap_or("")
                         .to_string();
                     entries.push((name, label));

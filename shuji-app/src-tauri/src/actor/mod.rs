@@ -313,18 +313,31 @@ pub struct ActorSystem {
     pub workflow_graph: Arc<tokio::sync::Mutex<crate::workflow::WorkflowGraph>>,
 }
 
+pub struct ActorSystemParts {
+    pub senders: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
+    pub fast_txs: HashMap<Role, mpsc::Sender<FastMessage>>,
+    pub emperor_tx: mpsc::Sender<ChatMessage>,
+    pub dept_log_tx: mpsc::Sender<DeptLogEntry>,
+    pub dept_step_tx: Option<DeptStepSender>,
+    pub cancel_map: crate::CancelMap,
+    pub cancel: Arc<AtomicBool>,
+    pub workflow_graph: Arc<tokio::sync::Mutex<crate::workflow::WorkflowGraph>>,
+}
+
 impl ActorSystem {
     /// 构造 ActorSystem（仅供 bootstrap 使用）。
-    pub fn new(
-        senders: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
-        fast_txs: HashMap<Role, mpsc::Sender<FastMessage>>,
-        emperor_tx: mpsc::Sender<ChatMessage>,
-        dept_log_tx: mpsc::Sender<DeptLogEntry>,
-        dept_step_tx: Option<DeptStepSender>,
-        cancel_map: crate::CancelMap,
-        cancel: Arc<AtomicBool>,
-        workflow_graph: Arc<tokio::sync::Mutex<crate::workflow::WorkflowGraph>>,
-    ) -> Self {
+    pub fn new(parts: ActorSystemParts) -> Self {
+        let ActorSystemParts {
+            senders,
+            fast_txs,
+            emperor_tx,
+            dept_log_tx,
+            dept_step_tx,
+            cancel_map,
+            cancel,
+            workflow_graph,
+        } = parts;
+
         Self {
             senders,
             fast_txs,

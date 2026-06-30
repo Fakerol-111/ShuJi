@@ -57,7 +57,7 @@ pub async fn execute_named_tool(
             if args
                 .get("path")
                 .and_then(|v| v.as_str())
-                .map_or(true, |p| p.is_empty())
+                .is_none_or(|p| p.is_empty())
             {
                 crate::tool::output::ToolOutput::error(
                     "read_file",
@@ -73,7 +73,7 @@ pub async fn execute_named_tool(
             if args
                 .get("path")
                 .and_then(|v| v.as_str())
-                .map_or(true, |p| p.is_empty())
+                .is_none_or(|p| p.is_empty())
             {
                 crate::tool::output::ToolOutput::error(
                     "create_file",
@@ -96,9 +96,7 @@ pub async fn execute_named_tool(
         "create_document" => documents::tool_create_document(working_dir, args, dept).await,
         "modify_document" => documents::tool_modify_document(working_dir, args, dept).await,
         "set_document_status" => match args.get("status").and_then(|v| v.as_str()) {
-            Some(s) if s == "approved" => {
-                documents::tool_set_document_status(working_dir, args).await
-            }
+            Some("approved") => documents::tool_set_document_status(working_dir, args).await,
             Some(other) => crate::tool::output::ToolOutput::error(
                 "set_document_status",
                 other,
@@ -497,5 +495,5 @@ pub async fn tool_request_decision(args: &serde_json::Value) -> String {
         let text = opt.as_str().unwrap_or("(invalid option)");
         msg.push_str(&format!("{}. {}\n", i + 1, text));
     }
-    ToolOutput::success_raw("request_decision", &msg.trim())
+    ToolOutput::success_raw("request_decision", msg.trim())
 }

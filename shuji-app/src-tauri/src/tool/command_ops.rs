@@ -38,9 +38,13 @@ pub async fn tool_execute_command(
 
     if let Err(blocked) = check_safe_command(cmd) {
         log_console!("[{}] BLOCKED command: {} — reason: {}", dept, cmd, blocked);
-        return format!(
-            "[Security block] Command prohibited: {}\nReason: {}",
-            cmd, blocked
+        return ToolOutput::error(
+            "execute_command",
+            cmd,
+            "command_not_allowed",
+            &format!(
+                "Command prohibited: {blocked}. Use run_tests/run_lint or an approved build/format command instead."
+            ),
         );
     }
 
@@ -297,7 +301,7 @@ pub(crate) fn parse_test_output(
 
     /// Extract count before a keyword like "passed" or "failed" from token windows.
     /// Handles formats like: `7 passed; 1 failed` and `3 passed, 0 failed`.
-    fn extract_count<'a>(tokens: &[&'a str], keyword: &str) -> Option<usize> {
+    fn extract_count(tokens: &[&str], keyword: &str) -> Option<usize> {
         tokens
             .windows(2)
             .find(|w| w[1] == keyword)

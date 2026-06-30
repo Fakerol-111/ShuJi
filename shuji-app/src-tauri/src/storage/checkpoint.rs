@@ -250,6 +250,10 @@ pub fn git_cmd(working_dir: &Path) -> tokio::process::Command {
 }
 
 async fn git_checkpoint(working_dir: &Path, role: &str, description: &str) -> Option<String> {
+    if !working_dir.join(".shuji/.git").exists() {
+        return None;
+    }
+
     let add = git_cmd(working_dir)
         .args(["add", "-A"])
         .output()

@@ -130,6 +130,7 @@ pub async fn tool_list_dir_tree(working_dir: &Path, args: &serde_json::Value) ->
     let mut total = 0usize;
     const MAX_ITEMS: usize = 200;
 
+    #[allow(clippy::too_many_arguments)]
     fn collect(
         dir: &Path,
         working_dir: &Path,

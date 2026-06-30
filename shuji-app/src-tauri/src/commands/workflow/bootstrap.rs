@@ -212,6 +212,7 @@ fn build_agents(
 ///  快速中断:  Bounded(16)       (有界 mpsc) — FastMessage (Interrupt)
 ///  前端转发:  Bounded(200/500)  (有界 mpsc) — ChatMessage / DeptLogEntry
 /// ```
+#[allow(clippy::too_many_arguments)]
 pub async fn start_actor_system(
     config: &AppConfig,
     runtime_config: Arc<crate::config::RuntimeConfig>,
@@ -422,6 +423,7 @@ pub async fn start_actor_system(
 /// 启动 5 条事件转发通道：actor → 前端 emit + 内存缓存 + 持久化。
 ///
 /// 普通消息路径与 pipeline 恢复路径共用此逻辑，避免 send.rs 内重复初始化。
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_event_forwarders(
     app: tauri::AppHandle,
     state: &AppState,
