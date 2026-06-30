@@ -1,4 +1,4 @@
-﻿//! Pipeline integration tests — 15 cases covering validation, execution,
+//! Pipeline integration tests — 15 cases covering validation, execution,
 //! approval, failure modes, persistence, and deadlock detection.
 //!
 //! Uses a MockActorHarness to simulate department actors without real LLM calls.
@@ -302,7 +302,7 @@ async fn route_to_unknown_role_fails() {
 async fn approval_gate_pauses_and_resumes() {
     let harness = MockActorHarness::all_roles();
     let tmp = tempfile::TempDir::new().unwrap();
-    let revw_id = seed_revw_in_review(tmp.path()).await;
+    let revw_id = seed_non_empty_revw(tmp.path()).await;
     let plan = simple_plan(
         "p5",
         "approval",
@@ -617,7 +617,7 @@ edition = "2021"
 async fn runtime_persist_and_reload() {
     let harness = MockActorHarness::all_roles();
     let tmp = tempfile::TempDir::new().unwrap();
-    let revw_id = seed_revw_in_review(tmp.path()).await;
+    let revw_id = seed_non_empty_revw(tmp.path()).await;
     let plan = simple_plan(
         "p13",
         "persistence",
@@ -781,29 +781,13 @@ fn extract_doc_id(parsed: &serde_json::Value) -> String {
         .to_string()
 }
 
-async fn seed_revw_in_review(root: &Path) -> String {
-    let shuji = root.join(".shuji");
-    tokio::fs::create_dir_all(shuji.join("reviews"))
-        .await
-        .unwrap();
-    let counter = shuji.join("_counter");
-    tokio::fs::write(&counter, "1").await.unwrap();
-    let revw_args = serde_json::json!({"type": "revw", "refs": []});
-    let revw_result =
-        shuji_app_lib::tool::documents::tool_create_document(root, &revw_args, "menxiashizhong")
-            .await;
-    let revw_parsed: serde_json::Value = serde_json::from_str(&revw_result).unwrap();
-    assert_eq!(revw_parsed["ok"], true);
-    extract_doc_id(&revw_parsed)
-}
-
 /// Test 17: Manual mode blocks route_to when upstream revw is in_review.
 #[tokio::test]
 async fn manual_mode_route_to_blocks_unapproved_revw() {
     let tmp = common::create_test_project("pipeline_manual_gate");
     let root = tmp.path();
 
-    let revw_id = seed_revw_in_review(root).await;
+    let revw_id = seed_non_empty_revw(root).await;
 
     let mut outputs = HashMap::new();
     outputs.insert(
@@ -849,7 +833,7 @@ async fn manual_mode_approval_gate_resume_requires_approved_doc() {
     let tmp = common::create_test_project("pipeline_approval_block");
     let root = tmp.path();
 
-    let revw_id = seed_revw_in_review(root).await;
+    let revw_id = seed_non_empty_revw(root).await;
 
     let mut outputs = HashMap::new();
     outputs.insert(
@@ -920,7 +904,7 @@ async fn manual_mode_approval_gate_resume_after_approved() {
     let tmp = common::create_test_project("pipeline_approval_pass");
     let root = tmp.path();
 
-    let revw_id = seed_revw_in_review(root).await;
+    let revw_id = seed_non_empty_revw(root).await;
 
     let mut outputs = HashMap::new();
     outputs.insert(
@@ -1188,5 +1172,123 @@ async fn load_from_disk_restores_actor_system_context() {
             assert!(matches!(resume, PipelineResult::Complete { .. }));
         }
         other => panic!("expected AwaitingUserInput, got {:?}", other),
+    }
+}
+
+/// Helper: create an empty revw on disk (no body content).
+async fn seed_empty_revw(root: &Path) -> String {
+    let shuji = root.join(".shuji");
+    tokio::fs::create_dir_all(shuji.join("reviews"))
+        .await
+        .unwrap();
+    let counter = shuji.join("_counter");
+    tokio::fs::write(&counter, "1").await.unwrap();
+    let revw_args = serde_json::json!({"type": "revw", "refs": []});
+    let revw_result =
+        shuji_app_lib::tool::documents::tool_create_document(root, &revw_args, "menxiashizhong")
+            .await;
+    let revw_parsed: serde_json::Value = serde_json::from_str(&revw_result).unwrap();
+    assert_eq!(revw_parsed["ok"], true);
+    extract_doc_id(&revw_parsed)
+}
+
+/// Helper: create a non-empty revw on disk (with body content).
+async fn seed_non_empty_revw(root: &Path) -> String {
+    let revw_id = seed_empty_revw(root).await;
+    let append_args = serde_json::json!({
+        "id": revw_id,
+        "content": "## Review\nThe implementation is solid and meets all requirements."
+    });
+    let result =
+        shuji_app_lib::tool::documents::tool_append_document(root, &append_args, "menxiashizhong")
+            .await;
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+    assert_eq!(parsed["ok"], true, "append must succeed: {}", result);
+    revw_id
+}
+
+/// Test: approval_gate rejects an empty revw document.
+///
+/// Before the fix, an empty revw (created but never appended to) would be
+/// presented to the user for approval — showing a blank document in the UI.
+#[tokio::test]
+async fn approval_gate_rejects_empty_revw() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let empty_revw_id = seed_empty_revw(tmp.path()).await;
+
+    // Mock 门下侍中 to return the empty revw as its artifact
+    let mut outputs = HashMap::new();
+    outputs.insert(
+        Role::MenxiaShizhong,
+        format!("Review complete. {empty_revw_id}"),
+    );
+    let harness = MockActorHarness::with_roles_and_outputs(
+        &[Role::Zhongshuling, Role::MenxiaShizhong],
+        outputs,
+    );
+
+    let plan = simple_plan(
+        "p_empty_revw",
+        "empty revw",
+        vec![
+            route_step("s1", "review", "门下侍中", "review", vec![]),
+            approval_step("s2", "approve", vec!["s1"]),
+        ],
+    );
+    let mut engine = make_engine(plan, &harness, tmp.path());
+    let result = engine.run().await;
+    match result {
+        PipelineResult::StepFailed {
+            step_id, reason, ..
+        } => {
+            assert_eq!(step_id, "s2");
+            assert!(
+                reason.contains("non-empty"),
+                "Should reject empty revw, got: {}",
+                reason
+            );
+            assert!(
+                reason.contains(&empty_revw_id),
+                "Should mention the specific doc: {}",
+                reason
+            );
+        }
+        other => panic!("expected StepFailed for empty revw, got {:?}", other),
+    }
+}
+
+/// Test: approval_gate accepts a non-empty revw document.
+#[tokio::test]
+async fn approval_gate_accepts_non_empty_revw() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let revw_id = seed_non_empty_revw(tmp.path()).await;
+
+    let mut outputs = HashMap::new();
+    outputs.insert(Role::MenxiaShizhong, format!("Review complete. {revw_id}"));
+    let harness = MockActorHarness::with_roles_and_outputs(
+        &[Role::Zhongshuling, Role::MenxiaShizhong],
+        outputs,
+    );
+
+    let plan = simple_plan(
+        "p_nonempty_revw",
+        "non-empty revw",
+        vec![
+            route_step("s1", "review", "门下侍中", "review", vec![]),
+            approval_step("s2", "approve", vec!["s1"]),
+        ],
+    );
+    let mut engine = make_engine(plan, &harness, tmp.path());
+    let result = engine.run().await;
+    match result {
+        PipelineResult::AwaitingApproval {
+            step_id,
+            doc_id,
+            runtime: _,
+        } => {
+            assert_eq!(step_id, "s2");
+            assert_eq!(doc_id, revw_id);
+        }
+        other => panic!("expected AwaitingApproval, got {:?}", other),
     }
 }

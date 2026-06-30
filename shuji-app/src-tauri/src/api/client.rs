@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use crate::api::reasoning::{self, LlmProvider};
+use crate::config::ResolvedReasoningPolicy;
 use serde::Serialize;
 
 const API_TIMEOUT: Duration = Duration::from_secs(180);
@@ -44,22 +46,6 @@ pub struct AnthropicClient {
 }
 
 #[derive(Serialize)]
-struct AnthropicRequest {
-    model: String,
-    max_tokens: u32,
-    system: String,
-    messages: Vec<MessageItem>,
-}
-
-#[derive(Serialize)]
-struct OpenAIRequest {
-    model: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    max_tokens: Option<u32>,
-    messages: Vec<MessageItem>,
-}
-
-#[derive(Serialize)]
 struct MessageItem {
     role: String,
     content: String,
@@ -96,28 +82,47 @@ impl AnthropicClient {
         messages: &[crate::models::message::Message],
         model: &str,
     ) -> anyhow::Result<String> {
+        let policy = ResolvedReasoningPolicy::disabled();
+        self.send_message_with_reasoning(system_prompt, messages, model, policy)
+            .await
+    }
+
+    /// Text-only send with explicit reasoning policy.
+    pub async fn send_message_with_reasoning(
+        &self,
+        system_prompt: &str,
+        messages: &[crate::models::message::Message],
+        model: &str,
+        policy: ResolvedReasoningPolicy,
+    ) -> anyhow::Result<String> {
         if self.api_url.contains("anthropic.com") {
-            self.send_anthropic(system_prompt, messages, model).await
+            self.send_anthropic_with_reasoning(system_prompt, messages, model, policy)
+                .await
         } else {
-            self.send_openai(system_prompt, messages, model).await
+            self.send_openai_with_reasoning(system_prompt, messages, model, policy)
+                .await
         }
     }
 
     // ── Anthropic format ─────────────────────────────────────
 
-    async fn send_anthropic(
+    async fn send_anthropic_with_reasoning(
         &self,
         system_prompt: &str,
         messages: &[crate::models::message::Message],
         model: &str,
+        policy: ResolvedReasoningPolicy,
     ) -> anyhow::Result<String> {
         let api_messages: Vec<MessageItem> = self.build_messages(messages);
-        let body = AnthropicRequest {
-            model: model.to_string(),
-            max_tokens: 32_768,
-            system: system_prompt.to_string(),
-            messages: api_messages,
-        };
+        let mut body = serde_json::json!({
+            "model": model,
+            "max_tokens": 32_768,
+            "system": system_prompt,
+            "messages": api_messages.iter().map(|m| {
+                serde_json::json!({"role": m.role, "content": m.content})
+            }).collect::<Vec<_>>(),
+        });
+        reasoning::apply_reasoning_to_body(&mut body, LlmProvider::Anthropic, policy);
 
         log_console!("[api] anthropic send (model={})", model);
         let resp = self
@@ -161,11 +166,12 @@ impl AnthropicClient {
 
     // ── OpenAI format (no tools) ─────────────────────────────
 
-    async fn send_openai(
+    async fn send_openai_with_reasoning(
         &self,
         system_prompt: &str,
         messages: &[crate::models::message::Message],
         model: &str,
+        policy: ResolvedReasoningPolicy,
     ) -> anyhow::Result<String> {
         let mut api_messages = Vec::new();
         if !system_prompt.is_empty() {
@@ -187,11 +193,12 @@ impl AnthropicClient {
             });
         }
 
-        let body = OpenAIRequest {
-            model: model.to_string(),
-            max_tokens: None,
-            messages: api_messages,
-        };
+        let mut body = serde_json::json!({
+            "model": model,
+            "messages": api_messages,
+        });
+        let provider = reasoning::detect_provider(&self.api_url, model);
+        reasoning::apply_reasoning_to_body(&mut body, provider, policy);
 
         log_console!("[api] openai send (model={})", model);
         let resp = self
@@ -252,26 +259,46 @@ impl AnthropicClient {
         messages: &[crate::models::message::Message],
         model: &str,
         cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        on_delta: F,
+    ) -> anyhow::Result<String>
+    where
+        F: FnMut(&str) -> anyhow::Result<()>,
+    {
+        let policy = ResolvedReasoningPolicy::disabled();
+        self.stream_message_with_reasoning(system_prompt, messages, model, cancel, policy, on_delta)
+            .await
+    }
+
+    /// Stream text-only chat completion with reasoning policy.
+    pub async fn stream_message_with_reasoning<F>(
+        &self,
+        system_prompt: &str,
+        messages: &[crate::models::message::Message],
+        model: &str,
+        cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        policy: ResolvedReasoningPolicy,
         mut on_delta: F,
     ) -> anyhow::Result<String>
     where
         F: FnMut(&str) -> anyhow::Result<()>,
     {
         let result = if self.api_url.contains("anthropic.com") {
-            self.stream_anthropic(
+            self.stream_anthropic_with_reasoning(
                 system_prompt,
                 messages,
                 model,
                 cancel.clone(),
+                policy,
                 &mut on_delta,
             )
             .await
         } else {
-            self.stream_openai(
+            self.stream_openai_with_reasoning(
                 system_prompt,
                 messages,
                 model,
                 cancel.clone(),
+                policy,
                 &mut on_delta,
             )
             .await
@@ -281,19 +308,22 @@ impl AnthropicClient {
             Ok(text) => Ok(text),
             Err(e) => {
                 log_console!("[api] stream failed ({}), falling back to send_message", e);
-                let text = self.send_message(system_prompt, messages, model).await?;
+                let text = self
+                    .send_message_with_reasoning(system_prompt, messages, model, policy)
+                    .await?;
                 on_delta(&text)?;
                 Ok(text)
             }
         }
     }
 
-    async fn stream_openai<F>(
+    async fn stream_openai_with_reasoning<F>(
         &self,
         system_prompt: &str,
         messages: &[crate::models::message::Message],
         model: &str,
         cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        policy: ResolvedReasoningPolicy,
         on_delta: &mut F,
     ) -> anyhow::Result<String>
     where
@@ -310,11 +340,13 @@ impl AnthropicClient {
             api_messages.push(serde_json::json!({"role": "user", "content": "请继续"}));
         }
 
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "model": model,
             "messages": api_messages,
             "stream": true,
         });
+        let provider = reasoning::detect_provider(&self.api_url, model);
+        reasoning::apply_reasoning_to_body(&mut body, provider, policy);
 
         log_console!("[api] openai stream send (model={})", model);
         let resp = self
@@ -337,19 +369,20 @@ impl AnthropicClient {
         crate::api::stream::consume_openai_sse_stream(resp.bytes_stream(), cancel, on_delta).await
     }
 
-    async fn stream_anthropic<F>(
+    async fn stream_anthropic_with_reasoning<F>(
         &self,
         system_prompt: &str,
         messages: &[crate::models::message::Message],
         model: &str,
         cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        policy: ResolvedReasoningPolicy,
         on_delta: &mut F,
     ) -> anyhow::Result<String>
     where
         F: FnMut(&str) -> anyhow::Result<()>,
     {
         let api_messages: Vec<MessageItem> = self.build_messages(messages);
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "model": model,
             "max_tokens": 32768,
             "stream": true,
@@ -358,6 +391,7 @@ impl AnthropicClient {
                 serde_json::json!({"role": m.role, "content": m.content})
             }).collect::<Vec<_>>(),
         });
+        reasoning::apply_reasoning_to_body(&mut body, LlmProvider::Anthropic, policy);
 
         log_console!("[api] anthropic stream send (model={})", model);
         let resp = self

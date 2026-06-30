@@ -27,6 +27,7 @@ import type {
   PricingConfig,
   PricingEntry,
   ModelPrices,
+  ReasoningConfig,
 } from './types';
 
 export interface ShujiEntry {
@@ -220,6 +221,18 @@ export async function setApprovalConfig(config: ApprovalConfig): Promise<void> {
 
 export async function getPendingApprovals(): Promise<string[]> {
   return invoke('get_pending_approvals');
+}
+
+// ── Reasoning config ─────────────────────────────────────────
+
+export type { ReasoningConfig, ReasoningEffort, RoleReasoningConfig } from './types';
+
+export async function getReasoningConfig(): Promise<ReasoningConfig> {
+  return invoke('get_reasoning_config');
+}
+
+export async function setReasoningConfig(config: ReasoningConfig): Promise<void> {
+  return invoke('set_reasoning_config', { config });
 }
 
 // ── Demo project ───────────────────────────────────────────

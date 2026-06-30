@@ -305,6 +305,23 @@ export interface ApprovalConfig {
   auto_retries: number;
 }
 
+// ── Reasoning config ────────────────────────────────────────
+
+export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high';
+
+export interface RoleReasoningConfig {
+  enabled?: boolean | null;
+  effort?: ReasoningEffort | null;
+  budget_tokens?: number | null;
+}
+
+export interface ReasoningConfig {
+  enabled: boolean;
+  effort: ReasoningEffort;
+  budget_tokens: number;
+  roles: Record<string, RoleReasoningConfig>;
+}
+
 // ── Workflow state (runtime) ──────────────────────────────
 
 export interface WorkflowState {

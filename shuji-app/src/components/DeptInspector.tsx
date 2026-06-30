@@ -221,26 +221,8 @@ function StepCard({ entry, humanMode }: { entry: DeptStepEntry; humanMode: boole
   }
 
   switch (kind.type) {
-    case 'thinking': {
-      const [expanded, setExpanded] = useState(false);
-      const text = kind.content;
-      return (
-        <div className="border-l-2 border-jade/40 pl-2 py-1">
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="text-caption text-ink-500 hover:text-ink-700 font-mono flex items-center gap-1"
-          >
-            <span>{expanded ? '▾' : '▸'}</span>
-            <span className="text-jade font-semibold">{t('inspector.thinking')}</span>
-          </button>
-          {expanded && (
-            <div className="text-caption text-ink-600 mt-1 whitespace-pre-wrap font-mono leading-relaxed max-h-60 overflow-y-auto">
-              {text}
-            </div>
-          )}
-        </div>
-      );
-    }
+    case 'thinking':
+      return <ThinkingStepCard text={kind.content} label={t('inspector.thinking')} />;
     case 'tool_call': {
       const argsStr = kind.args
         ? Object.entries(kind.args)
@@ -301,6 +283,27 @@ function StepCard({ entry, humanMode }: { entry: DeptStepEntry; humanMode: boole
     default:
       return null;
   }
+}
+
+function ThinkingStepCard({ text, label }: { text: string; label: string }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="border-l-2 border-jade/40 pl-2 py-1">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="text-caption text-ink-500 hover:text-ink-700 font-mono flex items-center gap-1"
+      >
+        <span>{expanded ? '▾' : '▸'}</span>
+        <span className="text-jade font-semibold">{label}</span>
+      </button>
+      {expanded && (
+        <div className="text-caption text-ink-600 mt-1 whitespace-pre-wrap font-mono leading-relaxed max-h-60 overflow-y-auto">
+          {text}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /** Resolve department steps — keys are normalized to CN labels in useDeptEvents. */

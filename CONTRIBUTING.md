@@ -46,12 +46,15 @@ ShuJi/                          # 仓库根
     ├── src-tauri/src/          # Rust 后端
     │   ├── actor/              # Actor 消息循环
     │   ├── agent/              # 各部门 Agent（含 prompt.md、skills/）
-    │   ├── api/                # Session、AgentController、LLM 客户端
+    │   ├── api/                # Session、AgentController、LLM 客户端、reasoning
     │   ├── tool/               # 工具注册与 dispatch
     │   ├── commands/           # Tauri invoke 入口
     │   ├── audit/              # 审计、血缘、diff
     │   ├── pipeline/           # Pipeline 引擎
-    │   └── workflow/           # Workflow Profile
+    │   ├── workflow/           # Workflow Profile
+    │   ├── validate/           # 交付验证：contract、lint、diff、tests_runner
+    │   ├── learning/           # 角色学习：store、extract、inject
+    │   └── config/             # RuntimeConfig (TOML)
     ├── src-tauri/tests/        # Rust 集成测试
 ```
 
@@ -118,7 +121,7 @@ API 密钥，模板见 `shuji-app/.env.template` 或 `shuji-app/src-tauri/.env.t
 
 ## 测试
 
-Rust 后端提供 **291+ 测试**（96 单元 + 195+ 集成），覆盖 token 计数、路由规则、文档系统、Actor 消息、Session、配置、E2E 工作流（Mock LLM）、审计、Checkpoint 等。所有测试使用临时目录隔离，建议 `--test-threads=1` 规避并发状态竞争。
+Rust 后端提供 **683 测试**（202 单元 + 481 集成），覆盖 token 计数、路由规则、文档系统、Actor 消息、Session、配置、E2E 工作流（Mock LLM）、审计、Checkpoint 等。所有测试使用临时目录隔离，建议 `--test-threads=1` 规避并发状态竞争。
 
 ### 快速验证（PR 前推荐）
 
@@ -143,15 +146,23 @@ cargo clippy --manifest-path shuji-app/src-tauri/Cargo.toml --all-targets
 | 单元测试 | `cargo test --lib` | ❌ |
 | 文件 CRUD | `cargo test --test tool_test` | ❌ |
 | 路径安全 | `cargo test --test path_security_test` | ❌ |
+| 命令安全 | `cargo test --test command_security_test` | ❌ |
 | 文档系统 | `cargo test --test document_test` | ❌ |
 | Actor 消息 | `cargo test --test actor_test` | ❌ |
 | Session | `cargo test --test session_test` | ❌ |
 | Session 控制 | `cargo test --test session_control_test` | ❌ |
 | 配置覆盖 | `cargo test --test config_test` | ❌ |
+| Dispatch 门禁 | `cargo test --test dispatch_gate_test` | ❌ |
 | Workflow mock | `cargo test --test workflow_mock_test` | ❌ |
 | E2E 工作流 | `cargo test --test workflow_demo_test` | ❌（Mock LLM） |
+| Pipeline 引擎 | `cargo test --test pipeline_test` | ❌ |
+| 交付验证 | `cargo test --test validate_test` | ❌ |
 | 审计 | `cargo test --test audit_test` | ❌ |
 | Checkpoint | `cargo test --test checkpoint_test` | ❌ |
+| 外部编辑器 | `cargo test --test editor_test` | ❌ |
+| 角色学习 | `cargo test --test learning_test` | ❌ |
+| 消息路由 | `cargo test --test send_message_routing_test` | ❌ |
+| 场景回放 | `cargo test --test scenario_replay_test` | ❌ |
 | expand_requirements | `cargo test --test expand_requirements_test` | ✅（默认跳过） |
 
 ### 运行单个测试

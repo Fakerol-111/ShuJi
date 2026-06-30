@@ -52,7 +52,7 @@ shuji-app/src-tauri/src/
 ├── commands/workflow/send.rs # 用户发消息入口（常规 / pipeline 恢复双路径）
 ├── commands/workflow/bootstrap.rs # ensure_actor_system、事件转发
 ├── pipeline/engine.rs        # PipelineEngine 调度
-├── actor/spawn.rs            # 各部门 Actor 循环
+├── actor/spawn/            # 各部门 Actor 循环
 ├── api/control/mod.rs        # LLM 工具驱动循环（最核心）
 ├── api/session/              # 消息历史与 API 调用
 ├── tool/dispatch.rs          # 工具总调度 + contract gate

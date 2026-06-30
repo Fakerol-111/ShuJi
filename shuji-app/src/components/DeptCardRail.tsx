@@ -1,11 +1,13 @@
+import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEPT_META_LIST, DEPT_RAIL_GROUPS } from '../constants';
+import { getReasoningConfig, setReasoningConfig as setReasoningConfigApi } from '../api';
 import { isDeptActive } from '../utils/deptLog';
 import { deriveDeptActivitySummary } from '../utils/deptStepSummary';
 import { useDeptEvents } from '../hooks/useDeptEvents';
 import DeptCard from './DeptCard';
 import DeptGlyph from './DeptGlyph';
-import type { DeptLogEntry, PlanInfo } from '../types';
+import type { DeptLogEntry, PlanInfo, ReasoningConfig } from '../types';
 
 const ERROR_PREFIX = '❌';
 
@@ -33,6 +35,18 @@ export default function DeptCardRail({
   const { deptSteps } = useDeptEvents();
   const metaByLabel = new Map(DEPT_META_LIST.map((d) => [d.label, d]));
 
+  const [reasoningConfig, setReasoningConfig] = useState<ReasoningConfig | null>(null);
+  useEffect(() => {
+    getReasoningConfig()
+      .then(setReasoningConfig)
+      .catch(() => {});
+  }, []);
+
+  const handleReasoningChange = useCallback(async (newConfig: ReasoningConfig) => {
+    setReasoningConfig(newConfig);
+    await setReasoningConfigApi(newConfig);
+  }, []);
+
   const renderDept = (label: string) => {
     const meta = metaByLabel.get(label);
     if (!meta) return null;
@@ -56,6 +70,8 @@ export default function DeptCardRail({
         intent={activity.intent}
         latestArtifact={activity.latestArtifact}
         planInfo={planInfo}
+        reasoningConfig={reasoningConfig}
+        onReasoningChange={handleReasoningChange}
         onClick={() => onSelect(selectedDept ? null : label)}
       />
     );

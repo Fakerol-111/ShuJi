@@ -1,16 +1,22 @@
 pub mod esaa_contract;
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;
 
 /// 系统运行时配置
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RuntimeConfig {
+    #[serde(default)]
     pub api: ApiConfig,
+    #[serde(default)]
     pub tool_iterations: ToolIterationsConfig,
+    #[serde(default)]
     pub context_compaction: ContextCompactionConfig,
+    #[serde(default)]
     pub actor: ActorConfig,
+    #[serde(default)]
     pub watchdog: WatchdogConfig,
     #[serde(default)]
     pub checkpoint: CheckpointConfig,
@@ -36,6 +42,7 @@ pub struct ApiConfig {
     pub length_max_retries: u32,
 
     /// 不同类型 agent 的 max_tokens 配置；设为 0 时不发送该字段，让模型/服务端使用可用上限
+    #[serde(default)]
     pub max_tokens: MaxTokensConfig,
 
     /// 推理/思考模式配置
@@ -239,15 +246,81 @@ fn default_checkpoint_interval() -> u64 {
     0
 }
 
+/// 推理/思考强度等级
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ReasoningEffort {
+    None,
+    Low,
+    #[default]
+    Medium,
+    High,
+}
+
+impl std::fmt::Display for ReasoningEffort {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::None => write!(f, "none"),
+            Self::Low => write!(f, "low"),
+            Self::Medium => write!(f, "medium"),
+            Self::High => write!(f, "high"),
+        }
+    }
+}
+
+/// 单个角色的推理配置覆盖（可选字段，None 表示继承全局）
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RoleReasoningConfig {
+    #[serde(default)]
+    pub enabled: Option<bool>,
+    #[serde(default)]
+    pub effort: Option<ReasoningEffort>,
+    #[serde(default)]
+    pub budget_tokens: Option<u32>,
+}
+
 /// 推理/思考模式配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReasoningConfig {
     /// 是否启用思考模式
     #[serde(default = "default_reasoning_enabled")]
     pub enabled: bool,
+    /// 思考强度：none / low / medium / high
+    #[serde(default = "default_reasoning_effort")]
+    pub effort: ReasoningEffort,
     /// 思考预算 token 数（0 = 使用模型默认值；仅 Anthropic API 有效）
     #[serde(default = "default_reasoning_budget")]
     pub budget_tokens: u32,
+    /// 按角色覆盖推理策略
+    #[serde(default)]
+    pub roles: HashMap<String, RoleReasoningConfig>,
+}
+
+/// 推理阶段（用于工部等需要按阶段切换策略的角色）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReasoningPhase {
+    Default,
+    Planning,
+    Execution,
+    WrapUp,
+}
+
+/// 已解析的推理策略（最终生效的值）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResolvedReasoningPolicy {
+    pub enabled: bool,
+    pub effort: ReasoningEffort,
+    pub budget_tokens: u32,
+}
+
+impl ResolvedReasoningPolicy {
+    pub const fn disabled() -> Self {
+        Self {
+            enabled: false,
+            effort: ReasoningEffort::None,
+            budget_tokens: 0,
+        }
+    }
 }
 
 // ── 默认值函数 ────────────────────────────────────────────────
@@ -307,6 +380,9 @@ fn default_max_plan_iterations() -> u32 {
 fn default_reasoning_enabled() -> bool {
     true
 }
+fn default_reasoning_effort() -> ReasoningEffort {
+    ReasoningEffort::Medium
+}
 fn default_reasoning_budget() -> u32 {
     0
 }
@@ -339,7 +415,9 @@ impl Default for ReasoningConfig {
     fn default() -> Self {
         Self {
             enabled: default_reasoning_enabled(),
+            effort: default_reasoning_effort(),
             budget_tokens: default_reasoning_budget(),
+            roles: HashMap::new(),
         }
     }
 }
@@ -504,6 +582,14 @@ impl RuntimeConfig {
         if other.api.reasoning.budget_tokens != default_reasoning_budget() {
             self.api.reasoning.budget_tokens = other.api.reasoning.budget_tokens;
         }
+        if other.api.reasoning.effort != default_reasoning_effort() {
+            self.api.reasoning.effort = other.api.reasoning.effort;
+        }
+        if !other.api.reasoning.roles.is_empty() {
+            for (k, v) in &other.api.reasoning.roles {
+                self.api.reasoning.roles.insert(k.clone(), v.clone());
+            }
+        }
         if other.api.streaming.enabled {
             self.api.streaming.enabled = other.api.streaming.enabled;
         }
@@ -653,6 +739,86 @@ impl RuntimeConfig {
                 .unwrap_or(base.mid_run_compact),
         }
     }
+
+    /// 为指定角色和阶段解析推理策略。
+    /// 优先级：阶段覆盖 > api.reasoning.roles[role] 显式覆盖 > 内置角色默认策略 > api.reasoning 全局默认。
+    pub fn resolve_reasoning_policy(
+        &self,
+        role: &str,
+        phase: ReasoningPhase,
+    ) -> ResolvedReasoningPolicy {
+        // 1. 阶段覆盖（仅工部有 Planning/Execution 区分）
+        if let Some(resolved) = resolve_phase_override(role, phase) {
+            return resolved;
+        }
+
+        // 2. api.reasoning.roles[role] 显式覆盖
+        if let Some(role_cfg) = self.api.reasoning.roles.get(role) {
+            let enabled = role_cfg.enabled.unwrap_or(self.api.reasoning.enabled);
+            let effort = role_cfg.effort.unwrap_or(self.api.reasoning.effort);
+            let budget = role_cfg
+                .budget_tokens
+                .unwrap_or(self.api.reasoning.budget_tokens);
+            return ResolvedReasoningPolicy {
+                enabled,
+                effort: if !enabled {
+                    ReasoningEffort::None
+                } else {
+                    effort
+                },
+                budget_tokens: budget,
+            };
+        }
+
+        // 3. 内置角色默认策略
+        if let Some(builtin) = builtin_role_reasoning(role) {
+            return builtin;
+        }
+
+        // 4. 全局默认
+        ResolvedReasoningPolicy {
+            enabled: self.api.reasoning.enabled,
+            effort: if !self.api.reasoning.enabled {
+                ReasoningEffort::None
+            } else {
+                self.api.reasoning.effort
+            },
+            budget_tokens: self.api.reasoning.budget_tokens,
+        }
+    }
+}
+
+/// 工部阶段覆盖策略
+fn resolve_phase_override(role: &str, phase: ReasoningPhase) -> Option<ResolvedReasoningPolicy> {
+    if role != "工部" {
+        return None;
+    }
+    match phase {
+        ReasoningPhase::Planning => Some(ResolvedReasoningPolicy {
+            enabled: true,
+            effort: ReasoningEffort::High,
+            budget_tokens: 0,
+        }),
+        ReasoningPhase::Execution => Some(ResolvedReasoningPolicy::disabled()),
+        _ => None,
+    }
+}
+
+/// 内置角色默认推理策略
+fn builtin_role_reasoning(role: &str) -> Option<ResolvedReasoningPolicy> {
+    let effort = match role {
+        "内阁" | "Zhongshuling" | "中书令" => ReasoningEffort::High,
+        "门下侍中" | "尚书令" | "吏部尚书" | "兵部尚书" | "工部尚书" => {
+            ReasoningEffort::Medium
+        }
+        "刑部尚书" | "礼部尚书" => ReasoningEffort::Low,
+        _ => return None,
+    };
+    Some(ResolvedReasoningPolicy {
+        enabled: effort != ReasoningEffort::None,
+        effort,
+        budget_tokens: 0,
+    })
 }
 
 /// 接近 1M 窗口上限再压缩（各部门统一策略，可用 `context_config.json` 覆盖）。

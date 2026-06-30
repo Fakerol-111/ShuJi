@@ -306,6 +306,61 @@ pub(crate) async fn find_latest_doc_with_prefixes(
     best.map(|(_, id)| id)
 }
 
+/// Like `find_latest_doc_with_prefixes`, but only returns documents whose body
+/// is non-empty (after trimming).  Used by artifact fallback to avoid picking
+/// up empty `revw` shells that were created but never appended to.
+pub(crate) async fn find_latest_non_empty_doc_with_prefixes(
+    working_dir: &Path,
+    type_prefixes: &[&str],
+) -> Option<String> {
+    let mut candidates: Vec<(u64, String)> = Vec::new();
+    let subdirs = [
+        "designs",
+        "designs/detail",
+        "reviews",
+        "requirements",
+        "tasks",
+        "contracts",
+        "analysis",
+    ];
+    for subdir in subdirs {
+        let dir = working_dir.join(".shuji").join(subdir);
+        let mut entries = match tokio::fs::read_dir(&dir).await {
+            Ok(rd) => rd,
+            Err(_) => continue,
+        };
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let path = entry.path();
+            let name = path.file_name()?.to_string_lossy().to_string();
+            let Some(id) = name.strip_suffix(".md") else {
+                continue;
+            };
+            let prefix = id.split('_').next().unwrap_or("");
+            if !type_prefixes.contains(&prefix) {
+                continue;
+            }
+            // Read and parse to check body is non-empty
+            if let Ok(content) = tokio::fs::read_to_string(&path).await {
+                if let Ok((_, body)) = parse_doc(&content) {
+                    if body.trim().is_empty() {
+                        continue;
+                    }
+                } else {
+                    continue;
+                }
+            } else {
+                continue;
+            }
+            let num = id.rsplit('_').next()?.parse::<u64>().ok()?;
+            candidates.push((num, id.to_string()));
+        }
+    }
+    candidates
+        .into_iter()
+        .max_by_key(|(n, _)| *n)
+        .map(|(_, id)| id)
+}
+
 /// Resolve the full path for a document by its ID.
 pub(super) async fn resolve_doc_path(working_dir: &Path, id: &str) -> Result<PathBuf, String> {
     use crate::tool::resolve_scoped_path;

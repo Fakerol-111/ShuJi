@@ -35,6 +35,7 @@
 - **Checkpoint 回滚** — 定时快照工作区与会话状态，可在 UI 中浏览并恢复
 - **完整审计链** — 操作日志、文档血缘、变更 diff，关键步骤可追溯
 - **灵活 API 配置** — 支持 Anthropic / OpenAI / DeepSeek 及兼容接口，可按部门独立配置厂商与模型
+- **推理/思考展示** — 支持 per-vendor 推理链（reasoning/thinking tokens）展示，可查看 LLM 的推理过程
 
 ---
 
@@ -162,7 +163,7 @@ flowchart TB
 | [CLAUDE.md](CLAUDE.md) | 文件级索引与测试命令（维护者 / AI） |
 | [LICENSE](LICENSE) | MIT 许可证 |
 
-后端核心路径有 **400+** 自动化测试（Rust 单元/集成 + 前端 Vitest），详见 [CONTRIBUTING.md#测试](CONTRIBUTING.md#测试)。
+后端核心路径有 **683** 自动化测试（Rust 单元/集成 + 前端 Vitest），详见 [CONTRIBUTING.md#测试](CONTRIBUTING.md#测试)。
 
 ---
 

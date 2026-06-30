@@ -45,6 +45,18 @@ async fn workflow_greenfield_plan_hits_approval_gate() {
     let harness = MockActorHarness::all_roles();
     let tmp = tempfile::TempDir::new().unwrap();
 
+    // Seed a non-empty revw so approval_gate can read its body.
+    // MockActorHarness returns "revw_1" as the artifact for 门下侍中.
+    let shuji = tmp.path().join(".shuji");
+    tokio::fs::create_dir_all(shuji.join("reviews"))
+        .await
+        .unwrap();
+    tokio::fs::write(shuji.join("_counter"), "1").await.unwrap();
+    let revw_body = "---\nid: revw_1\ntype: revw\nauthor: 门下侍中\ntimestamp: 2026-01-01\nrefs: [-1]\nstatus: in_review\n---\n## Review\nThe design is well structured.";
+    tokio::fs::write(shuji.join("reviews/revw_1.md"), revw_body)
+        .await
+        .unwrap();
+
     let plan = pipeline_from_profile("greenfield_standard", "plan-gs-test-001", "standard task")
         .expect("greenfield_standard profile should generate a plan");
 
