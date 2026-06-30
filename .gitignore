@@ -50,8 +50,9 @@ shuji-app/src-tauri/gen/
 # Local docs (not for repo)
 /docs/
 shuji-app/docs/*
-# ARCHITECTURE.md is the public architecture narrative referenced by README/CONTRIBUTING/etc.
+# 公开架构叙事与维护者索引进仓库，其余 docs 本地
 !shuji-app/docs/ARCHITECTURE.md
+!shuji-app/docs/MAINTAINER_INDEX.md
 
 # Project meta files (local only)
 CLAUDE.md

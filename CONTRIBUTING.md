@@ -29,7 +29,7 @@ sudo apt-get install -y \
 
 Python 项目测试需系统安装 `python3`（或 `python`）。
 
-新人请先读 [ONBOARDING.md](ONBOARDING.md)。架构叙事见 [shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md)；后续 agent 任务边界见 [shuji-app/docs/AGENT_TASKS.md](shuji-app/docs/AGENT_TASKS.md)；文件级索引见 [CLAUDE.md](CLAUDE.md)。
+新人请先读 [ONBOARDING.md](ONBOARDING.md)。架构叙事见 [shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md)；文件级索引见 [shuji-app/docs/MAINTAINER_INDEX.md](shuji-app/docs/MAINTAINER_INDEX.md)；AI 维护入口见 [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md)（本地文件）。
 
 ## 仓库目录约定
 
@@ -193,9 +193,13 @@ npm run lint
 npm test
 ```
 
-## 架构要点
+## 架构与文件索引
 
-### 消息流
+架构叙事（主流程、9 Actors、Session/AgentController、审计、Checkpoint 等）见 **[shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md)**。
+
+文件级索引、Session Limits、Edge Cases、Token Tracking 见 **[shuji-app/docs/MAINTAINER_INDEX.md](shuji-app/docs/MAINTAINER_INDEX.md)**。
+
+### 消息流（快速参考）
 
 1. 用户输入 → `send_message` → `ActorSystem` 路由到内阁
 2. 内阁根据 `<skill>` 选择工作流，可用 `cancel_agent` 精确中断指定部门
@@ -204,18 +208,6 @@ npm test
 5. `dept_log_tx` → 前端 `dept-log` 事件
 6. `milestone_tx` → 持久化到 `.shuji/state.json`
 7. `plan-update` → 工部批次进度面板
-
-### 核心技术（摘要）
-
-- **Actor 模型** — tokio actor + mpsc，`FastMessage` 精确中断
-- **Skill 系统** — `<skill>` 标签按需加载，内阁可运行时创建技能
-- **3 层上下文** — base_prompt / soul_prompt / context_messages
-- **上下文压缩** — 超阈值 LLM 摘要，skill 消息剥离后重追加
-- **Session / AgentController 分离** — 纯 LLM 层 + 驱动循环（cancel / watchdog / checkpoint）
-- **批量计划循环** — 工部大任务分批执行，批间轻量恢复
-- **审计系统** — JSONL 日志、文档血缘、diff、双向引用索引
-
-完整技术栈与文件布局见 [CLAUDE.md](CLAUDE.md#architecture)。
 
 ### Checkpoint 系统
 

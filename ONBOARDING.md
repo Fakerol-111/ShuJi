@@ -30,8 +30,8 @@
 
 ### ③ 深入维护 / AI 辅助开发
 
-1. [CLAUDE.md](CLAUDE.md) — 文件级索引、各模块路径、边缘 case 清单  
-2. **[shuji-app/docs/AGENT_TASKS.md](shuji-app/docs/AGENT_TASKS.md)** — 后续 agent 任务边界、清单完成状态、不建议做的事  
+1. [shuji-app/docs/MAINTAINER_INDEX.md](shuji-app/docs/MAINTAINER_INDEX.md) — 文件级位置、Session Limits、Edge Cases  
+2. [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md) — 文件级索引与测试命令（本地，AI 工具入口）  
 
 ### ④ 改代码时
 
@@ -85,10 +85,11 @@ shuji-app/src-tauri/src/
 | 问题 | 答案 |
 |------|------|
 | 主流程是 route_to 还是 Pipeline？ | **Pipeline-first**。内阁 `submit_pipeline_plan` → `PipelineEngine`。`route_to` 仅步骤内兼容。 |
-| README 和 CLAUDE 看哪个？ | 对外 / 架构叙事 → **ARCHITECTURE.md**；改具体文件 → **CLAUDE.md** |
-| 为什么有 CLAUDE.md？ | Cursor/Claude 维护索引，含测试命令与文件路径 |
+| 架构看哪份文档？ | 对外叙事 → **[ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md)**；文件位置 → **[MAINTAINER_INDEX.md](shuji-app/docs/MAINTAINER_INDEX.md)** |
+| 为什么有 CLAUDE.md / AGENTS.md？ | Claude Code / Codex 的维护索引入口（本地，.gitignore 忽略） |
 | 改配置不生效？ | `config.local.toml` > `config.toml`；API 用 `api_config.json` > `.env` |
 | 测试要 API Key 吗？ | 绝大多数不需要；`expand_requirements_test` 默认跳过 |
+| 测试有多少个？ | 以 `scripts/count_tests.sh` 输出为准（约 730，Rust + 前端） |
 
 ---
 
