@@ -455,3 +455,35 @@ export async function listRunMetrics(
 ): Promise<RunMetricsSummary[]> {
   return invoke('list_run_metrics', { projectDir, limit });
 }
+
+// ── External IDE ────────────────────────────────────────────────
+
+export interface EditorConfig {
+  editor: 'vscode' | 'cursor' | 'trae' | 'zed' | 'sublime' | 'jetbrains' | 'custom';
+  custom_command?: string | null;
+  reuse_window: boolean;
+}
+
+export async function getEditorConfig(): Promise<EditorConfig> {
+  return invoke('get_editor_config');
+}
+
+export async function setEditorConfig(config: EditorConfig): Promise<void> {
+  return invoke('set_editor_config', { config });
+}
+
+export async function checkExternalEditor(config: EditorConfig): Promise<string> {
+  return invoke('check_external_editor', { config });
+}
+
+export async function openInExternalEditor(
+  projectDir: string,
+  relPath: string,
+  line?: number
+): Promise<void> {
+  return invoke('open_in_external_editor', { projectDir, relPath, line });
+}
+
+export async function openProjectInExternalEditor(projectDir: string): Promise<void> {
+  return invoke('open_project_in_external_editor', { projectDir });
+}

@@ -221,7 +221,30 @@
     "approvalAutoRetries": "自动放行重试次数",
     "approvalModeManualDesc": "plan/revw 待批时暂停流程，必须皇帝朱批后才继续。（默认）",
     "approvalModeAutoDesc": "内阁连续 N 轮未请示后自动批准，兼容旧版行为。",
-    "approvalModeHint": "保存后立即写入 config.local.toml；进行中的工作流需重新打开项目后生效。"
+    "approvalModeHint": "保存后立即写入 config.local.toml；进行中的工作流需重新打开项目后生效。",
+    "externalEditor": "外部 IDE",
+    "externalEditorDesc": "在架阁预览中一键用 VS Code、Cursor 或自定义编辑器打开当前文件。",
+    "externalEditorHint": "请确保所选编辑器已安装。若检测失败，可在「自定义」中填写 code.cmd 或 Cursor 的完整路径。",
+    "externalEditor.check": "检测",
+    "externalEditor.checkSuccess": "检测通过：编辑器命令可用",
+    "externalEditor.customCommand": "自定义命令",
+    "externalEditor.customCommandHint": "仅填写单个可执行文件名或完整路径，不要包含参数或 shell 语法。",
+    "externalEditor.customCommandPlaceholder": "例如 C:\\Program Files\\MyEditor\\editor.exe",
+    "externalEditor.reuseWindow": "复用当前窗口",
+    "externalEditor.reuseWindowHint": "向编辑器传递 --reuse-window，避免每次打开新窗口。",
+    "externalEditor.vscode": "VS Code",
+    "externalEditor.cursor": "Cursor",
+    "externalEditor.trae": "Trae",
+    "externalEditor.zed": "Zed",
+    "externalEditor.sublime": "Sublime Text",
+    "externalEditor.jetbrains": "JetBrains (IDEA)",
+    "externalEditor.custom": "自定义"
+  },
+  "editor": {
+    "openInEditor": "用 {{editor}} 打开",
+    "openLineInEditor": "在 {{editor}} 中打开此行",
+    "openProjectInEditor": "用 {{editor}} 打开项目",
+    "checkSuccess": "检测通过：将使用 {{editor}}"
   },
   "settingsExtra": {
     "workflowIntent": "任务意图 (Intent)",
@@ -382,6 +405,8 @@
     "auditDiffHeader": "审计 Diff",
     "metadata": "元数据",
     "fileEmpty": "文件为空",
+    "openInExternalEditor": "在外部 IDE 打开",
+    "openLineInEditor": "在外部 IDE 中打开此行",
     "approvalNotifyFailed": "已朱批但未通知内阁：{{error}}。您可以手动发送消息继续",
     "reasonNoApi": "缺少 API 定义",
     "reasonNoTest": "缺少测试策略",
@@ -460,7 +485,9 @@
     "typeTask": "任务",
     "typeCtrt": "契约",
     "typeRprt": "报告",
-    "typeAnls": "分析"
+    "typeAnls": "分析",
+    "openInExternalEditor": "在外部 IDE 打开",
+    "openProjectInEditor": "打开项目"
   },
   "workflow": {
     "newFeature": "新功能",

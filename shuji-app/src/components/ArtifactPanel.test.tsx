@@ -18,6 +18,11 @@ vi.mock('../api', () => ({
   getDocumentDiffs: vi.fn().mockResolvedValue([]),
   readDocumentDiff: vi.fn().mockResolvedValue(''),
   getDocumentLineage: vi.fn().mockResolvedValue(null),
+  getEditorConfig: vi.fn().mockResolvedValue({
+    editor: 'vscode',
+    custom_command: null,
+    reuse_window: true,
+  }),
 }));
 
 vi.mock('react-markdown', () => ({
