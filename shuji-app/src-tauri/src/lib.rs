@@ -225,6 +225,11 @@ pub fn run() {
             commands::validate::validate_delivery_cmd,
             commands::metrics::get_latest_run_metrics,
             commands::metrics::list_run_metrics,
+            commands::editor::get_editor_config,
+            commands::editor::set_editor_config,
+            commands::editor::check_external_editor,
+            commands::editor::open_in_external_editor,
+            commands::editor::open_project_in_external_editor,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

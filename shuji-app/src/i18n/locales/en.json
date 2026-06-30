@@ -222,7 +222,30 @@
     "approvalAutoRetries": "Auto-approve Retries",
     "approvalModeManualDesc": "Pause when plan/revw is pending; workflow continues only after imperial approval. (Default)",
     "approvalModeAutoDesc": "Cabinet auto-approves after N rounds without request_decision; legacy behavior.",
-    "approvalModeHint": "Saved to config.local.toml immediately; reload the project for in-flight workflows."
+    "approvalModeHint": "Saved to config.local.toml immediately; reload the project for in-flight workflows.",
+    "externalEditor": "External IDE",
+    "externalEditorDesc": "Open the current file from Archive preview in VS Code, Cursor, or a custom editor.",
+    "externalEditorHint": "Ensure the selected editor is installed. If detection fails, choose Custom and enter the full path to code.cmd or Cursor.",
+    "externalEditor.check": "Check",
+    "externalEditor.checkSuccess": "Check passed: editor command is available",
+    "externalEditor.customCommand": "Custom command",
+    "externalEditor.customCommandHint": "Enter a single executable name or full path only — no arguments or shell syntax.",
+    "externalEditor.customCommandPlaceholder": "e.g. C:\\Program Files\\MyEditor\\editor.exe",
+    "externalEditor.reuseWindow": "Reuse window",
+    "externalEditor.reuseWindowHint": "Pass --reuse-window to avoid opening a new window each time.",
+    "externalEditor.vscode": "VS Code",
+    "externalEditor.cursor": "Cursor",
+    "externalEditor.trae": "Trae",
+    "externalEditor.zed": "Zed",
+    "externalEditor.sublime": "Sublime Text",
+    "externalEditor.jetbrains": "JetBrains (IDEA)",
+    "externalEditor.custom": "Custom"
+  },
+  "editor": {
+    "openInEditor": "Open in {{editor}}",
+    "openLineInEditor": "Open this line in {{editor}}",
+    "openProjectInEditor": "Open project in {{editor}}",
+    "checkSuccess": "Check passed: will use {{editor}}"
   },
   "settingsExtra": {
     "workflowIntent": "Workflow Intent",
@@ -383,6 +406,8 @@
     "auditDiffHeader": "Audit Diff",
     "metadata": "Metadata",
     "fileEmpty": "File is empty",
+    "openInExternalEditor": "Open in external IDE",
+    "openLineInEditor": "Open this line in external IDE",
     "approvalNotifyFailed": "Approved but failed to notify Cabinet: {{error}}. You can manually send a message to continue.",
     "reasonNoApi": "Missing API definitions",
     "reasonNoTest": "Missing test strategy",
@@ -461,7 +486,9 @@
     "typeTask": "Task",
     "typeCtrt": "Contract",
     "typeRprt": "Report",
-    "typeAnls": "Analysis"
+    "typeAnls": "Analysis",
+    "openInExternalEditor": "Open in external IDE",
+    "openProjectInEditor": "Open project"
   },
   "workflow": {
     "newFeature": "New Feature",

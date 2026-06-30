@@ -15,7 +15,7 @@ const API_ERROR_MAP: Array<[RegExp, string]> = [
   [/500|internal server error/i, 'error.serverError'],
   [/502|503|service unavailable/i, 'error.serviceUnavailable'],
   [/400|bad request/i, 'error.badRequest'],
-  [/404|not found/i, 'error.notFound'],
+  [/404|api endpoint.*not found|endpoint.*not found|not found.*api url/i, 'error.notFound'],
   [/api error \(unknown\)/i, 'error.unknownApiError'],
 ];
 

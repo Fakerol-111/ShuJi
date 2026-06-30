@@ -2,14 +2,22 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { listen } from '@tauri-apps/api/event';
-import { listShujiTree } from '../api';
+import { listShujiTree, openInExternalEditor, openProjectInExternalEditor } from '../api';
 import { formatError } from '../utils/error';
+import { useEditorConfig } from '../hooks/useEditorConfig';
+import { openInEditorLabel, openProjectInEditorLabel } from '../utils/editorLabel';
 import type { ShujiEntry } from '../api';
 
 interface DocTreeProps {
   projectDir: string;
   selectedDoc: string | null;
   onSelect: (path: string) => void;
+}
+
+interface ContextMenuState {
+  x: number;
+  y: number;
+  path: string;
 }
 
 function filterShujiOnly(entries: ShujiEntry[]): ShujiEntry[] {
@@ -62,10 +70,19 @@ function formatTypeLabel(name: string, t: TFunction): string {
 
 export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreeProps) {
   const { t } = useTranslation();
+  const editorConfig = useEditorConfig();
+  const openInEditorText = useMemo(() => openInEditorLabel(editorConfig, t), [editorConfig, t]);
+  const openProjectInEditorText = useMemo(
+    () => openProjectInEditorLabel(editorConfig, t),
+    [editorConfig, t]
+  );
   const [tree, setTree] = useState<ShujiEntry[]>([]);
   const [showAllFiles, setShowAllFiles] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [editorError, setEditorError] = useState('');
+  const [openingProject, setOpeningProject] = useState(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const expandedRef = useRef<Record<string, boolean>>({});
 
@@ -96,6 +113,39 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
     };
   }, [debouncedRefresh]);
 
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    window.addEventListener('click', close);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [contextMenu]);
+
+  const handleOpenInEditor = async (relPath: string) => {
+    setContextMenu(null);
+    setEditorError('');
+    try {
+      await openInExternalEditor(projectDir, relPath);
+    } catch (e) {
+      setEditorError(formatError(e));
+    }
+  };
+
+  const handleOpenProject = async () => {
+    setOpeningProject(true);
+    setEditorError('');
+    try {
+      await openProjectInExternalEditor(projectDir);
+    } catch (e) {
+      setEditorError(formatError(e));
+    } finally {
+      setOpeningProject(false);
+    }
+  };
+
   const displayTree = useMemo(
     () => (showAllFiles ? tree : filterShujiOnly(tree)),
     [tree, showAllFiles]
@@ -111,7 +161,7 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
     );
 
   return (
-    <div className="py-2 text-ui">
+    <div className="py-2 text-ui relative">
       <div className="sticky top-0 z-10 bg-surface-parchment px-2 pb-2 flex justify-between items-center gap-2 border-b border-fold mb-1">
         <div className="flex rounded border border-fold overflow-hidden shrink-0">
           <button
@@ -135,12 +185,21 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
             {t('docTree.allFiles')}
           </button>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 shrink-0">
           {loading && (
             <span className="text-[10px] text-ink-400 animate-pulse">
               {t('docTree.refreshing')}
             </span>
           )}
+          <button
+            type="button"
+            onClick={handleOpenProject}
+            disabled={openingProject}
+            title={openProjectInEditorText}
+            className="px-2 py-1 rounded text-[10px] text-ink-500 hover:bg-ink-100 hover:text-ink-800 disabled:opacity-50 whitespace-nowrap"
+          >
+            {openingProject ? t('common.loading') : openProjectInEditorText}
+          </button>
           <button
             onClick={loadTree}
             className="px-2 py-1 rounded text-ui text-ink-500 hover:bg-ink-100 hover:text-ink-800"
@@ -149,6 +208,12 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
           </button>
         </div>
       </div>
+
+      {editorError && (
+        <p className="mx-2 mb-2 px-2 py-1.5 text-caption text-vermillion bg-vermillion/5 rounded border border-vermillion/20">
+          {editorError}
+        </p>
+      )}
 
       {displayTree.length === 0 && !loading ? (
         <div className="p-3 text-center text-ink-400">
@@ -171,10 +236,27 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
             entry={entry}
             selectedDoc={selectedDoc}
             onSelect={onSelect}
+            onContextMenu={(path, x, y) => setContextMenu({ path, x, y })}
             depth={0}
             expandedRef={expandedRef}
           />
         ))
+      )}
+
+      {contextMenu && (
+        <div
+          className="fixed z-50 min-w-[160px] rounded-lg border border-fold bg-surface-paper shadow-lg py-1 text-ui"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="w-full px-3 py-1.5 text-left hover:bg-ink-100 text-ink-800"
+            onClick={() => handleOpenInEditor(contextMenu.path)}
+          >
+            {openInEditorText}
+          </button>
+        </div>
       )}
     </div>
   );
@@ -184,12 +266,14 @@ function DocNode({
   entry,
   selectedDoc,
   onSelect,
+  onContextMenu,
   depth,
   expandedRef,
 }: {
   entry: ShujiEntry;
   selectedDoc: string | null;
   onSelect: (path: string) => void;
+  onContextMenu: (path: string, x: number, y: number) => void;
   depth: number;
   expandedRef: React.MutableRefObject<Record<string, boolean>>;
 }) {
@@ -223,6 +307,7 @@ function DocNode({
               entry={child}
               selectedDoc={selectedDoc}
               onSelect={onSelect}
+              onContextMenu={onContextMenu}
               depth={depth + 1}
               expandedRef={expandedRef}
             />
@@ -236,6 +321,10 @@ function DocNode({
   return (
     <button
       onClick={() => onSelect(entry.path)}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onContextMenu(entry.path, e.clientX, e.clientY);
+      }}
       className={`w-full flex items-center gap-1 px-2 py-1 text-left transition-colors ${
         active
           ? 'bg-vermillion/10 text-vermillion border-r-2 border-vermillion'

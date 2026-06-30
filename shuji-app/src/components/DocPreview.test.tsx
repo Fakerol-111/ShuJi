@@ -15,6 +15,8 @@ vi.mock('../api', () => ({
   getDocumentDiffs: vi.fn(),
   readDocumentDiff: vi.fn(),
   getDocumentLineage: vi.fn(),
+  getEditorConfig: vi.fn(),
+  openInExternalEditor: vi.fn(),
 }));
 
 vi.mock('react-markdown', () => ({
@@ -56,6 +58,11 @@ describe('DocPreview', () => {
       status: 'approved',
       refs: [],
       children: [],
+    });
+    mockedApi.getEditorConfig.mockResolvedValue({
+      editor: 'vscode',
+      custom_command: null,
+      reuse_window: true,
     });
   });
 
@@ -230,5 +237,49 @@ describe('DocPreview', () => {
     });
     expect(container.querySelector('.doc-preview-metadata')).toBeTruthy();
     expect(container.querySelector('details')).toBeTruthy();
+  });
+
+  it('opens file in external editor from toolbar button', async () => {
+    const user = userEvent.setup();
+    mockedApi.openInExternalEditor.mockResolvedValue(undefined);
+    render(<DocPreview projectDir="/test" docPath=".shuji/reviews/doc-001.md" />);
+    await waitFor(() => {
+      expect(screen.getByText(/审查报告/)).toBeTruthy();
+    });
+    await user.click(screen.getByRole('button', { name: '用 VS Code 打开' }));
+    await waitFor(() => {
+      expect(mockedApi.openInExternalEditor).toHaveBeenCalledWith(
+        '/test',
+        '.shuji/reviews/doc-001.md'
+      );
+    });
+  });
+
+  it('shows editor error below toolbar on open failure', async () => {
+    const user = userEvent.setup();
+    mockedApi.openInExternalEditor.mockRejectedValue(new Error('未找到 code'));
+    render(<DocPreview projectDir="/test" docPath=".shuji/reviews/doc-001.md" />);
+    await waitFor(() => {
+      expect(screen.getByText(/审查报告/)).toBeTruthy();
+    });
+    await user.click(screen.getByRole('button', { name: '用 VS Code 打开' }));
+    await waitFor(() => {
+      expect(screen.getByText(/未找到 code/)).toBeTruthy();
+    });
+  });
+
+  it('opens code file at clicked line number', async () => {
+    const user = userEvent.setup();
+    mockedApi.openInExternalEditor.mockResolvedValue(undefined);
+    mockedApi.readShujiDoc.mockResolvedValue({
+      content: 'line1\nline2\nline3',
+      path: 'src/main.rs',
+    });
+    render(<DocPreview projectDir="/test" docPath="src/main.rs" />);
+    await waitFor(() => expect(screen.getByText('2')).toBeTruthy());
+    await user.click(screen.getByText('2'));
+    await waitFor(() => {
+      expect(mockedApi.openInExternalEditor).toHaveBeenCalledWith('/test', 'src/main.rs', 2);
+    });
   });
 });

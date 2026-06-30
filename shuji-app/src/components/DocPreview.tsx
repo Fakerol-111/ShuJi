@@ -12,8 +12,11 @@ import {
   getDocumentDiffs,
   readDocumentDiff,
   getDocumentLineage,
+  openInExternalEditor,
 } from '../api';
 import { formatError } from '../utils/error';
+import { useEditorConfig } from '../hooks/useEditorConfig';
+import { openInEditorLabel, openLineInEditorLabel } from '../utils/editorLabel';
 import type { DocumentDiff } from '../api';
 import type { LineageNode } from '../types';
 
@@ -52,6 +55,12 @@ function docIdFromPath(docPath: string, metaId?: string): string {
 
 export default function DocPreview({ projectDir, docPath, initialTab }: DocPreviewProps) {
   const { t } = useTranslation();
+  const editorConfig = useEditorConfig();
+  const openInEditorText = useMemo(() => openInEditorLabel(editorConfig, t), [editorConfig, t]);
+  const openLineInEditorText = useMemo(
+    () => openLineInEditorLabel(editorConfig, t),
+    [editorConfig, t]
+  );
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -64,6 +73,8 @@ export default function DocPreview({ projectDir, docPath, initialTab }: DocPrevi
   const [diffSource, setDiffSource] = useState<'audit' | 'git' | null>(null);
   const [lineage, setLineage] = useState<LineageNode | null>(null);
   const [lineageLoading, setLineageLoading] = useState(false);
+  const [editorError, setEditorError] = useState('');
+  const [openingEditor, setOpeningEditor] = useState(false);
   const contentRef = useRef('');
 
   const isShujiMarkdown = docPath.startsWith('.shuji/') && docPath.endsWith('.md');
@@ -138,6 +149,7 @@ export default function DocPreview({ projectDir, docPath, initialTab }: DocPrevi
 
   useEffect(() => {
     setApprovalError('');
+    setEditorError('');
     setDiffData(null);
     setDiffSource(null);
     setLineage(null);
@@ -172,6 +184,18 @@ export default function DocPreview({ projectDir, docPath, initialTab }: DocPrevi
       unlistens.forEach((p) => p.then((f) => f()));
     };
   }, [loadDoc, loadDiff, parsed.meta?.id]);
+
+  const handleOpenInEditor = async () => {
+    setOpeningEditor(true);
+    setEditorError('');
+    try {
+      await openInExternalEditor(projectDir, docPath);
+    } catch (e) {
+      setEditorError(formatError(e));
+    } finally {
+      setOpeningEditor(false);
+    }
+  };
 
   const handleApproval = async () => {
     setApproving(true);
@@ -231,7 +255,21 @@ export default function DocPreview({ projectDir, docPath, initialTab }: DocPrevi
               </span>
             ))}
           </div>
+          <button
+            type="button"
+            onClick={handleOpenInEditor}
+            disabled={openingEditor}
+            title={openInEditorText}
+            className="shrink-0 text-ui font-medium px-2.5 py-1 rounded border border-fold text-ink-600 hover:text-ink-900 hover:bg-ink-100 transition disabled:opacity-50"
+          >
+            {openingEditor ? t('common.loading') : openInEditorText}
+          </button>
         </div>
+        {editorError && (
+          <p className="px-3 py-1.5 text-caption text-vermillion border-b border-fold/60">
+            {editorError}
+          </p>
+        )}
         <div className="flex gap-0.5 px-2 min-w-0 overflow-x-auto">
           <button
             onClick={() => setViewMode('content')}
@@ -338,7 +376,19 @@ export default function DocPreview({ projectDir, docPath, initialTab }: DocPrevi
                 </ReactMarkdown>
               </article>
             ) : (
-              <CodePreview content={content} path={docPath} />
+              <CodePreview
+                content={content}
+                path={docPath}
+                openLineLabel={openLineInEditorText}
+                onOpenLine={async (line) => {
+                  setEditorError('');
+                  try {
+                    await openInExternalEditor(projectDir, docPath, line);
+                  } catch (e) {
+                    setEditorError(formatError(e));
+                  }
+                }}
+              />
             )}
           </>
         )}
@@ -405,10 +455,21 @@ function DiffView({ diff, audit = false }: { diff: string; audit?: boolean }) {
   );
 }
 
-function CodePreview({ content, path }: { content: string; path: string }) {
+function CodePreview({
+  content,
+  path,
+  openLineLabel,
+  onOpenLine,
+}: {
+  content: string;
+  path: string;
+  openLineLabel?: string;
+  onOpenLine?: (line: number) => void | Promise<void>;
+}) {
   const { t } = useTranslation();
   const lines = (content || t('docPreview.fileEmpty')).split(/\r?\n/);
   const language = languageName(path);
+  const lineClickable = Boolean(onOpenLine);
 
   return (
     <div
@@ -451,12 +512,16 @@ function CodePreview({ content, path }: { content: string; path: string }) {
             {lines.map((line, index) => (
               <tr key={index} className="code-preview-row">
                 <td
-                  className="select-none sticky left-0 w-14 min-w-14 pr-3 text-right align-top"
+                  className={`select-none sticky left-0 w-14 min-w-14 pr-3 text-right align-top ${
+                    lineClickable ? 'cursor-pointer hover:text-vermillion hover:underline' : ''
+                  }`}
                   style={{
                     backgroundColor: 'var(--code-bg)',
                     color: 'var(--code-line-num)',
                     borderRight: '1px solid var(--code-border)',
                   }}
+                  title={lineClickable ? openLineLabel : undefined}
+                  onClick={lineClickable ? () => onOpenLine?.(index + 1) : undefined}
                 >
                   {index + 1}
                 </td>

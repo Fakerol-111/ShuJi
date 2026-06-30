@@ -10,6 +10,9 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 vi.mock('../api', () => ({
   listShujiTree: vi.fn(),
+  getEditorConfig: vi.fn(),
+  openInExternalEditor: vi.fn(),
+  openProjectInExternalEditor: vi.fn(),
 }));
 
 import * as api from '../api';
@@ -53,6 +56,11 @@ describe('DocTree', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedApi.listShujiTree.mockResolvedValue(sampleTree);
+    mockedApi.getEditorConfig.mockResolvedValue({
+      editor: 'vscode',
+      custom_command: null,
+      reuse_window: true,
+    });
   });
 
   it('shows only .shuji entries by default', async () => {
@@ -81,6 +89,33 @@ describe('DocTree', () => {
     await waitFor(() => {
       expect(screen.getByText('审查')).toBeTruthy();
       expect(screen.queryByText('Review')).toBeFalsy();
+    });
+  });
+
+  it('opens file in external editor from context menu', async () => {
+    const user = userEvent.setup();
+    mockedApi.openInExternalEditor.mockResolvedValue(undefined);
+    render(<DocTree projectDir="/test" selectedDoc={null} onSelect={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText('revw_001.md')).toBeTruthy());
+    await user.pointer({ keys: '[MouseRight>]', target: screen.getByText('revw_001.md') });
+    await waitFor(() => expect(screen.getByText('用 VS Code 打开')).toBeTruthy());
+    await user.click(screen.getByText('用 VS Code 打开'));
+    await waitFor(() => {
+      expect(mockedApi.openInExternalEditor).toHaveBeenCalledWith(
+        '/test',
+        '.shuji/reviews/revw_001.md'
+      );
+    });
+  });
+
+  it('opens project root in external editor', async () => {
+    const user = userEvent.setup();
+    mockedApi.openProjectInExternalEditor.mockResolvedValue(undefined);
+    render(<DocTree projectDir="/test" selectedDoc={null} onSelect={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText('用 VS Code 打开项目')).toBeTruthy());
+    await user.click(screen.getByText('用 VS Code 打开项目'));
+    await waitFor(() => {
+      expect(mockedApi.openProjectInExternalEditor).toHaveBeenCalledWith('/test');
     });
   });
 });

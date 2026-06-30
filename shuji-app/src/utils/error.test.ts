@@ -36,6 +36,16 @@ describe('formatError', () => {
 
   it('maps 404 not found', () => {
     expect(formatError('404 not found')).toBe('API 端点不存在，请检查 API URL');
+    expect(formatError('api endpoint not found')).toBe('API 端点不存在，请检查 API URL');
+  });
+
+  it('does not map local not found errors to API endpoint errors', () => {
+    expect(formatError("editor command 'code' not found")).toBe(
+      "系统错误: editor command 'code' not found"
+    );
+    expect(formatError('file not found: src/main.rs')).toBe(
+      '系统错误: file not found: src/main.rs'
+    );
   });
 
   it('truncates very long raw errors', () => {

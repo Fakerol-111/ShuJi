@@ -13,6 +13,7 @@ pub mod cache;
 pub mod command_ops;
 pub mod dispatch;
 pub mod documents;
+pub mod editor;
 pub mod file_ops;
 pub mod lint_ops;
 pub mod neige_special;

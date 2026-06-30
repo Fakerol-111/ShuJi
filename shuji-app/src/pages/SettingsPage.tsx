@@ -30,9 +30,10 @@ import ServiceConfigTab from '../components/settings/ServiceConfigTab';
 import ContextSettingsTab from '../components/settings/ContextSettingsTab';
 import SoulSettingsTab from '../components/settings/SoulSettingsTab';
 import AppearanceTab from '../components/settings/AppearanceTab';
+import ExternalEditorTab from '../components/settings/ExternalEditorTab';
 import { SettingsSaveButton } from '../components/settings/SettingsPrimitives';
 
-export type SettingsCategory = 'service' | 'context' | 'soul' | 'appearance';
+export type SettingsCategory = 'service' | 'context' | 'soul' | 'externalEditor' | 'appearance';
 
 type RoleFormState = Pick<RoleEndpoint, 'api_key' | 'api_url' | 'model'>;
 const DEFAULT_EMPTY: RoleFormState = { api_key: '', api_url: '', model: '' };
@@ -338,6 +339,8 @@ export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
         );
       case 'soul':
         return <SoulSettingsTab setSavedMsg={setSavedMsg} />;
+      case 'externalEditor':
+        return <ExternalEditorTab setSavedMsg={setSavedMsg} />;
       case 'appearance':
         return <AppearanceTab />;
     }
@@ -386,9 +389,11 @@ export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
                       ? 'contextWindow'
                       : activeCategory === 'soul'
                         ? 'soulManagement'
-                        : activeCategory === 'service'
-                          ? 'serviceConfig'
-                          : activeCategory)
+                        : activeCategory === 'externalEditor'
+                          ? 'externalEditor'
+                          : activeCategory === 'service'
+                            ? 'serviceConfig'
+                            : activeCategory)
                 )}
               </h2>
             </header>
