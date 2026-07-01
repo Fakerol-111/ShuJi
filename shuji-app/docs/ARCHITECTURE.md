@@ -1,7 +1,7 @@
 # 枢机架构说明
 
 > 对外叙事 + Agent 必读。本文描述枢机（ShuJi）的现行架构与关键机制。
-> 文件级索引见仓库根 [CLAUDE.md](../../CLAUDE.md)；开发指南见 [CONTRIBUTING.md](../../CONTRIBUTING.md)。
+> 文件级索引见 `CLAUDE.md`；开发指南见 [CONTRIBUTING.md](../../CONTRIBUTING.md)。
 >
 > **核对日期**：2026-06-30（基于 `shuji-app/src-tauri/src/` 实际目录结构与 v0.8.0+ 代码）。
 

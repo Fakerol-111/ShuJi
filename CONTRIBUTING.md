@@ -29,7 +29,7 @@ sudo apt-get install -y \
 
 Python 项目测试需系统安装 `python3`（或 `python`）。
 
-新人请先读 [ONBOARDING.md](ONBOARDING.md)。架构叙事见 [shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md)；文件级索引见 [shuji-app/docs/MAINTAINER_INDEX.md](shuji-app/docs/MAINTAINER_INDEX.md)；AI 维护入口见 [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md)（本地文件）。
+新人请先读 [ONBOARDING.md](ONBOARDING.md)。架构叙事见 [shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md)；文件级索引见 [shuji-app/docs/MAINTAINER_INDEX.md](shuji-app/docs/MAINTAINER_INDEX.md)；AI 维护入口见 `CLAUDE.md` / `AGENTS.md`（本地文件）。
 
 ## 仓库目录约定
 

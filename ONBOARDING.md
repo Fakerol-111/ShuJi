@@ -11,7 +11,7 @@
 | [`shuji-app/`](shuji-app/) | **唯一主应用**：Tauri v2 桌面端 + React 前端 + Rust 后端 |
 | 仓库根目录 | 项目元信息、贡献指南、截图资源、脚本与演示资产 |
 
-**不要**在根目录新增第二个应用目录。和主应用无关的脚本放 [`scripts/`](scripts/)，演示 PPT / 图片放 [`assets/`](assets/) 或 [`docs/images/`](docs/images/)。
+**不要**在根目录新增第二个应用目录。和主应用无关的脚本放 [`scripts/`](scripts/)，演示 PPT / 图片放 [`assets/`](assets/)。
 
 ---
 
@@ -31,7 +31,7 @@
 ### ③ 深入维护 / AI 辅助开发
 
 1. [shuji-app/docs/MAINTAINER_INDEX.md](shuji-app/docs/MAINTAINER_INDEX.md) — 文件级位置、Session Limits、Edge Cases  
-2. [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md) — 文件级索引与测试命令（本地，AI 工具入口）  
+2. `CLAUDE.md` / [AGENTS.md](AGENTS.md) — 文件级索引与测试命令（本地，AI 工具入口）  
 
 ### ④ 改代码时
 

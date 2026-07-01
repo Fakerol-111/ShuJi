@@ -137,7 +137,7 @@ flowchart TB
   V --> R[交付报告 / 审计链]
 ```
 
-架构细节见 **[shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md)**（对外叙事 + 分层说明）。文件级索引见 [CLAUDE.md](CLAUDE.md)。
+架构细节见 **[shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md)**（对外叙事 + 分层说明）。文件级索引见 `CLAUDE.md`。
 
 ---
 
