@@ -88,3 +88,33 @@ jobs:
         run: cd shuji-app && npm test
       - name: Vite build
         run: cd shuji-app && npm run build
+
+  # Markdown 本地死链检查
+  # 防止 ARCHITECTURE.md / AGENT_TASKS.md 这类文件被删除但引用未清理的回退复发。
+  # 只检查本地文件链路（https/http 链接在 .lycheeignore 中排除）。
+  link-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check markdown links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          # 扫描所有 .md 文件（不含 node_modules/target，已在 .lycheeignore 排除）
+          args: >-
+            --no-progress
+            --accept 200,999
+            --exclude-mail
+            --root .
+            '**/*.md'
+          # 死链视为 error（CI 失败）
+          fail: true
+
+  # 测试数量统计
+  # 运行 scripts/count_tests.sh，输出 JSON 到 CI 日志，作为文档"约 N 个测试"的单一真相源。
+  # 文档引用脚本而非硬编码数字，避免漂移。
+  test-count:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Count tests (Rust + frontend)
+        run: bash scripts/count_tests.sh

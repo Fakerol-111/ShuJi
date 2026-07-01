@@ -1,0 +1,26 @@
+# Lychee 忽略规则
+# 文档：https://github.com/lycheeverse/lychee#exclude-path-or-pattern
+
+# 忽略 node_modules（不应扫描依赖的 README）
+node_modules/
+
+# 忽略 target（Rust 构建产物）
+shuji-app/src-tauri/target/
+
+# 忽略本地资源路径（assets/images/ 是本地截图占位，README 已标注不上库）
+assets/images/
+
+# 忽略 .shuji/ 运行时目录
+.shuji/
+
+# 忽略 .workbuddy/ 本地工作目录
+.workbuddy/
+
+# 忽略 https 链接（本检查只关注本地文件链路完整性；外链可用性由其他工具或人工保证）
+https://*
+
+# 忽略 http 链接
+http://*
+
+# 忽略 mailto
+mailto:*
