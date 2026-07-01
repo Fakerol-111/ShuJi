@@ -80,7 +80,8 @@ pub(super) async fn dispatch_mailbox_message(
             ctx.cancel.store(true, Ordering::SeqCst);
             clear_paused_if_needed(ctx, state.paused_for_decision).await;
             state.paused_for_decision = false;
-            log_dept(ctx, role_name, "interrupt signal received");
+            // 内部系统信号，不写入 dept log（避免 Drop 时的中断残留到下次打开）
+            log_console!("[actor] {}: interrupt signal received", role_name);
             // 排空 mailbox：中断后所有残留消息都过时了
             while ctx.rx.try_recv().is_ok() {}
             return MailboxOutcome::Skip;
