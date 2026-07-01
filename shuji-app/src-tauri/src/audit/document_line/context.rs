@@ -1,214 +1,19 @@
-//! Document line: end-to-end audit view linking docs, pipeline steps, approvals,
-//! validation, diffs, and semantic checkpoints for a single task run.
+//! Internal context aggregation and graph building for document lines.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
-
-use super::log::{read_all, AuditEntry};
-use super::ref_index::{build_ref_index, RefIndex};
+use super::events::load_line_events;
+use super::scan::{
+    extract_detail_field, is_doc_stale, load_validation, scan_all_docs, scan_diff_files,
+};
+use super::types::{DocInfo, EvidenceRef, ImpactAnalysis, ImpactNode, LineEdge, LineNode};
+use crate::audit::log::{read_all, AuditEntry};
+use crate::audit::ref_index::{build_ref_index, RefIndex};
 use crate::pipeline::PlanRuntime;
 use crate::storage::checkpoint::{load_index, CheckpointEntry};
-use crate::tool::documents;
 
-const ALL_DOC_TYPES: &[&str] = &[
-    "dsgn", "plan", "pdsg", "ddtl", "revw", "task", "ctrt", "rprt", "anls", "reqs", "precepts",
-];
-
-const TYPE_TO_DIR: &[(&str, &str)] = &[
-    ("dsgn", "designs"),
-    ("plan", "designs"),
-    ("pdsg", "designs"),
-    ("ddtl", "designs/detail"),
-    ("revw", "reviews"),
-    ("task", "tasks"),
-    ("ctrt", "contracts"),
-    ("rprt", "reports"),
-    ("reqs", "requirements"),
-    ("anls", "analysis"),
-];
-
-// ── Public types ────────────────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EvidenceRef {
-    pub source: String,
-    pub ref_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub label: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LineNode {
-    pub node_id: String,
-    pub kind: String,
-    pub label: String,
-    #[serde(default)]
-    pub status: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub role: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub timestamp: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub doc_type: Option<String>,
-    #[serde(default)]
-    pub evidence: Vec<EvidenceRef>,
-    #[serde(default)]
-    pub stale: bool,
-    #[serde(default)]
-    pub highlight: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LineEdge {
-    pub from: String,
-    pub to: String,
-    pub relation: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DocumentLineRun {
-    pub run_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub plan_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub session_label: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub started_at: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub completed_at: Option<String>,
-    pub status: String,
-    pub nodes: Vec<LineNode>,
-    pub edges: Vec<LineEdge>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub focus_doc_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ImpactNode {
-    pub node_id: String,
-    pub kind: String,
-    pub status: String,
-    pub stale: bool,
-    pub reason: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ImpactAnalysis {
-    pub source_doc_id: String,
-    pub impacted: Vec<ImpactNode>,
-    pub blocking_chain: String,
-    pub chain_path: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct LineEventRecord {
-    ts: String,
-    run_id: String,
-    event: String,
-    node_id: String,
-    #[serde(default)]
-    detail: serde_json::Value,
-}
-
-// ── Query API ───────────────────────────────────────────────────
-
-/// Build the document line for a pipeline run (or the active/legacy run when `run_id` is None).
-pub async fn build_document_line(
-    working_dir: &Path,
-    run_id: Option<&str>,
-) -> Option<DocumentLineRun> {
-    let ctx = LineContext::load(working_dir).await;
-    if ctx.is_empty() {
-        return None;
-    }
-    let rid = run_id
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| ctx.primary_run_id());
-    Some(ctx.build_run(&rid, None))
-}
-
-/// Build the document line containing `doc_id`, highlighting that node.
-pub async fn build_document_line_for_doc(
-    working_dir: &Path,
-    doc_id: &str,
-) -> Option<DocumentLineRun> {
-    let ctx = LineContext::load(working_dir).await;
-    if ctx.is_empty() {
-        return None;
-    }
-    let run_id = ctx.find_run_for_doc(doc_id);
-    Some(ctx.build_run(&run_id, Some(doc_id)))
-}
-
-/// List known run IDs (pipeline plan_id or legacy bucket).
-pub async fn list_document_line_runs(working_dir: &Path) -> Vec<String> {
-    let ctx = LineContext::load(working_dir).await;
-    ctx.run_ids()
-}
-
-/// Analyze downstream impact when modifying `doc_id`.
-pub async fn analyze_impact(working_dir: &Path, doc_id: &str) -> ImpactAnalysis {
-    let ctx = LineContext::load(working_dir).await;
-    ctx.analyze_impact(doc_id)
-}
-
-// ── Incremental line events ───────────────────────────────────
-
-/// Append a structured line event (Phase 2 runtime facts).
-pub async fn append_line_event(
-    working_dir: &Path,
-    run_id: &str,
-    event: &str,
-    node_id: &str,
-    detail: serde_json::Value,
-) {
-    let dir = working_dir.join(".shuji").join("audit").join("doc_lines");
-    let _ = tokio::fs::create_dir_all(&dir).await;
-    let path = dir.join("events.jsonl");
-    let record = LineEventRecord {
-        ts: chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string(),
-        run_id: run_id.to_string(),
-        event: event.to_string(),
-        node_id: node_id.to_string(),
-        detail,
-    };
-    if let Ok(json) = serde_json::to_string(&record) {
-        use tokio::io::AsyncWriteExt;
-        if let Ok(mut f) = tokio::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .await
-        {
-            let _ = f.write_all(format!("{json}\n").as_bytes()).await;
-        }
-    }
-}
-
-/// Resolve the active run_id from pipeline runtime or fallback.
-pub async fn active_run_id(working_dir: &Path) -> String {
-    if let Some(rt) = PlanRuntime::load_from(working_dir).await {
-        return rt.plan.plan_id.clone();
-    }
-    "legacy".into()
-}
-
-// ── Internal builder ────────────────────────────────────────────
-
-struct DocInfo {
-    doc_type: String,
-    author: String,
-    timestamp: String,
-    status: String,
-    approved_hash: String,
-    body_hash: String,
-    refs: Vec<String>,
-}
-
-struct LineContext {
+pub(super) struct LineContext {
     audit: Vec<AuditEntry>,
     ref_index: RefIndex,
     pipeline: Option<PlanRuntime>,
@@ -218,12 +23,12 @@ struct LineContext {
     docs: HashMap<String, DocInfo>,
     diff_files: Vec<(String, String, String)>,
     #[allow(dead_code)]
-    line_events: Vec<LineEventRecord>,
+    line_events: Vec<super::types::LineEventRecord>,
     doc_to_run: HashMap<String, String>,
 }
 
 impl LineContext {
-    async fn load(working_dir: &Path) -> Self {
+    pub(super) async fn load(working_dir: &Path) -> Self {
         let wd = working_dir.to_path_buf();
         let audit = read_all(&wd).await;
         let mut ref_index = RefIndex::load(&wd).await;
@@ -264,18 +69,18 @@ impl LineContext {
         }
     }
 
-    fn is_empty(&self) -> bool {
+    pub(super) fn is_empty(&self) -> bool {
         self.docs.is_empty() && self.audit.is_empty() && self.pipeline.is_none()
     }
 
-    fn primary_run_id(&self) -> String {
+    pub(super) fn primary_run_id(&self) -> String {
         if let Some(ref rt) = self.pipeline {
             return rt.plan.plan_id.clone();
         }
         "legacy".into()
     }
 
-    fn run_ids(&self) -> Vec<String> {
+    pub(super) fn run_ids(&self) -> Vec<String> {
         let mut ids: HashSet<String> = self.doc_to_run.values().cloned().collect();
         if ids.is_empty() {
             ids.insert("legacy".into());
@@ -285,7 +90,7 @@ impl LineContext {
         v
     }
 
-    fn find_run_for_doc(&self, doc_id: &str) -> String {
+    pub(super) fn find_run_for_doc(&self, doc_id: &str) -> String {
         self.doc_to_run
             .get(doc_id)
             .cloned()
@@ -299,7 +104,13 @@ impl LineContext {
             .unwrap_or(run_id == "legacy")
     }
 
-    fn build_run(&self, run_id: &str, focus_doc_id: Option<&str>) -> DocumentLineRun {
+    pub(super) fn build_run(
+        &self,
+        run_id: &str,
+        focus_doc_id: Option<&str>,
+    ) -> super::types::DocumentLineRun {
+        use super::types::DocumentLineRun;
+
         let mut nodes: Vec<LineNode> = Vec::new();
         let mut edges: Vec<LineEdge> = Vec::new();
         let mut node_ids: HashSet<String> = HashSet::new();
@@ -605,7 +416,7 @@ impl LineContext {
         (started, completed, "unknown".into(), None, None)
     }
 
-    fn analyze_impact(&self, doc_id: &str) -> ImpactAnalysis {
+    pub(super) fn analyze_impact(&self, doc_id: &str) -> ImpactAnalysis {
         let mut impacted: Vec<ImpactNode> = Vec::new();
         let mut visited: HashSet<String> = HashSet::new();
         let mut queue: VecDeque<String> = VecDeque::new();
@@ -726,137 +537,4 @@ fn build_blocking_chain(
         }
     }
     chain
-}
-
-fn is_doc_stale(info: &DocInfo) -> bool {
-    !info.approved_hash.is_empty() && info.approved_hash != info.body_hash
-}
-
-fn hash_body(body: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(body.as_bytes());
-    format!("{:x}", hasher.finalize())
-}
-
-fn extract_detail_field(detail: &str, key: &str) -> Option<String> {
-    detail.split(';').find_map(|part| {
-        let part = part.trim();
-        part.strip_prefix(&format!("{key}="))
-            .map(|v| v.trim().to_string())
-    })
-}
-
-async fn scan_all_docs(working_dir: &Path) -> HashMap<String, DocInfo> {
-    let mut docs = HashMap::new();
-    let shuji = working_dir.join(".shuji");
-
-    for (_prefix, dir_name) in TYPE_TO_DIR {
-        let dir = shuji.join(dir_name);
-        let mut entries = match tokio::fs::read_dir(&dir).await {
-            Ok(rd) => rd,
-            Err(_) => continue,
-        };
-        while let Ok(Some(entry)) = entries.next_entry().await {
-            let path = entry.path();
-            if path.extension().is_none_or(|e| e != "md") {
-                continue;
-            }
-            let Ok(content) = tokio::fs::read_to_string(&path).await else {
-                continue;
-            };
-            let Ok((meta, body)) = documents::parse_doc(&content) else {
-                continue;
-            };
-            let ref_nums = documents::parse_refs(&meta.refs);
-            let mut refs = Vec::new();
-            for num in ref_nums {
-                if let Some(id) = resolve_numeric_ref(working_dir, num).await {
-                    refs.push(id);
-                }
-            }
-            docs.insert(
-                meta.id.clone(),
-                DocInfo {
-                    doc_type: meta.doc_type,
-                    author: meta.author,
-                    timestamp: meta.timestamp,
-                    status: meta.status,
-                    approved_hash: meta.approved_hash,
-                    body_hash: hash_body(body),
-                    refs,
-                },
-            );
-        }
-    }
-    docs
-}
-
-async fn resolve_numeric_ref(working_dir: &Path, num: u64) -> Option<String> {
-    for prefix in ALL_DOC_TYPES {
-        let doc_id = format!("{prefix}_{num:03}");
-        let dir = documents::type_to_dir(prefix);
-        let rel = if dir.is_empty() {
-            format!(".shuji/{doc_id}.md")
-        } else {
-            format!(".shuji/{dir}/{doc_id}.md")
-        };
-        if crate::tool::resolve_scoped_path(working_dir, &rel)
-            .await
-            .map(|p| p.exists())
-            .unwrap_or(false)
-        {
-            return Some(doc_id);
-        }
-    }
-    None
-}
-
-async fn scan_diff_files(working_dir: &Path) -> Vec<(String, String, String)> {
-    let diff_dir = working_dir.join(".shuji").join("audit").join("diffs");
-    let mut out = Vec::new();
-    let mut rd = match tokio::fs::read_dir(&diff_dir).await {
-        Ok(rd) => rd,
-        Err(_) => return out,
-    };
-    while let Ok(Some(entry)) = rd.next_entry().await {
-        let name = entry.file_name().to_string_lossy().to_string();
-        if !name.ends_with(".patch") {
-            continue;
-        }
-        let stripped = name.strip_suffix(".patch").unwrap_or(&name);
-        let parts: Vec<&str> = stripped.splitn(3, '_').collect();
-        if parts.len() >= 2 {
-            out.push((parts[0].to_string(), parts[1].to_string(), name));
-        }
-    }
-    out
-}
-
-async fn load_validation(working_dir: &Path) -> (Option<String>, Option<bool>) {
-    let path = working_dir
-        .join(".shuji")
-        .join("validate")
-        .join("latest.json");
-    let Ok(content) = tokio::fs::read_to_string(&path).await else {
-        return (None, None);
-    };
-    let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) else {
-        return (None, None);
-    };
-    let ts = v.get("ts").and_then(|t| t.as_str()).map(|s| s.to_string());
-    let pass = v.get("overall_pass").and_then(|p| p.as_bool());
-    (ts, pass)
-}
-
-async fn load_line_events(working_dir: &Path) -> Vec<LineEventRecord> {
-    let path = working_dir
-        .join(".shuji")
-        .join("audit")
-        .join("doc_lines")
-        .join("events.jsonl");
-    let content = tokio::fs::read_to_string(&path).await.unwrap_or_default();
-    content
-        .lines()
-        .filter_map(|l| serde_json::from_str(l).ok())
-        .collect()
 }
