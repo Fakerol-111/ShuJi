@@ -261,7 +261,7 @@ Event-driven audit, split into focused submodules (`audit/`):
 - **Timeline** (`audit/timeline.rs`): `build_timeline()` — aggregates events by type and role.
 - **Query** (`audit/query.rs`): `query_documents()` with combined filters.
 - **Doc store** (`audit/doc_store.rs`): `read_doc_by_id()`, `find_by_numeric_id()`.
-- **Document line** (`audit/document_line.rs`): End-to-end audit view linking docs, pipeline steps, approvals, validation, diffs, and semantic checkpoints.
+- **Document line** (`audit/document_line/`): End-to-end audit view linking docs, pipeline steps, approvals, validation, diffs, and semantic checkpoints. Submodules: `types.rs`, `events.rs`, `scan.rs`, `context.rs`.
 
 ### Document-Centric Architecture
 
@@ -376,7 +376,7 @@ shuji-app/
 └── src-tauri/src/
     ├── commands/                     # Tauri command handlers
     │   ├── project.rs                # Project CRUD + demo generator
-    │   ├── settings.rs               # .env + api_config.json loader, model presets
+    │   ├── settings/                 # Settings submodules: api_config, reasoning, approval, etc.
     │   ├── checkpoint.rs             # list/restore checkpoints
     │   ├── shuji_docs.rs             # .shuji/ file tree + doc viewer
     │   └── workflow/                 # send_message, compact, context_stats, audit, bootstrap
@@ -426,27 +426,27 @@ shuji-app/
     ├── tool/
     │   ├── registry.rs               # Tool group factory functions
     │   ├── dispatch.rs               # Central tool dispatch + gate logic
-    │   ├── file_ops.rs / documents.rs / command_ops.rs / audit_tools.rs
+    │   ├── file_ops.rs / documents/ / command_ops.rs / audit_tools.rs
     │   ├── neige_special.rs          # 内阁-specific tools (cancel_agent, create_skill, etc.)
     │   ├── shangshuling_special.rs   # 尚书令-specific tools
     │   ├── editor.rs / lint_ops.rs / python_cmd.rs / test_env.rs
     │   ├── cache.rs / path.rs / output.rs / tool_log.rs
     ├── validate/                     # Delivery validation: contract, lint, diff, tests_runner
     ├── learning/                     # Role learning: store, extract, inject, config
-    ├── pipeline/                     # PipelineEngine: engine, handlers, artifacts, graph, supervisor
+    ├── pipeline/                     # PipelineEngine: engine/ (run_loop, step, route, graph, metrics), handlers, artifacts, supervisor
     ├── workflow/                     # Workflow Profile: state, stage, graph
     ├── metrics/                      # Metrics aggregation
     ├── scenario/                     # Scenario replay framework
     ├── precepts/                     # Rule/policy management
-    ├── audit/                        # Audit subsystem (split from god file)
+    ├── audit/                        # Audit subsystem
     │   ├── mod.rs                    # Public re-exports (facade)
     │   ├── log.rs                    # AuditEntry, hash chain, append, read_all, verify
     │   ├── ref_index.rs              # RefIndex, build_ref_index, check_immutability
-    │   ├── document_line.rs          # Document line: end-to-end audit view
+    │   ├── document_line/            # Document line: types, events, scan, context (graph build + impact)
     │   ├── checklist.rs / violation.rs / reauth.rs / diff.rs
     │   ├── lineage.rs / trace.rs / report.rs / timeline.rs / query.rs / doc_store.rs
     ├── models/                       # role.rs, chat.rs, message.rs, project.rs
-    ├── config/mod.rs                 # RuntimeConfig (TOML), merge_from, resolve_compact_thresholds
+    ├── config/                       # RuntimeConfig: types.rs (structs + load/merge), reasoning.rs, approval.rs, compaction.rs
     ├── storage/                      # shuji_dir.rs, checkpoint.rs
     ├── logging/logger.rs             # Department-scoped JSONL logging
     ├── playbook/                     # Watchdog playbook patterns
