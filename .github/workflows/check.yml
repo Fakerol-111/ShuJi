@@ -103,7 +103,6 @@ jobs:
           args: >-
             --no-progress
             --accept 200,999
-            --exclude-mail
             --root .
             '**/*.md'
           # 死链视为 error（CI 失败）
