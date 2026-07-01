@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 
 use crate::api::client::AnthropicClient;
 use crate::api::client::ToolDefinition;
@@ -10,43 +9,14 @@ use crate::config::{ReasoningEffort, ReasoningPhase, ResolvedReasoningPolicy, Ru
 pub mod persisted_context;
 pub use persisted_context::*;
 
-// ── Public types ──────────────────────────────────────────────
-
-/// Information about a single tool call returned by the LLM.
-#[derive(Debug, Clone)]
-pub struct ToolCallInfo {
-    pub id: String,
-    pub name: String,
-    pub args: serde_json::Value,
-}
-
-/// Outcome of one Session::step().
-pub enum StepResult {
-    Text(String),
-    ToolCalls {
-        calls: Vec<ToolCallInfo>,
-        /// Text content from the assistant message that also contained tool_calls.
-        /// The actor layer uses this to display text alongside tool execution results.
-        text: String,
-    },
-}
-
-/// Opaque snapshot of Session internals, used for interrupt/restore.
-#[derive(Clone)]
-pub struct SessionSnapshot {
-    pub(crate) messages: Vec<serde_json::Value>,
-}
-
-impl SessionSnapshot {
-    pub fn from_messages(messages: Vec<serde_json::Value>) -> Self {
-        Self { messages }
-    }
-
-    /// Access the messages for inspection (testing, debugging).
-    pub fn messages(&self) -> &[serde_json::Value] {
-        &self.messages
-    }
-}
+mod debug;
+mod length_retry;
+mod request;
+mod response;
+mod stream;
+mod token_usage;
+mod types;
+pub use types::{SessionSnapshot, StepResult, ToolCallInfo};
 
 // ── Session ──────────────────────────────────────────────────
 
@@ -147,6 +117,80 @@ impl Session {
     /// Return the role label set via `with_role`.
     pub fn role(&self) -> &str {
         &self.role
+    }
+
+    // ── Read-only accessors for sub-modules (debug.rs etc.) ───────────────
+    // These expose private fields to sibling modules without making them
+    // `pub`. Each returns an immutable reference (or copy for Copy types).
+
+    pub(super) fn model(&self) -> &str {
+        &self.model
+    }
+
+    pub(super) fn max_tokens(&self) -> Option<u32> {
+        self.max_tokens
+    }
+
+    pub(super) fn debug_dir(&self) -> Option<&std::path::Path> {
+        self.debug_dir.as_deref()
+    }
+
+    pub(super) fn messages_len(&self) -> usize {
+        self.messages.len()
+    }
+
+    pub(super) fn messages_iter(&self) -> impl Iterator<Item = &serde_json::Value> {
+        self.messages.iter()
+    }
+
+    /// Push a message onto the internal history. Used by sub-modules
+    /// (response.rs, length_retry.rs) that need to append assistant/user
+    /// messages without going through the public `inject` API.
+    pub(super) fn push_message(&mut self, msg: serde_json::Value) {
+        self.messages.push(msg);
+    }
+
+    // ── Read-only accessors for request.rs / token_usage.rs ───────────────
+    // These expose private fields to sibling modules without making them `pub`.
+
+    pub(super) fn messages_ref(&self) -> &[serde_json::Value] {
+        &self.messages
+    }
+
+    pub(super) fn tools_ref(&self) -> &[ToolDefinition] {
+        &self.tools
+    }
+
+    pub(super) fn tool_choice_none(&self) -> bool {
+        self.tool_choice_none
+    }
+
+    pub(super) fn provider(&self) -> crate::api::reasoning::LlmProvider {
+        self.provider
+    }
+
+    pub(super) fn reasoning_policy(&self) -> crate::config::ResolvedReasoningPolicy {
+        self.reasoning_policy
+    }
+
+    /// Internal max_tokens setter taking `Option<u32>`. Used by length_retry.rs
+    /// to expand the token budget. (The public `set_max_tokens` takes `u32`
+    /// and treats 0 as "unset"; this one is explicit about the Option.)
+    pub(super) fn set_max_tokens_opt(&mut self, tokens: Option<u32>) {
+        self.max_tokens = tokens;
+    }
+
+    // ── Accessors for stream.rs ───────────────────────────────────────────
+    // step_stream() needs the HTTP client, API URL/key, and config timeout.
+    // These return references to the Arc'd / owned fields without exposing
+    // them publicly.
+
+    pub(super) fn client(&self) -> &Arc<AnthropicClient> {
+        &self.client
+    }
+
+    pub(super) fn config(&self) -> &Arc<RuntimeConfig> {
+        &self.config
     }
 
     /// Inject a persona system message (`[soul: role]`) right after
@@ -358,42 +402,11 @@ impl Session {
             let msg = &data["choices"][0]["message"];
             let finish_reason = data["choices"][0]["finish_reason"].as_str().unwrap_or("");
 
-            // Log reasoning content length for debugging (DeepSeek reasoning_content field)
-            if let Some(rc) = msg.get("reasoning_content").and_then(|v| v.as_str()) {
-                if !rc.is_empty() {
-                    log_console!("[{}] reasoning: {} chars", self.role, rc.chars().count());
-                }
-            }
-            let completion_tokens = data
-                .get("usage")
-                .and_then(|usage| usage["completion_tokens"].as_u64())
-                .unwrap_or(0);
-
-            // Log token usage
-            if let Some(usage) = data.get("usage") {
-                let prompt = usage["prompt_tokens"].as_u64().unwrap_or(0);
-                let cached = usage["prompt_tokens_details"]["cached_tokens"]
-                    .as_u64()
-                    .unwrap_or(0);
-                let completion = usage["completion_tokens"].as_u64().unwrap_or(0);
-                log_console!(
-                    "[{}] tokens: prompt={} cached={} completion={} total={}",
-                    self.role,
-                    prompt,
-                    cached,
-                    completion,
-                    prompt + completion
-                );
-                if !self.role.is_empty() {
-                    crate::token_tracker::record(
-                        &self.role,
-                        prompt,
-                        cached,
-                        completion,
-                        &self.model,
-                    );
-                }
-            }
+            // ── Log reasoning content + token usage ──────────────────────
+            // Delegated to token_usage.rs. `completion_tokens` is needed by
+            // the length-retry path below to expand the token budget.
+            self.log_reasoning_content(msg);
+            let completion_tokens = self.log_token_usage(&data);
 
             // Log completion content for debugging
             {
@@ -419,116 +432,29 @@ impl Session {
                 }
             }
 
-            // Handle truncated responses: auto-continue when text was cut off
+            // ── Handle truncated responses (finish_reason=length) ────────
+            // Delegated to length_retry.rs. Returns Continue (retry scheduled)
+            // or Proceed (fall through to normal tool-call parsing).
             if finish_reason == "length" {
-                self.write_debug_truncated(msg, length_retries).await;
-
-                // First pass: parse tool calls to see which ones have valid JSON
-                let raw_tcs = msg["tool_calls"].as_array();
-                let valid_tool_count = raw_tcs
-                    .map(|tcs| {
-                        tcs.iter()
-                            .filter(|tc| match &tc["function"]["arguments"] {
-                                serde_json::Value::String(s) => {
-                                    serde_json::from_str::<serde_json::Value>(s).is_ok()
-                                }
-                                serde_json::Value::Object(_) => true,
-                                _ => false,
-                            })
-                            .count()
-                    })
-                    .unwrap_or(0);
-
-                let total_tool_count = raw_tcs.map(|tcs| tcs.len()).unwrap_or(0);
-                let has_valid_calls = valid_tool_count > 0;
-                let broken_count = total_tool_count - valid_tool_count;
-
-                // Collect names of broken tools for the retry hint
-                let broken_names: Vec<&str> = raw_tcs
-                    .map(|tcs| {
-                        tcs.iter()
-                            .filter(|tc| match &tc["function"]["arguments"] {
-                                serde_json::Value::String(s) => {
-                                    serde_json::from_str::<serde_json::Value>(s).is_err()
-                                }
-                                serde_json::Value::Object(_) => false,
-                                _ => true,
-                            })
-                            .filter_map(|tc| tc["function"]["name"].as_str())
-                            .collect()
-                    })
-                    .unwrap_or_default();
-
-                if length_retries < max_length_retries {
-                    let previous_max_tokens = self.max_tokens;
-                    self.max_tokens = Some(match self.max_tokens {
-                        Some(tokens) => tokens.saturating_mul(2),
-                        None => completion_tokens
-                            .saturating_mul(2)
-                            .try_into()
-                            .unwrap_or(u32::MAX),
-                    });
-                    let previous_max_tokens_label = previous_max_tokens
-                        .map(|tokens| tokens.to_string())
-                        .unwrap_or_else(|| "unlimited".to_string());
-                    log_console!(
-                        "[{}] finish_reason=length: max_tokens {} → {}",
-                        self.role,
-                        previous_max_tokens_label,
-                        self.max_tokens.unwrap_or(0)
-                    );
-                }
-
-                if !has_valid_calls && length_retries < max_length_retries {
-                    length_retries += 1;
-                    log_console!(
-                        "[{}] finish_reason=length (retry {}/{})",
-                        self.role,
+                match self
+                    .handle_length_truncation(
+                        msg,
                         length_retries,
-                        max_length_retries
-                    );
-                    self.messages.push(serde_json::json!({
-                        "role": "assistant",
-                        "content": msg["content"].as_str().unwrap_or("")
-                    }));
-                    let names_hint = if broken_names.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" Lost calls: {}.", broken_names.join(", "))
-                    };
-                    let instruction = format!(
-                        "The previous output was truncated due to length. The system has expanded the output space. Please continue. {}\nYou must:\n1. Prioritize completing truncated tool calls;\n2. Maximum 1 tool call per round;\n3. No explanatory text. If more tools are needed, continue in subsequent rounds.",
-                        names_hint
-                    );
-                    self.messages.push(serde_json::json!({
-                        "role": "user",
-                        "content": instruction
-                    }));
-                    continue;
+                        max_length_retries,
+                        completion_tokens,
+                    )
+                    .await
+                {
+                    crate::api::session::length_retry::LengthRetryAction::Continue {
+                        length_retries: new_count,
+                    } => {
+                        length_retries = new_count;
+                        continue;
+                    }
+                    crate::api::session::length_retry::LengthRetryAction::Proceed => {
+                        // Fall through to tool-call parsing below.
+                    }
                 }
-
-                // Mixed case: some valid, some broken. Keep the valid ones,
-                // and inject a hint so the LLM re-issues the broken ones.
-                if broken_count > 0 {
-                    let names_hint = broken_names.join(", ");
-                    let hint = format!(
-                        "The previous output was truncated due to length. The system has expanded the output space. {} tool call(s) were lost ({}). Please re-issue these tools, maximum 1 per round.",
-                        broken_count, names_hint
-                    );
-                    self.messages.push(serde_json::json!({
-                        "role": "user",
-                        "content": hint
-                    }));
-                }
-
-                let max_tokens = self
-                    .max_tokens
-                    .map(|tokens| tokens.to_string())
-                    .unwrap_or_else(|| "unlimited".to_string());
-                log_console!(
-                    "[{}] WARNING: finish_reason=length — response truncated at {} tokens ({} valid, {} broken)",
-                    self.role, max_tokens, valid_tool_count, broken_count
-                );
             }
 
             // Parse tool calls
@@ -632,195 +558,6 @@ impl Session {
         } // end step loop
     }
 
-    /// One API round-trip with streaming text/reasoning deltas when supported.
-    /// OpenAI-compatible APIs only; falls back to [`step()`] on failure or Anthropic URLs.
-    pub async fn step_stream<F>(&mut self, mut on_chunk: F) -> anyhow::Result<StepResult>
-    where
-        F: FnMut(crate::api::stream::AgentStreamChunk),
-    {
-        if self.client.api_url.contains("anthropic.com") {
-            return self.step().await;
-        }
-
-        let mut body = self.build_step_body();
-        body["stream"] = serde_json::json!(true);
-
-        log_console!(
-            "[{}] step_stream: sending {} messages",
-            self.role,
-            self.messages.len()
-        );
-
-        let resp = match self
-            .client
-            .http_client
-            .post(&self.client.api_url)
-            .header("Authorization", format!("Bearer {}", self.client.api_key))
-            .header("content-type", "application/json")
-            .json(&body)
-            .timeout(self.config.api_timeout())
-            .send()
-            .await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                log_console!(
-                    "[{}] step_stream request failed: {}, fallback step()",
-                    self.role,
-                    e
-                );
-                return self.step().await;
-            }
-        };
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            log_console!(
-                "[{}] step_stream API {}: {}, fallback step()",
-                self.role,
-                status,
-                text.chars().take(120).collect::<String>()
-            );
-            return self.step().await;
-        }
-
-        let streamed =
-            match crate::api::stream::consume_openai_agent_stream(resp.bytes_stream(), |chunk| {
-                on_chunk(chunk);
-                Ok(())
-            })
-            .await
-            {
-                Ok(s) => s,
-                Err(e) => {
-                    log_console!(
-                        "[{}] step_stream parse failed: {}, fallback step()",
-                        self.role,
-                        e
-                    );
-                    return self.step().await;
-                }
-            };
-
-        if streamed.finish_reason == "length" {
-            log_console!(
-                "[{}] step_stream truncated (length), fallback step()",
-                self.role
-            );
-            return self.step().await;
-        }
-
-        if !streamed.reasoning_content.is_empty() {
-            log_console!(
-                "[{}] reasoning(stream): {} chars",
-                self.role,
-                streamed.reasoning_content.chars().count()
-            );
-        }
-
-        let msg = serde_json::json!({
-            "content": streamed.content,
-            "reasoning_content": streamed.reasoning_content,
-            "tool_calls": streamed.tool_calls,
-        });
-
-        self.process_assistant_message(&msg)
-    }
-
-    /// Build the JSON body shared by `step()` and `step_stream()`.
-    fn build_step_body(&self) -> serde_json::Value {
-        let mut body = serde_json::json!({
-            "model": self.model,
-            "messages": self.messages,
-            "temperature": 0.1,
-            "top_p": 0.9,
-            "frequency_penalty": 0.1,
-            "seed": 42,
-        });
-        if let Some(max_tokens) = self.max_tokens {
-            body["max_tokens"] = serde_json::json!(max_tokens);
-        }
-
-        // Apply reasoning/thinking fields via the centralized adapter
-        reasoning::apply_reasoning_to_body(&mut body, self.provider, self.reasoning_policy);
-
-        if self.tool_choice_none {
-            body["tool_choice"] = serde_json::json!("none");
-            if !self.tools.is_empty() {
-                body["tools"] = serde_json::to_value(&self.tools).unwrap_or_default();
-                body["parallel_tool_calls"] = serde_json::json!(false);
-                body["temperature"] = serde_json::json!(0.0);
-            }
-        } else if !self.tools.is_empty() {
-            body["tools"] = serde_json::to_value(&self.tools).unwrap_or_default();
-            body["tool_choice"] = serde_json::json!("auto");
-        }
-        body
-    }
-
-    /// Parse an assistant message (from stream or non-stream API) into StepResult.
-    fn process_assistant_message(&mut self, msg: &serde_json::Value) -> anyhow::Result<StepResult> {
-        if let Some(tcs) = msg["tool_calls"].as_array() {
-            if tcs.is_empty() {
-                return Ok(StepResult::Text(
-                    msg["content"].as_str().unwrap_or_default().to_string(),
-                ));
-            }
-
-            let mut calls = Vec::new();
-            for tc in tcs {
-                let id = tc["id"].as_str().unwrap_or("").to_string();
-                let name = tc["function"]["name"].as_str().unwrap_or("").to_string();
-                let args: serde_json::Value = match &tc["function"]["arguments"] {
-                    serde_json::Value::String(s) => match serde_json::from_str(s) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            log_console!("[{}] JSON parse error for {}: {}", self.role, name, e);
-                            serde_json::Value::Null
-                        }
-                    },
-                    v @ serde_json::Value::Object(_) => v.clone(),
-                    _ => serde_json::Value::Null,
-                };
-
-                if args.is_null() {
-                    log_console!(
-                        "[{}] skipping tool call {} due to broken arguments",
-                        self.role,
-                        name
-                    );
-                    continue;
-                }
-
-                calls.push(ToolCallInfo { id, name, args });
-            }
-
-            if calls.is_empty() {
-                return Ok(StepResult::Text(
-                    msg["content"].as_str().unwrap_or_default().to_string(),
-                ));
-            }
-
-            let valid_ids: std::collections::HashSet<&str> =
-                calls.iter().map(|c| c.id.as_str()).collect();
-            let mut filtered = msg.clone();
-            if let Some(arr) = filtered["tool_calls"].as_array_mut() {
-                arr.retain(|tc| valid_ids.contains(tc["id"].as_str().unwrap_or("")));
-            }
-            let assistant_text = msg["content"].as_str().unwrap_or_default().to_string();
-            self.messages.push(filtered);
-            return Ok(StepResult::ToolCalls {
-                calls,
-                text: assistant_text,
-            });
-        }
-
-        Ok(StepResult::Text(
-            msg["content"].as_str().unwrap_or_default().to_string(),
-        ))
-    }
-
     /// Inject a system-level message into the conversation.
     /// Used by AgentController for interrupt / restart signals.
     pub fn inject(&mut self, content: &str) {
@@ -843,229 +580,6 @@ impl Session {
             "content": output,
             "tool_call_id": id,
         }));
-    }
-
-    /// Truncate content for log preview, safe for multi-byte text (e.g. Chinese).
-    fn preview(s: &str) -> String {
-        let char_count = s.chars().count();
-        if char_count <= 80 {
-            return s.to_string();
-        }
-        let lines: Vec<&str> = s.lines().collect();
-        if lines.len() <= 1 {
-            // Single line: show first 30 chars + "..." + last 30 chars
-            let head: String = s.chars().take(30).collect();
-            let tail: String = s.chars().skip(char_count.saturating_sub(30)).collect();
-            format!("{}...{}", head, tail)
-        } else {
-            // Multi-line: show first 20 chars of first line + last 20 chars of last line
-            let first: String = lines[0].chars().take(20).collect();
-            let last: String = lines[lines.len() - 1]
-                .chars()
-                .rev()
-                .take(20)
-                .collect::<String>()
-                .chars()
-                .rev()
-                .collect();
-            format!("{}...{} ({} lines)", first, last, lines.len())
-        }
-    }
-
-    /// Send API request, returning the response JSON on success.
-    async fn api_request(
-        client: &AnthropicClient,
-        body: &serde_json::Value,
-        timeout: Duration,
-    ) -> anyhow::Result<serde_json::Value> {
-        let resp = client
-            .http_client
-            .post(&client.api_url)
-            .header("Authorization", format!("Bearer {}", client.api_key))
-            .header("content-type", "application/json")
-            .json(body)
-            .timeout(timeout)
-            .send()
-            .await
-            .map_err(|e| {
-                let kind = if e.is_connect() {
-                    "connection failed"
-                } else if e.is_timeout() {
-                    "request timeout"
-                } else if e.is_body() {
-                    "request body error"
-                } else {
-                    "request error"
-                };
-                anyhow::anyhow!("[{}] {} {}", client.api_url, kind, e)
-            })?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            anyhow::bail!("API error ({}): {}", status, text);
-        }
-
-        Ok(resp.json().await?)
-    }
-
-    /// Write truncated output to `.shuji/debug/truncated.md` for debugging.
-    /// Dumps the raw message, partial tool calls, and the last messages of
-    /// session context (so we can see what caused the truncation).
-    async fn write_debug_truncated(&self, msg: &serde_json::Value, retry: u32) {
-        let dir = match self.debug_dir {
-            Some(ref d) => d.clone(),
-            None => return,
-        };
-        let path = dir.join("debug").join("truncated.md");
-        if let Some(parent) = path.parent() {
-            let _ = tokio::fs::create_dir_all(parent).await;
-        }
-
-        let sep = "─".repeat(60);
-        let content = msg["content"].as_str().unwrap_or("");
-        let finish = msg
-            .get("finish_reason")
-            .and_then(|v| v.as_str())
-            .unwrap_or("?");
-
-        let max_tokens = self
-            .max_tokens
-            .map(|tokens| tokens.to_string())
-            .unwrap_or_else(|| "unlimited".to_string());
-
-        let mut lines = vec![
-            sep.clone(),
-            "# Truncated Output".to_string(),
-            format!(
-                "Timestamp: {}",
-                chrono::Local::now().format("%Y-%m-%dT%H:%M:%S")
-            ),
-            format!("Role: {}", self.role),
-            format!("Model: {}", self.model),
-            format!("Max Tokens: {}", max_tokens),
-            format!("Retry: {}/5 — finish_reason: {}", retry + 1, finish),
-            format!("Session messages: {} total", self.messages.len()),
-            String::new(),
-        ];
-
-        // 1. Dump the truncated response content
-        lines.push("## Response Content".to_string());
-        if content.is_empty() {
-            lines.push("(empty — content was fully truncated)".to_string());
-            // Dump the raw message JSON to see if anything survived
-            lines.push(format!(
-                "\nRaw message:\n```json\n{}\n```",
-                serde_json::to_string_pretty(msg).unwrap_or_default()
-            ));
-        } else {
-            lines.push(format!("({} chars)", content.chars().count()));
-            lines.push(String::new());
-            lines.push(content.to_string());
-        }
-        lines.push(String::new());
-
-        // 2. Dump tool calls (even partial ones with broken JSON args)
-        if let Some(tcs) = msg["tool_calls"].as_array() {
-            let valid = tcs
-                .iter()
-                .filter(|tc| match &tc["function"]["arguments"] {
-                    serde_json::Value::String(s) => {
-                        serde_json::from_str::<serde_json::Value>(s).is_ok()
-                    }
-                    serde_json::Value::Object(_) => true,
-                    _ => false,
-                })
-                .count();
-            lines.push(format!(
-                "## Tool Calls ({} total, {} with valid args)",
-                tcs.len(),
-                valid
-            ));
-            for (i, tc) in tcs.iter().enumerate() {
-                let name = tc["function"]["name"].as_str().unwrap_or("?");
-                let args_raw = tc["function"]["arguments"].as_str().unwrap_or("");
-                let args_valid = match &tc["function"]["arguments"] {
-                    serde_json::Value::String(s) => {
-                        serde_json::from_str::<serde_json::Value>(s).is_ok()
-                    }
-                    serde_json::Value::Object(_) => true,
-                    _ => false,
-                };
-                let status = if args_valid { "✓" } else { "✗ BROKEN" };
-                lines.push(format!(
-                    "{}. {} {} — args ({} chars):",
-                    i + 1,
-                    name,
-                    status,
-                    args_raw.len()
-                ));
-                // Always show the raw args for broken ones; truncate valid ones only if huge
-                if !args_valid || args_raw.len() <= 1000 {
-                    lines.push(format!("```\n{}\n```", args_raw));
-                } else {
-                    let preview: String = args_raw.chars().take(500).collect();
-                    lines.push(format!("```\n{}...\n```", preview));
-                }
-                lines.push(String::new());
-            }
-        } else {
-            lines.push("## Tool Calls".to_string());
-            lines.push("(none)".to_string());
-        }
-        lines.push(String::new());
-
-        // 3. Dump last N session messages to show what led to truncation
-        let last_n = 8usize;
-        let start = self.messages.len().saturating_sub(last_n);
-        lines.push(format!(
-            "## Last {} Session Messages (of {})",
-            last_n,
-            self.messages.len()
-        ));
-        lines.push("(most recent at bottom — shows what triggered this response)".to_string());
-        lines.push(String::new());
-        for (j, m) in self.messages.iter().enumerate().skip(start) {
-            let role = m["role"].as_str().unwrap_or("");
-            let c = m["content"].as_str().unwrap_or("");
-            let tool_names: Vec<&str> = m["tool_calls"]
-                .as_array()
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|tc| tc["function"]["name"].as_str())
-                        .collect()
-                })
-                .unwrap_or_default();
-            let tool_id = m["tool_call_id"].as_str().unwrap_or("");
-
-            if role == "tool" {
-                let preview: String = c.chars().take(150).collect();
-                let suffix = if c.chars().count() > 150 { "..." } else { "" };
-                lines.push(format!(
-                    "[{}] tool (id={}) → {}{}",
-                    j, tool_id, preview, suffix
-                ));
-            } else if !tool_names.is_empty() {
-                lines.push(format!("[{}] {} → tools: {:?}", j, role, tool_names));
-            } else {
-                let preview: String = c.chars().take(200).collect();
-                let suffix = if c.chars().count() > 200 { "..." } else { "" };
-                lines.push(format!("[{}] {} → {}{}", j, role, preview, suffix));
-            }
-        }
-
-        if let Ok(mut file) = tokio::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .write(true)
-            .open(&path)
-            .await
-        {
-            use tokio::io::AsyncWriteExt;
-            let _ = file
-                .write_all(format!("{}\n", lines.join("\n")).as_bytes())
-                .await;
-        }
     }
 
     /// Snapshot the current message history (for interrupt/restore).
