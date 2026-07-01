@@ -7,7 +7,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use super::{build_ref_index, read_all, AuditEntry, RefIndex};
+use super::log::{read_all, AuditEntry};
+use super::ref_index::{build_ref_index, RefIndex};
 use crate::pipeline::PlanRuntime;
 use crate::storage::checkpoint::{load_index, CheckpointEntry};
 use crate::tool::documents;

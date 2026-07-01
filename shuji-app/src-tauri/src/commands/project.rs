@@ -172,7 +172,10 @@ pub async fn load_project(
         if let Ok(data) = tokio::fs::read_to_string(&dept_path).await {
             for line in data.lines() {
                 if let Ok(entry) = serde_json::from_str::<DeptLogEntry>(line) {
-                    dept_hist.push(entry);
+                    // 过滤掉内部系统信号（如 Drop 时的 interrupt），不展示给用户
+                    if !entry.action.contains("interrupt signal received") {
+                        dept_hist.push(entry);
+                    }
                 }
             }
         }
