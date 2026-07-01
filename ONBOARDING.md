@@ -31,7 +31,7 @@
 ### ③ 深入维护 / AI 辅助开发
 
 1. [shuji-app/docs/MAINTAINER_INDEX.md](shuji-app/docs/MAINTAINER_INDEX.md) — 文件级位置、Session Limits、Edge Cases  
-2. `CLAUDE.md` / [AGENTS.md](AGENTS.md) — 文件级索引与测试命令（本地，AI 工具入口）  
+2. [AGENTS.md](AGENTS.md) — 文件级索引与测试命令（AI 工具入口）  
 
 ### ④ 改代码时
 

@@ -137,7 +137,7 @@ flowchart TB
   V --> R[交付报告 / 审计链]
 ```
 
-架构细节见 **[shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md)**（对外叙事 + 分层说明）。文件级索引见 `CLAUDE.md`。
+架构细节见 **[shuji-app/docs/ARCHITECTURE.md](shuji-app/docs/ARCHITECTURE.md)**（对外叙事 + 分层说明）。
 
 ---
 
@@ -160,7 +160,7 @@ flowchart TB
 | [shuji-app/docs/MAINTAINER_INDEX.md](shuji-app/docs/MAINTAINER_INDEX.md) | **维护者索引**：文件级位置、Session Limits、Edge Cases |
 | `assets/images/` | 界面截图与占位资源（本地，不上库） |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 开发环境、测试、配置与贡献指南 |
-| [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md) | 文件级索引与测试命令（维护者 / AI 工具，本地） |
+| [AGENTS.md](AGENTS.md) | 文件级索引与测试命令（AI 工具入口，本地） |
 | [LICENSE](LICENSE) | MIT 许可证 |
 
 后端核心路径有约 730 个自动化测试（Rust 单元/集成 + 前端 Vitest，具体以 `scripts/count_tests.sh` 输出为准），详见 [CONTRIBUTING.md#测试](CONTRIBUTING.md#测试)。
