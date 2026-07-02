@@ -58,7 +58,15 @@ pub fn validate_plan_json(json: &str) -> Result<PipelinePlan, PlanValidationErro
         })?;
 
     if let Err(errors) = schema.validate(&value) {
-        let first = errors.into_iter().next().unwrap();
+        let first = match errors.into_iter().next() {
+            Some(e) => e,
+            None => {
+                return Err(PlanValidationError {
+                    message: "Schema 校验失败: 无具体错误信息".into(),
+                    field_path: None,
+                })
+            }
+        };
         let instance_path = first.instance_path.to_string();
         return Err(PlanValidationError {
             message: format!("Schema 校验失败: {} ({})", first, instance_path),

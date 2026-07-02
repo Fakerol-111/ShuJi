@@ -109,7 +109,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_validation_report_roundtrip() {
+    fn test_validation_report_roundtrip() -> anyhow::Result<()> {
         let report = ValidationReport {
             ts: "2026-06-13T12:00:00".into(),
             project_type: "rust".into(),
@@ -123,11 +123,12 @@ mod tests {
             ctrt_id: None,
         };
 
-        let json = serde_json::to_string(&report).unwrap();
-        let deserialized: ValidationReport = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&report)?;
+        let deserialized: ValidationReport = serde_json::from_str(&json)?;
         assert!(deserialized.overall_pass);
         assert_eq!(deserialized.checks.len(), 1);
         assert_eq!(deserialized.project_type, "rust");
+        Ok(())
     }
 
     #[test]
@@ -191,17 +192,18 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_config_deserialize() {
+    fn test_validate_config_deserialize() -> anyhow::Result<()> {
         let json = r#"{
             "enabled": true,
             "tests": { "required": true, "scope": "unit", "forbid_unexplained_skip": true },
             "contract_diff": { "enabled": true, "ctrt_id": "ctrt_001" },
             "lint": { "enabled": true, "fail_on_warning": false }
         }"#;
-        let config: ValidateConfig = serde_json::from_str(json).unwrap();
+        let config: ValidateConfig = serde_json::from_str(json)?;
         assert!(config.tests.forbid_unexplained_skip);
         assert_eq!(config.contract_diff.ctrt_id, Some("ctrt_001".into()));
         assert!(config.lint.enabled);
+        Ok(())
     }
 
     #[test]

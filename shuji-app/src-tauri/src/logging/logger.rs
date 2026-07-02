@@ -5,6 +5,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 
 use crate::models::role::Role;
+use crate::util::lock::lock_or_recover;
 
 /// Global channel for serialized console output.
 /// Lazily initialized on first `log_console!` call — after the tokio runtime is active.
@@ -14,7 +15,13 @@ static INIT_LOCK: Mutex<()> = Mutex::new(());
 
 /// Ensure the console writer task is running. Safe to call multiple times.
 fn ensure_console_writer() {
-    let _guard = INIT_LOCK.lock().unwrap();
+    let _guard = match lock_or_recover(&INIT_LOCK) {
+        Ok(g) => g,
+        Err(_) => {
+            // Lock poisoned but we can proceed — console will fall back to direct stderr writes
+            return;
+        }
+    };
     if CONSOLE_TX.get().is_some() {
         return;
     }

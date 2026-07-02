@@ -36,52 +36,54 @@ pub struct PreceptRules {
     pub rules: Vec<PreceptRule>,
 }
 
+/// Parse the bundled precepts index.json.
+/// Logs a warning on parse failure (shouldn't happen in production — it's a compile-time asset).
+fn parse_precepts_index() -> serde_json::Value {
+    let index_json = include_str!("../../assets/precepts/index.json");
+    let result: serde_json::Value = serde_json::from_str(index_json).unwrap_or_else(|e| {
+        log_console!("[precepts] bundled index.json parse failed: {}", e);
+        serde_json::Value::Null
+    });
+    result
+}
+
 /// Detect which precept files apply to the project at `working_dir`.
 /// Checks for key files (Cargo.toml, package.json, etc.) and maps to precept lists.
 pub fn detect_precept_files(working_dir: &Path) -> Vec<PreceptFile> {
-    let index_json = include_str!("../../assets/precepts/index.json");
-    let index: serde_json::Value = serde_json::from_str(index_json).unwrap_or_default();
+    let index = parse_precepts_index();
 
-    let detectors = index["detectors"].as_array();
-    if detectors.is_none() {
+    let Some(detectors) = index["detectors"].as_array() else {
         return vec![];
-    }
+    };
 
     let mut result = Vec::new();
 
-    // 已在上方检查 detectors.is_none()，此处安全 unwrap 或改用 if let
-    let detectors = match detectors {
-        Some(d) => d,
-        None => return vec![],
-    };
-
     for detector in detectors {
-        let files = detector["files"].as_array();
-        let precepts = detector["precepts"].as_array();
-        if files.is_none() || precepts.is_none() {
+        let Some(files) = detector["files"].as_array() else {
             continue;
-        }
+        };
+        let Some(precepts) = detector["precepts"].as_array() else {
+            continue;
+        };
 
-        let matched = files
-            .map(|fs| {
-                fs.iter().any(|f| {
-                    let fname = f.as_str().unwrap_or("");
-                    working_dir.join(fname).exists()
-                })
-            })
-            .unwrap_or(false);
+        let matched = files.iter().any(|f| {
+            let fname = match f.as_str() {
+                Some(name) => name,
+                None => return false,
+            };
+            working_dir.join(fname).exists()
+        });
 
         if matched {
-            if let Some(ps) = precepts {
-                for p in ps {
-                    let name = p.as_str().unwrap_or("");
-                    if !name.is_empty() {
-                        result.push(PreceptFile {
-                            file_name: name.to_string(),
-                            path: format!("assets/precepts/{}", name),
-                        });
-                    }
-                }
+            for p in precepts {
+                let name = match p.as_str() {
+                    Some(n) if !n.is_empty() => n,
+                    _ => continue,
+                };
+                result.push(PreceptFile {
+                    file_name: name.to_string(),
+                    path: format!("assets/precepts/{}", name),
+                });
             }
         }
     }
@@ -176,9 +178,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_detect_precept_files_rust() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        std::fs::write(tmp.path().join("Cargo.toml"), "").unwrap();
+    fn test_detect_precept_files_rust() -> anyhow::Result<()> {
+        let tmp = tempfile::TempDir::new()?;
+        std::fs::write(tmp.path().join("Cargo.toml"), "")?;
 
         let files = detect_precept_files(tmp.path());
         assert!(
@@ -189,25 +191,26 @@ mod tests {
             files.iter().any(|f| f.file_name == "universal.toml"),
             "should always include universal"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_detect_precept_files_node() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        std::fs::write(tmp.path().join("package.json"), "{}").unwrap();
+    fn test_detect_precept_files_node() -> anyhow::Result<()> {
+        let tmp = tempfile::TempDir::new()?;
+        std::fs::write(tmp.path().join("package.json"), "{}")?;
 
         let files = detect_precept_files(tmp.path());
         assert!(files.iter().any(|f| f.file_name == "typescript.toml"));
         assert!(files.iter().any(|f| f.file_name == "universal.toml"));
+        Ok(())
     }
 
     #[test]
-    fn test_detect_precept_files_unknown() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        // No Cargo.toml, no package.json — should only detect universal
-        // Actually, with no matching detector, nothing returns
+    fn test_detect_precept_files_unknown() -> anyhow::Result<()> {
+        let tmp = tempfile::TempDir::new()?;
         let files = detect_precept_files(tmp.path());
         assert!(files.is_empty(), "no files should match: {:?}", files);
+        Ok(())
     }
 
     #[test]
@@ -245,25 +248,27 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_init_project_precepts() {
-        let tmp = tempfile::TempDir::new().unwrap();
+    async fn test_init_project_precepts() -> anyhow::Result<()> {
+        let tmp = tempfile::TempDir::new()?;
         init_project_precepts(tmp.path()).await.unwrap();
 
         let precepts_dir = tmp.path().join(".shuji").join("precepts");
         assert!(precepts_dir.join("index.json").exists());
         assert!(precepts_dir.join("rust.toml").exists());
         assert!(precepts_dir.join("universal.toml").exists());
+        Ok(())
     }
 
     #[test]
-    fn test_load_project_rules_integration() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        std::fs::write(tmp.path().join("Cargo.toml"), "").unwrap();
+    fn test_load_project_rules_integration() -> anyhow::Result<()> {
+        let tmp = tempfile::TempDir::new()?;
+        std::fs::write(tmp.path().join("Cargo.toml"), "")?;
 
         let rules = load_project_rules(tmp.path());
         assert!(
             !rules.is_empty(),
             "should auto-detect and load rust+universal rules"
         );
+        Ok(())
     }
 }

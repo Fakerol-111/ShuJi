@@ -52,7 +52,9 @@ impl RefIndex {
             .join(".shuji")
             .join("audit")
             .join("ref_index.json");
-        let _ = tokio::fs::create_dir_all(path.parent().unwrap()).await;
+        if let Some(parent) = path.parent() {
+            let _ = tokio::fs::create_dir_all(parent).await;
+        }
         if let Ok(json) = serde_json::to_string_pretty(self) {
             let _ = tokio::fs::write(&path, &json).await;
         }

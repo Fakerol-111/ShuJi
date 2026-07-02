@@ -28,18 +28,23 @@ impl AgentContracts {
     /// Load contracts from `.shuji/esaa/AGENT_CONTRACT.yaml`.
     /// Returns empty contracts if the file doesn't exist or is unparseable.
     pub fn load(shuji_dir: &Path) -> Self {
-        let path = shuji_dir.join("esaa").join("AGENT_CONTRACT.yaml");
-        let content = match std::fs::read_to_string(&path) {
+        match Self::try_load(shuji_dir) {
             Ok(c) => c,
-            Err(_) => {
-                return Self {
+            Err(e) => {
+                log_console!("[esaa] AGENT_CONTRACT.yaml load failed: {}", e);
+                Self {
                     roles: HashMap::new(),
                 }
             }
-        };
-        serde_yaml::from_str(&content).unwrap_or(Self {
-            roles: HashMap::new(),
-        })
+        }
+    }
+
+    /// Try to load contracts, returning an error on parse failure.
+    pub fn try_load(shuji_dir: &Path) -> Result<Self, String> {
+        let path = shuji_dir.join("esaa").join("AGENT_CONTRACT.yaml");
+        let content = std::fs::read_to_string(&path)
+            .map_err(|e| format!("读取 AGENT_CONTRACT.yaml 失败: {}", e))?;
+        serde_yaml::from_str(&content).map_err(|e| format!("解析 AGENT_CONTRACT.yaml 失败: {}", e))
     }
 
     /// Resolve role name to contract key (supports Role::from_name aliases + sub-agents).
@@ -438,7 +443,13 @@ impl ContractBoundaryChecker {
                     return;
                 }
             };
-            *contracts = AgentContracts::load(&self.shuji_dir);
+            *contracts = match AgentContracts::try_load(&self.shuji_dir) {
+                Ok(c) => c,
+                Err(e) => {
+                    log_console!("[esaa] reload failed, keeping previous contracts: {}", e);
+                    return;
+                }
+            };
             *last = Instant::now();
         }
     }

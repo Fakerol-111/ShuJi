@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use crate::commands::friendly_error::friendly_error;
+use crate::util::lock::lock_or_recover;
 use serde::{Deserialize, Serialize};
 
 use super::paths::{api_config_path, load_dotenv, prefix_for_role, ROLE_PREFIXES};
@@ -91,8 +92,10 @@ pub fn to_dotenv_lines(config: &AppConfig) -> Vec<String> {
 /// Read config from `api_config.json`, falling back to `.env` with auto-migration.
 #[tauri::command]
 pub async fn get_config() -> Result<AppConfig, String> {
-    if let Some(cached) = APP_CONFIG_CACHE.lock().unwrap().as_ref() {
-        return Ok(cached.clone());
+    if let Ok(cache) = lock_or_recover(&APP_CONFIG_CACHE) {
+        if let Some(cached) = cache.as_ref() {
+            return Ok(cached.clone());
+        }
     }
 
     let json_path = api_config_path();
@@ -100,7 +103,9 @@ pub async fn get_config() -> Result<AppConfig, String> {
     if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
         if let Ok(config) = serde_json::from_str::<AppConfig>(&content) {
             log_console!("[debug] loaded api_config from {}", json_path.display());
-            *APP_CONFIG_CACHE.lock().unwrap() = Some(config.clone());
+            if let Ok(mut cache) = lock_or_recover(&APP_CONFIG_CACHE) {
+                *cache = Some(config.clone());
+            }
             return Ok(config);
         }
         log_console!("[warn] corrupted api_config.json, falling back to .env");
@@ -118,7 +123,9 @@ pub async fn get_config() -> Result<AppConfig, String> {
         log_console!("[debug] migrated .env → {}", json_path.display());
     }
 
-    *APP_CONFIG_CACHE.lock().unwrap() = Some(config.clone());
+    if let Ok(mut cache) = lock_or_recover(&APP_CONFIG_CACHE) {
+        *cache = Some(config.clone());
+    }
     Ok(config)
 }
 
@@ -139,7 +146,9 @@ pub async fn save_config(config: AppConfig) -> Result<(), String> {
         .await
         .map_err(friendly_error)?;
     log_console!("[debug] saved api_config to {}", path.display());
-    *APP_CONFIG_CACHE.lock().unwrap() = Some(final_config);
+    if let Ok(mut cache) = lock_or_recover(&APP_CONFIG_CACHE) {
+        *cache = Some(final_config);
+    }
     Ok(())
 }
 
@@ -174,5 +183,7 @@ pub async fn set_dotenv_key(key: String, value: String) -> Result<(), String> {
 
 /// Update the in-memory config cache (called by model_preset after applying preset).
 pub(crate) fn update_cache(config: AppConfig) {
-    *APP_CONFIG_CACHE.lock().unwrap() = Some(config);
+    if let Ok(mut cache) = lock_or_recover(&APP_CONFIG_CACHE) {
+        *cache = Some(config);
+    }
 }

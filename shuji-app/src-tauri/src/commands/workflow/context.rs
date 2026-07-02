@@ -9,6 +9,7 @@ use crate::commands::friendly_error::friendly_error;
 use crate::commands::project::AppState;
 use crate::commands::settings::ContextWindowConfig;
 use crate::commands::workflow::bootstrap::ContextStats;
+use crate::util::lock::rwlock_read_or_recover;
 
 /// Get per-role context usage statistics.
 #[tauri::command]
@@ -19,7 +20,9 @@ pub async fn get_context_stats(
         Some(d) => d.clone(),
         None => return Ok(HashMap::new()),
     };
-    let config = state.runtime_config.read().unwrap().clone();
+    let config = rwlock_read_or_recover(&state.runtime_config)
+        .map_err(|e| friendly_error(format!("runtime_config read error: {}", e)))?
+        .clone();
 
     let role_overrides: HashMap<String, crate::config::RoleContextConfig> = {
         let path = std::path::Path::new(&dir).join("context_config.json");
@@ -152,10 +155,8 @@ async fn compact_impl(
         .await
         .ok_or_else(|| friendly_error(format!("no context file found for role {}", role)))?;
 
-    let thresholds = state
-        .runtime_config
-        .read()
-        .unwrap()
+    let thresholds = rwlock_read_or_recover(&state.runtime_config)
+        .map_err(|e| friendly_error(format!("runtime_config read error: {}", e)))?
         .resolve_compact_thresholds(role, role_overrides.get(role));
 
     let total_tokens = crate::api::token_count::count_messages_tokens(&ctx.context_messages);

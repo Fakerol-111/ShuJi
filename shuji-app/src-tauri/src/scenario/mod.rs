@@ -135,7 +135,7 @@ mod tests {
             ]
         }"#;
 
-        let scenario = load_scenario(json).unwrap();
+        let scenario = load_scenario(json).expect("load_scenario should succeed");
         assert_eq!(scenario.name, "Todo CLI");
         assert_eq!(scenario.steps.len(), 1);
         assert_eq!(scenario.steps[0].agent, "neige");

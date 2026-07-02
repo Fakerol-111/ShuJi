@@ -158,8 +158,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn learning_config_persists_global_enabled() {
-        let dir = tempfile::tempdir().unwrap();
+    fn learning_config_persists_global_enabled() -> Result<(), String> {
+        let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
         let cfg_path = dir.path().join("learning_config.json");
         set_test_config_path(Some(cfg_path));
         reset_config_cache();
@@ -172,5 +172,6 @@ mod tests {
 
         set_test_config_path(None);
         reset_config_cache();
+        Ok(())
     }
 }

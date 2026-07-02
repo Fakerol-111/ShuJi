@@ -151,8 +151,8 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_rust_lint_on_empty_project() {
-        let tmp = tempfile::TempDir::new().unwrap();
+    async fn test_rust_lint_on_empty_project() -> anyhow::Result<()> {
+        let tmp = tempfile::TempDir::new()?;
         let dir = tmp.path();
 
         tokio::fs::write(
@@ -164,31 +164,31 @@ version = "0.1.0"
 edition = "2021"
 "#,
         )
-        .await
-        .unwrap();
+        .await?;
 
         let src = dir.join("src");
-        tokio::fs::create_dir_all(&src).await.unwrap();
-        tokio::fs::write(src.join("lib.rs"), "pub fn fine() -> i32 { 42 }")
-            .await
-            .unwrap();
+        tokio::fs::create_dir_all(&src).await?;
+        tokio::fs::write(src.join("lib.rs"), "pub fn fine() -> i32 { 42 }").await?;
 
         let result = run_lint(dir).await;
         // May pass or fail depending on clippy availability, but should not panic
         assert_eq!(result.name, "lint");
+        Ok(())
     }
 
     #[test]
-    fn test_detect_project_type_rust() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        std::fs::write(tmp.path().join("Cargo.toml"), "").unwrap();
+    fn test_detect_project_type_rust() -> anyhow::Result<()> {
+        let tmp = tempfile::TempDir::new()?;
+        std::fs::write(tmp.path().join("Cargo.toml"), "")?;
         assert_eq!(detect_project_type(tmp.path()), "rust");
+        Ok(())
     }
 
     #[test]
-    fn test_detect_project_type_node() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        std::fs::write(tmp.path().join("package.json"), "{}").unwrap();
+    fn test_detect_project_type_node() -> anyhow::Result<()> {
+        let tmp = tempfile::TempDir::new()?;
+        std::fs::write(tmp.path().join("package.json"), "{}")?;
         assert_eq!(detect_project_type(tmp.path()), "node");
+        Ok(())
     }
 }
