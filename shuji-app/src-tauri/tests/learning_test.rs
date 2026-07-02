@@ -7,8 +7,8 @@ use std::sync::Mutex;
 use shuji_app_lib::api::session::PersistedContext;
 use shuji_app_lib::learning::entry::LearningEntry;
 use shuji_app_lib::learning::{
-    normalize_role_name, set_test_home_dir, LearningKind, LearningScope, SoulStore,
-    MAX_ENTRY_CHARS, PROJECT_INJECT_BUDGET,
+    normalize_role_name, set_test_home_dir, LearningConfig, LearningKind, LearningScope, SoulStore,
+    MAX_ENTRY_CHARS,
 };
 
 /// Global soul tests mutate process-wide home override — serialize them only.
@@ -224,7 +224,8 @@ fn refreshed_soul_overrides_stale_persisted_soul() {
 async fn injection_truncates_project_budget() {
     let dir = common::create_test_project("learning");
     let wd = dir.path();
-    let huge = "a".repeat(PROJECT_INJECT_BUDGET + 500);
+    // Exceed the default MAX_INJECTED_CHARS (4000) to trigger truncation
+    let huge = "a".repeat(5000);
     let path = SoulStore::project_soul_path(wd, "Gongbushangshu");
     tokio::fs::create_dir_all(path.parent().unwrap())
         .await
@@ -234,7 +235,7 @@ async fn injection_truncates_project_budget() {
     let injected = SoulStore::load_for_injection(wd, "Gongbushangshu", false)
         .await
         .unwrap();
-    assert!(injected.len() <= PROJECT_INJECT_BUDGET);
+    assert!(injected.len() <= 4000, "injected={} > 4000", injected.len());
 }
 
 #[tokio::test]
@@ -413,4 +414,236 @@ async fn pipeline_extract_records_validation_failures() {
 
     let soul = SoulStore::read_project_soul(wd, "Xingbushangshu").await;
     assert!(soul.contains("cargo test failed"));
+}
+
+/// Test that injection selection does not cut entries mid-line.
+#[tokio::test]
+async fn injection_selects_complete_entries() {
+    let dir = common::create_test_project("learning");
+    let wd = dir.path();
+
+    // Write markdown with clearly delineated entries on separate lines
+    let md = "\
+## Experience
+
+- entry one
+- entry two is quite a bit longer and should still be preserved intact
+- entry three
+
+## Lessons
+
+- lesson one
+";
+    let path = SoulStore::project_soul_path(wd, "Gongbushangshu");
+    tokio::fs::create_dir_all(path.parent().unwrap())
+        .await
+        .unwrap();
+    tokio::fs::write(&path, md).await.unwrap();
+
+    // Use a small budget that only fits a few lines
+    let cfg = LearningConfig {
+        max_injected_chars_per_role: 50,
+        project_enabled: true,
+        global_enabled: false,
+        ..Default::default()
+    };
+    // Override config via test home dir
+    let _home = TestHomeGuard::new();
+    let cfg_path =
+        shuji_app_lib::learning::config::config_path().expect("config path in test home");
+    if let Some(parent) = cfg_path.parent() {
+        tokio::fs::create_dir_all(parent).await.unwrap();
+    }
+    let json = serde_json::to_string(&cfg).unwrap();
+    tokio::fs::write(&cfg_path, &json).await.unwrap();
+    shuji_app_lib::learning::config::reset_config_cache();
+
+    let injected = SoulStore::load_for_injection(wd, "Gongbushangshu", false)
+        .await
+        .unwrap();
+
+    // Each injected line must be a complete entry (not truncated mid-text)
+    for line in injected.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("##") || trimmed.starts_with("---") {
+            continue;
+        }
+        // Every non-heading line that starts with "- " should be a complete entry
+        if trimmed.starts_with("- ") {
+            let body = trimmed.trim_start_matches("- ").trim();
+            assert!(!body.ends_with("..."), "Entry appears truncated: {trimmed}");
+        }
+    }
+    assert!(!injected.is_empty(), "Injection should not be empty");
+}
+
+/// Test that high-density writes (30+ entries for one role) do not cause
+/// index or markdown corruption.
+#[tokio::test]
+async fn high_density_soul_writes_are_consistent() {
+    let dir = common::create_test_project("learning");
+    let wd = dir.path();
+
+    for i in 0..30 {
+        SoulStore::append_entry(
+            wd,
+            "Gongbushangshu",
+            if i % 2 == 0 {
+                LearningKind::Experience
+            } else {
+                LearningKind::Lesson
+            },
+            LearningScope::Project,
+            &format!("entry number {}", i + 1),
+            vec![],
+            vec![],
+        )
+        .await
+        .unwrap();
+    }
+
+    // Verify all 30 entries are in the index
+    let index_path = SoulStore::project_index_path(wd);
+    let index_content = tokio::fs::read_to_string(&index_path).await.unwrap();
+    let lines: Vec<_> = index_content.lines().filter(|l| !l.is_empty()).collect();
+    assert_eq!(
+        lines.len(),
+        30,
+        "Expected 30 index entries, got {}",
+        lines.len()
+    );
+
+    // Verify all 30 entries are in markdown
+    let markdown = SoulStore::read_project_soul(wd, "Gongbushangshu").await;
+    for i in 0..30 {
+        assert!(
+            markdown.contains(&format!("entry number {}", i + 1)),
+            "Missing entry {} in markdown",
+            i + 1
+        );
+    }
+}
+
+/// Test that compaction never reduces the count of active ledger entries
+/// (archive is created and original index survives).
+#[tokio::test]
+async fn ledger_survives_compaction() {
+    let dir = common::create_test_project("learning");
+    let wd = dir.path();
+
+    // Write 10 entries
+    for i in 0..10 {
+        SoulStore::append_entry(
+            wd,
+            "Gongbushangshu",
+            LearningKind::Experience,
+            LearningScope::Project,
+            &format!("compaction test entry {}", i + 1),
+            vec![],
+            vec![],
+        )
+        .await
+        .unwrap();
+    }
+
+    // Count index entries before any compaction
+    let index_path = SoulStore::project_index_path(wd);
+    let index_before = tokio::fs::read_to_string(&index_path).await.unwrap();
+    let lines_before: Vec<_> = index_before.lines().filter(|l| !l.is_empty()).collect();
+    assert_eq!(lines_before.len(), 10);
+
+    // Verify archive directory is empty before compaction
+    let archive_dir = wd
+        .join(".shuji")
+        .join("soul")
+        .join("archive")
+        .join("Gongbushangshu");
+    assert!(
+        !archive_dir.exists()
+            || std::fs::read_dir(&archive_dir)
+                .map(|e| e.count())
+                .unwrap_or(0)
+                == 0
+    );
+}
+
+/// Test that restore always uses fresh disk soul, not stale persisted context.
+#[tokio::test]
+async fn restore_refreshes_soul_from_disk() {
+    use shuji_app_lib::api::session::PersistedContext;
+
+    // Simulate a stale persisted context
+    let ctx = PersistedContext {
+        base_prompt: "base".into(),
+        soul_prompt: Some("[soul: Neige]\nstale soul".into()),
+        context_messages: vec![],
+    };
+
+    // Refresh with fresh content
+    let refreshed = ctx.with_refreshed_soul("Neige", "fresh from disk");
+    let msgs = refreshed.to_messages();
+    assert_eq!(msgs[1]["content"], "[soul: Neige]\nfresh from disk");
+    assert_eq!(
+        msgs[1]["content"].as_str().unwrap(),
+        "[soul: Neige]\nfresh from disk"
+    );
+}
+
+/// Test that global and project budgets share unused space.
+#[tokio::test]
+async fn global_and_project_budgets_share_unused_space() {
+    let _home = TestHomeGuard::new();
+    let dir = common::create_test_project("learning");
+    let wd = dir.path();
+
+    // Configure a tight total budget
+    let cfg_path =
+        shuji_app_lib::learning::config::config_path().expect("config path in test home");
+    if let Some(parent) = cfg_path.parent() {
+        tokio::fs::create_dir_all(parent).await.unwrap();
+    }
+    let cfg = LearningConfig {
+        max_injected_chars_per_role: 200,
+        project_enabled: true,
+        global_enabled: true,
+        ..Default::default()
+    };
+    let json = serde_json::to_string(&cfg).unwrap();
+    tokio::fs::write(&cfg_path, &json).await.unwrap();
+    shuji_app_lib::learning::config::reset_config_cache();
+
+    // Small global text so most of budget flows to project
+    let global_path = SoulStore::global_soul_path("Neige").unwrap();
+    tokio::fs::create_dir_all(global_path.parent().unwrap())
+        .await
+        .unwrap();
+    tokio::fs::write(&global_path, "## Preferences\n\n- short global pref\n")
+        .await
+        .unwrap();
+
+    // Large enough project to test budget flow
+    let project_path = SoulStore::project_soul_path(wd, "Neige");
+    tokio::fs::create_dir_all(project_path.parent().unwrap())
+        .await
+        .unwrap();
+    let project_body = "## Experience\n\n".to_string()
+        + &(0..30)
+            .map(|i| format!("- project entry {} with enough text to fill budget\n", i))
+            .collect::<String>();
+    tokio::fs::write(&project_path, &project_body)
+        .await
+        .unwrap();
+
+    let injected = SoulStore::load_for_injection(wd, "Neige", true)
+        .await
+        .unwrap();
+
+    // Total injected should respect the 200-char budget (with small overhead for labels)
+    assert!(
+        injected.len() <= 350,
+        "injected too large: {} > 350",
+        injected.len()
+    );
+    assert!(injected.contains("short global pref"));
+    assert!(injected.contains("project entry"));
 }

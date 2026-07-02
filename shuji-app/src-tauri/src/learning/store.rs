@@ -60,6 +60,10 @@ impl SoulStore {
     }
 
     /// Load soul markdown for prompt injection (global first, separate budgets).
+    ///
+    /// Uses the configured `max_injected_chars_per_role` as the total budget,
+    /// split 30% global / 70% project when both are active. Unused budget
+    /// from one scope can flow to the other.
     pub async fn load_for_injection(
         working_dir: &Path,
         role_name: &str,
@@ -71,13 +75,20 @@ impl SoulStore {
             return Ok(String::new());
         }
 
+        let total_budget = cfg.max_injected_chars_per_role;
         let mut parts = Vec::new();
+        let mut remaining = total_budget;
 
         if global_enabled {
             if let Some(global) = Self::load_global_markdown(&role_name).await {
                 if !global.trim().is_empty() {
-                    let body = truncate_with_label(&global, GLOBAL_INJECT_BUDGET, "global");
-                    parts.push(format!("---\n[global]\n{body}"));
+                    let global_budget = (total_budget as f64 * 0.3) as usize;
+                    let body =
+                        truncate_to_entry_boundary(&global, global_budget.min(remaining), "global");
+                    if !body.is_empty() {
+                        remaining = remaining.saturating_sub(body.len());
+                        parts.push(format!("---\n[global]\n{body}"));
+                    }
                 }
             }
         }
@@ -85,8 +96,18 @@ impl SoulStore {
         if cfg.project_enabled {
             let project = Self::load_project_markdown(working_dir, &role_name).await;
             if !project.trim().is_empty() {
-                let body = truncate_with_label(&project, PROJECT_INJECT_BUDGET, "project");
-                parts.push(body);
+                let project_budget = if remaining >= total_budget {
+                    // No global was injected, use full budget (minus overhead)
+                    (total_budget as f64 * 0.95) as usize
+                } else {
+                    // Global consumed some budget; project gets what's left
+                    remaining
+                };
+                let body =
+                    truncate_to_entry_boundary(&project, project_budget.min(remaining), "project");
+                if !body.is_empty() {
+                    parts.push(body);
+                }
             }
         }
 
@@ -543,10 +564,40 @@ impl SoulStore {
         client: &crate::api::client::AnthropicClient,
         model: &str,
     ) -> Result<String, String> {
-        let soul_path = Self::project_soul_path(working_dir, role_name);
+        let role_name = normalize_role_name(Some(role_name))?;
+        let soul_path = Self::project_soul_path(working_dir, &role_name);
         let content = tokio::fs::read_to_string(&soul_path)
             .await
             .map_err(|e| format!("Failed to read soul: {e}"))?;
+
+        // ── Archive before compaction ──────────────────────────────────
+        // Preserve both the markdown and the structured index before any
+        // destructive rewrite. If compation fails or produces invalid output,
+        // the original data remains recoverable from the archive.
+        let archive_timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S_%3f");
+        let archive_dir = working_dir
+            .join(".shuji")
+            .join("soul")
+            .join("archive")
+            .join(&role_name);
+        let _ = tokio::fs::create_dir_all(&archive_dir).await;
+        let md_archive = archive_dir.join(format!("{archive_timestamp}.md"));
+        let _ = tokio::fs::write(&md_archive, &content).await;
+
+        // Also archive the index if it exists
+        let index_path = Self::project_index_path(working_dir);
+        if let Ok(index_content) = tokio::fs::read_to_string(&index_path).await {
+            if !index_content.trim().is_empty() {
+                let idx_archive = archive_dir.join(format!("{archive_timestamp}.index.jsonl"));
+                let _ = tokio::fs::write(&idx_archive, &index_content).await;
+            }
+        }
+
+        log_console!(
+            "[learning] soul archived for {} before compaction -> {}",
+            role_name,
+            md_archive.display()
+        );
 
         let prompt = format!(
             r#"You are a soul compaction tool. Distill the role soul into a concise version.
@@ -578,15 +629,36 @@ Original soul:
             .trim()
             .to_string();
 
+        // ── Validate compaction output ────────────────────────────────────
+        // Reject if empty, longer than original, or missing required headings.
+        // On failure the original markdown and index remain untouched
+        // (archived copy is also available for manual recovery).
         if compacted.is_empty() || compacted.len() >= content.len() {
-            return Err("Compaction result invalid".into());
+            return Err(format!(
+                "Compaction result invalid (empty: {}, not shorter: {} >= {}). \
+                 Original preserved in archive.",
+                compacted.is_empty(),
+                compacted.len(),
+                content.len(),
+            ));
+        }
+        // Require at least one known section heading to avoid corrupted output.
+        let has_heading = ["## Experience", "## Lessons", "## Preferences"]
+            .iter()
+            .any(|h| compacted.contains(h));
+        if !has_heading {
+            return Err(
+                "Compaction result missing required section heading. Original preserved in archive."
+                    .into(),
+            );
         }
 
         atomic_write(&soul_path, &compacted).await?;
         Ok(format!(
-            "soul auto-compacted ({} -> {} bytes)",
+            "soul auto-compacted ({} -> {} bytes); archive at {}",
             content.len(),
-            compacted.len()
+            compacted.len(),
+            archive_timestamp,
         ))
     }
 }
@@ -603,16 +675,39 @@ fn markdown_contains_entry(markdown: &str, content: &str) -> bool {
     markdown.contains(&format!("- {}", content.trim()))
 }
 
-fn truncate_with_label(s: &str, max: usize, label: &str) -> String {
-    if s.len() <= max {
-        return s.to_string();
+/// Truncate markdown to a budget, keeping only complete lines (entry boundaries).
+/// Prevents cutting entries mid-way. Falls back to raw char truncation if no line
+/// boundary is found within the budget.
+fn truncate_to_entry_boundary(s: &str, max: usize, label: &str) -> String {
+    if s.len() <= max || max == 0 {
+        return s.chars().take(max).collect();
     }
     log_console!(
-        "[learning] soul injection truncated {label}: {} -> {} chars",
+        "[learning] soul injection truncated {label}: {} -> {} chars (entry-boundary)",
         s.len(),
         max
     );
-    s.chars().take(max).collect()
+
+    // Walk back to find the last complete line boundary within the budget.
+    let mut end = max;
+    let chars: Vec<char> = s.chars().collect();
+    if end > chars.len() {
+        end = chars.len();
+    }
+    // Ensure we don't cut mid-line: walk back to the previous '\n' if we're
+    // in the middle of a line, but only if there's a '\n' before `end`.
+    if end > 0 && end < chars.len() && chars[end - 1] != '\n' {
+        if let Some(newline_pos) = chars[..end].iter().rposition(|&c| c == '\n') {
+            end = newline_pos + 1; // Include the newline
+        }
+    }
+
+    let result: String = chars[..end].iter().collect();
+    if result.is_empty() {
+        // Fallback: if entry-boundary truncation produces nothing, use raw prefix
+        return s.chars().take(max).collect();
+    }
+    result
 }
 
 fn insert_under_heading(existing: &str, heading: &str, entry_line: &str) -> String {
@@ -641,7 +736,17 @@ async fn atomic_write(path: &Path, content: &str) -> Result<(), String> {
             .await
             .map_err(|e| e.to_string())?;
     }
-    let tmp = path.with_extension("tmp");
+    let tmp = {
+        let mut name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("tmp")
+            .to_string();
+        name.push_str(".");
+        name.push_str(&uuid::Uuid::new_v4().to_string());
+        name.push_str(".tmp");
+        path.with_file_name(name)
+    };
     tokio::fs::write(&tmp, content)
         .await
         .map_err(|e| e.to_string())?;
