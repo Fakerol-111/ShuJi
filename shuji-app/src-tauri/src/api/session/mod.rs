@@ -4,13 +4,17 @@ use std::sync::Arc;
 use crate::api::client::AnthropicClient;
 use crate::api::client::ToolDefinition;
 use crate::api::reasoning::{self, LlmProvider};
-use crate::config::{ReasoningEffort, ReasoningPhase, ResolvedReasoningPolicy, RuntimeConfig};
+use crate::config::{ReasoningPhase, ResolvedReasoningPolicy, RuntimeConfig};
 
 pub mod persisted_context;
 pub use persisted_context::*;
 
+mod accessors;
+mod builder;
 mod debug;
+mod error_retry;
 mod length_retry;
+mod logging;
 mod request;
 mod response;
 mod stream;
@@ -119,189 +123,10 @@ impl Session {
         &self.role
     }
 
-    // ── Read-only accessors for sub-modules (debug.rs etc.) ───────────────
-    // These expose private fields to sibling modules without making them
-    // `pub`. Each returns an immutable reference (or copy for Copy types).
-
-    pub(super) fn model(&self) -> &str {
-        &self.model
-    }
-
-    pub(super) fn max_tokens(&self) -> Option<u32> {
-        self.max_tokens
-    }
-
-    pub(super) fn debug_dir(&self) -> Option<&std::path::Path> {
-        self.debug_dir.as_deref()
-    }
-
-    pub(super) fn messages_len(&self) -> usize {
-        self.messages.len()
-    }
-
-    pub(super) fn messages_iter(&self) -> impl Iterator<Item = &serde_json::Value> {
-        self.messages.iter()
-    }
-
-    /// Push a message onto the internal history. Used by sub-modules
-    /// (response.rs, length_retry.rs) that need to append assistant/user
-    /// messages without going through the public `inject` API.
-    pub(super) fn push_message(&mut self, msg: serde_json::Value) {
-        self.messages.push(msg);
-    }
-
     /// Public read-only access to the session message history.
     /// Returns a reference to the internal message array without cloning.
     pub fn messages(&self) -> &[serde_json::Value] {
         &self.messages
-    }
-
-    // ── Read-only accessors for request.rs / token_usage.rs ───────────────
-    // These expose private fields to sibling modules without making them `pub`.
-
-    pub(super) fn messages_ref(&self) -> &[serde_json::Value] {
-        &self.messages
-    }
-
-    pub(super) fn tools_ref(&self) -> &[ToolDefinition] {
-        &self.tools
-    }
-
-    pub(super) fn tool_choice_none(&self) -> bool {
-        self.tool_choice_none
-    }
-
-    pub(super) fn provider(&self) -> crate::api::reasoning::LlmProvider {
-        self.provider
-    }
-
-    pub(super) fn reasoning_policy(&self) -> crate::config::ResolvedReasoningPolicy {
-        self.reasoning_policy
-    }
-
-    /// Internal max_tokens setter taking `Option<u32>`. Used by length_retry.rs
-    /// to expand the token budget. (The public `set_max_tokens` takes `u32`
-    /// and treats 0 as "unset"; this one is explicit about the Option.)
-    pub(super) fn set_max_tokens_opt(&mut self, tokens: Option<u32>) {
-        self.max_tokens = tokens;
-    }
-
-    // ── Accessors for stream.rs ───────────────────────────────────────────
-    // step_stream() needs the HTTP client, API URL/key, and config timeout.
-    // These return references to the Arc'd / owned fields without exposing
-    // them publicly.
-
-    pub(super) fn client(&self) -> &Arc<AnthropicClient> {
-        &self.client
-    }
-
-    pub(super) fn config(&self) -> &Arc<RuntimeConfig> {
-        &self.config
-    }
-
-    /// Inject a persona system message (`[soul: role]`) right after
-    /// the base prompt but before other messages.
-    pub fn with_soul(mut self, role: &str, content: &str) -> Self {
-        if content.is_empty() {
-            return self;
-        }
-        let soul_msg = serde_json::json!({
-            "role": "system",
-            "content": format!("[soul: {}]\n{}", role, content)
-        });
-        // Insert at index 1 (after base prompt)
-        if self.messages.len() > 1 {
-            self.messages.insert(1, soul_msg);
-        } else {
-            self.messages.push(soul_msg);
-        }
-        self
-    }
-
-    /// Replace or insert the soul system message with latest content from disk.
-    pub fn replace_soul(&mut self, role: &str, content: &str) {
-        if content.trim().is_empty() {
-            self.messages.retain(|m| {
-                m["role"].as_str() != Some("system")
-                    || !m["content"]
-                        .as_str()
-                        .is_some_and(|c| c.starts_with("[soul:"))
-            });
-            return;
-        }
-        let soul_msg = serde_json::json!({
-            "role": "system",
-            "content": format!("[soul: {}]\n{}", role, content)
-        });
-        if let Some(idx) = self.messages.iter().position(|m| {
-            m["role"].as_str() == Some("system")
-                && m["content"]
-                    .as_str()
-                    .is_some_and(|c| c.starts_with("[soul:"))
-        }) {
-            self.messages[idx] = soul_msg;
-        } else if self.messages.len() > 1 {
-            self.messages.insert(1, soul_msg);
-        } else {
-            self.messages.push(soul_msg);
-        }
-    }
-
-    /// Override the auto-detected max_tokens value.
-    pub fn with_max_tokens(mut self, tokens: u32) -> Self {
-        self.max_tokens = (tokens != 0).then_some(tokens);
-        self
-    }
-
-    /// Dynamically set max_tokens (for phase-based control).
-    /// Passing 0 removes the request-level max_tokens field for OpenAI-compatible APIs.
-    pub fn set_max_tokens(&mut self, tokens: u32) {
-        self.max_tokens = (tokens != 0).then_some(tokens);
-    }
-
-    /// Enable or disable reasoning/thinking output (backward-compatible).
-    /// - true: enable with current effort level
-    /// - false: disable reasoning entirely
-    pub fn set_reasoning(&mut self, enabled: bool) {
-        if enabled {
-            self.reasoning_policy = ResolvedReasoningPolicy {
-                enabled: true,
-                effort: self.reasoning_policy.effort.max(ReasoningEffort::Low),
-                budget_tokens: self.reasoning_policy.budget_tokens,
-            };
-        } else {
-            self.reasoning_policy = ResolvedReasoningPolicy::disabled();
-        }
-    }
-
-    /// Set an explicit reasoning policy (full control).
-    pub fn set_reasoning_policy(&mut self, policy: ResolvedReasoningPolicy) {
-        self.reasoning_policy = policy;
-    }
-
-    /// Re-resolve reasoning policy for the given phase (e.g. Planning/Execution for 工部).
-    pub fn set_reasoning_phase(&mut self, phase: ReasoningPhase) {
-        self.reasoning_policy = self.config.resolve_reasoning_policy(&self.role, phase);
-        log_console!(
-            "[{}] reasoning phase {:?}: enabled={} effort={} budget={}",
-            self.role,
-            phase,
-            self.reasoning_policy.enabled,
-            self.reasoning_policy.effort,
-            self.reasoning_policy.budget_tokens,
-        );
-    }
-
-    /// Enable truncation debug output to `.shuji/debug/truncated.md`.
-    pub fn with_debug_dir(mut self, dir: PathBuf) -> Self {
-        self.debug_dir = Some(dir);
-        self
-    }
-
-    /// Force tool_choice to "none", preventing the LLM from calling tools.
-    /// Used during skill selection to force text-only responses.
-    pub fn set_tool_choice_none(&mut self, force: bool) {
-        self.tool_choice_none = force;
     }
 
     /// One complete API round-trip.  Builds the request, sends it,
@@ -318,32 +143,7 @@ impl Session {
         let mut reasoning_stripped = false;
 
         loop {
-            let mut body = serde_json::json!({
-                "model": self.model,
-                "messages": self.messages,
-                "temperature": 0.1,
-                "top_p": 0.9,
-                "frequency_penalty": 0.1,
-                "seed": 42,
-            });
-            if let Some(max_tokens) = self.max_tokens {
-                body["max_tokens"] = serde_json::json!(max_tokens);
-            }
-
-            // Apply reasoning/thinking fields via the centralized adapter
-            reasoning::apply_reasoning_to_body(&mut body, self.provider, self.reasoning_policy);
-
-            if self.tool_choice_none {
-                body["tool_choice"] = serde_json::json!("none");
-                if !self.tools.is_empty() {
-                    body["tools"] = serde_json::to_value(&self.tools).unwrap_or_default();
-                    body["parallel_tool_calls"] = serde_json::json!(false);
-                    body["temperature"] = serde_json::json!(0.0);
-                }
-            } else if !self.tools.is_empty() {
-                body["tools"] = serde_json::to_value(&self.tools).unwrap_or_default();
-                body["tool_choice"] = serde_json::json!("auto");
-            }
+            let body = self.build_step_body();
 
             log_console!(
                 "[{}] step: sending {} messages",
@@ -356,38 +156,18 @@ impl Session {
                 Ok(d) => d,
                 Err(e) => {
                     // Check if this is a reasoning-unsupported error — strip reasoning and retry once
-                    let err_str = e.to_string();
-                    if self.reasoning_policy.enabled
-                        && !reasoning_stripped
-                        && (err_str.contains("400") || err_str.contains("422"))
-                    {
-                        let status_code = err_str
-                            .split("API error (")
-                            .nth(1)
-                            .and_then(|s| s.split(')').next())
-                            .and_then(|s| s.split(',').next())
-                            .and_then(|s| s.trim().parse::<u16>().ok())
-                            .unwrap_or(0);
-                        let error_body = err_str
-                            .split("API error (")
-                            .nth(1)
-                            .and_then(|s| s.split("): ").nth(1))
-                            .unwrap_or("");
-                        if reasoning::looks_like_unsupported_reasoning_error(
-                            status_code,
-                            error_body,
-                        ) {
-                            log_console!(
-                                "[{}] reasoning not supported by provider, retrying without",
-                                self.role
-                            );
-                            if let Some(obj) = body.as_object_mut() {
-                                obj.remove("thinking");
-                                obj.remove("reasoning_effort");
-                            }
-                            reasoning_stripped = true;
-                            continue;
-                        }
+                    if error_retry::should_retry_without_reasoning(
+                        self.reasoning_policy.enabled,
+                        reasoning_stripped,
+                        &e,
+                    ) {
+                        log_console!(
+                            "[{}] reasoning not supported by provider, retrying without",
+                            self.role
+                        );
+                        reasoning_stripped = true;
+                        self.set_reasoning(false);
+                        continue;
                     }
 
                     api_retries += 1;
@@ -415,28 +195,7 @@ impl Session {
             let completion_tokens = self.log_token_usage(&data);
 
             // Log completion content for debugging
-            {
-                let text = msg["content"].as_str().unwrap_or("");
-                let has_tools = msg["tool_calls"].as_array().is_some_and(|a| !a.is_empty());
-                if has_tools {
-                    let tool_names: Vec<&str> = msg["tool_calls"]
-                        .as_array()
-                        .map(|arr| {
-                            arr.iter()
-                                .filter_map(|tc| tc["function"]["name"].as_str())
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    if text.is_empty() {
-                        log_console!("[{}] → tools: {:?}", self.role, tool_names);
-                    } else {
-                        let preview = Self::preview(text);
-                        log_console!("[{}] → {} | tools: {:?}", self.role, preview, tool_names);
-                    }
-                } else if !text.is_empty() {
-                    log_console!("[{}] → {}", self.role, Self::preview(text));
-                }
-            }
+            self.log_completion_preview(msg);
 
             // ── Handle truncated responses (finish_reason=length) ────────
             // Delegated to length_retry.rs. Returns Continue (retry scheduled)
@@ -463,104 +222,17 @@ impl Session {
                 }
             }
 
-            // Parse tool calls
-            if let Some(tcs) = msg["tool_calls"].as_array() {
-                if tcs.is_empty() {
-                    return Ok(StepResult::Text(
-                        msg["content"].as_str().unwrap_or_default().to_string(),
-                    ));
-                }
-
-                let mut calls = Vec::new();
-                for tc in tcs {
-                    let id = tc["id"].as_str().unwrap_or("").to_string();
-                    let name = tc["function"]["name"].as_str().unwrap_or("").to_string();
-                    let args: serde_json::Value = match &tc["function"]["arguments"] {
-                        serde_json::Value::String(s) => match serde_json::from_str(s) {
-                            Ok(v) => v,
-                            Err(e) => {
-                                let preview = &s[..s.floor_char_boundary(200.min(s.len()))];
-                                log_console!(
-                                    "[{}] JSON parse error for {}: {} — preview: {}",
-                                    self.role,
-                                    name,
-                                    e,
-                                    preview
-                                );
-                                serde_json::Value::Null
-                            }
-                        },
-                        v @ serde_json::Value::Object(_) => v.clone(),
-                        _ => {
-                            log_console!(
-                                "[{}] unexpected arguments type for {}: {:?}",
-                                self.role,
-                                name,
-                                tc["function"]["arguments"]
-                            );
-                            serde_json::Value::Null
-                        }
-                    };
-
-                    if args.is_null() {
-                        log_console!(
-                            "[{}] skipping tool call {} due to broken arguments (truncated)",
-                            self.role,
-                            name
-                        );
-                        continue;
-                    }
-
-                    let key_arg = if name == "route_to" {
-                        args.get("to")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("?")
-                            .to_string()
-                    } else {
-                        args.get("path")
-                            .or_else(|| args.get("command"))
-                            .or_else(|| args.get("id"))
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string()
-                    };
-                    log_console!("[{}] {} {}", self.role, name, key_arg);
-
-                    calls.push(ToolCallInfo { id, name, args });
-                }
-
-                // If all calls had broken arguments, return text content instead of
-                // empty ToolCalls (which would cause control.rs to loop infinitely).
-                if calls.is_empty() {
-                    log_console!(
-                        "[{}] all tool calls had broken arguments — falling back to text",
-                        self.role
-                    );
-                    return Ok(StepResult::Text(
-                        msg["content"].as_str().unwrap_or_default().to_string(),
-                    ));
-                }
-
-                // Only push assistant message with valid tool calls remaining.
-                // If we pushed the raw msg (which may contain truncated calls),
-                // the API would 400 because those IDs never get tool_result.
-                let valid_ids: std::collections::HashSet<&str> =
-                    calls.iter().map(|c| c.id.as_str()).collect();
-                let mut filtered = msg.clone();
-                if let Some(arr) = filtered["tool_calls"].as_array_mut() {
-                    arr.retain(|tc| valid_ids.contains(tc["id"].as_str().unwrap_or("")));
-                }
-                let assistant_text = msg["content"].as_str().unwrap_or_default().to_string();
-                self.messages.push(filtered);
+            // Parse tool calls via the shared parse_assistant helper
+            // (also used by step_stream — single source of truth).
+            let parsed = self.parse_assistant(msg, finish_reason == "length");
+            if !parsed.calls.is_empty() {
+                self.push_message(parsed.filtered_msg);
                 return Ok(StepResult::ToolCalls {
-                    calls,
-                    text: assistant_text,
+                    calls: parsed.calls,
+                    text: parsed.assistant_text,
                 });
-            } else {
-                return Ok(StepResult::Text(
-                    msg["content"].as_str().unwrap_or_default().to_string(),
-                ));
             }
+            return Ok(StepResult::Text(parsed.assistant_text));
         } // end step loop
     }
 
