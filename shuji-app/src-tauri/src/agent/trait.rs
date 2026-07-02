@@ -125,16 +125,6 @@ impl AgentOutput {
         }
     }
 
-    /// Builder 方法：附加路由指令。
-    /// 返回 self 以支持链式调用:
-    /// ```ignore
-    /// AgentOutput::new("设计完成").with_route(route_to).with_paused(true)
-    /// ```
-    pub fn with_route(mut self, route: crate::api::control::RouteTo) -> Self {
-        self.route = Some(route);
-        self
-    }
-
     /// Builder 方法：设置暂停标志。
     /// 内阁输出 `<options>` 后设置 paused=true，
     /// 让 actor 等待皇帝做出选择后再恢复执行。

@@ -93,37 +93,6 @@ pub fn summarize_logs_tool() -> Vec<ToolDefinition> {
     vec![crate::tool::summarize_logs_tool_def()]
 }
 
-/// Agent-interaction tools (route_to for all, cancel_agent for 内阁).
-pub fn route_tool() -> ToolDefinition {
-    crate::api::client::ToolDefinition {
-        tool_type: "function".into(),
-        function: crate::api::client::ToolFunction {
-            name: "route_to".into(),
-            description:
-                "Send tasks to other departments. type: task=new task, replace=interrupt and replace, interrupt=interrupt only."
-                    .into(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "to": {
-                        "type": "string",
-                        "enum": ["中书令", "门下侍中", "内阁", "尚书令", "吏部", "工部", "兵部", "刑部", "礼部"]
-                    },
-                    "type": {
-                        "type": "string",
-                        "enum": ["task", "replace", "interrupt"]
-                    },
-                    "subject": {
-                        "type": "string",
-                        "description": "Document ID (e.g. task_5)"
-                    }
-                },
-                "required": ["to", "type", "subject"]
-            }),
-        },
-    }
-}
-
 pub fn cancel_agent_tool() -> ToolDefinition {
     crate::api::client::ToolDefinition {
         tool_type: "function".into(),
