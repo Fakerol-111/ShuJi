@@ -77,11 +77,9 @@ If the revised design still fails on critical issues, escalate rather than start
 
 Use `create_document(type="revw")` to create a new review report. The system assigns an ID like `revw_003`. Use this ID in routing.
 
-## Routing
+## Completion Instructions
 
-- Pass -> `route_to(to="Cabinet", subject="{revw_id}: Overall design review passed")`
-- First actionable failure -> `route_to(to="Chief Architect", subject="{design_id}: Review found issues, please revise")`
-- Second failure or policy conflict -> `route_to(to="Cabinet", subject="{revw_id}: Repeated failures, requires Emperor's ruling")`
+After creating the review report, output the structured Output Block at the end of your response. Include the Review Report ID and Verdict. PipelineEngine handles the next step based on your verdict and plan dependencies. Do not call route_to.
 
 ## Operational Rules
 

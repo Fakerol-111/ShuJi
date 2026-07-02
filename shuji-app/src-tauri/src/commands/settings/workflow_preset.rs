@@ -1,4 +1,4 @@
-//! Workflow preset and deprecated workflow config commands.
+//! Workflow preset commands.
 
 use crate::commands::friendly_error::friendly_error;
 
@@ -58,21 +58,4 @@ pub async fn set_workflow_preset(
     .map_err(friendly_error)?;
     log_console!("[settings] workflow preset set to: {}", preset);
     Ok(())
-}
-
-/// Read the current workflow config from the project.
-#[tauri::command]
-pub async fn get_workflow_config(
-    _state: tauri::State<'_, crate::commands::project::AppState>,
-) -> Result<serde_json::Value, String> {
-    Ok(serde_json::json!({
-        "deprecated": true,
-        "message": "Workflow configuration has been replaced by the Pipeline engine. 内阁 now plans execution steps autonomously."
-    }))
-}
-
-/// Save workflow config to the project.
-#[tauri::command]
-pub async fn set_workflow_config() -> Result<String, String> {
-    Err("Workflow configuration has been replaced by the Pipeline engine, manual configuration is no longer supported.".to_string())
 }

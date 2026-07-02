@@ -183,8 +183,6 @@ pub fn run() {
             commands::settings::connection::check_api_connection,
             commands::settings::workflow_preset::get_workflow_preset,
             commands::settings::workflow_preset::set_workflow_preset,
-            commands::settings::workflow_preset::get_workflow_config,
-            commands::settings::workflow_preset::set_workflow_config,
             commands::settings::soul::get_soul_content,
             commands::settings::soul::clear_soul,
             commands::settings::soul::list_soul_roles,

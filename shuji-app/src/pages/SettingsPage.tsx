@@ -14,17 +14,9 @@ import {
   setModelPreset,
   getApprovalConfig,
   setApprovalConfig,
-  getWorkflowConfig as apiGetWorkflowConfig,
-  setWorkflowConfig as apiSetWorkflowConfig,
 } from '../api';
 import { ALL_ROLES } from '../constants';
-import type {
-  RoleEndpoint,
-  ContextWindowConfig,
-  RoleContextConfig,
-  WorkflowConfig as WFConfig,
-  ApprovalMode,
-} from '../types';
+import type { RoleEndpoint, ContextWindowConfig, RoleContextConfig, ApprovalMode } from '../types';
 import SettingsSidebar from '../components/settings/SettingsSidebar';
 import ServiceConfigTab from '../components/settings/ServiceConfigTab';
 import ContextSettingsTab from '../components/settings/ContextSettingsTab';
@@ -82,7 +74,6 @@ export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
 
   // Workflow / model preset state
   const [workflowPreset, setWorkflowPresetLocal] = useState('standard');
-  const [workflowIntent, setWorkflowIntent] = useState<string>('auto');
   const [modelPreset, setModelPresetLocal] = useState('balanced');
 
   // Approval mode state
@@ -136,20 +127,6 @@ export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
       .catch((e) => console.error(formatError(e)));
   }, []);
 
-  const loadWorkflowConfig = useCallback(() => {
-    apiGetWorkflowConfig()
-      .then((cfg: WFConfig) => {
-        setWorkflowIntent(cfg.intent);
-        setWorkflowPresetLocal(cfg.governance);
-      })
-      .catch(() => {
-        setWorkflowIntent('auto');
-        apiGetPreset()
-          .then(setWorkflowPresetLocal)
-          .catch(() => setWorkflowPresetLocal('standard'));
-      });
-  }, []);
-
   const loadModelPreset = useCallback(() => {
     getModelPreset()
       .then(setModelPresetLocal)
@@ -171,10 +148,12 @@ export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
   useEffect(() => {
     loadConfig();
     loadContextConfig();
-    loadWorkflowConfig();
     loadModelPreset();
     loadApprovalConfig();
-  }, [loadConfig, loadContextConfig, loadWorkflowConfig, loadModelPreset, loadApprovalConfig]);
+    apiGetPreset()
+      .then(setWorkflowPresetLocal)
+      .catch(() => setWorkflowPresetLocal('standard'));
+  }, [loadConfig, loadContextConfig, loadModelPreset, loadApprovalConfig]);
 
   const setOverride = (role: string, field: keyof RoleFormState, value: string) => {
     setOverrides((prev) => ({
@@ -260,11 +239,6 @@ export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
       }
       await saveContextConfig({ roles: ctxRoles });
       await apiSetPreset(workflowPreset);
-      await apiSetWorkflowConfig({
-        intent: workflowIntent as WFConfig['intent'],
-        governance: workflowPreset as WFConfig['governance'],
-        intent_override: null,
-      });
       await setApprovalConfig({
         mode: approvalMode,
         auto_retries: approvalAutoRetries,
@@ -312,8 +286,6 @@ export default function SettingsPage({ onClose }: SettingsPageProps = {}) {
             roleList={roleList}
             onApplyDefaultToAll={applyDefaultToAll}
             onApplyRoleToOthers={applyRoleToOthers}
-            workflowIntent={workflowIntent}
-            setWorkflowIntent={setWorkflowIntent}
             workflowPreset={workflowPreset}
             setWorkflowPresetLocal={setWorkflowPresetLocal}
             modelPreset={modelPreset}
