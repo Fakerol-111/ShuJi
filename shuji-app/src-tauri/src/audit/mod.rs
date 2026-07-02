@@ -12,6 +12,14 @@ pub mod timeline;
 pub mod trace;
 pub mod violation;
 
+// ── Backward-compatibility re-exports ────────────────────────────
+//
+// This facade is kept for callers that use `crate::audit::*` paths.
+// All types and functions are defined in their respective sub-modules
+// below; the re-exports make them available at `crate::audit::name`.
+// These re-exports should NOT be removed in this pass — many tests and
+// runtime call sites depend on them.
+
 // Re-export document_line public API at crate::audit level for backward compatibility
 pub use document_line::{
     active_run_id, analyze_impact, append_line_event, build_document_line,
