@@ -1,0 +1,24 @@
+# Deprecated/Legacy Marker Allowlist
+# Each entry: file:line — reason — removal condition
+# Format: <file_pattern>:<marker> | <reason> | <removal_condition>
+
+# Backward-compat serde aliases (must keep until config schema migration)
+config/compaction.rs:char_threshold | serde alias for old config files | remove after config migration
+config/types.rs:char_threshold | serde alias for old config files | remove after config migration
+
+# Backward-compat dispatch (must keep for request_reauth)
+tool/dispatch.rs:route_to | request_reauth fakes route_to operation | replace with explicit reauth operation
+tool/dispatch.rs:handle_route_to | validates route_to from request_reauth | remove with above
+
+# Pipeline backward-compat (must keep for old runtime.json files)
+pipeline/mod.rs:route_to | load_from migration alias | remove after one release
+pipeline/schema.rs:route_to | validation accepts old action name | remove after one release
+
+# Backward-compat playbook aliases (must keep for validation subsystem)
+playbook/mod.rs:compat_playbook_for_event | legacy event name aliases | add WatchdogEvent variants, then remove
+
+# Learning store migration (must keep for existing projects with legacy soul files)
+learning/store.rs:legacy_neige_paths | migration path for old soul files | remove after project schema version bump
+
+# Audit line compat (must keep for old events.jsonl)
+audit/document_line/events.rs:legacy | maps old run_id on load | remove after projects re-scan events
