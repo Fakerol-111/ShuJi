@@ -115,9 +115,9 @@ fn validate_plan_semantics(plan: &PipelinePlan) -> Result<(), PlanValidationErro
         });
     }
 
-    // 4d. route_to target must be valid Role
+    // 4d. dispatch_to target must be valid Role
     for step in steps {
-        if step.action == "route_to" {
+        if step.action == "dispatch_to" || step.action == "route_to" {
             let target = step
                 .action_params
                 .get("target")
@@ -125,7 +125,7 @@ fn validate_plan_semantics(plan: &PipelinePlan) -> Result<(), PlanValidationErro
                 .unwrap_or("");
             if !target.is_empty() && crate::models::role::Role::from_name(target).is_none() {
                 return Err(PlanValidationError {
-                    message: format!("route_to 目标不是合法部门: {}", target),
+                    message: format!("dispatch_to 目标不是合法部门: {}", target),
                     field_path: Some(format!("steps[{}].action_params.target", step.step_id)),
                 });
             }
@@ -219,7 +219,7 @@ mod tests {
                 {
                     "step_id": "s1",
                     "description": "step 1",
-                    "action": "route_to",
+                    "action": "dispatch_to",
                     "action_params": {"target": "工部", "task": "do work"}
                 }
             ]
@@ -234,8 +234,8 @@ mod tests {
             "plan_id": "plan-20260613-002",
             "summary": "duplicate",
             "steps": [
-                {"step_id": "s1", "description": "a", "action": "route_to", "action_params": {"target": "工部", "task": "a"}},
-                {"step_id": "s1", "description": "b", "action": "route_to", "action_params": {"target": "刑部", "task": "b"}}
+                {"step_id": "s1", "description": "a", "action": "dispatch_to", "action_params": {"target": "工部", "task": "a"}},
+                {"step_id": "s1", "description": "b", "action": "dispatch_to", "action_params": {"target": "刑部", "task": "b"}}
             ]
         }"#;
         let result = validate_plan_json(json);
@@ -254,8 +254,8 @@ mod tests {
             "plan_id": "plan-cycle",
             "summary": "cycle",
             "steps": [
-                {"step_id": "s1", "description": "a", "action": "route_to", "action_params": {"target": "工部", "task": "a"}, "depends_on": ["s2"]},
-                {"step_id": "s2", "description": "b", "action": "route_to", "action_params": {"target": "刑部", "task": "b"}, "depends_on": ["s1"]}
+                {"step_id": "s1", "description": "a", "action": "dispatch_to", "action_params": {"target": "工部", "task": "a"}, "depends_on": ["s2"]},
+                {"step_id": "s2", "description": "b", "action": "dispatch_to", "action_params": {"target": "刑部", "task": "b"}, "depends_on": ["s1"]}
             ]
         }"#;
         let result = validate_plan_json(json);
@@ -287,7 +287,7 @@ mod tests {
             "plan_id": "plan-bad-role",
             "summary": "bad role",
             "steps": [
-                {"step_id": "s1", "description": "a", "action": "route_to", "action_params": {"target": "御膳房", "task": "cook"}}
+                {"step_id": "s1", "description": "a", "action": "dispatch_to", "action_params": {"target": "御膳房", "task": "cook"}}
             ]
         }"#;
         let result = validate_plan_json(json);
@@ -306,7 +306,7 @@ mod tests {
             "plan_id": "plan-missing-dep",
             "summary": "missing dep",
             "steps": [
-                {"step_id": "s1", "description": "a", "action": "route_to", "action_params": {"target": "工部", "task": "a"}, "depends_on": ["ghost_step"]}
+                {"step_id": "s1", "description": "a", "action": "dispatch_to", "action_params": {"target": "工部", "task": "a"}, "depends_on": ["ghost_step"]}
             ]
         }"#;
         let result = validate_plan_json(json);

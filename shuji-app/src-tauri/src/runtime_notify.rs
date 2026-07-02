@@ -125,7 +125,7 @@ mod tests {
                 PlanStep {
                     step_id: "s1".into(),
                     description: "Design".into(),
-                    action: "route_to".into(),
+                    action: "dispatch_to".into(),
                     action_params: serde_json::json!({}),
                     depends_on: vec![],
                     require_approval: false,

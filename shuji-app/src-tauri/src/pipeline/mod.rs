@@ -29,7 +29,7 @@ pub struct PipelinePlan {
 pub struct PlanStep {
     pub step_id: String,
     pub description: String,
-    pub action: String, // ask_user | route_to | parallel | approval_gate | self_execute
+    pub action: String, // ask_user | dispatch_to | parallel | approval_gate | self_execute
     pub action_params: serde_json::Value,
     #[serde(default)]
     pub depends_on: Vec<String>,
@@ -164,13 +164,15 @@ impl PlanRuntime {
     }
 
     /// Load from .shuji/pipeline/runtime.json.
+    /// Migrates legacy `"route_to"` actions to `"dispatch_to"` on load.
     pub async fn load_from(project_dir: &std::path::Path) -> Option<Self> {
         let path = project_dir
             .join(".shuji")
             .join("pipeline")
             .join("runtime.json");
         let content = tokio::fs::read_to_string(&path).await.ok()?;
-        serde_json::from_str(&content).ok()
+        let migrated = content.replace(r#""action": "route_to""#, r#""action": "dispatch_to""#);
+        serde_json::from_str(&migrated).ok()
     }
 
     /// Delete runtime file (cleanup after completion).
@@ -225,7 +227,7 @@ mod tests {
             steps: vec![PlanStep {
                 step_id: "s1".into(),
                 description: "step1".into(),
-                action: "route_to".into(),
+                action: "dispatch_to".into(),
                 action_params: serde_json::json!({"target": "工部", "task": "do"}),
                 depends_on: vec![],
                 require_approval: false,
@@ -248,7 +250,7 @@ mod tests {
                 PlanStep {
                     step_id: "s1".into(),
                     description: "step1".into(),
-                    action: "route_to".into(),
+                    action: "dispatch_to".into(),
                     action_params: serde_json::json!({"target": "工部", "task": "do"}),
                     depends_on: vec![],
                     require_approval: false,
@@ -258,7 +260,7 @@ mod tests {
                 PlanStep {
                     step_id: "s2".into(),
                     description: "step2".into(),
-                    action: "route_to".into(),
+                    action: "dispatch_to".into(),
                     action_params: serde_json::json!({"target": "刑部", "task": "test"}),
                     depends_on: vec!["s1".into()],
                     require_approval: false,
@@ -286,7 +288,7 @@ mod tests {
             steps: vec![PlanStep {
                 step_id: "s1".into(),
                 description: "step1".into(),
-                action: "route_to".into(),
+                action: "dispatch_to".into(),
                 action_params: serde_json::json!({"target": "工部", "task": "do"}),
                 depends_on: vec![],
                 require_approval: false,
@@ -312,7 +314,7 @@ mod tests {
                 PlanStep {
                     step_id: "s1".into(),
                     description: "step1".into(),
-                    action: "route_to".into(),
+                    action: "dispatch_to".into(),
                     action_params: serde_json::json!({"target": "工部"}),
                     depends_on: vec!["s2".into()],
                     require_approval: false,
@@ -322,7 +324,7 @@ mod tests {
                 PlanStep {
                     step_id: "s2".into(),
                     description: "step2".into(),
-                    action: "route_to".into(),
+                    action: "dispatch_to".into(),
                     action_params: serde_json::json!({"target": "刑部"}),
                     depends_on: vec!["s1".into()],
                     require_approval: false,
@@ -346,7 +348,7 @@ mod tests {
             steps: vec![PlanStep {
                 step_id: "s1".into(),
                 description: "do thing".into(),
-                action: "route_to".into(),
+                action: "dispatch_to".into(),
                 action_params: serde_json::json!({"target": "工部", "task": "code"}),
                 depends_on: vec![],
                 require_approval: true,

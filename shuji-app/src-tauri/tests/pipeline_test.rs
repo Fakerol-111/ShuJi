@@ -173,7 +173,7 @@ fn route_step(id: &str, desc: &str, target: &str, task: &str, deps: Vec<&str>) -
     make_step(
         id,
         desc,
-        "route_to",
+        "dispatch_to",
         serde_json::json!({"target": target, "task": task}),
         deps,
     )
@@ -217,8 +217,8 @@ async fn plan_schema_rejects_duplicate_step_id() {
     let json = r#"{
         "plan_id": "plan-p1", "summary": "dup",
         "steps": [
-            {"step_id": "s1", "description": "a", "action": "route_to", "action_params": {"target": "工部", "task": "a"}},
-            {"step_id": "s1", "description": "b", "action": "route_to", "action_params": {"target": "刑部", "task": "b"}}
+            {"step_id": "s1", "description": "a", "action": "dispatch_to", "action_params": {"target": "工部", "task": "a"}},
+            {"step_id": "s1", "description": "b", "action": "dispatch_to", "action_params": {"target": "刑部", "task": "b"}}
         ]
     }"#;
     let result = validate_plan_json(json);
@@ -232,8 +232,8 @@ async fn plan_schema_rejects_cycle() {
     let json = r#"{
         "plan_id": "plan-p2", "summary": "cycle",
         "steps": [
-            {"step_id": "s1", "description": "a", "action": "route_to", "action_params": {"target": "工部", "task": "a"}, "depends_on": ["s2"]},
-            {"step_id": "s2", "description": "b", "action": "route_to", "action_params": {"target": "刑部", "task": "b"}, "depends_on": ["s1"]}
+            {"step_id": "s1", "description": "a", "action": "dispatch_to", "action_params": {"target": "工部", "task": "a"}, "depends_on": ["s2"]},
+            {"step_id": "s2", "description": "b", "action": "dispatch_to", "action_params": {"target": "刑部", "task": "b"}, "depends_on": ["s1"]}
         ]
     }"#;
     let result = validate_plan_json(json);
@@ -280,7 +280,7 @@ async fn route_to_unknown_role_fails() {
         vec![make_step(
             "s1",
             "bad",
-            "route_to",
+            "dispatch_to",
             serde_json::json!({"target": "御膳房", "task": "cook"}),
             vec![],
         )],
@@ -414,7 +414,7 @@ async fn failed_step_wake_cabinet() {
         vec![PlanStep {
             step_id: "s1".into(),
             description: "fail".into(),
-            action: "route_to".into(),
+            action: "dispatch_to".into(),
             action_params: serde_json::json!({"target": "中书令", "task": "task"}),
             depends_on: vec![],
             require_approval: false,
@@ -687,7 +687,7 @@ async fn deadlock_no_executable_step() {
             PlanStep {
                 step_id: "s1".into(),
                 description: "dep on s2".into(),
-                action: "route_to".into(),
+                action: "dispatch_to".into(),
                 action_params: serde_json::json!({"target": "工部", "task": "a"}),
                 depends_on: vec!["s2".into()],
                 require_approval: false,
@@ -697,7 +697,7 @@ async fn deadlock_no_executable_step() {
             PlanStep {
                 step_id: "s2".into(),
                 description: "dep on s1".into(),
-                action: "route_to".into(),
+                action: "dispatch_to".into(),
                 action_params: serde_json::json!({"target": "刑部", "task": "b"}),
                 depends_on: vec!["s1".into()],
                 require_approval: false,
@@ -1088,7 +1088,7 @@ async fn artifact_doc_id_propagates_to_review_step() {
             PlanStep {
                 step_id: "design".into(),
                 description: "design".into(),
-                action: "route_to".into(),
+                action: "dispatch_to".into(),
                 action_params: serde_json::json!({"target": "中书令", "task": "design"}),
                 depends_on: vec![],
                 require_approval: false,
@@ -1098,7 +1098,7 @@ async fn artifact_doc_id_propagates_to_review_step() {
             PlanStep {
                 step_id: "review".into(),
                 description: "review".into(),
-                action: "route_to".into(),
+                action: "dispatch_to".into(),
                 action_params: serde_json::json!({
                     "target": "门下侍中",
                     "task": "Review the design"

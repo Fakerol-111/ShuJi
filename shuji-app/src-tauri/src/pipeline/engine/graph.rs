@@ -3,7 +3,7 @@
 use super::PipelineEngine;
 
 impl PipelineEngine {
-    /// 预填充文移图：遍历 pipeline plan 中的所有 route_to/parallel 步骤，
+    /// 预填充文移图：遍历 pipeline plan 中的所有 dispatch_to/parallel 步骤，
     /// 以 planned 状态添加到 workflow graph 中，让前端提前看到整个计划 DAG。
     pub async fn preview_pipeline_on_graph(&mut self) {
         if self.workflow_graph.is_none() {
@@ -15,7 +15,7 @@ impl PipelineEngine {
 
         for step in &steps {
             match step.action.as_str() {
-                "route_to" => {
+                "dispatch_to" => {
                     let target = step
                         .action_params
                         .get("target")

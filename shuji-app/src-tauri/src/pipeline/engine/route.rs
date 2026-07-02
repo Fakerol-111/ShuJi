@@ -1,4 +1,4 @@
-//! execute_route_to_step — route pipeline steps to department actors.
+//! execute_dispatch_step — dispatch pipeline steps to department actors.
 
 use crate::actor::ActorMessage;
 use crate::api::control::RouteMsgType;
@@ -17,7 +17,7 @@ const EXEC_DEPTS: [&str; 6] = ["尚书令", "吏部", "兵部", "工部", "刑�
 impl PipelineEngine {
     /// Route a step to a department actor and wait for its output.
     /// Records edges in the workflow graph for 文移图 visualization.
-    pub(crate) async fn execute_route_to_step(&self, step: &PlanStep) -> StepResultInner {
+    pub(crate) async fn execute_dispatch_step(&self, step: &PlanStep) -> StepResultInner {
         let target = step
             .action_params
             .get("target")
@@ -41,7 +41,7 @@ impl PipelineEngine {
         // 从 depends_on 对应的上游步骤 artifact 收集文档 ID（plan 不含 id）
         let upstream_doc_ids = collect_upstream_doc_ids(&self.runtime.artifacts, &step.depends_on);
 
-        // Manual mode: gate route_to to execution departments when refs are not approved
+        // Manual mode: gate dispatch to execution departments when refs are not approved
         if self.runtime_config.approval.mode == ApprovalMode::Manual && EXEC_DEPTS.contains(&target)
         {
             if let Some(subject) = upstream_doc_ids.first() {
@@ -52,7 +52,7 @@ impl PipelineEngine {
                 .await
                 {
                     log_console!(
-                        "[pipeline] route_to blocked at step {} → {}: {}",
+                        "[pipeline] dispatch blocked at step {} → {}: {}",
                         step.step_id,
                         target,
                         msg
@@ -111,7 +111,7 @@ impl PipelineEngine {
                     run_id: Some(run_id.clone()),
                     step_id: Some(step.step_id.clone()),
                     doc_id: upstream_doc_ids.first().cloned(),
-                    reason: Some(format!("route_to:{}", target)),
+                    reason: Some(format!("dispatch_to:{}", target)),
                     ..Default::default()
                 },
                 None,
