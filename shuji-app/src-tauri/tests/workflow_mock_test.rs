@@ -4,11 +4,102 @@
 
 use shuji_app_lib::config::{ApprovalMode, RuntimeConfig};
 use shuji_app_lib::pipeline::schema::validate_plan_json;
-use shuji_app_lib::pipeline::templates::pipeline_from_profile;
-use shuji_app_lib::pipeline::{PipelineResult, StepStatus};
+use shuji_app_lib::pipeline::{PipelinePlan, PipelineResult, PlanStep, StepStatus};
 
 mod common;
 use common::{create_mini_rust_project, make_pipeline_engine, MockActorHarness};
+
+fn inline_demo_plan(plan_id: &str, summary: &str) -> PipelinePlan {
+    PipelinePlan {
+        plan_id: plan_id.into(),
+        summary: summary.into(),
+        estimated_complexity: "low".into(),
+        created: chrono::Local::now().to_rfc3339(),
+        steps: vec![
+            PlanStep {
+                step_id: "init".into(),
+                description: "noop".into(),
+                action: "self_execute".into(),
+                action_params: serde_json::json!({"handler": "noop"}),
+                depends_on: vec![],
+                require_approval: false,
+                on_failure: "wake_cabinet".into(),
+                retry: 1,
+            },
+            PlanStep {
+                step_id: "gongbu".into(),
+                description: "coding".into(),
+                action: "dispatch_to".into(),
+                action_params: serde_json::json!({"target": "尚书令", "task": summary}),
+                depends_on: vec!["init".into()],
+                require_approval: false,
+                on_failure: "wake_cabinet".into(),
+                retry: 1,
+            },
+            PlanStep {
+                step_id: "xingbu".into(),
+                description: "testing".into(),
+                action: "dispatch_to".into(),
+                action_params: serde_json::json!({"target": "尚书令", "task": format!("验证: {}", summary)}),
+                depends_on: vec!["gongbu".into()],
+                require_approval: false,
+                on_failure: "wake_cabinet".into(),
+                retry: 1,
+            },
+            PlanStep {
+                step_id: "validate".into(),
+                description: "validation".into(),
+                action: "self_execute".into(),
+                action_params: serde_json::json!({"handler": "validate_delivery", "run_lint": false}),
+                depends_on: vec!["xingbu".into()],
+                require_approval: false,
+                on_failure: "wake_cabinet".into(),
+                retry: 1,
+            },
+        ],
+    }
+}
+
+fn inline_bugfix_plan(plan_id: &str, summary: &str) -> PipelinePlan {
+    PipelinePlan {
+        plan_id: plan_id.into(),
+        summary: summary.into(),
+        estimated_complexity: "low".into(),
+        created: chrono::Local::now().to_rfc3339(),
+        steps: vec![
+            PlanStep {
+                step_id: "diagnose".into(),
+                description: "diagnose".into(),
+                action: "dispatch_to".into(),
+                action_params: serde_json::json!({"target": "中书令", "task": summary}),
+                depends_on: vec![],
+                require_approval: false,
+                on_failure: "wake_cabinet".into(),
+                retry: 1,
+            },
+            PlanStep {
+                step_id: "fix".into(),
+                description: "fix".into(),
+                action: "dispatch_to".into(),
+                action_params: serde_json::json!({"target": "尚书令", "task": summary}),
+                depends_on: vec!["diagnose".into()],
+                require_approval: false,
+                on_failure: "wake_cabinet".into(),
+                retry: 1,
+            },
+            PlanStep {
+                step_id: "validate".into(),
+                description: "validate".into(),
+                action: "self_execute".into(),
+                action_params: serde_json::json!({"handler": "validate_delivery", "run_lint": false}),
+                depends_on: vec!["fix".into()],
+                require_approval: false,
+                on_failure: "wake_cabinet".into(),
+                retry: 1,
+            },
+        ],
+    }
+}
 
 /// Demo profile executes through engine.
 #[tokio::test]
@@ -17,8 +108,7 @@ async fn workflow_demo_profile_completes() {
     let tmp = tempfile::TempDir::new().unwrap();
     create_mini_rust_project(tmp.path()).await;
 
-    let plan = pipeline_from_profile("demo", "plan-wfd-001", "demo task")
-        .expect("demo profile should generate a plan");
+    let plan = inline_demo_plan("plan-wfd-001", "demo task");
     assert!(validate_plan_json(&serde_json::to_string(&plan).unwrap()).is_ok());
 
     let mut engine = make_pipeline_engine(plan, &harness, tmp.path());
@@ -39,8 +129,7 @@ async fn workflow_bugfix_profile_completes() {
     let tmp = tempfile::TempDir::new().unwrap();
     create_mini_rust_project(tmp.path()).await;
 
-    let plan = pipeline_from_profile("bugfix", "plan-wfb-001", "fix bug")
-        .expect("bugfix profile should generate a plan");
+    let plan = inline_bugfix_plan("plan-wfb-001", "fix bug");
     let mut config = RuntimeConfig::default();
     config.approval.mode = ApprovalMode::Auto;
     let mut engine = common::make_pipeline_engine_with_config(

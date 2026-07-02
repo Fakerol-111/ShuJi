@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
-import { getPipelineStatus, getWorkflowGraph, getWorkflowState } from '../api';
+import { getPipelineStatus, getWorkflowGraph } from '../api';
 import type {
   DeptLogEntry,
   PlanInfo,
   PipelineRuntime,
   RuntimeUpdate,
   WorkflowGraph,
-  WorkflowState,
 } from '../types';
 import {
   buildRecentDocIds,
@@ -31,15 +30,11 @@ export function useWorkflowTimeline({
   planInfo,
 }: UseWorkflowTimelineInput) {
   const { t } = useTranslation();
-  const [wfState, setWfState] = useState<WorkflowState | null>(null);
   const [graph, setGraph] = useState<WorkflowGraph | null>(null);
   const [pipeline, setPipeline] = useState<PipelineRuntime | null>(null);
 
   useEffect(() => {
     const load = () => {
-      getWorkflowState()
-        .then(setWfState)
-        .catch(() => setWfState(null));
       getWorkflowGraph()
         .then(setGraph)
         .catch(() => setGraph(null));
@@ -66,13 +61,13 @@ export function useWorkflowTimeline({
   }, []);
 
   const timelineNodes = useMemo(
-    () => buildTimelineNodes(pipeline, graph, wfState, pendingApprovals),
-    [pipeline, graph, wfState, pendingApprovals]
+    () => buildTimelineNodes(pipeline, graph, pendingApprovals),
+    [pipeline, graph, pendingApprovals]
   );
 
   const recentDocIds = useMemo(
-    () => buildRecentDocIds(pipeline, wfState, pendingApprovals),
-    [pipeline, wfState, pendingApprovals]
+    () => buildRecentDocIds(pipeline, pendingApprovals),
+    [pipeline, pendingApprovals]
   );
 
   const nextAction = useMemo(
@@ -107,11 +102,9 @@ export function useWorkflowTimeline({
     timelineNodes.length > 0 ||
     pendingApprovals.length > 0 ||
     activeDepts.length > 0 ||
-    pipeline !== null ||
-    wfState !== null;
+    pipeline !== null;
 
   return {
-    wfState,
     graph,
     pipeline,
     timelineNodes,

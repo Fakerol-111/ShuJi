@@ -8,7 +8,6 @@ pub mod engine;
 pub mod handlers;
 pub mod schema;
 pub mod supervisor;
-pub mod templates;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

@@ -19,7 +19,7 @@ const pipeline: PipelineRuntime = {
       {
         step_id: 's1',
         description: 'Design',
-        action: 'route_to',
+        action: 'dispatch_to',
         action_params: { target: '中书令' },
         depends_on: [],
         require_approval: false,
@@ -42,7 +42,7 @@ const pipeline: PipelineRuntime = {
 
 describe('buildTimelineNodes', () => {
   it('maps pipeline steps with statuses', () => {
-    const nodes = buildTimelineNodes(pipeline, null, null, ['revw_1']);
+    const nodes = buildTimelineNodes(pipeline, null, ['revw_1']);
     expect(nodes).toHaveLength(2);
     expect(nodes[0].status).toBe('done');
     expect(nodes[0].docId).toBe('dsgn_1');
@@ -52,7 +52,7 @@ describe('buildTimelineNodes', () => {
 
 describe('buildRecentDocIds', () => {
   it('prioritizes pending approvals then artifacts', () => {
-    const ids = buildRecentDocIds(pipeline, null, ['revw_1'], 3);
+    const ids = buildRecentDocIds(pipeline, ['revw_1'], 3);
     expect(ids[0]).toBe('revw_1');
     expect(ids).toContain('dsgn_1');
   });

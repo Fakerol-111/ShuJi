@@ -1,9 +1,0 @@
-id: audit
-version: 1
-label: "审计合规"
-cabinet_skill: workflow_audit
-execution_chain: greenfield_full
-gates:
-  forbid_tools: []
-  forbid_route_to: []
-escalations: []

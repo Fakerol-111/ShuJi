@@ -6,7 +6,6 @@ import type {
   TimelineNode,
   TimelineNodeStatus,
   WorkflowGraph,
-  WorkflowState,
 } from '../types';
 
 function mapPipelineStepStatus(
@@ -47,7 +46,6 @@ function graphNodeStatus(status: GraphNode['status']): TimelineNodeStatus {
 export function buildTimelineNodes(
   pipeline: PipelineRuntime | null,
   graph: WorkflowGraph | null,
-  wfState: WorkflowState | null,
   pendingApprovals: string[]
 ): TimelineNode[] {
   if (pipeline && pipeline.plan.steps.length > 0) {
@@ -79,24 +77,11 @@ export function buildTimelineNodes(
       }));
   }
 
-  if (wfState && wfState.current_stage !== 'init') {
-    return [
-      {
-        id: wfState.current_stage,
-        label: wfState.current_stage,
-        sublabel: wfState.profile_id,
-        status: 'active',
-        kind: 'stage',
-      },
-    ];
-  }
-
   return [];
 }
 
 export function buildRecentDocIds(
   pipeline: PipelineRuntime | null,
-  wfState: WorkflowState | null,
   pendingApprovals: string[],
   limit = 4
 ): string[] {
@@ -114,9 +99,6 @@ export function buildRecentDocIds(
     for (const step of pipeline.plan.steps) {
       push(pipeline.artifacts[step.step_id]);
     }
-  }
-  if (wfState) {
-    for (const id of Object.values(wfState.artifacts)) push(id);
   }
 
   return ordered.slice(0, limit);

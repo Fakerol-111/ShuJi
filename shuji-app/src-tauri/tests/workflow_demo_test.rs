@@ -1,14 +1,122 @@
-//! Demo workflow test — verifies the demo profile end-to-end using MockActorHarness.
-//!
-//! This replaces the CI-skipped `workflow_demo` test which previously required
-//! a real LLM API. The mock-based version runs in CI without API keys.
+//! Demo workflow test — verifies demo and greenfield plans end-to-end using MockActorHarness.
 
 use shuji_app_lib::pipeline::schema::validate_plan_json;
-use shuji_app_lib::pipeline::templates::pipeline_from_profile;
-use shuji_app_lib::pipeline::PipelineResult;
+use shuji_app_lib::pipeline::{PipelinePlan, PipelineResult, PlanStep};
 
 mod common;
 use common::{create_mini_rust_project, make_pipeline_engine, MockActorHarness};
+
+fn demo_plan(plan_id: &str, summary: &str) -> PipelinePlan {
+    PipelinePlan {
+        plan_id: plan_id.into(),
+        summary: summary.into(),
+        estimated_complexity: "low".into(),
+        created: chrono::Local::now().to_rfc3339(),
+        steps: vec![
+            PlanStep {
+                step_id: "init".into(),
+                description: "noop init".into(),
+                action: "self_execute".into(),
+                action_params: serde_json::json!({"handler": "noop"}),
+                depends_on: vec![],
+                require_approval: false,
+                on_failure: "wake_cabinet".into(),
+                retry: 1,
+            },
+            PlanStep {
+                step_id: "gongbu".into(),
+                description: "Works Ministry coding".into(),
+                action: "dispatch_to".into(),
+                action_params: serde_json::json!({"target": "尚书令", "task": summary}),
+                depends_on: vec!["init".into()],
+                require_approval: false,
+                on_failure: "wake_cabinet".into(),
+                retry: 1,
+            },
+            PlanStep {
+                step_id: "xingbu".into(),
+                description: "Justice Ministry testing".into(),
+                action: "dispatch_to".into(),
+                action_params: serde_json::json!({"target": "尚书令", "task": format!("验证: {}", summary)}),
+                depends_on: vec!["gongbu".into()],
+                require_approval: false,
+                on_failure: "wake_cabinet".into(),
+                retry: 1,
+            },
+            PlanStep {
+                step_id: "validate".into(),
+                description: "automated validation".into(),
+                action: "self_execute".into(),
+                action_params: serde_json::json!({"handler": "validate_delivery", "run_lint": false}),
+                depends_on: vec!["xingbu".into()],
+                require_approval: false,
+                on_failure: "wake_cabinet".into(),
+                retry: 1,
+            },
+        ],
+    }
+}
+
+fn greenfield_plan(plan_id: &str, summary: &str) -> PipelinePlan {
+    PipelinePlan {
+        plan_id: plan_id.into(),
+        summary: summary.into(),
+        estimated_complexity: "high".into(),
+        created: chrono::Local::now().to_rfc3339(),
+        steps: vec![
+            PlanStep {
+                step_id: "expand".into(),
+                description: "expand requirements".into(),
+                action: "dispatch_to".into(),
+                action_params: serde_json::json!({"target": "内阁", "task": "expand_requirements"}),
+                depends_on: vec![],
+                require_approval: false,
+                on_failure: "wake_cabinet".into(),
+                retry: 1,
+            },
+            PlanStep {
+                step_id: "design".into(),
+                description: "overall design".into(),
+                action: "dispatch_to".into(),
+                action_params: serde_json::json!({"target": "中书令", "task": summary}),
+                depends_on: vec!["expand".into()],
+                require_approval: false,
+                on_failure: "wake_cabinet".into(),
+                retry: 1,
+            },
+            PlanStep {
+                step_id: "review".into(),
+                description: "review design".into(),
+                action: "dispatch_to".into(),
+                action_params: serde_json::json!({"target": "门下侍中", "task": "review design"}),
+                depends_on: vec!["design".into()],
+                require_approval: false,
+                on_failure: "wake_cabinet".into(),
+                retry: 1,
+            },
+            PlanStep {
+                step_id: "approval".into(),
+                description: "approval gate".into(),
+                action: "approval_gate".into(),
+                action_params: serde_json::json!({}),
+                depends_on: vec!["review".into()],
+                require_approval: true,
+                on_failure: "wake_cabinet".into(),
+                retry: 1,
+            },
+            PlanStep {
+                step_id: "execution".into(),
+                description: "execution via 尚书令".into(),
+                action: "dispatch_to".into(),
+                action_params: serde_json::json!({"target": "尚书令", "task": summary}),
+                depends_on: vec!["approval".into()],
+                require_approval: false,
+                on_failure: "wake_cabinet".into(),
+                retry: 1,
+            },
+        ],
+    }
+}
 
 /// Demo profile: generates a 4-step plan and executes through PipelineEngine.
 #[tokio::test]
@@ -17,8 +125,7 @@ async fn workflow_demo_plan_executes_fully() {
     let tmp = tempfile::TempDir::new().unwrap();
     create_mini_rust_project(tmp.path()).await;
 
-    let plan = pipeline_from_profile("demo", "plan-demo-test-001", "demo verification task")
-        .expect("demo profile should generate a plan");
+    let plan = demo_plan("plan-demo-test-001", "demo verification task");
 
     let plan_json = serde_json::to_string(&plan).unwrap();
     validate_plan_json(&plan_json).expect("demo plan should pass schema validation");
@@ -32,7 +139,6 @@ async fn workflow_demo_plan_executes_fully() {
             assert_eq!(runtime.plan.steps.len(), 4, "demo plan should have 4 steps");
         }
         PipelineResult::StepFailed { step_id, .. } => {
-            // validate step may fail in test environment
             eprintln!("demo workflow: step {} failed (acceptable in CI)", step_id);
         }
         other => panic!("expected Complete or StepFailed, got {:?}", other),
@@ -45,8 +151,6 @@ async fn workflow_greenfield_plan_hits_approval_gate() {
     let harness = MockActorHarness::all_roles();
     let tmp = tempfile::TempDir::new().unwrap();
 
-    // Seed a non-empty revw so approval_gate can read its body.
-    // MockActorHarness returns "revw_1" as the artifact for 门下侍中.
     let shuji = tmp.path().join(".shuji");
     tokio::fs::create_dir_all(shuji.join("reviews"))
         .await
@@ -57,8 +161,7 @@ async fn workflow_greenfield_plan_hits_approval_gate() {
         .await
         .unwrap();
 
-    let plan = pipeline_from_profile("greenfield_standard", "plan-gs-test-001", "standard task")
-        .expect("greenfield_standard profile should generate a plan");
+    let plan = greenfield_plan("plan-gs-test-001", "standard task");
 
     let plan_json = serde_json::to_string(&plan).unwrap();
     validate_plan_json(&plan_json).expect("should pass validation");

@@ -32,7 +32,7 @@ pub mod audit; // 审计系统：事件日志、引用索引、文档谱系、di
 pub mod config; // 配置系统：RuntimeConfig (TOML)、优先级合并、阈值解析
 pub mod learning; // 角色化学习记忆：soul 读写、注入、结构化索引
 pub mod metrics; // 运行指标收集与查询
-pub mod models; // 数据模型：Role、ChatMessage、Project、WorkflowState 等
+pub mod models; // 数据模型：Role、ChatMessage、Project 等
 pub mod pipeline; // Pipeline 引擎：阶段编排、验证、恢复、死锁检测
 pub mod playbook; // Playbook 剧本定义：本项目中预定义的协作流程模板
 pub mod precepts; // 戒律/规范模块：项目中定义的规则和约束
@@ -219,7 +219,6 @@ pub fn run() {
             commands::workflow::verify_audit_trail,
             commands::workflow::get_pipeline_status,
             commands::workflow::get_tool_logs,
-            commands::workflow::get_workflow_state,
             commands::workflow::get_workflow_graph,
             commands::workflow::list_workflow_archives,
             commands::workflow::load_workflow_archive,
