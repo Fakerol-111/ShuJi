@@ -4,7 +4,6 @@ use std::sync::Mutex;
 
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput, LoopDecision};
 use crate::api::client::{AnthropicClient, ToolDefinition};
-use crate::models::message::Message;
 use crate::models::role::Role;
 use crate::util::lock::lock_or_recover;
 
@@ -104,8 +103,7 @@ impl Agent for GongbuShangshuAgent {
         let working_dir = input.working_dir.clone();
         let role_name = self.role().name().to_string();
 
-        let mut msgs = input.context_messages.clone();
-        msgs.push(Message::user(&input.task_description));
+        let msgs = crate::agent::runner::build_initial_messages(input);
 
         let client = Arc::new(self.client.clone());
         let mut session = crate::api::session::Session::new(
@@ -349,9 +347,8 @@ impl Agent for GongbuShangshuAgent {
         }
         let result = run_result.into_text();
 
-        // Persist for continuation within the batch
-        let snap = session.snapshot();
-        let mut ctx = crate::api::session::PersistedContext::from_messages(&snap.messages);
+        // Persist for continuation within the batch (borrow messages directly)
+        let mut ctx = crate::api::session::PersistedContext::from_messages(session.messages());
         ctx.trim_tool_results(2000);
         ctx.save_to(&working_dir, &role_name).await;
 

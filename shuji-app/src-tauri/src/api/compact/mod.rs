@@ -46,17 +46,17 @@ async fn maybe_compact_with_prompt(
         return None;
     }
 
-    // Strip skill messages so they never enter the compressible batch.
-    // They will be re-appended to the keep zone after compression.
-    let skill_msgs: Vec<serde_json::Value> = context_messages
-        .iter()
-        .filter(|m| crate::api::session::is_skill_message(m))
-        .cloned()
-        .collect();
-
-    // Work with non-skill messages only
-    let mut non_skill = context_messages.to_vec();
-    crate::api::session::strip_skill_messages(&mut non_skill);
+    // Partition into skill and non-skill in a single pass,
+    // avoiding the full `to_vec()` + `strip_skill_messages` double-copy.
+    let mut skill_msgs: Vec<serde_json::Value> = Vec::new();
+    let mut non_skill: Vec<serde_json::Value> = Vec::with_capacity(context_messages.len());
+    for msg in context_messages {
+        if crate::api::session::is_skill_message(msg) {
+            skill_msgs.push(msg.clone());
+        } else {
+            non_skill.push(msg.clone());
+        }
+    }
 
     let split_at = non_skill.len().saturating_sub(thresholds.keep_recent_count);
     if split_at == 0 {
