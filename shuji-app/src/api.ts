@@ -19,7 +19,6 @@ import type {
   ImpactAnalysis,
   DocQuery,
   DocSummary,
-  WorkflowConfig,
   WorkflowState,
   WorkflowGraph,
   PipelineRuntime,
@@ -269,14 +268,6 @@ export async function setWorkflowPreset(preset: string): Promise<void> {
 }
 
 // ── Workflow config (Intent × Governance) ───────────────────
-
-export async function getWorkflowConfig(): Promise<WorkflowConfig> {
-  return invoke('get_workflow_config');
-}
-
-export async function setWorkflowConfig(config: WorkflowConfig): Promise<void> {
-  return invoke('set_workflow_config', { config });
-}
 
 // ── Workflow state (runtime) ────────────────────────────────
 

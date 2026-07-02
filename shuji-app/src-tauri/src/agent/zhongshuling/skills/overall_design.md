@@ -62,7 +62,7 @@ Execute in the following order:
    - Determine whether the task truly needs high-level design
 
 2. **Check input sufficiency**
-   If critical information is missing, request clarification via `route_to(to="Cabinet")`.
+   If critical information is missing, record the missing items in the Output Block's "Open Issues" field. Do not call any routing tool. PipelineEngine will handle downstream escalation based on plan dependencies and produced document IDs.
    Only clarify when missing information would substantially change the architecture, e.g.:
    - Target platform unknown
    - Existing codebase constraints unknown
@@ -132,11 +132,11 @@ Write for subsequent departments:
 
 If a downstream reader still has to guess the system shape, the design is not complete.
 
-## Routing
+## Completion Instructions
 
-- Design complete -> `route_to(to="Gate Reviewer", subject="{id}: Overall design complete, please review")`
-- Needs clarification -> `route_to(to="Cabinet", subject="{id}: Missing critical architecture constraints, need clarification")`
-- Revision request received -> Modify existing design, then route back to `Gate Reviewer`
+When the design is complete, output the structured Output Block at the end of your response. PipelineEngine advances downstream steps based on plan dependencies and the document IDs you produce. Do not call route_to.
+
+If you need clarification, list the missing constraints in the Output Block's "Open Issues" field.
 
 ## Operational Rules
 

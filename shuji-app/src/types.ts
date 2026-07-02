@@ -287,17 +287,6 @@ export interface PipelineSnapshot {
   plan_summary: string;
 }
 
-// ── Workflow Config (Intent × Governance) ───────────────────
-
-export type Intent = 'auto' | 'greenfield_standard' | 'brownfield_optimize' | 'bugfix' | 'demo';
-export type Governance = 'full' | 'standard' | 'fast' | 'audit';
-
-export interface WorkflowConfig {
-  intent: Intent;
-  governance: Governance;
-  intent_override: Intent | null;
-}
-
 export type ApprovalMode = 'manual' | 'auto';
 
 export interface ApprovalConfig {

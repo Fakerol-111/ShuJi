@@ -107,11 +107,11 @@ When receiving review feedback:
 - Preserve stable decisions unless the review explicitly challenges them
 - Only route back after the document reflects the requested changes
 
-## Routing
+## Completion Instructions
 
-- Phase design complete -> `route_to(to="Gate Reviewer", subject="{id}: Phase design complete, please review")`
-- Upstream ambiguity blocking design -> `route_to(to="Cabinet", subject="{id}: Upstream constraints unclear, need clarification")`
-- Revision complete -> Route back to `Gate Reviewer`
+When the phase design is complete, output the structured Output Block at the end of your response. PipelineEngine advances downstream steps based on plan dependencies and the document IDs you produce. Do not call route_to.
+
+If upstream ambiguity blocks the design, record the blocking issues in the Output Block's "Open Issues" field.
 
 ## Operational Rules
 

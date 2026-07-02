@@ -1,5 +1,5 @@
 import { API_URL_PRESETS, MODEL_PRESETS } from '../../constants/presets';
-import type { ApprovalMode, WorkflowConfig as WFConfig } from '../../types';
+import type { ApprovalMode } from '../../types';
 import {
   SettingsSection,
   SettingsField,
@@ -37,8 +37,6 @@ interface ServiceConfigTabProps {
   roleList: RoleInfo[];
   onApplyDefaultToAll: () => void;
   onApplyRoleToOthers: (role: string) => void;
-  workflowIntent: string;
-  setWorkflowIntent: (key: string) => void;
   workflowPreset: string;
   setWorkflowPresetLocal: (key: string) => void;
   modelPreset: string;
@@ -49,19 +47,7 @@ interface ServiceConfigTabProps {
   setApprovalAutoRetries: (n: number) => void;
 }
 
-const INTENTS: { key: string; label: string; desc: string }[] = [
-  { key: 'auto', label: '自动', desc: '根据任务描述自动推断意图。（默认）' },
-  { key: 'greenfield_standard', label: '新功能', desc: '全新功能开发，走完整设计→审查→执行流程。' },
-  {
-    key: 'brownfield_optimize',
-    label: '存量优化',
-    desc: '对现有代码进行优化，跳过需求展开和门下审查。',
-  },
-  { key: 'bugfix', label: '缺陷修复', desc: '修复缺陷，直接路由到工部编码修复。' },
-  { key: 'demo', label: '快速原型', desc: '快速原型/演示，最轻量流程。' },
-];
-
-const PRESETS: { key: WFConfig['governance']; label: string; desc: string }[] = [
+const PRESETS: { key: string; label: string; desc: string }[] = [
   { key: 'full', label: '完整治理', desc: '所有流程必经审查。适合高复杂度任务。' },
   { key: 'standard', label: '标准', desc: '跳过门下审查。适合中等复杂度任务。（默认）' },
   { key: 'fast', label: '极速', desc: '跳过设计/审查，直达执行。适合小改动。' },
@@ -95,8 +81,6 @@ export default function ServiceConfigTab({
   roleList,
   onApplyDefaultToAll,
   onApplyRoleToOthers,
-  workflowIntent,
-  setWorkflowIntent,
   workflowPreset,
   setWorkflowPresetLocal,
   modelPreset,
@@ -247,22 +231,6 @@ export default function ServiceConfigTab({
             );
           })}
         </div>
-      </SettingsSection>
-
-      <SettingsSection title="任务意图" divider>
-        <div className="flex gap-2 flex-wrap">
-          {INTENTS.map((p) => (
-            <SettingsChip
-              key={p.key}
-              selected={workflowIntent === p.key}
-              onClick={() => setWorkflowIntent(p.key)}
-              title={p.desc}
-            >
-              {p.label}
-            </SettingsChip>
-          ))}
-        </div>
-        <SettingsHint>{INTENTS.find((i) => i.key === workflowIntent)?.desc || ''}</SettingsHint>
       </SettingsSection>
 
       <SettingsSection title="流程治理" divider>

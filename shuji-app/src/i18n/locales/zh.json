@@ -248,16 +248,9 @@
     "checkSuccess": "检测通过：将使用 {{editor}}"
   },
   "settingsExtra": {
-    "workflowIntent": "任务意图 (Intent)",
-    "workflowPreset": "流程预设",
     "modelPreset": "模型分级预设",
     "modelPresetCustomDesc": "已手动修改部门模型配置",
     "modelPresetHint": "切换预设会覆盖相关角色的 model 字段，不改 API URL/Key。",
-    "intentAutoDesc": "根据任务描述自动推断意图。（默认）",
-    "intentNewFeatureDesc": "全新功能开发，走完整设计→审查→执行流程。",
-    "intentOptimizeDesc": "对现有代码进行优化，跳过需求展开和门下审查。",
-    "intentBugfixDesc": "修复缺陷，直接路由到工部编码修复。",
-    "intentDemoDesc": "快速原型/演示，最轻量流程。",
     "presetFullDesc": "所有流程必经审查。适合高复杂度任务。",
     "presetStandardDesc": "跳过门下审查。适合中等复杂度任务。（默认）",
     "presetFastDesc": "跳过设计/审查，直达执行。适合小改动。",
@@ -510,16 +503,7 @@
     "rejected": "驳回",
     "approved": "批准",
     "blocked": "阻塞",
-    "allPhasesComplete": "所有阶段已完成",
-    "intentAuto": "自动",
-    "intentNewFeature": "新功能",
-    "intentOptimize": "存量优化",
-    "intentBugfix": "缺陷修复",
-    "intentPrototype": "快速原型",
-    "governanceFull": "完整治理",
-    "governanceStandard": "标准",
-    "governanceFast": "极速",
-    "governanceAudit": "审计"
+    "allPhasesComplete": "所有阶段已完成"
   },
   "workflowGraph": {
     "routePath": "行文路径",

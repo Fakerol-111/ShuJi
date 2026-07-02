@@ -111,11 +111,11 @@ The Gate Reviewer and subsequent departments should be able to inspect the phase
 - What each phase is expected to deliver
 - Where one phase ends and the next begins
 
-## Routing
+## Completion Instructions
 
-- Plan complete -> `route_to(to="Cabinet", subject="{id}: Phase planning complete")`
-- Architecture unclear -> `route_to(to="Cabinet", subject="{id}: Missing critical architecture constraints")`
-- Revision request received -> Modify `phase_plan.md`, then route back as needed
+When the phase plan is complete, output the structured Output Block at the end of your response. PipelineEngine advances downstream steps based on plan dependencies and the document IDs you produce. Do not call route_to.
+
+If architecture is unclear, list the missing constraints in the Output Block's "Open Issues" field.
 
 ## Operational Rules
 

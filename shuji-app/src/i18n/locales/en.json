@@ -249,16 +249,9 @@
     "checkSuccess": "Check passed: will use {{editor}}"
   },
   "settingsExtra": {
-    "workflowIntent": "Workflow Intent",
-    "workflowPreset": "Workflow Preset",
     "modelPreset": "Model Preset",
     "modelPresetCustomDesc": "Custom department model configuration",
     "modelPresetHint": "Changing preset overrides model fields but not API URL/Key.",
-    "intentAutoDesc": "Auto-detect from task description. (Default)",
-    "intentNewFeatureDesc": "New feature with full design → review → execution flow.",
-    "intentOptimizeDesc": "Optimize existing code, skip requirement expansion and review.",
-    "intentBugfixDesc": "Fix bugs, route directly to Gongbu for coding.",
-    "intentDemoDesc": "Quick prototype/demo, lightest workflow.",
     "presetFullDesc": "All processes require review. Suitable for high-complexity tasks.",
     "presetStandardDesc": "Skip review. Suitable for medium-complexity tasks. (Default)",
     "presetFastDesc": "Skip design/review, go straight to execution. Suitable for small changes.",
@@ -511,16 +504,7 @@
     "rejected": "Rejected",
     "approved": "Approved",
     "blocked": "Blocked",
-    "allPhasesComplete": "All phases complete",
-    "intentAuto": "Auto",
-    "intentNewFeature": "New Feature",
-    "intentOptimize": "Existing Optimization",
-    "intentBugfix": "Bugfix",
-    "intentPrototype": "Quick Prototype",
-    "governanceFull": "Full Governance",
-    "governanceStandard": "Standard",
-    "governanceFast": "Fast",
-    "governanceAudit": "Audit"
+    "allPhasesComplete": "All phases complete"
   },
   "workflowGraph": {
     "routePath": "Route Path",
