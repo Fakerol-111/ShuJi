@@ -4,6 +4,11 @@
 //! appear in explicitly allowlisted locations. If a new `deprecated`,
 //! `legacy`, or `route_to(` occurrence appears outside the allowlist,
 //! these tests fail.
+//!
+//! Also scans for mojibake (GBK decode errors) in source code and prompt
+//! files that could corrupt LLM interaction prompts. Known bad-text markers
+//! are listed in MOJIBAKE_MARKERS; the only exceptions are this test file
+//! and the cleanup plan document itself.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -200,6 +205,117 @@ fn scan_dir_recursive(
             }
 
             violations.push(format!("{}:{}", rel, line_num + 1));
+        }
+    }
+}
+
+/// Known mojibake markers (GBK decode errors seen in this codebase).
+/// These must NOT appear in source or prompt files outside the explicit
+/// allowlist (this test file and the cleanup plan document).
+const MOJIBAKE_MARKERS: &[&str] = &[
+    "�",
+    "鐨囧笣",
+    "灏氫功浠",
+    "涓功",
+    "闂ㄤ笅",
+    "鍐呴榿",
+    "鈥?",
+    "鈫?",
+    "鈹€",
+    "锛",
+    "銆",
+];
+
+/// Files that are explicitly allowed to contain mojibake markers
+/// (the test itself, the cleanup plan).
+const MOJIBAKE_ALLOWLIST_SUFFIXES: &[&str] =
+    &["deprecated_guard_test.rs", "mojibake-cleanup-plan.md"];
+
+/// Assert that no known mojibake markers appear outside the allowlist.
+#[test]
+fn no_mojibake_markers_in_source_and_prompts() {
+    let root = project_root();
+    let mut violations = Vec::new();
+
+    let scan_subtrees = [
+        "shuji-app/src-tauri/src",
+        "shuji-app/src-tauri/tests",
+        "shuji-app/src",
+        "shuji-app/docs",
+    ];
+
+    for sub in &scan_subtrees {
+        let dir = root.join(sub);
+        if !dir.is_dir() {
+            continue;
+        }
+        scan_mojibake_dir(&dir, &root, &mut violations);
+    }
+
+    // Root-level markdown files
+    for fname in &["README.md", "CONTRIBUTING.md", "AGENTS.md"] {
+        let path = root.join(fname);
+        if path.exists() {
+            scan_mojibake_file(&path, &root, &mut violations);
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "Found mojibake markers outside allowlist:\n  {}",
+        violations.join("\n  ")
+    );
+}
+
+fn scan_mojibake_dir(dir: &Path, root: &Path, violations: &mut Vec<String>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if name == "target" || name == "node_modules" || name == ".shuji" || name == ".git" {
+                continue;
+            }
+            scan_mojibake_dir(&path, root, violations);
+            continue;
+        }
+
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if ext != "rs" && ext != "ts" && ext != "tsx" && ext != "md" {
+            continue;
+        }
+
+        // Skip files on the allowlist (the test itself and the cleanup plan doc)
+        let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if MOJIBAKE_ALLOWLIST_SUFFIXES
+            .iter()
+            .any(|s| filename.ends_with(s))
+        {
+            continue;
+        }
+
+        scan_mojibake_file(&path, root, violations);
+    }
+}
+
+fn scan_mojibake_file(path: &Path, root: &Path, violations: &mut Vec<String>) {
+    let Ok(content) = std::fs::read_to_string(&path) else {
+        return;
+    };
+    let rel = path
+        .strip_prefix(root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/");
+
+    for (line_num, line) in content.lines().enumerate() {
+        for marker in MOJIBAKE_MARKERS {
+            if line.contains(marker) {
+                violations.push(format!("{}:{} (marker: {})", rel, line_num + 1, marker));
+                break; // one violation per line
+            }
         }
     }
 }

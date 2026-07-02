@@ -5,10 +5,10 @@
 //! path gives the model one extra API round-trip to produce a coherent
 //! summary (and optionally route to 尚书令 for further authorization).
 //!
-//! Behavior is preserved bit-for-bit in this migration:
+//! Behavior notes:
 //! - `session.set_reasoning(true)` is called before the extra step.
-//! - The injected wrap-up prompt is the same string (mojibake and all —
-//!   fixing that is a separate cleanup, not part of this refactor).
+//! - The wrap-up prompt text was normalized (mojibake markers replaced with
+//!   correct UTF-8 Chinese characters); route behavior remains unchanged.
 //! - Route detection reuses `routing::detect_route` with `my_role = None`
 //!   (the wrap-up path skips self-routing detection — legacy quirk).
 //! - The final text is composed differently depending on whether
@@ -46,7 +46,7 @@ impl super::AgentController {
         session.set_reasoning(true);
         let wrap_up = format!(
             "\n\n---\n[System] Tool call limit reached ({} calls). {}. \
-             \nPlease immediately summarize the work completed and any difficulties encountered. If you need to continue, call route_to to route to 灏氫功浠? explaining the reason and requesting further authorization. \
+             \nPlease immediately summarize the work completed and any difficulties encountered. If you need to continue, call route_to to route to 尚书令 explaining the reason and requesting further authorization. \
              \nIf no routing is needed, directly output the work summary.\n---",
             max_iter, reason,
         );

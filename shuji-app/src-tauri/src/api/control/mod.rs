@@ -109,7 +109,7 @@ impl AgentController {
     /// Register a handler for mid-run context compaction.
     /// `interval` controls how many tool-call iterations between compactions.
     /// The handler receives the flat session messages and persists a compressed
-    /// version to disk. The running session is NOT modified 鈥?the compressed
+    /// version to disk. The running session is NOT modified -- the compressed
     /// context is loaded automatically on the next execute() call.
     /// Helps prevent unbounded context growth during long-running agent sessions.
     pub fn set_compact_handler(&mut self, handler: CompactFn, interval: u32) {
@@ -138,7 +138,7 @@ impl AgentController {
     /// Interrupt the current session.
     ///
     /// Save a snapshot of the current conversation state for
-    /// potential resume. Does NOT make an API call 鈥?the LLM
+    /// potential resume. Does NOT make an API call -- the LLM
     /// acknowledges the interruption naturally on the next
     /// user message.
     pub async fn interrupt(&mut self, session: &mut Session) {
@@ -151,16 +151,16 @@ impl AgentController {
         if let Some(snap) = self.saved.take() {
             session.restore(&snap);
             session.inject(&format!(
-                "System: Previous operation was interrupted. 鐨囧笣 has given a new instruction: {}",
+                "System: Previous operation was interrupted. 皇帝 has given a new instruction: {}",
                 new_instruction
             ));
             log_console!("[control] restart_with: snapshot restored, new instruction injected");
         } else {
             log_console!(
-                "[control] restart_with: no saved snapshot 鈥?injecting as new instruction"
+                "[control] restart_with: no saved snapshot -- injecting as new instruction"
             );
             session.inject(&format!(
-                "System: 鐨囧笣 has given a new instruction, please start processing: {}",
+                "System: 皇帝 has given a new instruction, please start processing: {}",
                 new_instruction
             ));
         }

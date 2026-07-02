@@ -47,11 +47,12 @@ cargo test --test editor_test            # External editor integration
 cargo test --test learning_test          # Role learning store
 cargo test --test send_message_routing_test  # Message routing logic
 cargo test --test scenario_replay_test   # Scenario replay framework
+cargo test --test deprecated_guard_test  # Deprecated data compatibility checks
 cargo test --test expand_requirements_test  # Real LLM call (requires .env, skipped by default)
 
 # Frontend
 npm run lint                     # tsc --noEmit
-npm test                         # Vitest (36 test files)
+npm test                         # Vitest (36 test files, ~230 cases)
 npm run format:check             # Prettier
 
 # Rust lint
@@ -60,9 +61,9 @@ cargo clippy --all-targets
 
 **Test pattern**: Async tools use `block_on()` wrapper (current-thread tokio). Async-only tests use `#[tokio::test]`. All tests use `tempfile::TempDir` via `common::create_test_project()` for isolation. Run with `--test-threads=1` to avoid state contention.
 
-**Total**: 约 730 个测试（Rust 单元 + 集成 + 前端 Vitest，以 `scripts/count_tests.sh` 输出为准）。
+**Total**: ~730 tests (Rust unit 213 + integration 288 + frontend Vitest 230 cases, per `scripts/count_tests.sh`).
 
-**Pre-commit**: `cargo fmt --check && cargo clippy --all-targets && cargo test --lib && cargo test --tests -- --skip expand_requirements --test-threads=1`
+**Pre-commit**: `cargo fmt --check && cargo clippy --all-targets && cargo test --lib && cargo test --tests -- --skip expand_requirements --test-threads=1 && cargo test --test deprecated_guard_test`
 
 ## Environment Setup
 
@@ -89,7 +90,7 @@ Per-role keys override `DEFAULT_API_KEY` with `{ROLE}_API_KEY` format (9 roles: 
   → 各部门 Actor（文档产出）→ approval_gate → validate_delivery → 审计/报告
 ```
 
-Legacy `route_to` 仅用于 Pipeline 计划步骤内部转发、尚书令/执行部门任务内路由，以及 dispatch 层兼容；**不是**内阁主编排方式。
+Legacy `route_to` → M4 renamed to `dispatch_to` in pipeline actions. 仅用于 Pipeline 计划步骤内部转发、尚书令/执行部门任务内路由，以及 dispatch 层兼容；**不是**内阁主编排方式。
 
 ```
 PipelineEngine 调度的 9 部门(actor)
@@ -106,12 +107,12 @@ PipelineEngine 调度的 9 部门(actor)
 
 ### 9 Actors + 2 Sub-agents
 
-Each actor is a `tokio::spawn` with an `mpsc::UnboundedReceiver` mailbox. Communication is document-centric: pipeline steps and internal `route_to` pass document IDs; receivers read documents to understand the task.
+Each actor is a `tokio::spawn` with an `mpsc::UnboundedReceiver` mailbox. Communication is document-centric: pipeline steps and internal `dispatch_to` pass document IDs; receivers read documents to understand the task.
 
-- **内阁 (Neige)**: Orchestrator. Submits `submit_pipeline_plan` to PipelineEngine (route_tool removed). Has soul system, runtime skill creation, pause/resume and must-approve gating (3 retries → auto-approve).
+- **内阁 (Neige)**: Orchestrator. Submits `submit_pipeline_plan` to PipelineEngine (route_tool removed). Has soul system, **3-level hierarchy** (`levels/level1-3.md`, replaced legacy skills/), pause/resume and must-approve gating (3 retries → auto-approve).
 - **中书令 (Zhongshuling)**: Designer. Self-managed 7 skills for design/analysis/diagnosis. Skills have `## 输出块` structured output templates.
 - **门下侍中 (Menxiashizhong)**: Reviewer. 2 skills: `review_overall`, `review_phase`. Skills have `## 输出块` structured output templates.
-- **尚书令 (Shangshuling)**: Executor. Loads execution chain from `WorkflowState`, routes to specific ministries.
+- **尚书令 (Shangshuling)**: Executor. Loads execution chain from `WorkflowGraph`, routes to specific ministries.
 - **吏部尚书 (Libushangshu)**: Detailed design. Uses document tools only.
 - **兵部尚书 (Bingbushangshu)**: Tests + contracts. Uses file-write + document tools.
 - **工部尚书 (Gongbushangshu)**: TDD coding with **batch plan loop** — splits large tasks into plan batches, executes one batch per re-entry, switches reasoning on/off between planning and execution phases. Has `force_stop` for clean batch transitions.
@@ -160,28 +161,13 @@ All agents compose tool lists via `tool::registry` group functions — factory f
 | `execute_command_tool()` / `run_tests_tool()` | Shell commands | General / 工部 only |
 | `reauth_tool()` | request_reauth | 尚书令 |
 
-Tools return structured `ToolOutput { ok, operation, path, message, error_code }`. Dispatch via `execute_named_tool()` in `dispatch.rs` with gating logic (append_document/route_to checks approval status before proceeding), cache invalidation, and result size truncation.
+Tools return structured `ToolOutput { ok, operation, path, message, error_code }`. Dispatch via `execute_named_tool()` in `dispatch.rs` with gating logic (append_document/dispatch_to checks approval status before proceeding), cache invalidation, and result size truncation.
 
-### Skill System (内阁: 12 skills)
+### Skill System (内阁: 3-level hierarchy)
 
-内阁 uses `<skill>name</skill>` to switch workflows. Skills are `.md` files injected as `[skill: name]` system messages:
+内阁 uses levels (`levels/level1.md`, `level2.md`, `level3.md`) instead of the old 12 skills. The level system replaces `workflow_complex`, `workflow_standard`, etc. with graduated escalation levels.
 
-| Skill | Purpose |
-|---|---|
-| `workflow_demo` | Single file, zero deps → route to 工部 directly |
-| `workflow_simple` | Small scope (1-3 files) → route to 尚书令 |
-| `workflow_standard` | New business logic → design → review → approval → execution |
-| `workflow_complex` | Multi-stage, multi-module → full pipeline |
-| `workflow_bugfix` | Bug reports and test failures |
-| `workflow_refactor` | Structural changes (rename, reorganize) |
-| `workflow_optimize` | Performance tuning, existing code changes |
-| `workflow_audit` | Security, compliance, standards check |
-| `clarify` | Ask emperor questions to understand requirements |
-| `discuss` | Free chat mode, no tools, no project state modification |
-| `reflect` | Post-execution review, extracts 经验/教训 to soul |
-| `summary` | Summarize work done, produce completion report |
-
-Routing heuristic (`routing.rs`): pure-function text analyzer. Priority: explicit skill mention > keyword matching (bugfix/refactor/optimize/audit/demo/complex/simple) > fallback to `workflow_standard`.
+Routing heuristic (`routing.rs`): pure-function text analyzer. Priority: explicit level mention > keyword matching (bugfix/refactor/optimize/audit/demo/complex/simple) > fallback to standard level.
 
 中书令 has 7 self-managed skills (design/analysis/diagnosis). 门下侍中 has 2 (review_overall, review_phase). Others have no skill system.
 
@@ -200,8 +186,8 @@ Skills and summaries are stored inside `context_messages` as regular system/user
 
 ### Session / AgentController Split
 
-- **Session** (`api/session/mod.rs`): Pure LLM layer. Owns message history. `step()` = one API round-trip. Auto-retries on `finish_reason=length` (halving max_tokens). Handles: tool call truncation, ID validation, orphaned tool message cleanup (two-pass sanitize). `PersistedContext` for 3-layer save/load (base, soul, context). `trim_tool_results()` truncates verbose tool outputs on save.
-- **AgentController** (`api/control/mod.rs`): Drive loop. Calls `step()`, executes tools, feeds results back, handles cancel/interrupt/restart. Supports `CompactFn` (persist compressed context) and `CheckpointFn` (git commit + snapshot). Watchdog: same-tool repetition, read-without-write patterns, consecutive error tracking (5 → auto-stop). Watchdog injects intervention hints into tool results to guide LLM self-correction.
+- **Session** (`api/session/`): Pure LLM layer. Owns message history. `step()` = one API round-trip. Auto-retries on `finish_reason=length` (halving max_tokens). Handles: tool call truncation, ID validation, orphaned tool message cleanup (two-pass sanitize). `PersistedContext` for 3-layer save/load (base, soul, context). Submodules: `accessors.rs`, `builder.rs`, `debug.rs`, `error_retry.rs`, `length_retry.rs`, `logging.rs`, `persisted_context.rs`, `request.rs`, `response.rs`, `stream.rs`, `token_usage.rs`, `types.rs`. `trim_tool_results()` truncates verbose tool outputs on save. Clone message sharing via `accessors.rs` (M9 optimization).
+- **AgentController** (`api/control/`): Drive loop. Calls `step()`, executes tools, feeds results back, handles cancel/interrupt/restart. Supports `CompactFn` (persist compressed context) and `CheckpointFn` (git commit + snapshot). Watchdog: same-tool repetition, read-without-write patterns, consecutive error tracking (5 → auto-stop). Watchdog injects intervention hints into tool results to guide LLM self-correction. Submodules: `iterations.rs`, `lifecycle.rs`, `loop_runner.rs`, `routing.rs`, `tool_exec.rs`, `types.rs`, `watchdog.rs`, `wrap_up.rs`.
 
 ### Context Compaction
 
@@ -214,6 +200,14 @@ When `context_messages` token count exceeds threshold → older non-skill messag
 **Mid-run compaction**: All 9 departments register CompactFn at 20-iteration intervals. Compresses + saves to `.shuji/context/{role}.json`. Running session untouched.
 
 **Three threshold levels** (priority): `context_config.json` per-role > department built-in recommendations (`default_compact_thresholds_for_role()`) > `config.toml` global defaults.
+
+### ESAA Contract System (`config/esaa_contract.rs`)
+
+ESAA (Executable Safety & Authorization Agreement) contracts define per-role tool allow/deny/block and path-level white/blacklist rules:
+- Built-in contract compiled from constants
+- Optional `contract.toml` overrides at project or user level
+- `dispatch_gate` checks tool, path, route against contract before execution
+- `check_immutability()` detects modifying an approved document that affects downstream
 
 ### Batch Plan Loop (工部尚书)
 
@@ -265,11 +259,11 @@ Event-driven audit, split into focused submodules (`audit/`):
 
 ### Document-Centric Architecture
 
-Departments communicate via documents under `.shuji/`, not via route_to semantics. YAML frontmatter format with auto-assigned IDs.
+Departments communicate via documents under `.shuji/`, not via dispatch_to semantics. YAML frontmatter format with auto-assigned IDs.
 
 **Document types**: dsgn, plan, pdsg, ddtl, revw, task, ctrt, rprt, anls, reqs, precepts.
 
-**朱批 (Approval System)**: plan/revw documents require emperor approval before downstream can proceed. `route_to` and `append_document` hard-gate against unapproved documents. `set_document_status` tool (approved/rejected) requires `emperor_note`.
+**朱批 (Approval System)**: plan/revw documents require emperor approval before downstream can proceed. `dispatch_to` and `append_document` hard-gate against unapproved documents. `set_document_status` tool (approved/rejected) requires `emperor_note`.
 
 ### Cancel Mechanism
 
@@ -285,6 +279,7 @@ Two layers:
 
 ```
 Runtime behavior: config.local.toml  >  config.toml  >  compile-time defaults
+ESAA contracts:   contract.toml      >  built-in esaa contract
 API credentials:  api_config.json    >  .env         >  hardcoded fallback
 Compaction:       context_config.json (per-role) > department built-ins > global defaults
 ```
@@ -293,6 +288,7 @@ Compaction:       context_config.json (per-role) > department built-ins > global
 - `config.local.toml` (gitignored): Selective field overrides — only non-default values take effect
 - `api_config.json` (gitignored): UI-managed per-role API key/url/model. Supports presets (balanced/economy/quality) with model mapping
 - `context_config.json`: Per-role compaction threshold overrides (managed via UI or manual edit)
+- `contract.toml`: ESAA security contract overrides (tool/path/route allowlists)
 
 ### Session Limits (configurable via config.toml)
 
@@ -322,6 +318,8 @@ Compaction:       context_config.json (per-role) > department built-ins > global
 - **Compaction concurrency safety**: Active role tracking + `compacting_roles` in AppState prevents double-clicks; atomic tmp+rename writes
 - **Path security** (`resolve_scoped_path`): Rejects absolute paths and `..` traversal. Falls back to ancestor-walking + canonicalize. Catches symlink escape attacks.
 - **Command safety** (`check_safe_command`): Token-based matching. Blocks `sudo rm`, `format X:`, `shutdown`, `mkfs`, `dd`, `wget`/`curl` to external URLs.
+- **Lock recovery** (`util/lock.rs`, M8): Non-panicking lock access patterns, poison recovery for RwLock/Mutex
+- **Clone message sharing** (M9): Agent entry helper, session accessor, compaction — share messages across clones instead of deep copying
 
 ### Token Tracking
 
@@ -343,7 +341,7 @@ Cache fields parsed from API response: OpenAI `usage.prompt_tokens_details.cache
 Single `AnthropicClient` struct auto-detects format per request:
 - URL contains `anthropic.com` → Anthropic Messages API (`x-api-key` header)
 - Otherwise → OpenAI Chat Completions API (`Bearer` auth)
-- Non-Anthropic APIs auto-enable reasoning/thinking tokens
+- Non-Anthropic APIs auto-enable reasoning/thinking tokens (`api/reasoning.rs`)
 
 ### Key File Locations
 
@@ -351,11 +349,16 @@ Single `AnthropicClient` struct auto-detects format per request:
 shuji-app/
 ├── src/                              # Frontend (React + Vite + Tailwind CSS 4 + Vitest)
 │   ├── pages/                        # WorkspaceSelect, ProjectDashboard, LogsPage, SettingsPage, SetupPage
+│   ├── runtime/                      # RuntimeProvider, runtimeSelectors, runtimeTypes
+│   ├── i18n/                         # config.ts (i18n setup)
 │   ├── components/
-│   │   ├── ui/                       # Primitive UI kit (Button, Card, Tabs, etc.)
+│   │   ├── ui/                       # Primitive UI kit (Button, Card, Tabs, Input, Textarea, Badge)
+│   │   ├── settings/                 # ApiSettingsTab, ReasoningSettingsTab, ContextSettingsTab, etc.
+│   │   ├── audit/                    # Audit sub-tabs: Dashboard, DocumentLine, Lineage, Report, Search, Timeline, Trace
+│   │   ├── doc-preview/              # DocPreview sub-components: ApprovalBanner, CodePreview, DiffView, LineageView, etc.
+│   │   ├── workflow-graph/           # WorkflowGraph sub-components: ArchiveSidebar, GraphSection, layout
 │   │   ├── ChatBubble.tsx            # <options> clickable buttons
 │   │   ├── ChatInput.tsx / ChatPanel.tsx
-│   │   ├── CommandBar.tsx            # Pipeline stage command bar
 │   │   ├── DeptStatusPanel.tsx       # Real-time dept status
 │   │   ├── DeptCard.tsx / DeptCardRail.tsx / DeptInspector.tsx  # Department detail views
 │   │   ├── ReasoningPopover.tsx      # LLM reasoning/thinking content display
@@ -364,11 +367,22 @@ shuji-app/
 │   │   ├── CheckpointPanel.tsx       # Checkpoint snapshots list/restore
 │   │   ├── TokenPanel.tsx / ContextPanel.tsx  # Sidebar panels
 │   │   ├── ProjectOverview.tsx / WorkflowTimeline.tsx
-│   │   ├── HelpDrawer.tsx / DemoTour.tsx
+│   │   ├── WorkflowGraph.tsx / PlanPanel.tsx
+│   │   ├── AgentStreamPanel.tsx / AgentIdleState.tsx
+│   │   ├── DeliveryReceipt.tsx / ValidationSummary.tsx
+│   │   ├── DashboardLayout.tsx / ActivityBar.tsx / Sidebar.tsx / TabBar.tsx
+│   │   ├── ApprovalBanner.tsx / ApprovalPromptCard.tsx
+│   │   ├── CommandBar.tsx            # Pipeline stage command bar
+│   │   ├── ChatDocumentCards.tsx / DutyBar.tsx / DeptActivityCard.tsx
+│   │   ├── DeptGlyph.tsx / DeptActivityFeed.tsx
+│   │   ├── HelpDrawer.tsx / DemoTour.tsx / DemoSummaryCard.tsx
 │   │   ├── SettingsMenu.tsx / SealLogo.tsx
-│   │   └── settings/                 # Settings tabs: ApiSettingsTab, ReasoningSettingsTab, etc.
-│   ├── hooks/                        # React hooks: useChat, useClickOutside, usePendingApprovals, etc.
-│   ├── utils/                        # chat.ts, error.ts, approvalGate.ts, etc.
+│   │   ├── ErrorBoundary.tsx / RouteContextBar.tsx
+│   │   ├── GlossaryTerm.tsx / LangSwitcher.tsx
+│   │   ├── ProjectOnboarding.tsx / ProjectPicker.tsx
+│   │   └── ... (other panels)
+│   ├── hooks/                        # useChat, useClickOutside, usePendingApprovals, useLang, etc.
+│   ├── utils/                        # chat.ts, error.ts, approvalGate.ts, deptLog.ts, etc.
 │   ├── constants/                    # constants.ts, reasoning.ts, presets.ts
 │   ├── api.ts                        # Tauri invoke wrappers
 │   ├── types.ts                      # TypeScript type definitions (RoleName union, etc.)
@@ -376,18 +390,22 @@ shuji-app/
 └── src-tauri/src/
     ├── commands/                     # Tauri command handlers
     │   ├── project.rs                # Project CRUD + demo generator
-    │   ├── settings/                 # Settings submodules: api_config, reasoning, approval, etc.
+    │   ├── settings/                 # Settings submodules: api_config, approval, connection, context, learning, model_preset, paths, reasoning, soul, workflow_preset
     │   ├── checkpoint.rs             # list/restore checkpoints
     │   ├── shuji_docs.rs             # .shuji/ file tree + doc viewer
-    │   └── workflow/                 # send_message, compact, context_stats, audit, bootstrap
-    ├── actor/mod.rs                  # Actor system: run_actor, ActorContext, FastMessage/FastChannel
+    │   ├── workflow/                 # send_message, compact, context_stats, audit, bootstrap, query
+    │   ├── demo.rs / editor.rs / metrics.rs / pricing.rs / validate.rs
+    │   └── friendly_error.rs         # User-friendly API error messages
+    ├── actor/
+    │   ├── mod.rs                    # Actor system types: ActorContext, FastMessage/FastChannel
+    │   └── spawn/                    # Actor lifecycle: mailbox, exec_loop, emit, output, fallback, neige
     ├── agent/
     │   ├── trait.rs                  # Agent trait + AgentInput/Output, LoopDecision
     │   ├── runner.rs                 # Shared execution framework (compact/checkpoint/context helpers)
     │   ├── util.rs                   # Tag extraction helpers
     │   ├── expand_requirements.rs    # Requirements sub-agent
     │   ├── survey_codebase.rs        # Codebase survey sub-agent
-    │   ├── neige/                    # 内阁: mod.rs, prompt.md, routing.rs, skills/ (12 .md files)
+    │   ├── neige/                    # 内阁: mod.rs, prompt.md, soul.md, routing.rs, levels/ (3 levels)
     │   ├── zhongshuling/             # 中书令: mod.rs, prompt.md, skills/ (7 skills)
     │   ├── menxiashizhong/           # 门下侍中: mod.rs, prompt.md, skills/ (2 skills)
     │   ├── shangshuling/             # 尚书令: mod.rs, prompt.md
@@ -398,60 +416,38 @@ shuji-app/
     │   └── liburshangshu/            # 礼部: mod.rs, prompt.md
     ├── api/
     │   ├── client.rs                 # AnthropicClient (dual-format HTTP)
-    │   ├── session/                  # Session, PersistedContext, step()
-    │   │   ├── mod.rs                # Session 门面、构造、状态 setter
-    │   │   ├── types.rs              # ToolCallInfo, StepResult, SessionSnapshot
-    │   │   ├── persisted_context.rs  # 3-layer save/load
-    │   │   ├── request.rs            # build_step_body, api_request
-    │   │   ├── response.rs           # process_assistant_message, tool call 解析
-    │   │   ├── length_retry.rs       # finish_reason=length 处理
-    │   │   ├── stream.rs             # step_stream
-    │   │   ├── debug.rs              # write_debug_truncated
-    │   │   └── token_usage.rs        # usage 解析、token_tracker 记录
-    │   ├── control/                  # AgentController: tool loop, watchdog, callbacks
-    │   │   ├── mod.rs                # AgentController 门面、构造、setter
-    │   │   ├── types.rs              # public types
-    │   │   ├── iterations.rs         # 迭代上限判断
-    │   │   ├── loop_runner.rs        # run() 主循环
-    │   │   ├── lifecycle.rs          # cancel/checkpoint/compact 检查
-    │   │   ├── tool_exec.rs          # read-only 并发执行、工具结果 feed
-    │   │   ├── routing.rs            # route_to 解析、自路由检查
-    │   │   ├── watchdog.rs           # repetition/error/read-without-write 状态
-    │   │   └── wrap_up.rs            # max-iteration 收尾
-    │   ├── compact/                  # Context compaction (2 prompt variants)
+    │   ├── session/                  # mod.rs, types.rs, builder.rs, accessors.rs, persisted_context.rs, request.rs, response.rs, length_retry.rs, error_retry.rs, stream.rs, debug.rs, token_usage.rs, logging.rs
+    │   ├── control/                  # mod.rs, types.rs, loop_runner.rs, iterations.rs, lifecycle.rs, tool_exec.rs, routing.rs, watchdog.rs, wrap_up.rs
+    │   ├── compact/                  # Context compaction (2 prompt variants: prompt.md, dept_prompt.md)
     │   ├── reasoning.rs              # Per-vendor reasoning/thinking token injection
     │   ├── intent.rs                 # User intent classification
     │   ├── stream.rs                 # Streaming response handling
     │   └── token_count.rs            # Token counting utilities
     ├── tool/
+    │   ├── mod.rs
     │   ├── registry.rs               # Tool group factory functions
     │   ├── dispatch.rs               # Central tool dispatch + gate logic
-    │   ├── file_ops.rs / documents/ / command_ops.rs / audit_tools.rs
+    │   ├── file_ops/                 # create.rs, edit.rs, patch.rs, mod.rs
+    │   ├── documents/                # mod.rs, definitions.rs, approval.rs, attach.rs, parse.rs, policy.rs, read.rs, write.rs
+    │   ├── audit_tools.rs / command_ops.rs / editor.rs / lint_ops.rs / python_cmd.rs / test_env.rs
     │   ├── neige_special.rs          # 内阁-specific tools (cancel_agent, create_skill, etc.)
     │   ├── shangshuling_special.rs   # 尚书令-specific tools
-    │   ├── editor.rs / lint_ops.rs / python_cmd.rs / test_env.rs
     │   ├── cache.rs / path.rs / output.rs / tool_log.rs
-    ├── validate/                     # Delivery validation: contract, lint, diff, tests_runner
-    ├── learning/                     # Role learning: store, extract, inject, config
-    ├── pipeline/                     # PipelineEngine: engine/ (run_loop, step, route, graph, metrics), handlers, artifacts, supervisor
-    ├── workflow/                     # Workflow Profile: state, stage, graph
-    ├── metrics/                      # Metrics aggregation
-    ├── scenario/                     # Scenario replay framework
+    ├── validate/                     # Delivery validation: delivery.rs, contract.rs, lint.rs, diff.rs, tests_runner.rs, api_extract.rs, design_schema.rs, report.rs
+    ├── learning/                     # Role learning: store.rs, inject.rs, extract.rs, entry.rs, role.rs, config.rs
+    ├── pipeline/                     # Pipeline engine: engine/ (run_loop, step, route, graph, context, constructors, metrics, result, resume), handlers, artifacts, schema, supervisor
+    ├── workflow/                     # Workflow Graph: graph.rs (WorkflowGraph — removed profiles/state/stage)
+    ├── metrics/                      # Metrics aggregation: mod.rs, run.rs
+    ├── scenario/                     # Scenario replay: mod.rs, replay.rs
     ├── precepts/                     # Rule/policy management
-    ├── audit/                        # Audit subsystem
-    │   ├── mod.rs                    # Public re-exports (facade)
-    │   ├── log.rs                    # AuditEntry, hash chain, append, read_all, verify
-    │   ├── ref_index.rs              # RefIndex, build_ref_index, check_immutability
-    │   ├── document_line/            # Document line: types, events, scan, context (graph build + impact)
-    │   ├── checklist.rs / violation.rs / reauth.rs / diff.rs
-    │   ├── lineage.rs / trace.rs / report.rs / timeline.rs / query.rs / doc_store.rs
-    ├── models/                       # role.rs, chat.rs, message.rs, project.rs
-    ├── config/                       # RuntimeConfig: types.rs (structs + load/merge), reasoning.rs, approval.rs, compaction.rs
-    ├── storage/                      # shuji_dir.rs, checkpoint.rs
-    ├── logging/logger.rs             # Department-scoped JSONL logging
     ├── playbook/                     # Watchdog playbook patterns
-    ├── templates/                    # Document templates
-    ├── round_metrics.rs / token_tracker.rs
+    ├── audit/                        # Audit subsystem: log.rs, ref_index.rs, document_line/ (4 files), checklist.rs, violation.rs, reauth.rs, diff.rs, lineage.rs, trace.rs, report.rs, timeline.rs, query.rs, doc_store.rs
+    ├── config/                       # RuntimeConfig: types.rs (structs + load/merge), reasoning.rs, approval.rs, compaction.rs, esaa_contract.rs
+    ├── models/                       # role.rs, chat.rs, message.rs, project.rs, dept_step.rs
+    ├── storage/                      # shuji_dir.rs, checkpoint.rs
+    ├── logging/                      # logger.rs, mod.rs
+    ├── pricing.rs / round_metrics.rs / token_tracker.rs
+    ├── runtime_notify.rs / usage_notify.rs
     └── lib.rs                        # Tauri builder, plugin registration
 ```
 
@@ -471,4 +467,17 @@ shuji-app/
 
 ### Project Status
 
-Core actor system, collaboration flow, document system, audit system, checkpoint system, pipeline engine, and frontend work end-to-end. 约 730 个测试（以 `scripts/count_tests.sh` 输出为准）。
+Core actor system, collaboration flow, document system, audit system, checkpoint system, pipeline engine, and frontend work end-to-end. ~730 tests (Rust unit 213 + integration 288 + frontend Vitest 230 cases, per `scripts/count_tests.sh`).
+
+Recent refactoring milestones:
+- **P0 series**: god-file splits — `api/session/`, `pipeline/engine/`, `audit/document_line/`, `commands/settings/`, `tool/documents/`, `config/`
+- **M1-M2**: Removed deprecated `WorkflowConfig`, stale `route_to` prompts
+- **M3**: Isolated legacy `route_to` — removed dead code, clarified remaining consumers
+- **M4**: Renamed pipeline action `route_to` → `dispatch_to`
+- **M5**: Removed orphaned `WorkflowState`, `StageTracker`, workflow profiles, old templates
+- **M6**: Data compatibility cleanup — renames, migration markers, compat aliases
+- **M7**: Documentation and guardrails — architecture update, allowlist, grep test
+- **M8**: Panic safety cleanup — lock recovery, non-panicking access patterns (`util/lock.rs`)
+- **M9**: Clone message sharing optimization — agent entry helper, session accessor (`api/session/accessors.rs`), compaction
+- **M10**: Frontend component split — AuditPanel, DocPreview, WorkflowGraph into sub-component directories
+- **M11**: P0 god-file split follow-up — remaining session/pipeline/audit splits

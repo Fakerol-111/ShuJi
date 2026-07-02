@@ -34,13 +34,13 @@ impl super::AgentController {
     /// Run the tool-iteration loop.
     ///
     /// 1. Call `session.step()` (one API round-trip)
-    /// 2. If tool calls 鈫?execute each via `tool_exec`, feed results back
-    /// 3. If text 鈫?return `RunResult::Done`
-    /// 4. If `cancel` is set 鈫?`interrupt()` and return `RunResult::Stopped`
+    /// 2. If tool calls -> execute each via `tool_exec`, feed results back
+    /// 3. If text -> return `RunResult::Done`
+    /// 4. If `cancel` is set -> `interrupt()` and return `RunResult::Stopped`
     ///
     /// Route detection is output-driven: after executing a tool via `tool_exec`,
     /// the result JSON is checked for `operation == "route_to"`. This keeps the
-    /// dispatcher generic 鈥?any tool can signal a control-flow transition via
+    /// dispatcher generic -- any tool can signal a control-flow transition via
     /// its output, not via pre-execution name matching.
     #[allow(clippy::too_many_arguments)]
     pub async fn run(
@@ -63,7 +63,7 @@ impl super::AgentController {
         let mut wd = WatchdogState::new();
 
         for iter in 0..max_iter {
-            // 鈹€鈹€ Emit iteration step 鈹€鈹€
+            // -- Emit iteration step --
             if let Some(ref emit) = self.step_emit {
                 emit(DeptStepKind::Iteration {
                     n: (iter + 1) as u32,
@@ -140,7 +140,7 @@ impl super::AgentController {
                         last_text.push_str(&text);
                     }
 
-                    // 鈹€鈹€ Emit thinking step 鈹€鈹€
+                    // -- Emit thinking step --
                     if !text.is_empty() {
                         if let Some(ref emit) = self.step_emit {
                             emit(DeptStepKind::Thinking {
@@ -188,7 +188,7 @@ impl super::AgentController {
                             );
                         }
 
-                        // 鈹€鈹€ Execute tool (unified, no special-case intercept) 鈹€鈹€
+                        // -- Execute tool (unified, no special-case intercept) --
                         // Use pre-computed result for reads (P2-1 parallel exec),
                         // execute writes serially to avoid file contention.
                         let result = if let Some(pre) = read_results.remove(&idx) {
