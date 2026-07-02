@@ -6,7 +6,7 @@
 //! - `graph` — preview_pipeline_on_graph (workflow graph pre-fill from plan)
 //! - `run_loop` — run() main execution loop
 //! - `step` — execute_step action dispatcher
-//! - `route` — execute_route_to_step (actor communication + checkpoint)
+//! - `route` — execute_dispatch_step (actor communication + checkpoint)
 
 mod graph;
 mod metrics;
@@ -345,7 +345,7 @@ mod tests {
             }],
         };
         let mut rt = PlanRuntime::new(plan);
-        // Without an actor system, execute_route_to_step will fail.
+        // Without an actor system, execute_dispatch_step will fail.
         // But we can test the status setting logic directly.
         rt.step_status.insert("s1".into(), StepStatus::InProgress);
         rt.error_log.push("s1: test error".into());
@@ -354,7 +354,7 @@ mod tests {
 
     #[test]
     fn test_retry_default_one() {
-        let plan = make_single_step_plan("route_to", "工部");
+        let plan = make_single_step_plan("dispatch_to", "工部");
         assert_eq!(plan.steps[0].retry, 1);
     }
 }

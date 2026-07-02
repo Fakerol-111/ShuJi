@@ -188,7 +188,7 @@ mod tests {
         let mut m = RunMetrics::start("p1");
         m.add_step(StepMetric {
             step_id: "s1".into(),
-            action: "route_to".into(),
+            action: "dispatch_to".into(),
             target: Some("工部".into()),
             started_at: "2026-01-01".into(),
             duration_ms: 1000,

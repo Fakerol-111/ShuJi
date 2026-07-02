@@ -51,9 +51,9 @@ impl PipelineEngine {
                     },
                 }
             }
-            "route_to" => self.execute_route_to_step(step).await,
+            "dispatch_to" => self.execute_dispatch_step(step).await,
             "parallel" => {
-                // Execute multiple route_to steps concurrently
+                // Execute multiple dispatch steps concurrently
                 let targets: Vec<serde_json::Value> = step
                     .action_params
                     .get("targets")
@@ -76,7 +76,7 @@ impl PipelineEngine {
                             t["name"].as_str().unwrap_or("sub")
                         ),
                         description: t["task"].as_str().unwrap_or("").to_string(),
-                        action: "route_to".into(),
+                        action: "dispatch_to".into(),
                         action_params: serde_json::json!({
                             "target": t["target"].as_str().unwrap_or(""),
                             "task": t["task"].as_str().unwrap_or(""),
@@ -89,7 +89,7 @@ impl PipelineEngine {
                 }
                 let futures: Vec<_> = sub_steps
                     .iter()
-                    .map(|s| self.execute_route_to_step(s))
+                    .map(|s| self.execute_dispatch_step(s))
                     .collect();
                 let results = futures::future::join_all(futures).await;
                 // Check all results — return first failure

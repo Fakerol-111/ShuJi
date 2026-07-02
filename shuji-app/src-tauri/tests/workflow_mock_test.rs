@@ -110,7 +110,7 @@ async fn workflow_mixed_route_and_self_execute() {
             PlanStep {
                 step_id: "s2".into(),
                 description: "route 工部".into(),
-                action: "route_to".into(),
+                action: "dispatch_to".into(),
                 action_params: serde_json::json!({"target": "尚书令", "task": "task"}),
                 depends_on: vec!["s1".into()],
                 require_approval: false,
