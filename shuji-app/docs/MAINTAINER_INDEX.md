@@ -2,7 +2,7 @@
 
 > 文件级索引与维护者速查。架构叙事见 [ARCHITECTURE.md](ARCHITECTURE.md)；开发指南见 [../../CONTRIBUTING.md](../../CONTRIBUTING.md)。
 >
-> **核对日期**：2026-06-30（基于 `shuji-app/src-tauri/src/` 与 `shuji-app/src/` 实际目录结构）。
+> **核对日期**：2026-07-02（基于 `shuji-app/src-tauri/src/` 与 `shuji-app/src/` 实际目录结构）。
 
 ---
 
@@ -96,71 +96,15 @@ shuji-app/
 
 ---
 
-## Session Limits（config.toml 可配置）
+## 参考详情
 
-| 设置 | 默认 | Agent |
-|---|---|---|
-| write_file max_tokens | 0（无限） | 兵部、工部 |
-| append_document max_tokens | 4096 | 中书令、吏部、刑部 |
-| 只读 max_tokens | 2048 | 礼部 |
-| 纯文本 max_tokens | 1024 | 内阁、尚书令、门下侍中 |
-| 只读工具迭代 | 80 | 礼部 |
-| 写密集工具迭代 | 60 | 兵部、工部 |
-| 文档密集工具迭代 | 100 | 中书令、吏部、刑部 |
-| finish_reason=length 重试 | 5（每次减半） | 全部 |
-| 连续工具错误 | 5 → 自动停止 | 全部 |
-| 最大计划循环迭代 | 6 | 工部 |
-| 单 actor 最大执行迭代 | 20 | 全部 |
-| Checkpoint 间隔 | 300s | 全部 |
-| 同工具重复警告 | 3 | 全部 |
-| 只读不写警告 | 5 | 全部 |
-| 审批自动放行重试 | 3 | 内阁 |
+以下内容详见 [ARCHITECTURE.md](ARCHITECTURE.md)：
 
----
-
-## Edge Cases Handled
-
-- **截断的工具调用**：过滤 assistant 消息仅留有效 `tool_call_id`（防 400 错误）
-- **所有工具调用损坏**：返回 `StepResult::Text` 而非空 `ToolCalls`（防死循环）
-- **孤立 tool 消息**：两遍 sanitize——先收集所有 ID，再过滤（消除顺序相关竞争）
-- **Soul 消息漂移**：`PersistedContext` 单独存储 `soul_prompt`，保存/加载时保留其在 base 与 skill prompt 间的位置
-- **Windows CRLF**：`log_console!` 用 `write!` + 显式 `\n` 而非 `eprintln!`
-- **技能循环去重**：内阁连续输出同一 `<skill>` 标签两次则中断循环
-- **自路由预防**：base prompt 禁止 `route_to(to="内阁")`
-- **必须批准重提示守卫**：连续 3 次无 `<options>` → 自动放行继续
-- **压缩并发安全**：AppState 中活跃角色追踪 + `compacting_roles` 防双击；原子 tmp+rename 写入
-- **路径安全**（`resolve_scoped_path`）：拒绝绝对路径与 `..` 穿越。回退到祖先遍历 + canonicalize。捕获符号链接逃逸攻击。
-- **命令安全**（`check_safe_command`）：token 匹配。阻断 `sudo rm`、`format X:`、`shutdown`、`mkfs`、`dd`、`wget`/`curl` 到外部 URL。
-
----
-
-## Token Tracking
-
-两套并行系统：
-
-- **`token_tracker.rs`**：持久化 JSON，每次调用记录（prompt/cached/uncached/completion），按时间窗口聚合（今日/近3天/近7天/汇总）。通过 `get_token_stats` 命令暴露。
-- **`round_metrics.rs`**：内存实时，追踪当前角色、技能、累计 token 含缓存拆分、部门迭代。通过 `get_round_metrics` 命令暴露。
-
-缓存字段从 API 响应解析：OpenAI `usage.prompt_tokens_details.cached_tokens` 或 Anthropic `usage.cache_read_input_tokens`。
-
----
-
-## Project State Persistence
-
-- `Project.talk`：追加式，自动修剪到 ~12 条（最旧 → 摘要）
-- `Project.task`：里程碑（追加式，不修剪）
-- `Project.summary`：单行状态，自动更新
-- 每个里程碑事件持久化到 `.shuji/state.json`
-
----
-
-## API Dual-Format
-
-单一 `AnthropicClient` 结构体按请求自动检测格式：
-
-- URL 含 `anthropic.com` → Anthropic Messages API（`x-api-key` header）
-- 否则 → OpenAI Chat Completions API（`Bearer` auth）
-- 非 Anthropic API 自动启用 reasoning/thinking tokens
+- **Session Limits**（config.toml 可配置的迭代/token/重试上限）
+- **Edge Cases Handled**（截断工具调用、路径安全、命令安全等）
+- **Token Tracking**（token_tracker.rs + round_metrics.rs 双系统）
+- **Project State Persistence**（Project.talk/task/summary 持久化）
+- **API Dual-Format**（Anthropic vs OpenAI 自动检测）
 
 ---
 

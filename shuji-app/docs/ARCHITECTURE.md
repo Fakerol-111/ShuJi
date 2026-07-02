@@ -27,7 +27,7 @@
 
 内阁分析任务后提交结构化 **PipelinePlan**；引擎按依赖顺序驱动部门，关键文档需朱批后才能继续。
 
-Legacy `route_to` 仅用于 Pipeline 计划步骤内部转发、尚书令/执行部门任务内路由，以及 dispatch 层兼容；**不是**内阁主编排方式。
+Legacy `route_to` 仅在 Pipeline 保存的旧 runtime.json 中存在（加载时自动迁移为 `dispatch_to`）；agent 层面的 `route_to` 工具已在 M2 移除。
 
 ```mermaid
 flowchart TB
@@ -47,11 +47,11 @@ flowchart TB
 
 ## 9 Actors + 2 Sub-agents
 
-每个 actor 是一个 `tokio::spawn` 配 `mpsc::UnboundedReceiver` 邮箱。部门间以**文档**为中心通信：pipeline 步骤与内部 `route_to` 传递文档 ID，接收方读取文档理解任务。
+每个 actor 是一个 `tokio::spawn` 配 `mpsc::UnboundedReceiver` 邮箱。部门间以**文档**为中心通信：PipelineEngine 通过 `dispatch_to` 步骤传递文档 ID，接收方读取文档理解任务。
 
 ### 决策层
 
-- **内阁 (Neige)** — 编排者。向 PipelineEngine 提交 `submit_pipeline_plan`（已移除 route_tool）。具备 soul 系统、运行时技能创建、暂停/恢复与必须批准门禁（3 次重试 → 自动放行）。
+- **内阁 (Neige)** — 编排者。向 PipelineEngine 提交 `submit_pipeline_plan`。具备 soul 系统、运行时技能创建、暂停/恢复与必须批准门禁（3 次重试 → 自动放行）。
 - **皇帝 (用户)** — 输入需求，做最终决策（朱批）。
 
 ### 设计层
@@ -61,7 +61,7 @@ flowchart TB
 
 ### 执行层
 
-- **尚书令 (Shangshuling)** — 执行调度。从 `WorkflowState` 加载执行链，路由到具体六部。
+- **尚书令 (Shangshuling)** — 执行调度。接收 PipelineEngine 指令，路由到具体六部。
 - **吏部尚书 (Libushangshu)** — 详细设计。仅用文档工具。
 - **兵部尚书 (Bingbushangshu)** — 测试 + 接口契约。用文件写入 + 文档工具。
 - **工部尚书 (Gongbushangshu)** — TDD 编码，**批次计划循环**：把大任务拆成计划批次，每次重入执行一批，计划与执行阶段切换 reasoning 开关。有 `force_stop` 用于批次间干净过渡。
@@ -118,7 +118,7 @@ pub trait Agent {
 | `execute_command_tool()` / `run_tests_tool()` | Shell 命令 | 通用 / 工部 |
 | `reauth_tool()` | request_reauth | 尚书令 |
 
-工具返回结构化 `ToolOutput { ok, operation, path, message, error_code }`。通过 `dispatch.rs` 的 `execute_named_tool()` 调度，含门禁逻辑（append_document/route_to 在继续前检查审批状态）、缓存失效与结果大小截断。
+工具返回结构化 `ToolOutput { ok, operation, path, message, error_code }`。通过 `dispatch.rs` 的 `execute_named_tool()` 调度，含门禁逻辑（append_document 在继续前检查审批状态）、缓存失效与结果大小截断。
 
 ---
 
@@ -240,11 +240,11 @@ pub trait Agent {
 
 ## Document-Centric Architecture
 
-部门间通过 `.shuji/` 下的文档通信，而非 route_to 语义。YAML frontmatter 格式，自动分配 ID。
+部门间通过 `.shuji/` 下的文档通信。YAML frontmatter 格式，自动分配 ID。
 
 **文档类型**：dsgn、plan、pdsg、ddtl、revw、task、ctrt、rprt、anls、reqs、precepts。
 
-**朱批（审批系统）**：plan/revw 文档需皇帝批准后下游才能继续。`route_to` 与 `append_document` 对未批准文档硬性门禁。`set_document_status` 工具（approved/rejected）需要 `emperor_note`。
+**朱批（审批系统）**：plan/revw 文档需皇帝批准后下游才能继续。PipelineEngine 的 `dispatch_to` 步骤与 `append_document` 对未批准文档硬性门禁。`set_document_status` 工具（approved/rejected）需要 `emperor_note`。
 
 ---
 
@@ -303,7 +303,7 @@ API 凭证:    api_config.json    >  .env         >  硬编码回退
 - **Soul 消息漂移**：`PersistedContext` 单独存储 `soul_prompt`，保存/加载时保留其在 base 与 skill prompt 间的位置
 - **Windows CRLF**：`log_console!` 用 `write!` + 显式 `\n` 而非 `eprintln!`
 - **技能循环去重**：内阁连续输出同一 `<skill>` 标签两次则中断循环
-- **自路由预防**：base prompt 禁止 `route_to(to="内阁")`
+- **自路由预防**：PipelineEngine 禁止 `dispatch_to` 目标为自己所在的部门（defense-in-depth）
 - **必须批准重提示守卫**：连续 3 次无 `<options>` → 自动放行继续
 - **压缩并发安全**：AppState 中活跃角色追踪 + `compacting_roles` 防双击；原子 tmp+rename 写入
 - **路径安全**（`resolve_scoped_path`）：拒绝绝对路径与 `..` 穿越。回退到祖先遍历 + canonicalize。捕获符号链接逃逸攻击。
