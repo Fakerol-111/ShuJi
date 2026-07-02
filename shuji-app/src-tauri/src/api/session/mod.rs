@@ -150,6 +150,12 @@ impl Session {
         self.messages.push(msg);
     }
 
+    /// Public read-only access to the session message history.
+    /// Returns a reference to the internal message array without cloning.
+    pub fn messages(&self) -> &[serde_json::Value] {
+        &self.messages
+    }
+
     // ── Read-only accessors for request.rs / token_usage.rs ───────────────
     // These expose private fields to sibling modules without making them `pub`.
 

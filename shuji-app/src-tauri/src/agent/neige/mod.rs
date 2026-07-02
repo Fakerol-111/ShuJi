@@ -5,7 +5,6 @@ use std::sync::{Arc, Mutex};
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput};
 use crate::agent::util::strip_skill_tag;
 use crate::api::client::{AnthropicClient, ToolDefinition};
-use crate::models::message::Message;
 use crate::models::role::Role;
 
 pub struct NeigeAgent {
@@ -233,8 +232,7 @@ impl Agent for NeigeAgent {
         };
         let working_dir = input.working_dir.clone();
 
-        let mut msgs = input.context_messages.clone();
-        msgs.push(Message::user(&input.task_description));
+        let msgs = crate::agent::runner::build_initial_messages(input);
 
         let client = Arc::new(self.client.clone());
         let model = self.model.clone();
@@ -466,7 +464,7 @@ impl Agent for NeigeAgent {
             })
         };
 
-        let before_len = session.snapshot().messages.len();
+        let before_len = session.messages().len();
 
         let (result, route, run_stopped) = if self.cancel.load(std::sync::atomic::Ordering::SeqCst)
         {
@@ -496,8 +494,7 @@ impl Agent for NeigeAgent {
 
         // ── Extract plan_json only from messages added this turn ──
         let plan_json = if input.allow_pipeline_plan && !run_stopped {
-            let after = session.snapshot();
-            extract_plan_json_from_messages(after.messages.iter().skip(before_len))
+            extract_plan_json_from_messages(session.messages().iter().skip(before_len))
         } else {
             None
         };
@@ -525,19 +522,17 @@ impl Agent for NeigeAgent {
             Self::save_paused_session(&snap.messages, &working_dir).await;
             log_console!("[内阁] paused awaiting emperor approval (pending={has_pending})");
         } else {
-            // Normal: save to PersistedContext
-            let snap = session.snapshot();
-            let ctx = crate::api::session::PersistedContext::from_messages(&snap.messages);
+            // Normal: save to PersistedContext — borrow messages directly
+            let ctx = crate::api::session::PersistedContext::from_messages(session.messages());
             ctx.save_to(&working_dir, &role_name).await;
         }
 
-        let snap = session.snapshot();
         let clean = strip_skill_tag(result);
         let mut output = AgentOutput::new(clean);
         output.paused = should_pause;
         output.route = route;
         output.plan_json = plan_json;
-        output.decision_options = extract_decision_options(&snap.messages);
+        output.decision_options = extract_decision_options(session.messages());
         crate::agent::runner::attach_run_documents(&mut output, &mut controller, &working_dir)
             .await;
         if should_pause {

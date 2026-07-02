@@ -7,7 +7,6 @@ use tokio::sync::mpsc;
 use crate::actor::ActorMessage;
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput};
 use crate::api::client::{AnthropicClient, ToolDefinition};
-use crate::models::message::Message;
 use crate::models::role::Role;
 use crate::workflow::WorkflowGraph;
 
@@ -69,8 +68,7 @@ impl Agent for ShangshulingAgent {
         let working_dir = input.working_dir.clone();
         let role_name = self.role().name().to_string();
 
-        let mut msgs = input.context_messages.clone();
-        msgs.push(Message::user(&input.task_description));
+        let msgs = crate::agent::runner::build_initial_messages(input);
 
         let client = Arc::new(self.client.clone());
         let mut session = crate::api::session::Session::new(

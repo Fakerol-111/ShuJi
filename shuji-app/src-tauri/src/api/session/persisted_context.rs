@@ -264,6 +264,7 @@ pub(crate) fn is_skill_message(msg: &serde_json::Value) -> bool {
 }
 
 /// Remove all skill messages from the vector in-place.
+#[allow(dead_code)]
 pub(crate) fn strip_skill_messages(msgs: &mut Vec<serde_json::Value>) {
     msgs.retain(|m| !is_skill_message(m));
 }

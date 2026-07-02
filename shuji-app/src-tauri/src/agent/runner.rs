@@ -6,6 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::agent::r#trait::AgentInput;
 use crate::api::client::AnthropicClient;
 use crate::api::compact::compact_and_save;
 use crate::api::control::{CheckpointFn, CompactFn};
@@ -130,6 +131,18 @@ pub async fn load_and_compact_context(
     }
 }
 
+/// Build the initial message vec for an agent execution.
+///
+/// Clones the shared context messages and appends the task description
+/// as a user message.  All departments use this instead of manually
+/// writing `input.context_messages.clone(); msgs.push(...)`.
+pub fn build_initial_messages(input: &AgentInput) -> Vec<Message> {
+    let mut msgs = Vec::with_capacity(input.context_messages.len() + 1);
+    msgs.extend(input.context_messages.iter().cloned());
+    msgs.push(Message::user(&input.task_description));
+    msgs
+}
+
 /// Inject upstream document IDs as a system context message (not part of the user task).
 pub fn inject_upstream_doc_context(msgs: &mut Vec<Message>, doc_ids: &[String]) {
     if doc_ids.is_empty() {
@@ -147,9 +160,12 @@ pub fn inject_upstream_doc_context(msgs: &mut Vec<Message>, doc_ids: &[String]) 
 }
 
 /// Save the current session state as persisted context.
+///
+/// Uses the public `Session::messages()` accessor to avoid an
+/// intermediate `SessionSnapshot` clone when only the message slice
+/// is needed for `PersistedContext::from_messages`.
 pub async fn save_context(session: &Session, working_dir: &Path, role_name: &str) {
-    let snap = session.snapshot();
-    let ctx = PersistedContext::from_messages(&snap.messages);
+    let ctx = PersistedContext::from_messages(session.messages());
     ctx.save_to(working_dir, role_name).await;
 }
 
