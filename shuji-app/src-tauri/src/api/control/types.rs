@@ -82,7 +82,9 @@ impl RunResult {
     }
 
     /// Consume and return the legacy `(String, Option<RouteTo>)` tuple.
-    /// This is a migration helper -- new code should match on the enum directly.
+    /// This is a migration helper — new code should match on the enum directly.
+    /// Only `request_reauth` (via audit_tools) actively produces `Routed` today;
+    /// all other agents discard the route component.
     pub fn into_tuple(self) -> (String, Option<RouteTo>) {
         match self {
             RunResult::Done(text) => (text, None),

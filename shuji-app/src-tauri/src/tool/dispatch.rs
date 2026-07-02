@@ -144,9 +144,9 @@ pub async fn execute_named_tool(
         // Main flow: 内阁 submit_pipeline_plan → PipelineEngine schedules departments.
         // route_to remains for:
         //   - Pipeline plan steps with action "route_to" (engine-internal dispatch)
-        //   - 尚书令 and execution departments forwarding work inside a running task
-        //   - Actor spawn output parsing when an agent still emits route_to in tool results
-        // Do not extend route_to as a new cabinet-level orchestration mechanism.
+        //   - request_reauth (audit_tools) — the only active agent-level producer
+        //   - Actor spawn output parsing when neige emits route_to in tool results
+        // Do not extend route_to as a new orchestration mechanism.
         "route_to" => {
             // Gate: check refs before routing to execution departments
             let exec_depts = ["尚书令", "吏部", "兵部", "工部", "刑部", "礼部"];
@@ -325,8 +325,12 @@ fn doc_id_from_write_result(
     None
 }
 
-/// Validate and execute route_to — returns a ToolOutput with `operation: "route_to"`
-/// so the AgentController can detect it in the result and break the tool loop.
+/// Validate and execute route_to — returns a ToolOutput with `operation: "route_to"`.
+///
+/// This function is reached today only via `request_reauth` (audit_tools)
+/// which fakes `operation: "route_to"` to trigger the AgentController's
+/// routing detection path. Agent-level `route_to` tool calls have been removed
+/// (M2 milestone) but the dispatch arm is retained for request_reauth compat.
 fn handle_route_to(args: &serde_json::Value, dept: &str) -> String {
     let to_name = args["to"].as_str().unwrap_or("");
     if to_name.is_empty() {
