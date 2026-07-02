@@ -47,6 +47,13 @@ pub(crate) async fn load_line_events(working_dir: &Path) -> Vec<LineEventRecord>
     content
         .lines()
         .filter_map(|l| serde_json::from_str(l).ok())
+        .map(|mut r: LineEventRecord| {
+            // M6: map legacy "legacy" run_id to "unassigned"
+            if r.run_id == "legacy" {
+                r.run_id = super::context::UNASSIGNED_RUN_ID.to_string();
+            }
+            r
+        })
         .collect()
 }
 
@@ -55,5 +62,5 @@ pub async fn active_run_id(working_dir: &Path) -> String {
     if let Some(rt) = PlanRuntime::load_from(working_dir).await {
         return rt.plan.plan_id.clone();
     }
-    "legacy".into()
+    super::context::UNASSIGNED_RUN_ID.into()
 }

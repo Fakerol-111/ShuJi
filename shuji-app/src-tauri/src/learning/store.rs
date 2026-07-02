@@ -138,6 +138,15 @@ impl SoulStore {
             let dir = Self::project_soul_dir(working_dir);
             let _ = tokio::fs::create_dir_all(&dir).await;
             let _ = tokio::fs::write(&canonical, content).await;
+            // Record migration in audit log for traceability
+            crate::audit::append(
+                working_dir,
+                "soul_migration",
+                "learning",
+                "Neige",
+                "migrated legacy neige soul path → Neige.md",
+            )
+            .await;
             log_console!("[learning] migrated legacy neige soul → Neige.md");
         }
     }
