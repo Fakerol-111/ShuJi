@@ -27,7 +27,10 @@ mod tests {
 
     #[test]
     fn normalize_chinese_role_name() {
-        assert_eq!(normalize_role_name(Some("工部")).unwrap(), "Gongbushangshu");
+        assert_eq!(
+            normalize_role_name(Some("工部")),
+            Ok("Gongbushangshu".into())
+        );
     }
 
     #[test]

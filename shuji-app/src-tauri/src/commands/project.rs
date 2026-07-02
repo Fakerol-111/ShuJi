@@ -31,7 +31,14 @@ pub struct AppState {
 
 /// Clone the current runtime config snapshot for agent / pipeline use.
 pub fn snapshot_runtime_config(lock: &Arc<RwLock<RuntimeConfig>>) -> Arc<RuntimeConfig> {
-    Arc::new(lock.read().unwrap().clone())
+    let guard = crate::util::lock::rwlock_read_or_recover(lock);
+    match guard {
+        Ok(g) => Arc::new(g.clone()),
+        Err(e) => {
+            log_console!("[project] runtime_config read failed, using default: {}", e);
+            Arc::new(RuntimeConfig::default())
+        }
+    }
 }
 
 #[tauri::command]

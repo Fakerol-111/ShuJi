@@ -22,8 +22,14 @@ pub async fn generate_report(working_dir: &Path) -> String {
         }
     }
 
-    let first = entries.first().unwrap();
-    let last = entries.last().unwrap();
+    let first = match entries.first() {
+        Some(f) => f,
+        None => return "## Delivery Report\n\nNo audit records yet.\n".to_string(),
+    };
+    let last = match entries.last() {
+        Some(l) => l,
+        None => return "## Delivery Report\n\nNo audit records yet.\n".to_string(),
+    };
 
     let mut report = String::new();
     report.push_str("## Delivery Report\n\n");

@@ -12,25 +12,52 @@
 //! let guard = lock_or_recover(&self.contracts)?;
 //! ```
 
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-/// 锁定 Mutex，若中毒则恢复内部值（PoisonError::into_inner）。
-///
-/// 适用于"中毒后内部状态仍可用"或"会重新加载"的场景，如配置缓存。
-/// 不适用于"中毒意味着数据损坏不可用"的严格场景——用 [`lock_or_error`]。
+/// Lock Mutex, recovering from poison.
 pub fn lock_or_recover<T>(m: &Mutex<T>) -> anyhow::Result<MutexGuard<'_, T>> {
     m.lock().or_else(|e| {
-        // 锁中毒通常因为持锁线程 panic，内部数据可能不完整。
-        // 对缓存类数据，重新加载即可恢复，故返回内部 guard。
         log_console!("[util] Mutex poisoned, recovering inner value: {}", e);
         Ok(e.into_inner())
     })
 }
 
-/// 锁定 Mutex，若中毒则返回 anyhow::Error（不恢复）。
-///
-/// 适用于严格失败语义场景。调用方需决定如何处理错误。
+/// Lock Mutex, returning error on poison.
 pub fn lock_or_error<T>(m: &Mutex<T>) -> anyhow::Result<MutexGuard<'_, T>> {
     m.lock()
         .map_err(|e| anyhow::anyhow!("mutex poisoned: {}", e))
+}
+
+/// Lock RwLock for reading, recovering from poison.
+pub fn rwlock_read_or_recover<T>(m: &RwLock<T>) -> anyhow::Result<RwLockReadGuard<'_, T>> {
+    m.read().or_else(|e| {
+        log_console!(
+            "[util] RwLock poisoned (read), recovering inner value: {}",
+            e
+        );
+        Ok(e.into_inner())
+    })
+}
+
+/// Lock RwLock for reading, returning error on poison.
+pub fn rwlock_read_or_error<T>(m: &RwLock<T>) -> anyhow::Result<RwLockReadGuard<'_, T>> {
+    m.read()
+        .map_err(|e| anyhow::anyhow!("RwLock poisoned (read): {}", e))
+}
+
+/// Lock RwLock for writing, recovering from poison.
+pub fn rwlock_write_or_recover<T>(m: &RwLock<T>) -> anyhow::Result<RwLockWriteGuard<'_, T>> {
+    m.write().or_else(|e| {
+        log_console!(
+            "[util] RwLock poisoned (write), recovering inner value: {}",
+            e
+        );
+        Ok(e.into_inner())
+    })
+}
+
+/// Lock RwLock for writing, returning error on poison.
+pub fn rwlock_write_or_error<T>(m: &RwLock<T>) -> anyhow::Result<RwLockWriteGuard<'_, T>> {
+    m.write()
+        .map_err(|e| anyhow::anyhow!("RwLock poisoned (write): {}", e))
 }

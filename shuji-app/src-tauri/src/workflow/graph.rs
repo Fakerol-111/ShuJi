@@ -463,14 +463,16 @@ mod tests {
     }
 
     #[test]
-    fn test_reuse_node_when_no_cycle() {
+    fn test_reuse_node_when_no_cycle() -> anyhow::Result<()> {
         let mut g = WorkflowGraph::new();
         g.add_edge("内阁", "尚书令", "t1", "任务A");
         g.add_edge("内阁", "工部", "t2", "任务B");
         g.add_edge("工部", "尚书令", "t3", "任务C");
         assert_eq!(g.nodes.len(), 3, "不应创建新尚书令节点");
-        let shangshu = g.nodes.iter().find(|n| n.role == "尚书令").unwrap();
-        assert_eq!(shangshu.task_summary, "任务C");
+        let shangshu = g.nodes.iter().find(|n| n.role == "尚书令");
+        assert!(shangshu.is_some(), "尚书令 should exist");
+        assert_eq!(shangshu.unwrap().task_summary, "任务C");
+        Ok(())
     }
 
     #[test]
@@ -506,44 +508,65 @@ mod tests {
     }
 
     #[test]
-    fn test_persistence_round_trip() {
-        let tmp = tempfile::TempDir::new().unwrap();
+    fn test_persistence_round_trip() -> anyhow::Result<()> {
+        let tmp = tempfile::TempDir::new()?;
         let mut g = WorkflowGraph::new();
         g.add_edge("内阁", "尚书令", "t1", "执行");
         g.add_edge("尚书令", "工部", "t2", "编码");
 
-        let rt = tokio::runtime::Runtime::new().unwrap();
+        let rt = tokio::runtime::Runtime::new()?;
         rt.block_on(g.save_to(tmp.path()));
-        let loaded = rt.block_on(WorkflowGraph::load_from(tmp.path())).unwrap();
+        let loaded = rt
+            .block_on(WorkflowGraph::load_from(tmp.path()))
+            .expect("load_from should succeed after save_to");
         assert_eq!(loaded.nodes.len(), 3);
         assert_eq!(loaded.edges.len(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_rebuild_state() {
+    fn test_rebuild_state() -> anyhow::Result<()> {
         let mut g = WorkflowGraph::new();
         g.add_edge("内阁", "尚书令", "t1", "A");
         g.add_edge("尚书令", "工部", "t2", "B");
         g.add_edge("工部", "内阁", "t3", "C");
 
-        let json = serde_json::to_string(&g).unwrap();
-        let mut restored: WorkflowGraph = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&g)?;
+        let mut restored: WorkflowGraph = serde_json::from_str(&json)?;
         restored.rebuild_state();
 
         assert_eq!(restored.nodes.len(), 4);
         assert_eq!(restored.edges.len(), 3);
-        assert_eq!(*restored.current_nodes.get("内阁").unwrap(), 4);
-        assert_eq!(*restored.instance_counts.get("内阁").unwrap(), 2);
+        assert_eq!(
+            *restored
+                .current_nodes
+                .get("内阁")
+                .expect("内阁 in current_nodes"),
+            4
+        );
+        assert_eq!(
+            *restored
+                .instance_counts
+                .get("内阁")
+                .expect("内阁 in instance_counts"),
+            2
+        );
+        Ok(())
     }
 
     #[test]
-    fn test_mark_completed() {
+    fn test_mark_completed() -> anyhow::Result<()> {
         let mut g = WorkflowGraph::new();
         g.add_edge("内阁", "尚书令", "t1", "执行");
         g.mark_completed("尚书令");
         assert_eq!(
-            g.nodes.iter().find(|n| n.role == "尚书令").unwrap().status,
+            g.nodes
+                .iter()
+                .find(|n| n.role == "尚书令")
+                .expect("尚书令 node should exist")
+                .status,
             NodeStatus::Completed
         );
+        Ok(())
     }
 }

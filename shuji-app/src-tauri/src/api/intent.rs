@@ -3,6 +3,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use crate::util::lock::lock_or_recover;
 use serde::{Deserialize, Serialize};
 
 /// Agent's intent declaration (transparently constructed by the interception layer).
@@ -168,7 +169,10 @@ impl IntentChecker for RateLimiter {
             .unwrap_or("");
         let key = format!("{}:{}:{}", intent.agent, intent.tool, key_arg);
 
-        let mut recent = self.recent.lock().unwrap();
+        let mut recent = match lock_or_recover(&self.recent) {
+            Ok(g) => g,
+            Err(_) => return IntentVerdict::Allow,
+        };
         let now = Instant::now();
 
         while recent

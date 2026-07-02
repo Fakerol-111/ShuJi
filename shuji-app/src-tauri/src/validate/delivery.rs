@@ -15,7 +15,7 @@ pub async fn validate_delivery(
     opts: &DeliveryOptions,
 ) -> Result<ValidationReport, String> {
     // 1. Load config
-    let config = load_validate_config(working_dir).await;
+    let (config, config_warn) = load_validate_config(working_dir).await;
 
     if !config.enabled {
         return Ok(ValidationReport {
@@ -28,6 +28,18 @@ pub async fn validate_delivery(
     }
 
     let mut checks: Vec<CheckResult> = Vec::new();
+
+    // 1b. Report config warning as a check failure if config was malformed
+    if let Some(ref warn) = config_warn {
+        checks.push(CheckResult {
+            name: "validate_config".into(),
+            pass: false,
+            summary: warn.clone(),
+            details: serde_json::json!({"config_error": true}),
+        });
+        // Continue with default config rather than aborting
+        crate::audit::append(working_dir, "validate_config_warning", "system", "", warn).await;
+    }
 
     // 2. Run tests gate
     if config.tests.required {
@@ -114,11 +126,19 @@ pub async fn validate_delivery(
 }
 
 /// Load `validate_config.json` or return defaults.
-async fn load_validate_config(working_dir: &Path) -> ValidateConfig {
+/// Returns the config plus a warning string if the file was present but malformed.
+async fn load_validate_config(working_dir: &Path) -> (ValidateConfig, Option<String>) {
     let path = working_dir.join(".shuji").join("validate_config.json");
     match tokio::fs::read_to_string(&path).await {
-        Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
-        Err(_) => ValidateConfig::default(),
+        Ok(content) => match serde_json::from_str::<ValidateConfig>(&content) {
+            Ok(cfg) => (cfg, None),
+            Err(e) => {
+                let warn = format!("validate_config.json 解析失败: {}，使用默认配置", e);
+                log_console!("[validate] {}", warn);
+                (ValidateConfig::default(), Some(warn))
+            }
+        },
+        Err(_) => (ValidateConfig::default(), None),
     }
 }
 
@@ -247,8 +267,8 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_validate_delivery_with_passing_tests() {
-        let tmp = tempfile::TempDir::new().unwrap();
+    async fn test_validate_delivery_with_passing_tests() -> anyhow::Result<()> {
+        let tmp = tempfile::TempDir::new()?;
         let dir = tmp.path();
 
         // Minimal cargo project with passing test
@@ -261,10 +281,9 @@ version = "0.1.0"
 edition = "2021"
 "#,
         )
-        .await
-        .unwrap();
+        .await?;
         let src = dir.join("src");
-        tokio::fs::create_dir_all(&src).await.unwrap();
+        tokio::fs::create_dir_all(&src).await?;
         tokio::fs::write(
             src.join("lib.rs"),
             r#"
@@ -275,8 +294,7 @@ mod tests {
 }
 "#,
         )
-        .await
-        .unwrap();
+        .await?;
 
         let opts = DeliveryOptions::default();
         let report = validate_delivery(dir, &opts).await.unwrap();
@@ -284,11 +302,12 @@ mod tests {
         assert!(report.overall_pass);
         assert_eq!(report.project_type, "rust");
         assert!(report.checks.iter().any(|c| c.name == "tests" && c.pass));
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_persist_report_creates_file() {
-        let tmp = tempfile::TempDir::new().unwrap();
+    async fn test_persist_report_creates_file() -> anyhow::Result<()> {
+        let tmp = tempfile::TempDir::new()?;
         let dir = tmp.path();
 
         let report = ValidationReport {
@@ -304,9 +323,10 @@ mod tests {
         let path = dir.join(".shuji").join("validate").join("latest.json");
         assert!(path.exists(), "report should be persisted");
 
-        let loaded: ValidationReport =
-            serde_json::from_str(&tokio::fs::read_to_string(&path).await.unwrap()).unwrap();
+        let content = tokio::fs::read_to_string(&path).await?;
+        let loaded: ValidationReport = serde_json::from_str(&content)?;
         assert_eq!(loaded.project_type, "rust");
         assert!(loaded.overall_pass);
+        Ok(())
     }
 }

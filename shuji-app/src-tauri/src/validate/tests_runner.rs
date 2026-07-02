@@ -152,11 +152,10 @@ mod tests {
     use crate::validate::report::ValidateConfig;
 
     #[tokio::test]
-    async fn test_run_test_gate_pass_on_valid_cargo_project() {
-        let tmp = tempfile::TempDir::new().unwrap();
+    async fn test_run_test_gate_pass_on_valid_cargo_project() -> anyhow::Result<()> {
+        let tmp = tempfile::TempDir::new()?;
         let dir = tmp.path();
 
-        // Create a minimal Cargo project with a passing test
         tokio::fs::write(
             dir.join("Cargo.toml"),
             r#"
@@ -166,11 +165,10 @@ version = "0.1.0"
 edition = "2021"
 "#,
         )
-        .await
-        .unwrap();
+        .await?;
 
         let src = dir.join("src");
-        tokio::fs::create_dir_all(&src).await.unwrap();
+        tokio::fs::create_dir_all(&src).await?;
         tokio::fs::write(
             src.join("lib.rs"),
             r#"
@@ -183,17 +181,17 @@ mod tests {
 }
 "#,
         )
-        .await
-        .unwrap();
+        .await?;
 
         let config = ValidateConfig::default();
         let result = run_test_gate(dir, &config).await;
         assert!(result.pass, "test should pass: {}", result.summary);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_run_test_gate_fail_on_broken_test() {
-        let tmp = tempfile::TempDir::new().unwrap();
+    async fn test_run_test_gate_fail_on_broken_test() -> anyhow::Result<()> {
+        let tmp = tempfile::TempDir::new()?;
         let dir = tmp.path();
 
         tokio::fs::write(
@@ -205,11 +203,10 @@ version = "0.1.0"
 edition = "2021"
 "#,
         )
-        .await
-        .unwrap();
+        .await?;
 
         let src = dir.join("src");
-        tokio::fs::create_dir_all(&src).await.unwrap();
+        tokio::fs::create_dir_all(&src).await?;
         tokio::fs::write(
             src.join("lib.rs"),
             r#"
@@ -222,8 +219,7 @@ mod tests {
 }
 "#,
         )
-        .await
-        .unwrap();
+        .await?;
 
         let config = ValidateConfig::default();
         let result = run_test_gate(dir, &config).await;
@@ -234,5 +230,6 @@ mod tests {
                 .is_some_and(|a| !a.is_empty()),
             "should list failed test names"
         );
+        Ok(())
     }
 }

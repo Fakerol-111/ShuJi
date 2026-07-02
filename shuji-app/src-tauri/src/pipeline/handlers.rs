@@ -94,8 +94,8 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_noop_handler() {
-        let tmp = tempfile::TempDir::new().unwrap();
+    async fn test_noop_handler() -> anyhow::Result<()> {
+        let tmp = tempfile::TempDir::new()?;
         let result = run_self_execute("noop", &serde_json::json!({}), tmp.path()).await;
         assert!(result.is_ok());
         match result.unwrap() {
@@ -104,19 +104,21 @@ mod tests {
             }
             _ => panic!("expected Success"),
         }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_unknown_handler() {
-        let tmp = tempfile::TempDir::new().unwrap();
+    async fn test_unknown_handler() -> anyhow::Result<()> {
+        let tmp = tempfile::TempDir::new()?;
         let result = run_self_execute("bogus", &serde_json::json!({}), tmp.path()).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("unknown"));
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_validate_delivery_handler_without_project() {
-        let tmp = tempfile::TempDir::new().unwrap();
+    async fn test_validate_delivery_handler_without_project() -> anyhow::Result<()> {
+        let tmp = tempfile::TempDir::new()?;
         // No Cargo.toml — should still not panic
         let result = run_self_execute(
             "validate_delivery",
@@ -125,5 +127,6 @@ mod tests {
         )
         .await;
         assert!(result.is_ok());
+        Ok(())
     }
 }

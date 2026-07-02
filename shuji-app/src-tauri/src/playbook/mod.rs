@@ -237,7 +237,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_playbook_for_test_red() {
+    fn test_playbook_for_test_red() -> anyhow::Result<()> {
         let ctx = PlaybookContext {
             event: "test_stalemate".into(),
             step_id: None,
@@ -246,6 +246,7 @@ mod tests {
         let content = playbook_for_event("test-red", &ctx);
         assert!(content.is_some());
         assert!(content.unwrap().contains("测试僵局"));
+        Ok(())
     }
 
     #[test]
@@ -259,10 +260,11 @@ mod tests {
     }
 
     #[test]
-    fn test_playbook_hint_length() {
+    fn test_playbook_hint_length() -> anyhow::Result<()> {
         let hint = playbook_hint("test-red").unwrap();
         assert!(hint.len() <= 200, "hint too long: {}", hint.len());
         assert!(hint.contains("[playbook:"));
+        Ok(())
     }
 
     #[test]
@@ -273,7 +275,7 @@ mod tests {
     }
 
     #[test]
-    fn test_playbook_for_contract_mismatch() {
+    fn test_playbook_for_contract_mismatch() -> anyhow::Result<()> {
         let ctx = PlaybookContext {
             event: "contract_diff".into(),
             step_id: None,
@@ -282,6 +284,7 @@ mod tests {
         let content = playbook_for_event("contract-mismatch", &ctx);
         assert!(content.is_some());
         assert!(content.unwrap().contains("契约"));
+        Ok(())
     }
 
     #[test]

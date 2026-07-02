@@ -34,6 +34,7 @@ use crate::commands::settings::AppConfig;
 use crate::models::chat::ChatMessage;
 use crate::models::dept_step::{DeptStepEntry, DeptStepSender};
 use crate::models::role::Role;
+use crate::util::lock::lock_or_recover;
 
 // ============================================================================
 // ContextStats — 前端上下文面板用统计信息
@@ -276,7 +277,11 @@ pub async fn start_actor_system(
         // 为每个角色创建独立的取消标志，注册到 cancel_map
         let actor_flag = Arc::new(AtomicBool::new(false));
         agent.set_interrupt_flag(actor_flag.clone());
-        cancel_map.lock().unwrap().insert(role, actor_flag);
+        if let Ok(mut cm) = lock_or_recover(&cancel_map) {
+            cm.insert(role, actor_flag);
+        } else {
+            log_console!("[bootstrap] cancel_map lock failed, skip inserting {}. actor will not support cancel-agents", role.name());
+        }
 
         // 创建该角色的 mailbox: (tx → senders 表, rx → contexts 表)
         let (tx, rx) = mpsc::unbounded_channel();
@@ -326,10 +331,11 @@ pub async fn start_actor_system(
         let (mut agent, rx) = shangshuling_agent;
         let actor_flag = Arc::new(AtomicBool::new(false));
         agent.set_interrupt_flag(actor_flag.clone());
-        cancel_map
-            .lock()
-            .unwrap()
-            .insert(Role::Shangshuling, actor_flag);
+        if let Ok(mut cm) = lock_or_recover(&cancel_map) {
+            cm.insert(Role::Shangshuling, actor_flag);
+        } else {
+            log_console!("[bootstrap] cancel_map lock failed, skip inserting Shangshuling");
+        }
         contexts.push((Role::Shangshuling, agent, rx));
     }
 
@@ -369,12 +375,37 @@ pub async fn start_actor_system(
             }
         }
 
-        let actor_flag = cancel_map.lock().unwrap().get(&role).unwrap().clone();
+        let actor_flag = match lock_or_recover(&cancel_map) {
+            Ok(map) => map.get(&role).cloned().unwrap_or_else(|| {
+                log_console!(
+                    "[bootstrap] no cancel flag registered for {}, creating default",
+                    role.name()
+                );
+                Arc::new(AtomicBool::new(false))
+            }),
+            Err(e) => {
+                log_console!(
+                    "[bootstrap] cancel_map lock failed for {}: {}",
+                    role.name(),
+                    e
+                );
+                Arc::new(AtomicBool::new(false))
+            }
+        };
         // 每个角色的日志写入 .shuji/logs/{role}/ 目录
         let logger = crate::logging::logger::Logger::new(&working_dir.join(".shuji"));
         let is_neige = role == Role::Neige;
         // 从 fast_rxs 表中取出该角色的 fast channel 接收端（所有权转移）
-        let fast_rx = fast_rxs.remove(&role).unwrap();
+        let fast_rx = match fast_rxs.remove(&role) {
+            Some(rx) => rx,
+            None => {
+                log_console!(
+                    "[bootstrap] missing fast_rx for {}, actor will run without fast channel",
+                    role.name()
+                );
+                tokio::sync::Mutex::new(mpsc::channel(16).1)
+            }
+        };
 
         // ActorContext 是 run_actor 所需的完整上下文包
         let ctx = ActorContext {

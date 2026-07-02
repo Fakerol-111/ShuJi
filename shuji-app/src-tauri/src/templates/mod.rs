@@ -40,7 +40,9 @@ pub fn render_contract_template(name: &str, vars: &HashMap<String, String>) -> O
         "integration_scenarios" => {
             include_str!("../../assets/templates/contracts/integration_scenarios.md.template")
         }
-        "rest_endpoint" => include_str!("../../assets/templates/contracts/rest_endpoint.md.template"),
+        "rest_endpoint" => {
+            include_str!("../../assets/templates/contracts/rest_endpoint.md.template")
+        }
         _ => return None,
     };
 
@@ -63,28 +65,33 @@ mod tests {
     }
 
     #[test]
-    fn test_render_module_api() {
+    fn test_render_module_api() -> anyhow::Result<()> {
         let mut vars = HashMap::new();
         vars.insert("module_name".into(), "user_service".into());
         vars.insert("design_ref".into(), "ddtl_001".into());
-        vars.insert("functions_table".into(), "| create_user | name, email | User | 创建用户 |".into());
+        vars.insert(
+            "functions_table".into(),
+            "| create_user | name, email | User | 创建用户 |".into(),
+        );
 
-        let result = render_contract_template("module_api", &vars).unwrap();
+        let result = render_contract_template("module_api", &vars)?;
         assert!(result.contains("user_service"));
         assert!(result.contains("ddtl_001"));
         assert!(result.contains("create_user"));
+        Ok(())
     }
 
     #[test]
-    fn test_render_integration_scenarios() {
+    fn test_render_integration_scenarios() -> anyhow::Result<()> {
         let mut vars = HashMap::new();
         vars.insert("scenario_name".into(), "user_login".into());
         vars.insert("precondition".into(), "用户已注册".into());
         vars.insert("step_1".into(), "调用登录接口".into());
         vars.insert("expected_result".into(), "返回 token".into());
 
-        let result = render_contract_template("integration_scenarios", &vars).unwrap();
+        let result = render_contract_template("integration_scenarios", &vars)?;
         assert!(result.contains("user_login"));
+        Ok(())
     }
 
     #[test]

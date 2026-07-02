@@ -201,8 +201,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_save_and_load_latest() {
-        let tmp = tempfile::TempDir::new().unwrap();
+    async fn test_save_and_load_latest() -> anyhow::Result<()> {
+        let tmp = tempfile::TempDir::new()?;
         let mut m = RunMetrics::start("plan-save-001");
         m.add_step(StepMetric {
             step_id: "s1".into(),
@@ -220,11 +220,12 @@ mod tests {
         assert_eq!(loaded.plan_id, "plan-save-001");
         assert_eq!(loaded.status, "complete");
         assert_eq!(loaded.steps.len(), 1);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_list_runs() {
-        let tmp = tempfile::TempDir::new().unwrap();
+    async fn test_list_runs() -> anyhow::Result<()> {
+        let tmp = tempfile::TempDir::new()?;
         for i in 0..3 {
             let mut m = RunMetrics::start(&format!("plan-{:03}", i));
             m.finalize("complete", tmp.path()).await.unwrap();
@@ -232,7 +233,8 @@ mod tests {
 
         let runs = list_runs(tmp.path(), 10).await;
         assert_eq!(runs.len(), 3);
-        assert!(runs[0].run_id > runs[2].run_id); // newest first
+        assert!(runs[0].run_id > runs[2].run_id);
+        Ok(())
     }
 
     #[test]
@@ -247,17 +249,18 @@ mod tests {
         };
         m.attach_validation(report);
         assert!(m.validation.is_some());
-        assert!(m.validation.as_ref().unwrap().overall_pass);
+        assert!(matches!(m.validation.as_ref(), Some(v) if v.overall_pass));
     }
 
     #[tokio::test]
-    async fn test_metrics_limit() {
-        let tmp = tempfile::TempDir::new().unwrap();
+    async fn test_metrics_limit() -> anyhow::Result<()> {
+        let tmp = tempfile::TempDir::new()?;
         for i in 0..5 {
             let mut m = RunMetrics::start(&format!("plan-{:03}", i));
             m.finalize("complete", tmp.path()).await.unwrap();
         }
         let runs = list_runs(tmp.path(), 2).await;
         assert_eq!(runs.len(), 2);
+        Ok(())
     }
 }

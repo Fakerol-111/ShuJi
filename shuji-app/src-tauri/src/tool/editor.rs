@@ -64,12 +64,21 @@ fn editor_config_path() -> PathBuf {
     shuji_home().join("editor_config.json")
 }
 
-pub fn load_editor_config() -> EditorConfig {
+pub fn try_load_editor_config() -> Result<EditorConfig, String> {
     let path = editor_config_path();
-    std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| format!("读取编辑器配置失败 ({}): {}", path.display(), e))?;
+    serde_json::from_str(&content).map_err(|e| format!("编辑器配置 JSON 解析失败: {}", e))
+}
+
+pub fn load_editor_config() -> EditorConfig {
+    match try_load_editor_config() {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            log_console!("[editor] load_editor_config fallback to default: {}", e);
+            EditorConfig::default()
+        }
+    }
 }
 
 pub fn save_editor_config(config: &EditorConfig) -> Result<(), String> {

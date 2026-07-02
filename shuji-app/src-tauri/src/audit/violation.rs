@@ -71,7 +71,9 @@ pub async fn update_violation_status(
             .join(".shuji")
             .join("audit")
             .join("violations.jsonl");
-        let _ = tokio::fs::create_dir_all(path.parent().unwrap()).await;
+        if let Some(parent) = path.parent() {
+            let _ = tokio::fs::create_dir_all(parent).await;
+        }
         let mut content = String::new();
         for v in &violations {
             if let Ok(json) = serde_json::to_string(v) {

@@ -35,7 +35,10 @@ pub async fn save_checklist(working_dir: &Path, checklist: &Checklist) {
         .join(".shuji")
         .join("audit")
         .join("checklist.json");
-    let _ = tokio::fs::create_dir_all(path.parent().unwrap()).await;
+    let _ = match path.parent() {
+        Some(parent) => tokio::fs::create_dir_all(parent).await,
+        None => return,
+    };
     if let Ok(json) = serde_json::to_string_pretty(checklist) {
         let _ = tokio::fs::write(&path, &json).await;
     }

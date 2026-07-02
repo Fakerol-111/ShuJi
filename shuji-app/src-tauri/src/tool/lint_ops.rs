@@ -145,8 +145,8 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_tool_run_lint_on_rust_project() {
-        let tmp = tempfile::TempDir::new().unwrap();
+    async fn test_tool_run_lint_on_rust_project() -> anyhow::Result<()> {
+        let tmp = tempfile::TempDir::new()?;
         tokio::fs::write(
             tmp.path().join("Cargo.toml"),
             r#"
@@ -156,13 +156,10 @@ version = "0.1.0"
 edition = "2021"
 "#,
         )
-        .await
-        .unwrap();
+        .await?;
         let src = tmp.path().join("src");
-        tokio::fs::create_dir_all(&src).await.unwrap();
-        tokio::fs::write(src.join("lib.rs"), "pub fn ok() -> i32 { 42 }")
-            .await
-            .unwrap();
+        tokio::fs::create_dir_all(&src).await?;
+        tokio::fs::write(src.join("lib.rs"), "pub fn ok() -> i32 { 42 }").await?;
 
         let result = tool_run_lint(tmp.path(), &serde_json::json!({})).await;
         assert!(
@@ -170,5 +167,6 @@ edition = "2021"
             "should produce a valid response: {}",
             result
         );
+        Ok(())
     }
 }
