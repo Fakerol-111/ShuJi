@@ -120,7 +120,7 @@ fn estimate_dual_cost(
             (usd, cny)
         }
         None => {
-            let usd = legacy_deepseek_cost(prompt, completion, model);
+            let usd = fallback_deepseek_cost(prompt, completion, model);
             let cny = usd.map(|v| v * 7.25);
             (usd, cny)
         }
@@ -128,7 +128,7 @@ fn estimate_dual_cost(
 }
 
 /// Fallback cost for DeepSeek when pricing config is not available.
-fn legacy_deepseek_cost(prompt: u64, completion: u64, model: &str) -> Option<f64> {
+fn fallback_deepseek_cost(prompt: u64, completion: u64, model: &str) -> Option<f64> {
     let model_lower = model.to_lowercase();
     let (input_pm, output_pm) = if model_lower.contains("reasoner") || model_lower.contains("r1") {
         (0.55, 2.19)

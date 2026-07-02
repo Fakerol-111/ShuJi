@@ -10,7 +10,7 @@ pub use types::{DocumentLineRun, EvidenceRef, ImpactAnalysis, ImpactNode, LineEd
 
 use context::LineContext;
 
-/// Build the document line for a pipeline run (or the active/legacy run when `run_id` is None).
+/// Build the document line for a pipeline run (or the unassigned run when `run_id` is None).
 pub async fn build_document_line(
     working_dir: &std::path::Path,
     run_id: Option<&str>,

@@ -81,10 +81,14 @@ pub struct PlaybookContext {
 pub fn playbook_for_event(event: &str, _context: &PlaybookContext) -> Option<String> {
     watchdog_event_from_str(event)
         .map(|e| playbook_for_watchdog(e).to_string())
-        .or_else(|| legacy_playbook_for_event(event))
+        .or_else(|| compat_playbook_for_event(event))
 }
 
-fn legacy_playbook_for_event(event: &str) -> Option<String> {
+/// Compatibility aliases for legacy event names.
+/// Remove individual arms once callers emit the canonical WatchdogEvent names.
+/// Target removal: after all scenario JSON files and pipeline code emit
+/// `contract-mismatch`, `lint-fail`, `pipeline-deadlock` directly.
+fn compat_playbook_for_event(event: &str) -> Option<String> {
     match event {
         "test-red" | "test_stalemate" => {
             Some(include_str!("../../assets/playbooks/test-red.md").to_string())

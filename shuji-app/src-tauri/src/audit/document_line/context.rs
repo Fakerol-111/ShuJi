@@ -8,6 +8,11 @@ use super::scan::{
     extract_detail_field, is_doc_stale, load_validation, scan_all_docs, scan_diff_files,
 };
 use super::types::{DocInfo, EvidenceRef, ImpactAnalysis, ImpactNode, LineEdge, LineNode};
+
+/// Run ID for documents not assigned to any active pipeline run.
+/// Formerly named "legacy"; renamed for clarity. Old events with
+/// `"legacy"` are mapped to this value on load.
+pub(crate) const UNASSIGNED_RUN_ID: &str = "unassigned";
 use crate::audit::log::{read_all, AuditEntry};
 use crate::audit::ref_index::{build_ref_index, RefIndex};
 use crate::pipeline::PlanRuntime;
@@ -52,7 +57,7 @@ impl LineContext {
         for doc_id in docs.keys() {
             doc_to_run
                 .entry(doc_id.clone())
-                .or_insert_with(|| "legacy".to_string());
+                .or_insert_with(|| UNASSIGNED_RUN_ID.to_string());
         }
 
         Self {
@@ -77,13 +82,13 @@ impl LineContext {
         if let Some(ref rt) = self.pipeline {
             return rt.plan.plan_id.clone();
         }
-        "legacy".into()
+        UNASSIGNED_RUN_ID.into()
     }
 
     pub(super) fn run_ids(&self) -> Vec<String> {
         let mut ids: HashSet<String> = self.doc_to_run.values().cloned().collect();
         if ids.is_empty() {
-            ids.insert("legacy".into());
+            ids.insert(UNASSIGNED_RUN_ID.into());
         }
         let mut v: Vec<_> = ids.into_iter().collect();
         v.sort();
@@ -101,7 +106,7 @@ impl LineContext {
         self.doc_to_run
             .get(doc_id)
             .map(|r| r == run_id)
-            .unwrap_or(run_id == "legacy")
+            .unwrap_or(run_id == UNASSIGNED_RUN_ID)
     }
 
     pub(super) fn build_run(
@@ -123,7 +128,7 @@ impl LineContext {
 
         // Pipeline steps + produced artifacts
         if let Some(ref rt) = self.pipeline {
-            if rt.plan.plan_id == run_id || run_id == "legacy" {
+            if rt.plan.plan_id == run_id || run_id == UNASSIGNED_RUN_ID {
                 for step in &rt.plan.steps {
                     let step_node = format!("step:{}", step.step_id);
                     let status = rt

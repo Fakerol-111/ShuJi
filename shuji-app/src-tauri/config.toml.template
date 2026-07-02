@@ -35,8 +35,8 @@ write_heavy = 120
 document_heavy = 100
 
 [context_compaction]
-# 触发压缩的字符数阈值（约 80k tokens）
-char_threshold = 160000
+# 触发压缩的 token 阈值（旧字段 char_threshold 仍兼容）
+token_threshold = 160000
 
 # 压缩后保留的最近消息数
 keep_recent_count = 6
