@@ -219,19 +219,6 @@ pub fn get_active_roles() -> Vec<String> {
     crate::round_metrics::get_active_roles()
 }
 
-// ── Workflow state ─────────────────────────────────────────
-
-#[tauri::command]
-pub async fn get_workflow_state(
-    state: State<'_, AppState>,
-) -> Result<Option<crate::workflow::WorkflowState>, String> {
-    let dir = {
-        let d = state.current_dir.lock().await;
-        d.clone().ok_or("没有打开的项目")?
-    };
-    Ok(crate::workflow::WorkflowState::load_from(Path::new(&dir)).await)
-}
-
 #[tauri::command]
 pub async fn get_workflow_graph(
     state: State<'_, AppState>,

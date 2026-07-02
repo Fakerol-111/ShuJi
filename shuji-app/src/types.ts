@@ -311,16 +311,6 @@ export interface ReasoningConfig {
   roles: Record<string, RoleReasoningConfig>;
 }
 
-// ── Workflow state (runtime) ──────────────────────────────
-
-export interface WorkflowState {
-  profile_id: string;
-  governance: string;
-  execution_chain_id: string;
-  current_stage: string;
-  artifacts: Record<string, string>;
-}
-
 export interface AuditEntry {
   ts: string;
   event: string;

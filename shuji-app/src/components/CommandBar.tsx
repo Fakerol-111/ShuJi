@@ -126,7 +126,6 @@ export default function CommandBar({
   const lang = i18n.language?.startsWith('en') ? 'en' : 'zh';
   const { latestLogs, latestHumanSummary, roundMetrics: eventRoundMetrics } = useDeptEvents();
   const {
-    wfState,
     timelineNodes,
     recentDocIds,
     nextAction,
@@ -158,34 +157,6 @@ export default function CommandBar({
       setExpanded(true);
     }
   }, [pipeline]);
-
-  const profileLabels: Record<string, string> = {
-    greenfield_standard: t('workflow.newFeature'),
-    brownfield_optimize: t('workflow.existingOptimization'),
-    bugfix: t('workflow.bugfix'),
-    demo: t('workflow.quickPrototype'),
-  };
-
-  function profileLabel(id: string): string {
-    return profileLabels[id] || id;
-  }
-
-  const stageLabels: Record<string, string> = {
-    init: t('workflow.initialize'),
-    expand: t('workflow.expandRequirements'),
-    design: t('workflow.design'),
-    analysis: t('workflow.codeAnalysis'),
-    plan: t('workflow.planning'),
-    review: t('workflow.review'),
-    approval: t('workflow.approval'),
-    execution: t('workflow.execution'),
-    summary: t('workflow.summary'),
-    done: t('workflow.complete'),
-  };
-
-  function stageLabel(id: string): string {
-    return stageLabels[id] || id;
-  }
 
   useEffect(() => {
     const load = () => {
@@ -254,21 +225,6 @@ export default function CommandBar({
   return (
     <div className="shrink-0 bg-surface-elevated border-b border-fold command-bar-glow">
       <div className="h-10 flex items-center gap-3 px-4 min-w-0">
-        {wfState && (
-          <span className="text-caption px-1.5 py-[1px] rounded-full border border-ink-300 text-ink-500 bg-ink-100/30 whitespace-nowrap shrink-0">
-            {profileLabel(wfState.profile_id)}
-          </span>
-        )}
-
-        {wfState && wfState.current_stage !== 'init' && (
-          <>
-            <span className="text-caption text-ink-300 shrink-0">·</span>
-            <span className="text-caption px-1.5 py-[1px] rounded-full border border-gold/30 text-gold-700 bg-gold/8 whitespace-nowrap shrink-0">
-              {stageLabel(wfState.current_stage)}
-            </span>
-          </>
-        )}
-
         {pipelineProgress && (
           <span
             className="text-caption text-ink-500 truncate max-w-[120px] shrink-0 hidden sm:inline"
@@ -419,29 +375,6 @@ export default function CommandBar({
                     )}
                   </button>
                 ))}
-              </div>
-            </div>
-          )}
-
-          {wfState && (
-            <div className="pt-1 border-t border-fold/30">
-              <div className="flex items-center gap-2 mb-1 text-ink-500 font-medium">
-                <span>{t('commandBar.workflow')}</span>
-                <span className="text-caption px-1 rounded bg-ink-100/50">
-                  {wfState.governance}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="px-2 py-0.5 rounded-full border border-ink-200 text-ink-500">
-                  {profileLabel(wfState.profile_id)}
-                </span>
-                <span className="text-ink-300">→</span>
-                <span className="px-2 py-0.5 rounded-full border border-gold/30 text-gold-700 bg-gold/8">
-                  {stageLabel(wfState.current_stage)}
-                </span>
-                <span className="text-ink-300 mx-1 text-caption">
-                  ({wfState.execution_chain_id})
-                </span>
               </div>
             </div>
           )}

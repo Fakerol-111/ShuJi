@@ -1,9 +1,0 @@
-id: refactor
-version: 1
-label: "架构重构"
-cabinet_skill: workflow_refactor
-execution_chain: greenfield_full
-gates:
-  forbid_tools: []
-  forbid_route_to: []
-escalations: []
