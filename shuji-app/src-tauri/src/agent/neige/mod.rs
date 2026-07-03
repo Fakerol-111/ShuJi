@@ -8,11 +8,11 @@ pub(crate) mod skill;
 
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput};
 use crate::agent::util::strip_skill_tag;
-use crate::api::client::{AnthropicClient, ToolDefinition};
+use crate::api::client::{LlmClient, ToolDefinition};
 use crate::models::role::Role;
 
 pub struct NeigeAgent {
-    client: AnthropicClient,
+    client: LlmClient,
     model: String,
     cancel: Arc<AtomicBool>,
     cancel_map: Option<crate::CancelMap>,
@@ -21,7 +21,7 @@ pub struct NeigeAgent {
 
 impl NeigeAgent {
     pub fn new(
-        client: AnthropicClient,
+        client: LlmClient,
         model: &str,
         cancel: Arc<AtomicBool>,
         cancel_map: Option<crate::CancelMap>,

@@ -3,17 +3,17 @@ use std::sync::Arc;
 
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput};
 use crate::agent::util::{extract_skill, strip_skill_tag};
-use crate::api::client::{AnthropicClient, ToolDefinition};
+use crate::api::client::{LlmClient, ToolDefinition};
 use crate::models::role::Role;
 
 pub struct ZhongshulingAgent {
-    client: AnthropicClient,
+    client: LlmClient,
     model: String,
     cancel: Arc<AtomicBool>,
 }
 
 impl ZhongshulingAgent {
-    pub fn new(client: AnthropicClient, model: &str, cancel: Arc<AtomicBool>) -> Self {
+    pub fn new(client: LlmClient, model: &str, cancel: Arc<AtomicBool>) -> Self {
         Self {
             client,
             model: model.to_string(),

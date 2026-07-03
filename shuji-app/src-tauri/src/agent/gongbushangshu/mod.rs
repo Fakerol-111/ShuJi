@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput, LoopDecision};
-use crate::api::client::{AnthropicClient, ToolDefinition};
+use crate::api::client::{LlmClient, ToolDefinition};
 use crate::models::role::Role;
 use crate::util::lock::lock_or_recover;
 
@@ -53,7 +53,7 @@ impl PlanState {
 // ── Agent ────────────────────────────────────────────────────
 
 pub struct GongbuShangshuAgent {
-    client: AnthropicClient,
+    client: LlmClient,
     model: String,
     cancel: Arc<AtomicBool>,
     plan: Arc<Mutex<Option<PlanState>>>,
@@ -61,7 +61,7 @@ pub struct GongbuShangshuAgent {
 }
 
 impl GongbuShangshuAgent {
-    pub fn new(client: AnthropicClient, model: &str, cancel: Arc<AtomicBool>) -> Self {
+    pub fn new(client: LlmClient, model: &str, cancel: Arc<AtomicBool>) -> Self {
         Self {
             client,
             model: model.to_string(),
@@ -426,7 +426,7 @@ mod tests {
     #[test]
     fn gongbu_stopped_does_not_continue_batch() {
         let cancel = Arc::new(AtomicBool::new(false));
-        let client = AnthropicClient::new(String::new(), String::new());
+        let client = LlmClient::new(String::new(), String::new());
         let agent = GongbuShangshuAgent::new(client, "test", cancel);
 
         {

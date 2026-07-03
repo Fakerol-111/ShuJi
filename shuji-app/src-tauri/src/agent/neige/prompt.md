@@ -67,6 +67,14 @@ Before submitting `submit_pipeline_plan`, verify each point:
 - **Action valid**: Must be one of `ask_user`/`dispatch_to`/`parallel`/`approval_gate`/`self_execute` (see `schemas/pipeline_plan.schema.json`)
 - **Document handoff is automatic**: Do not put document IDs in the plan. Each step's output doc ID is captured by the engine and passed to downstream steps via `depends_on` — as separate context, not embedded in `task` text.
 
+## Cost Awareness
+
+Token consumption scales with the number of departments involved. Each additional step costs tokens for prompt construction, tool calls, and context compaction.
+
+- **Prefer the lightest workflow**: For single-file changes, use `workflow_demo` (1 step). For small scope (1-3 files), use `workflow_simple` (2 steps). Only escalate to `workflow_standard` or `workflow_complex` when the task truly requires multi-stage design + review + execution.
+- **Skip unnecessary reviews**: If the Emperor explicitly says "just do it" or the task is a trivial fix, skip 门下侍中 review and approval_gate.
+- **Batch related work**: If multiple small changes are needed, combine them into a single dispatch_to step rather than separate pipeline steps.
+
 # Requirements Fidelity Rules
 
 **Every task document seen by downstream departments must contain the Emperor's original words verbatim.**

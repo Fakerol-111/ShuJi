@@ -2,17 +2,17 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput};
-use crate::api::client::{AnthropicClient, ToolDefinition};
+use crate::api::client::{LlmClient, ToolDefinition};
 use crate::models::role::Role;
 
 pub struct XingbuShangshuAgent {
-    client: AnthropicClient,
+    client: LlmClient,
     model: String,
     cancel: Arc<AtomicBool>,
 }
 
 impl XingbuShangshuAgent {
-    pub fn new(client: AnthropicClient, model: &str, cancel: Arc<AtomicBool>) -> Self {
+    pub fn new(client: LlmClient, model: &str, cancel: Arc<AtomicBool>) -> Self {
         Self {
             client,
             model: model.to_string(),

@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::api::client::AnthropicClient;
+use crate::api::client::LlmClient;
 use crate::api::session::PersistedContext;
 use crate::api::token_count;
 use crate::config::CompactThresholds;
@@ -33,7 +33,7 @@ pub fn messages_to_text(msgs: &[serde_json::Value]) -> String {
 /// Returns the new context_messages with old messages replaced by a summary,
 /// or None if no compression was needed.
 async fn maybe_compact_with_prompt(
-    client: &AnthropicClient,
+    client: &LlmClient,
     model: &str,
     context_messages: &[serde_json::Value],
     thresholds: &CompactThresholds,
@@ -123,7 +123,7 @@ async fn maybe_compact_with_prompt(
 
 /// Check whether compaction is needed and, if so, run it (内阁 version).
 pub async fn maybe_compact(
-    client: &AnthropicClient,
+    client: &LlmClient,
     model: &str,
     context_messages: &[serde_json::Value],
     thresholds: &CompactThresholds,
@@ -141,7 +141,7 @@ pub async fn maybe_compact(
 
 /// Check whether compaction is needed and, if so, run it (department version).
 pub async fn maybe_compact_dept(
-    client: &AnthropicClient,
+    client: &LlmClient,
     model: &str,
     context_messages: &[serde_json::Value],
     thresholds: &CompactThresholds,
@@ -161,7 +161,7 @@ pub async fn maybe_compact_dept(
 /// Compresses old context_messages into a summary message prepended to context.
 /// Returns `true` if any compaction was performed.
 pub async fn run_compaction_loop(
-    client: &AnthropicClient,
+    client: &LlmClient,
     model: &str,
     ctx: &mut PersistedContext,
     thresholds: &CompactThresholds,
@@ -187,7 +187,7 @@ pub async fn run_compaction_loop(
 /// High-level helper: compact context, trim tool results, and save.
 /// Intended for use in agent mid-run compact handlers and reload paths.
 pub async fn compact_and_save(
-    client: &AnthropicClient,
+    client: &LlmClient,
     model: &str,
     ctx: &mut PersistedContext,
     thresholds: &CompactThresholds,
