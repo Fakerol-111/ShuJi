@@ -52,7 +52,7 @@
           },
           "on_failure": {
             "type": "string",
-            "enum": ["wake_cabinet", "skip", "abort"]
+            "enum": ["wake_cabinet", "skip", "abort", "retry_fix"]
           },
           "retry": {
             "type": "integer",

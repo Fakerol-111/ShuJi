@@ -79,6 +79,13 @@ same_tool_warning_count = 3
 # 触发警告的连续读取次数（无写入）
 read_without_write_warning = 5
 
+# run_tests 连续失败多少次后注入 playbook 干预
+# 调试复杂测试时可能需要更多尝试，可以适当调高
+test_stalemate_threshold = 5
+
+# delete->create 循环多少次后触发警告
+delete_create_warning_count = 2
+
 [approval]
 # manual=等待用户朱批, auto=自动放行
 mode = "manual"

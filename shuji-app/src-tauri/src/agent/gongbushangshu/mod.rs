@@ -79,6 +79,7 @@ impl GongbuShangshuAgent {
         tools.push(crate::tool::documents::create_document_tool_def());
         tools.push(crate::tool::documents::append_document_tool_def());
         tools.extend(crate::tool::registry::run_tests_tool());
+        tools.extend(crate::tool::registry::check_compile_tool());
         tools.push(crate::tool::lint_ops::run_lint_tool_def());
         tools.push(crate::tool::registry::submit_batch_plan_tool());
         tools.push(crate::tool::registry::complete_task_tool());

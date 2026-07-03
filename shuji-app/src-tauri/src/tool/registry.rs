@@ -88,6 +88,11 @@ pub fn run_tests_tool() -> Vec<ToolDefinition> {
     vec![crate::tool::run_tests_tool_def()]
 }
 
+/// Check compilation tool (Gongbushangshu/Xingbushangshu — compile check without running tests).
+pub fn check_compile_tool() -> Vec<ToolDefinition> {
+    vec![crate::tool::command_ops::check_compile_tool_def()]
+}
+
 /// Log summarization tool.
 pub fn summarize_logs_tool() -> Vec<ToolDefinition> {
     vec![crate::tool::summarize_logs_tool_def()]

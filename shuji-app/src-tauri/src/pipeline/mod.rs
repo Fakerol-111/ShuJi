@@ -70,6 +70,9 @@ pub struct PlanRuntime {
     /// step_id → primary artifact doc_id
     pub artifacts: HashMap<String, String>,
     pub error_log: Vec<String>,
+    /// step_id → fix attempt count (for `retry_fix` on_failure strategy)
+    #[serde(default)]
+    pub fix_attempts: HashMap<String, u32>,
 }
 
 impl PlanRuntime {
@@ -84,6 +87,7 @@ impl PlanRuntime {
             current_step: None,
             artifacts: HashMap::new(),
             error_log: Vec::new(),
+            fix_attempts: HashMap::new(),
         }
     }
 
@@ -364,5 +368,57 @@ mod tests {
         let loaded = PlanRuntime::load_from(tmp.path()).await.unwrap();
         assert_eq!(loaded.plan.plan_id, "p1");
         assert_eq!(loaded.step_status.get("s1"), Some(&StepStatus::InProgress));
+    }
+
+    #[test]
+    fn test_fix_attempts_default_empty() {
+        let plan = PipelinePlan {
+            plan_id: "test".into(),
+            summary: "test".into(),
+            estimated_complexity: "low".into(),
+            created: "2026-01-01".into(),
+            steps: vec![PlanStep {
+                step_id: "s1".into(),
+                description: "step1".into(),
+                action: "dispatch_to".into(),
+                action_params: serde_json::json!({"target": "工部", "task": "do"}),
+                depends_on: vec![],
+                require_approval: false,
+                on_failure: "retry_fix".into(),
+                retry: 1,
+            }],
+        };
+        let rt = PlanRuntime::new(plan);
+        assert!(rt.fix_attempts.is_empty());
+    }
+
+    #[test]
+    fn test_retry_fix_valid_on_failure() {
+        let json = r#"{
+            "plan_id": "plan-retry-fix",
+            "summary": "test retry_fix",
+            "steps": [
+                {
+                    "step_id": "s1",
+                    "description": "code",
+                    "action": "dispatch_to",
+                    "action_params": {"target": "工部", "task": "implement"}
+                },
+                {
+                    "step_id": "s2",
+                    "description": "test",
+                    "action": "dispatch_to",
+                    "action_params": {"target": "刑部", "task": "test", "fix_target": "s1"},
+                    "depends_on": ["s1"],
+                    "on_failure": "retry_fix"
+                }
+            ]
+        }"#;
+        let result = super::schema::validate_plan_json(json);
+        assert!(
+            result.is_ok(),
+            "retry_fix should be valid: {:?}",
+            result.err()
+        );
     }
 }

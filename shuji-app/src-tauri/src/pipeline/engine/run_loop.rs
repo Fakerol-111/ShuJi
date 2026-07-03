@@ -202,6 +202,79 @@ impl PipelineEngine {
                         self.set_status(&next, StepStatus::Skipped);
                         continue;
                     }
+                    "retry_fix" => {
+                        // ── Auto-fix loop: reset fix_target step to Pending ──
+                        // When a test step (e.g. 刑部) fails, send the failure
+                        // back to the coding step (e.g. 工部) for fixing.
+                        // Max 3 fix cycles to prevent infinite loops.
+                        const MAX_FIX_ATTEMPTS: u32 = 3;
+                        let attempts = self.runtime.fix_attempts.entry(next.clone()).or_insert(0);
+                        *attempts += 1;
+
+                        if *attempts > MAX_FIX_ATTEMPTS {
+                            log_console!(
+                                "[pipeline] step {} retry_fix exhausted ({} attempts), waking cabinet",
+                                next,
+                                *attempts
+                            );
+                            self.runtime.error_log.push(format!(
+                                "{}: retry_fix exhausted after {} attempts: {}",
+                                next, *attempts, last_reason
+                            ));
+                            self.save().await.ok();
+                            self.finalize_metrics("failed").await;
+                            return PipelineResult::StepFailed {
+                                step_id: next,
+                                reason: format!(
+                                    "retry_fix exhausted after {} attempts: {}",
+                                    MAX_FIX_ATTEMPTS, last_reason
+                                ),
+                                runtime: self.runtime.clone(),
+                            };
+                        }
+
+                        // Find fix_target in action_params
+                        let fix_target_step_id = step
+                            .action_params
+                            .get("fix_target")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+
+                        if let Some(ref fix_step_id) = fix_target_step_id {
+                            log_console!(
+                                "[pipeline] step {} failed (attempt {}/{}), resetting fix_target step {} for repair",
+                                next,
+                                *attempts,
+                                MAX_FIX_ATTEMPTS,
+                                fix_step_id
+                            );
+                            // Reset the fix target step to Pending so it re-executes
+                            self.set_status(fix_step_id, StepStatus::Pending);
+                            // Reset current step to Pending — it will re-run after fix_target completes
+                            self.set_status(&next, StepStatus::Pending);
+                            // Inject failure context into the fix_target step's task
+                            // by appending to error_log (the handler reads this)
+                            self.runtime.error_log.push(format!(
+                                "FIX_REQUEST for step {}: {} needs repair. Failure reason: {}",
+                                fix_step_id, next, last_reason
+                            ));
+                            self.save().await.ok();
+                            continue; // loop back to find_executable_step
+                        } else {
+                            // No fix_target specified — fall through to wake_cabinet
+                            log_console!(
+                                "[pipeline] step {} retry_fix has no fix_target in action_params, falling back to wake_cabinet",
+                                next
+                            );
+                            self.save().await.ok();
+                            self.finalize_metrics("failed").await;
+                            return PipelineResult::StepFailed {
+                                step_id: next,
+                                reason: last_reason,
+                                runtime: self.runtime.clone(),
+                            };
+                        }
+                    }
                     _ => {
                         self.save().await.ok();
                         self.finalize_metrics("failed").await;
