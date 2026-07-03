@@ -217,7 +217,7 @@ pub struct ActorContext {
     pub dept_step_tx: Option<DeptStepSender>,
 
     /// 计划更新 → 前端工部进度卡片
-    pub plan_tx: mpsc::Sender<serde_json::Value>,
+    pub plan_tx: mpsc::Sender<crate::events::PlanUpdate>,
 
     /// 里程碑事件 → 持久化 + 项目状态更新
     pub milestone_tx: mpsc::Sender<String>,

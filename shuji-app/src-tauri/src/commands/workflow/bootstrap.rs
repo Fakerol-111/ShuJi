@@ -13,7 +13,7 @@ use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 use tokio::sync::mpsc;
 
 use crate::actor::ActorSystem;
@@ -219,12 +219,12 @@ pub async fn start_actor_system(
     runtime_config: Arc<crate::config::RuntimeConfig>,
     project_dir: &Path,
     working_dir: &Path,
-    cancel: Arc<AtomicBool>,                  // 全局取消标志（所有部门共享）
-    emperor_tx: mpsc::Sender<ChatMessage>,    // 聊天消息 → 前端
-    dept_log_tx: mpsc::Sender<DeptLogEntry>,  // 部门日志 → 前端
-    dept_step_tx: Option<DeptStepSender>,     // 步骤事件 → 前端（可选）
-    plan_tx: mpsc::Sender<serde_json::Value>, // 计划更新 → 前端
-    milestone_tx: mpsc::Sender<String>,       // 里程碑事件 → 持久化
+    cancel: Arc<AtomicBool>,                 // 全局取消标志（所有部门共享）
+    emperor_tx: mpsc::Sender<ChatMessage>,   // 聊天消息 → 前端
+    dept_log_tx: mpsc::Sender<DeptLogEntry>, // 部门日志 → 前端
+    dept_step_tx: Option<DeptStepSender>,    // 步骤事件 → 前端（可选）
+    plan_tx: mpsc::Sender<crate::events::PlanUpdate>, // 计划更新 → 前端
+    milestone_tx: mpsc::Sender<String>,      // 里程碑事件 → 持久化
     pipeline_supervisor: Arc<crate::pipeline::supervisor::PipelineSupervisor>,
     actor_system_slot: Arc<tokio::sync::Mutex<Option<ActorSystem>>>,
 ) -> ActorSystem {
@@ -462,7 +462,7 @@ pub fn spawn_event_forwarders(
     mut emperor_rx: mpsc::Receiver<ChatMessage>,
     mut dept_log_rx: mpsc::Receiver<DeptLogEntry>,
     mut dept_step_rx: mpsc::UnboundedReceiver<DeptStepEntry>,
-    mut plan_rx: mpsc::Receiver<serde_json::Value>,
+    mut plan_rx: mpsc::Receiver<crate::events::PlanUpdate>,
     mut milestone_rx: mpsc::Receiver<String>,
 ) {
     let chat_hist = state.chat_history.clone();
@@ -472,7 +472,7 @@ pub fn spawn_event_forwarders(
 
     tokio::spawn(async move {
         while let Some(msg) = emperor_rx.recv().await {
-            let _ = app_handle.emit("chat-message", &msg);
+            let _ = crate::events::emit_chat_message(&app_handle, &msg);
             let mut hist = chat_hist.lock().await;
             hist.push(msg.clone());
             let log_dir = std::path::Path::new(&chat_persist_dir).join(".shuji");
@@ -496,7 +496,7 @@ pub fn spawn_event_forwarders(
     let dept_log_dir = working_dir.to_string();
     tokio::spawn(async move {
         while let Some(entry) = dept_log_rx.recv().await {
-            let _ = app2.emit("dept-log", &entry);
+            let _ = crate::events::emit_dept_log(&app2, &entry);
             let mut hist = dept_log_hist.lock().await;
             hist.push(entry.clone());
             let log_dir = std::path::Path::new(&dept_log_dir).join(".shuji");
@@ -519,14 +519,14 @@ pub fn spawn_event_forwarders(
     let app_step = app.clone();
     tokio::spawn(async move {
         while let Some(entry) = dept_step_rx.recv().await {
-            let _ = app_step.emit("dept-step", &entry);
+            let _ = crate::events::emit_dept_step(&app_step, &entry);
         }
     });
 
     let app_plan = app.clone();
     tokio::spawn(async move {
-        while let Some(plan_json) = plan_rx.recv().await {
-            let _ = app_plan.emit("plan-update", &plan_json);
+        while let Some(plan_update) = plan_rx.recv().await {
+            let _ = crate::events::emit_plan_update(&app_plan, &plan_update);
         }
     });
 
@@ -547,7 +547,7 @@ pub fn spawn_event_forwarders(
                 let _ = s.save_project(project).await;
             }
             if let Some(ref project) = snapshot {
-                let _ = app3.emit("project-update", project);
+                let _ = crate::events::emit_project_update(&app3, project);
             }
             let event = "milestone";
             let role = milestone.split('|').next().unwrap_or("").trim();
@@ -574,7 +574,7 @@ pub async fn ensure_actor_system(
     let (emperor_tx, emperor_rx) = mpsc::channel::<ChatMessage>(200);
     let (dept_log_tx, dept_log_rx) = mpsc::channel::<DeptLogEntry>(500);
     let (dept_step_tx, dept_step_rx) = mpsc::unbounded_channel::<DeptStepEntry>();
-    let (plan_tx, plan_rx) = mpsc::channel::<serde_json::Value>(50);
+    let (plan_tx, plan_rx) = mpsc::channel::<crate::events::PlanUpdate>(50);
     let (milestone_tx, milestone_rx) = mpsc::channel::<String>(50);
 
     spawn_event_forwarders(

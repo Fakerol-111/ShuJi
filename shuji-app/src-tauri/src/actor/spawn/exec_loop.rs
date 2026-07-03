@@ -232,14 +232,13 @@ fn check_plan_iteration_limit(
     max_exec_iterations: u32,
 ) -> bool {
     // 检测 plan 的 current batch 是否变化
-    if let Ok(plan_json) = serde_json::from_str::<serde_json::Value>(&ctx.agent.plan_display()) {
-        if let Some(cur) = plan_json["current"].as_u64() {
-            let cur_usize = cur as usize;
-            if *last_plan_current != Some(cur_usize) {
-                // batch 变了 — 有进展，重置计数器
-                *exec_iterations = 1;
-                *last_plan_current = Some(cur_usize);
-            }
+    if let Some(plan_update) =
+        crate::events::PlanUpdate::from_json_string(&ctx.agent.plan_display())
+    {
+        if *last_plan_current != Some(plan_update.current) {
+            // batch 变了 — 有进展，重置计数器
+            *exec_iterations = 1;
+            *last_plan_current = Some(plan_update.current);
         }
     }
 

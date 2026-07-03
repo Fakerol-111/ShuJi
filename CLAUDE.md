@@ -47,7 +47,7 @@ cargo test --test editor_test            # External editor integration
 cargo test --test learning_test          # Role learning store
 cargo test --test send_message_routing_test  # Message routing logic
 cargo test --test scenario_replay_test   # Scenario replay framework
-cargo test --test deprecated_guard_test  # Deprecated data compatibility checks
+cargo test --test pattern_guard_test  # Deprecated pattern regression guard
 cargo test --test expand_requirements_test  # Real LLM call (requires .env, skipped by default)
 
 # Frontend
@@ -63,7 +63,7 @@ cargo clippy --all-targets
 
 **Total**: ~730 tests (Rust unit 213 + integration 288 + frontend Vitest 230 cases, per `scripts/count_tests.sh`).
 
-**Pre-commit**: `cargo fmt --check && cargo clippy --all-targets && cargo test --lib && cargo test --tests -- --skip expand_requirements --test-threads=1 && cargo test --test deprecated_guard_test`
+**Pre-commit**: `cargo fmt --check && cargo clippy --all-targets && cargo test --lib && cargo test --tests -- --skip expand_requirements --test-threads=1 && cargo test --test pattern_guard_test`
 
 ## Environment Setup
 

@@ -230,17 +230,17 @@ fn emit_plan_progress(ctx: &ActorContext, role_name: &str, ctx_msg: &str) {
 
     // 结构化 plan 进度 → 前端工部进度卡片
     let plan_json = ctx.agent.plan_display();
-    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&plan_json) {
-        let _ = ctx.plan_tx.try_send(value);
+    if let Some(plan_update) = crate::events::PlanUpdate::from_json_string(&plan_json) {
+        let _ = ctx.plan_tx.try_send(plan_update);
     }
 }
 
 /// 发送最终 plan 更新给前端（exec 循环结束后）。
 fn push_final_plan_update(ctx: &ActorContext) {
     let plan_json = ctx.agent.plan_display();
-    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&plan_json) {
-        if !value.is_null() {
-            let _ = ctx.plan_tx.try_send(value);
+    if let Some(plan_update) = crate::events::PlanUpdate::from_json_string(&plan_json) {
+        if !plan_update.complete || !plan_update.batches.is_empty() {
+            let _ = ctx.plan_tx.try_send(plan_update);
         }
     }
 }

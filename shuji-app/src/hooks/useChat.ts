@@ -1,15 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { listen } from '@tauri-apps/api/event';
 import {
   sendMessage,
   discussStream,
   cancelDiscuss as cancelDiscussApi,
   getChatHistory,
+  onChatMessage,
+  onChatDelta,
+  onChatComplete,
+  onPlanUpdate,
 } from '../api';
 import { formatError, swallowError } from '../utils/error';
 import { initialCabinetMessage, mergeMessages } from '../utils/chat';
-import type { ChatDeltaEvent, ChatMessage, PlanInfo } from '../types';
+import type { ChatMessage, PlanInfo } from '../types';
 
 export type Tab = 'decision' | 'discuss';
 
@@ -43,9 +46,7 @@ export function useChat(initialMessages: ChatMessage[]) {
 
   // Listen for real-time chat messages
   useEffect(() => {
-    const unlisten = listen<ChatMessage>('chat-message', (event) =>
-      setMessages((prev) => [...prev, event.payload])
-    );
+    const unlisten = onChatMessage((msg) => setMessages((prev) => [...prev, msg]));
     return () => {
       unlisten.then((f) => f());
     };
@@ -53,8 +54,8 @@ export function useChat(initialMessages: ChatMessage[]) {
 
   // Listen for discuss stream deltas and completion
   useEffect(() => {
-    const unlistenDelta = listen<ChatDeltaEvent>('chat-delta', (event) => {
-      const { message_id, delta } = event.payload;
+    const unlistenDelta = onChatDelta((event) => {
+      const { message_id, delta } = event;
       if (discussCancelRef.current) return;
       setDiscussMsgs((prev) =>
         prev.map((m) =>
@@ -63,21 +64,21 @@ export function useChat(initialMessages: ChatMessage[]) {
       );
     });
 
-    const unlistenComplete = listen<ChatMessage>('chat-complete', (event) => {
-      const msg = { ...event.payload, streaming: false };
-      if (discussCancelRef.current && streamingIdRef.current === msg.id) {
+    const unlistenComplete = onChatComplete((msg) => {
+      const payload = { ...msg, streaming: false };
+      if (discussCancelRef.current && streamingIdRef.current === payload.id) {
         return;
       }
       setDiscussMsgs((prev) => {
-        const idx = prev.findIndex((m) => m.id === msg.id);
+        const idx = prev.findIndex((m) => m.id === payload.id);
         if (idx >= 0) {
           const next = [...prev];
-          next[idx] = msg;
+          next[idx] = payload;
           return next;
         }
-        return [...prev, msg];
+        return [...prev, payload];
       });
-      if (streamingIdRef.current === msg.id) {
+      if (streamingIdRef.current === payload.id) {
         streamingIdRef.current = null;
         setDiscussing(false);
         discussCancelRef.current = false;
@@ -92,9 +93,7 @@ export function useChat(initialMessages: ChatMessage[]) {
 
   // Listen for plan updates
   useEffect(() => {
-    const unlisten = listen<PlanInfo>('plan-update', (event) =>
-      setPlanInfo(event.payload.complete ? null : event.payload)
-    );
+    const unlisten = onPlanUpdate((payload) => setPlanInfo(payload.complete ? null : payload));
     return () => {
       unlisten.then((f) => f());
     };

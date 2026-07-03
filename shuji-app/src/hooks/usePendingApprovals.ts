@@ -4,8 +4,7 @@
  * Also loads pipeline runtime for approval gate context (step / next step).
  */
 import { useState, useEffect, useMemo } from 'react';
-import { listen } from '@tauri-apps/api/event';
-import { getPendingApprovals, getPipelineStatus } from '../api';
+import { getPendingApprovals, getPipelineStatus, onProjectChanged } from '../api';
 import type { PipelineRuntime } from '../types';
 import { computeApprovalGateContext, type ApprovalGateContext } from '../utils/approvalGate';
 
@@ -28,7 +27,7 @@ export function usePendingApprovals(project: { working_dir?: string } | null) {
         .catch(() => setPipeline(null));
     };
     fetch();
-    const unlisten = listen('project-update', () => {
+    const unlisten = onProjectChanged(() => {
       fetch();
     });
     return () => {

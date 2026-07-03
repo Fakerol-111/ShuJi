@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { listen } from '@tauri-apps/api/event';
 import { classifyError, swallowError } from '../utils/error';
 import { useDeptEvents } from '../hooks/useDeptEvents';
 import { useProject } from '../hooks/useProject';
@@ -22,7 +21,7 @@ import WorkflowGraphView from '../components/WorkflowGraph';
 import { Button } from '../components/ui/Button';
 import { docIdToPath } from '../utils/docPath';
 import { approveDocumentAndResume } from '../utils/approveDocument';
-import { cancelProcessing } from '../api';
+import { cancelProcessing, onProjectUpdate } from '../api';
 import type { Project } from '../types';
 import {
   loadUiPrefs,
@@ -152,8 +151,8 @@ export default function ProjectDashboard() {
   }, [messages, discussMsgs]);
 
   useEffect(() => {
-    const unlisten = listen('project-update', (event: { payload: Project }) => {
-      setProject(event.payload);
+    const unlisten = onProjectUpdate((payload: Project) => {
+      setProject(payload);
     });
     return () => {
       unlisten.then((f) => f());

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { listen } from '@tauri-apps/api/event';
-import { readShujiDoc, getDocumentDiff } from '../../api';
+import { readShujiDoc, getDocumentDiff, onDocsMayHaveChanged } from '../../api';
 import { formatError } from '../../utils/error';
 import { parseFrontmatter, docIdFromPath } from './frontmatter';
 import { loadAuditDiff } from './diff';
@@ -141,12 +140,10 @@ export function useDocPreviewData(projectDir: string, docPath: string, initialTa
   }, [content, isShujiMarkdown, parsed.meta?.id, loadDiff, loadLineage]);
 
   useEffect(() => {
-    const events = ['chat-message', 'dept-log', 'plan-update'];
-    const refresh = () => {
+    const unlistens = onDocsMayHaveChanged(() => {
       loadDoc(true);
       loadDiff(true, parsed.meta?.id);
-    };
-    const unlistens = events.map((evt) => listen(evt, refresh));
+    });
     return () => {
       unlistens.forEach((p) => p.then((f) => f()));
     };

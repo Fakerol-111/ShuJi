@@ -10,7 +10,7 @@ use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 
 use crate::actor::{ActorMessage, ActorSystem, FastMessage};
 use crate::agent::neige::NeigeAgent;
@@ -315,9 +315,9 @@ pub async fn discuss_stream(
                     return Ok(());
                 }
                 full_text.push_str(delta);
-                let _ = app_for_delta.emit(
-                    "chat-delta",
-                    ChatDeltaEvent {
+                let _ = crate::events::emit_chat_delta(
+                    &app_for_delta,
+                    &ChatDeltaEvent {
                         message_id: delta_id.clone(),
                         role: "内阁".into(),
                         delta: delta.to_string(),
@@ -340,8 +340,7 @@ pub async fn discuss_stream(
 
     let mut msg = ChatMessage::new("内阁", &final_content);
     msg.id = message_id;
-    app.emit("chat-complete", &msg)
-        .map_err(|e| friendly_error(e.to_string()))?;
+    crate::events::emit_chat_complete(&app, &msg).map_err(|e| friendly_error(e.to_string()))?;
 
     Ok(())
 }

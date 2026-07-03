@@ -484,3 +484,23 @@ export async function openInExternalEditor(
 export async function openProjectInExternalEditor(projectDir: string): Promise<void> {
   return invoke('open_project_in_external_editor', { projectDir });
 }
+
+// ── Tauri event boundary (typed subscriptions) ────────────────────
+// All frontend code must import Tauri event functions from here,
+// NOT from `@tauri-apps/api/event` directly.
+export {
+  TAURI_EVENTS,
+  onChatMessage,
+  onChatDelta,
+  onChatComplete,
+  onDeptLog,
+  onDeptStep,
+  onPlanUpdate,
+  onProjectUpdate,
+  onUsageUpdate,
+  onRuntimeUpdate,
+  onProjectChanged,
+  onUsageChanged,
+  onDocsMayHaveChanged,
+} from './api/events';
+export type { UnlistenFn } from './api/events';

@@ -27,6 +27,30 @@ vi.mock('../api', () => ({
   discussStream: (...args: unknown[]) => mockDiscussStream(...args),
   getChatHistory: (...args: unknown[]) => mockGetChatHistory(...args),
   cancelDiscuss: (...args: unknown[]) => mockCancelDiscuss(...args),
+  onChatMessage: (handler: unknown) => {
+    mockListeners['chat-message'] = handler as (payload: unknown) => void;
+    return Promise.resolve(() => {
+      delete mockListeners['chat-message'];
+    });
+  },
+  onChatDelta: (handler: unknown) => {
+    mockListeners['chat-delta'] = handler as (payload: unknown) => void;
+    return Promise.resolve(() => {
+      delete mockListeners['chat-delta'];
+    });
+  },
+  onChatComplete: (handler: unknown) => {
+    mockListeners['chat-complete'] = handler as (payload: unknown) => void;
+    return Promise.resolve(() => {
+      delete mockListeners['chat-complete'];
+    });
+  },
+  onPlanUpdate: (handler: unknown) => {
+    mockListeners['plan-update'] = handler as (payload: unknown) => void;
+    return Promise.resolve(() => {
+      delete mockListeners['plan-update'];
+    });
+  },
 }));
 
 function createMsg(text: string, ts: string, role: RoleName = '内阁'): ChatMessage {

@@ -1,8 +1,12 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { listen } from '@tauri-apps/api/event';
-import { listShujiTree, openInExternalEditor, openProjectInExternalEditor } from '../api';
+import {
+  listShujiTree,
+  openInExternalEditor,
+  openProjectInExternalEditor,
+  onDocsMayHaveChanged,
+} from '../api';
 import { formatError } from '../utils/error';
 import { useEditorConfig } from '../hooks/useEditorConfig';
 import { openInEditorLabel, openProjectInEditorLabel } from '../utils/editorLabel';
@@ -106,8 +110,7 @@ export default function DocTree({ projectDir, selectedDoc, onSelect }: DocTreePr
   }, [loadTree]);
 
   useEffect(() => {
-    const events = ['chat-message', 'dept-log', 'plan-update'];
-    const unlistens = events.map((evt) => listen(evt, debouncedRefresh));
+    const unlistens = onDocsMayHaveChanged(debouncedRefresh);
     return () => {
       unlistens.forEach((p) => p.then((f) => f()));
     };

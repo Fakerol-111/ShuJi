@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { listen } from '@tauri-apps/api/event';
-import { getActiveRoles } from '../api';
+import { onDeptLog, onDeptStep, onRuntimeUpdate, getActiveRoles } from '../api';
 import type { DeptLogEntry, DeptStepEntry, RoundMetrics, RuntimeUpdate } from '../types';
 import {
   normalizeDeptLabel,
@@ -67,8 +66,8 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    const unlisten = listen<DeptLogEntry>('dept-log', (event) => {
-      const entry = normalizeDeptLogEntry(event.payload);
+    const unlisten = onDeptLog((event) => {
+      const entry = normalizeDeptLogEntry(event);
       setLatestLogs((prev) => {
         const next = new Map(prev);
         next.set(entry.dept, entry);
@@ -86,9 +85,9 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     const setup = async () => {
-      const unlisten = await listen<DeptStepEntry>('dept-step', (event) => {
+      const unlisten = await onDeptStep((event) => {
         if (cancelled) return;
-        const entry = normalizeDeptStepEntry(event.payload);
+        const entry = normalizeDeptStepEntry(event);
         setDeptSteps((prev) => {
           const next = new Map(prev);
           const dept = entry.dept;
@@ -121,8 +120,8 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const unlisten = listen<RuntimeUpdate>('runtime-update', (event) => {
-      applyRuntimeUpdate(event.payload, setActiveDepts, setRoundMetrics);
+    const unlisten = onRuntimeUpdate((payload) => {
+      applyRuntimeUpdate(payload, setActiveDepts, setRoundMetrics);
     });
     return () => {
       unlisten.then((f) => f());
