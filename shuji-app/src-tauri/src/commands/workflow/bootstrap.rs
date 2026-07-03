@@ -28,7 +28,7 @@ use crate::agent::r#trait::Agent;
 use crate::agent::shangshuling::ShangshulingAgent;
 use crate::agent::xingbushangshu::XingbuShangshuAgent;
 use crate::agent::zhongshuling::ZhongshulingAgent;
-use crate::api::client::AnthropicClient;
+use crate::api::client::LlmClient;
 use crate::commands::project::AppState;
 use crate::commands::settings::AppConfig;
 use crate::models::chat::ChatMessage;
@@ -98,7 +98,7 @@ fn build_agents(
     agents.insert(
         Role::MenxiaShizhong,
         Box::new(MenxiaShizhongAgent::new(
-            AnthropicClient::new(menxiashizhong_ep.api_key, menxiashizhong_ep.api_url),
+            LlmClient::new(menxiashizhong_ep.api_key, menxiashizhong_ep.api_url),
             &menxiashizhong_ep.model,
             cancel.clone(),
         )),
@@ -109,7 +109,7 @@ fn build_agents(
     agents.insert(
         Role::Zhongshuling,
         Box::new(ZhongshulingAgent::new(
-            AnthropicClient::new(zhongshuling_ep.api_key, zhongshuling_ep.api_url),
+            LlmClient::new(zhongshuling_ep.api_key, zhongshuling_ep.api_url),
             &zhongshuling_ep.model,
             cancel.clone(),
         )),
@@ -122,7 +122,7 @@ fn build_agents(
     agents.insert(
         Role::LiBuShangshu,
         Box::new(LibuShangshuAgent::new(
-            AnthropicClient::new(libushangshu_ep.api_key, libushangshu_ep.api_url),
+            LlmClient::new(libushangshu_ep.api_key, libushangshu_ep.api_url),
             &libushangshu_ep.model,
             cancel.clone(),
         )),
@@ -133,7 +133,7 @@ fn build_agents(
     agents.insert(
         Role::BingbuShangshu,
         Box::new(BingbuShangshuAgent::new(
-            AnthropicClient::new(bingbushangshu_ep.api_key, bingbushangshu_ep.api_url),
+            LlmClient::new(bingbushangshu_ep.api_key, bingbushangshu_ep.api_url),
             &bingbushangshu_ep.model,
             cancel.clone(),
         )),
@@ -144,7 +144,7 @@ fn build_agents(
     agents.insert(
         Role::GongbuShangshu,
         Box::new(GongbuShangshuAgent::new(
-            AnthropicClient::new(gongbushangshu_ep.api_key, gongbushangshu_ep.api_url),
+            LlmClient::new(gongbushangshu_ep.api_key, gongbushangshu_ep.api_url),
             &gongbushangshu_ep.model,
             cancel.clone(),
         )),
@@ -155,7 +155,7 @@ fn build_agents(
     agents.insert(
         Role::XingbuShangshu,
         Box::new(XingbuShangshuAgent::new(
-            AnthropicClient::new(xingbushangshu_ep.api_key, xingbushangshu_ep.api_url),
+            LlmClient::new(xingbushangshu_ep.api_key, xingbushangshu_ep.api_url),
             &xingbushangshu_ep.model,
             cancel.clone(),
         )),
@@ -166,7 +166,7 @@ fn build_agents(
     agents.insert(
         Role::LiBuRShangshu,
         Box::new(LibuRShangshuAgent::new(
-            AnthropicClient::new(liburshangshu_ep.api_key, liburshangshu_ep.api_url),
+            LlmClient::new(liburshangshu_ep.api_key, liburshangshu_ep.api_url),
             &liburshangshu_ep.model,
             cancel.clone(),
         )),
@@ -178,7 +178,7 @@ fn build_agents(
     agents.insert(
         Role::Neige,
         Box::new(NeigeAgent::new(
-            AnthropicClient::new(neige_ep.api_key, neige_ep.api_url),
+            LlmClient::new(neige_ep.api_key, neige_ep.api_url),
             &neige_ep.model,
             cancel,           // 全局取消标志
             Some(cancel_map), // 各角色取消标志（内阁可用 cancel_agent 工具操作）
@@ -316,7 +316,7 @@ pub async fn start_actor_system(
         senders.insert(Role::Shangshuling, shangshuling_tx);
 
         let agent = Box::new(ShangshulingAgent::new(
-            AnthropicClient::new(shangshuling_ep.api_key, shangshuling_ep.api_url),
+            LlmClient::new(shangshuling_ep.api_key, shangshuling_ep.api_url),
             &shangshuling_ep.model,
             cancel.clone(),
             shangshuling_peers, // 尚书令持有所有同级/下级部门的 sender

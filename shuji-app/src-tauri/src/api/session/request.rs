@@ -9,7 +9,7 @@
 
 use std::time::Duration;
 
-use crate::api::client::AnthropicClient;
+use crate::api::client::LlmClient;
 use crate::api::reasoning;
 
 impl super::Session {
@@ -46,7 +46,7 @@ impl super::Session {
 
     /// Send API request, returning the response JSON on success.
     pub(super) async fn api_request(
-        client: &AnthropicClient,
+        client: &LlmClient,
         body: &serde_json::Value,
         timeout: Duration,
     ) -> anyhow::Result<serde_json::Value> {

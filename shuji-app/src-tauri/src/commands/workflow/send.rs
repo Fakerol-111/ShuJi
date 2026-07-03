@@ -15,7 +15,7 @@ use tauri::{AppHandle, State};
 use crate::actor::{ActorMessage, ActorSystem, FastMessage};
 use crate::agent::neige::NeigeAgent;
 use crate::agent::r#trait::{Agent, AgentInput};
-use crate::api::client::AnthropicClient;
+use crate::api::client::LlmClient;
 use crate::api::control::RouteMsgType;
 use crate::api::stream::ChatDeltaEvent;
 use crate::commands::friendly_error::friendly_error;
@@ -171,7 +171,7 @@ pub async fn discuss_with_cabinet(
     };
 
     let ep = config.for_role("neige");
-    let client = AnthropicClient::new(ep.api_key, ep.api_url);
+    let client = LlmClient::new(ep.api_key, ep.api_url);
     let neige = NeigeAgent::new(
         client,
         &ep.model,
@@ -291,7 +291,7 @@ pub async fn discuss_stream(
     let (system_prompt, user_content) = build_discuss_stream_context(&state, &message).await?;
 
     let ep = config.for_role("neige");
-    let client = AnthropicClient::new(ep.api_key, ep.api_url);
+    let client = LlmClient::new(ep.api_key, ep.api_url);
     let cancel = state.discuss_cancel.clone();
     let msgs = vec![Message::user(&user_content)];
 

@@ -71,7 +71,7 @@ impl super::Session {
     // These return references to the Arc'd / owned fields without exposing
     // them publicly.
 
-    pub(super) fn client(&self) -> &std::sync::Arc<crate::api::client::AnthropicClient> {
+    pub(super) fn client(&self) -> &std::sync::Arc<crate::api::client::LlmClient> {
         &self.client
     }
 

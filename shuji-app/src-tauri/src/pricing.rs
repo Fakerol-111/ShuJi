@@ -128,6 +128,31 @@ impl PricingConfig {
         let output_cost = completion as f64 / 1_000_000.0 * prices.output_per_m;
         Some(input_cost + output_cost)
     }
+
+    /// Suggest a cheaper model for the given role based on current model and usage.
+    ///
+    /// Returns `(model_pattern, display_name, estimated_savings_pct)` if a cheaper
+    /// alternative exists, or `None` if the current model is already the cheapest.
+    pub fn suggest_downgrade(&self, current_model: &str) -> Option<(&str, &str, f64)> {
+        let current_entry = self.find_entry(current_model)?;
+        let current_cost = current_entry.usd.input_per_m + current_entry.usd.output_per_m;
+
+        let mut best: Option<(&PricingEntry, f64)> = None;
+        for entry in &self.entries {
+            let entry_cost = entry.usd.input_per_m + entry.usd.output_per_m;
+            if entry_cost < current_cost {
+                let savings = (1.0 - entry_cost / current_cost) * 100.0;
+                match best {
+                    None => best = Some((entry, savings)),
+                    Some((_, best_savings)) if savings > best_savings => {
+                        best = Some((entry, savings));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        best.map(|(entry, savings)| (&entry.model_pattern[..], &entry.display_name[..], savings))
+    }
 }
 
 // ── Global cache ──

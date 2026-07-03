@@ -9,12 +9,12 @@ pub async fn check_api_connection(
     api_url: String,
     model: String,
 ) -> Result<String, String> {
-    use crate::api::client::AnthropicClient;
+    use crate::api::client::LlmClient;
     use crate::models::message::Message;
     use std::time::Duration;
     use tokio::time::timeout;
 
-    let client = AnthropicClient::new(api_key, api_url.clone());
+    let client = LlmClient::new(api_key, api_url.clone());
 
     let msg = Message::user("ping");
     let result = timeout(

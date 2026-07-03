@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::actor::ActorMessage;
-use crate::api::client::AnthropicClient;
+use crate::api::client::LlmClient;
 use crate::models::role::Role;
 use crate::workflow::WorkflowGraph;
 use tokio::sync::mpsc;
@@ -44,7 +44,7 @@ pub use shangshuling_special::*;
 pub struct ToolContext {
     pub working_dir: PathBuf,
     pub cancel_map: Option<crate::CancelMap>,
-    pub client: Option<Arc<AnthropicClient>>,
+    pub client: Option<Arc<LlmClient>>,
     pub model: Option<String>,
     /// Fast mailbox senders for interrupting departments immediately.
     pub fast_txs: Option<crate::FastTxMap>,

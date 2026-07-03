@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::agent::r#trait::AgentInput;
-use crate::api::client::AnthropicClient;
+use crate::api::client::LlmClient;
 use crate::api::compact::compact_and_save;
 use crate::api::control::{CheckpointFn, CompactFn};
 use crate::api::session::{PersistedContext, Session, SessionSnapshot};
@@ -21,7 +21,7 @@ use crate::models::message::Message;
 /// The running session is NOT modified — the compressed context is
 /// loaded automatically on the next execute() call.
 pub fn build_compact_handler(
-    client: AnthropicClient,
+    client: LlmClient,
     model: String,
     working_dir: PathBuf,
     role_name: String,
@@ -84,7 +84,7 @@ pub async fn load_role_soul(working_dir: &Path, role_name: &str) -> String {
 /// false if no persisted context exists (fresh start).
 #[allow(clippy::too_many_arguments)]
 pub async fn load_and_compact_context(
-    client: &AnthropicClient,
+    client: &LlmClient,
     model: &str,
     working_dir: &Path,
     role_name: &str,

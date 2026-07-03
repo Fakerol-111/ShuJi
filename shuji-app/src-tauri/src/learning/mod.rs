@@ -1,6 +1,7 @@
 pub mod config;
 pub mod entry;
 pub mod extract;
+pub mod helpers;
 pub mod inject;
 pub mod role;
 pub mod store;

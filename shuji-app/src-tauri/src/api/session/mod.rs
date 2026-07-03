@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::api::client::AnthropicClient;
+use crate::api::client::LlmClient;
 use crate::api::client::ToolDefinition;
 use crate::api::reasoning::{self, LlmProvider};
 use crate::config::{ReasoningPhase, ResolvedReasoningPolicy, RuntimeConfig};
@@ -30,7 +30,7 @@ pub struct Session {
     messages: Vec<serde_json::Value>,
     model: String,
     tools: Vec<ToolDefinition>,
-    client: Arc<AnthropicClient>,
+    client: Arc<LlmClient>,
     max_tokens: Option<u32>,
     role: String,
     /// Whether this session has write_file tool (affects retry token floor).
@@ -57,7 +57,7 @@ impl Session {
         history: &[crate::models::message::Message],
         model: &str,
         tools: &[ToolDefinition],
-        client: &Arc<AnthropicClient>,
+        client: &Arc<LlmClient>,
         config: &Arc<RuntimeConfig>,
     ) -> Self {
         let mut messages: Vec<serde_json::Value> = Vec::new();

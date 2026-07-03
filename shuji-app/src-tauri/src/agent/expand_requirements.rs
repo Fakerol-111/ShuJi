@@ -6,7 +6,7 @@ use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use crate::api::client::AnthropicClient;
+use crate::api::client::LlmClient;
 use crate::models::message::Message;
 
 const PROMPT: &str = include_str!("expand_requirements_prompt.md");
@@ -18,7 +18,7 @@ const PROMPT: &str = include_str!("expand_requirements_prompt.md");
 pub async fn run(
     task_id: &str,
     working_dir: &Path,
-    client: &Arc<AnthropicClient>,
+    client: &Arc<LlmClient>,
     model: &str,
     cancel: &AtomicBool,
 ) -> Result<String, String> {

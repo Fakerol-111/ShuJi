@@ -3,7 +3,7 @@ use std::path::Path;
 
 use tauri::State;
 
-use crate::api::client::AnthropicClient;
+use crate::api::client::LlmClient;
 use crate::api::session::PersistedContext;
 use crate::commands::friendly_error::friendly_error;
 use crate::commands::project::AppState;
@@ -185,7 +185,7 @@ async fn compact_impl(
         )));
     }
 
-    let client = AnthropicClient::new(ep.api_key, ep.api_url);
+    let client = LlmClient::new(ep.api_key, ep.api_url);
     let model = ep.model;
     let is_cabinet = role == "neige";
 

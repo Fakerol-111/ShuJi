@@ -31,6 +31,9 @@ pub struct RuntimeConfig {
     pub esaa: EsaaConfig,
     #[serde(default)]
     pub approval: ApprovalConfig,
+    /// 成本预算配置（per-run token/cost 限制）
+    #[serde(default)]
+    pub budget: BudgetConfig,
 }
 
 /// API 相关配置
@@ -180,6 +183,58 @@ impl Default for EsaaConfig {
             enabled: default_esaa_enabled(),
             full_intent_log: default_esaa_full_intent_log(),
         }
+    }
+}
+
+// ── Budget config ──────────────────────────────────────────────
+
+/// 成本预算配置：限制单次 pipeline 运行的 token 用量和估算成本。
+///
+/// 当累计用量超过 `warn_threshold` 时发出告警事件；
+/// 超过 `hard_limit` 时 AgentController 自动停止执行。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BudgetConfig {
+    /// 单次运行 token 硬上限（0 = 不限制）
+    #[serde(default)]
+    pub per_run_token_limit: u64,
+    /// 单次运行估算成本（USD）硬上限（0 = 不限制）
+    #[serde(default)]
+    pub per_run_cost_limit: f64,
+    /// 告警阈值百分比（如 80 表示达到限额 80% 时告警）
+    #[serde(default = "default_budget_warn_pct")]
+    pub warn_threshold_pct: u8,
+}
+
+fn default_budget_warn_pct() -> u8 {
+    80
+}
+
+impl Default for BudgetConfig {
+    fn default() -> Self {
+        Self {
+            per_run_token_limit: 0,
+            per_run_cost_limit: 0.0,
+            warn_threshold_pct: default_budget_warn_pct(),
+        }
+    }
+}
+
+impl BudgetConfig {
+    /// Check whether a given cumulative token count exceeds the hard limit.
+    pub fn is_token_over_limit(&self, cumulative_tokens: u64) -> bool {
+        self.per_run_token_limit > 0 && cumulative_tokens >= self.per_run_token_limit
+    }
+
+    /// Check whether a given cumulative cost (USD) exceeds the hard limit.
+    pub fn is_cost_over_limit(&self, cumulative_cost: f64) -> bool {
+        self.per_run_cost_limit > 0.0 && cumulative_cost >= self.per_run_cost_limit
+    }
+
+    /// Check whether a given cumulative usage has crossed the warn threshold.
+    pub fn is_token_over_warn(&self, cumulative_tokens: u64) -> bool {
+        self.per_run_token_limit > 0
+            && cumulative_tokens
+                >= (self.per_run_token_limit as f64 * self.warn_threshold_pct as f64 / 100.0) as u64
     }
 }
 

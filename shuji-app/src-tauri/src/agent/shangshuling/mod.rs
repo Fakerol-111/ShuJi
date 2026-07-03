@@ -6,12 +6,12 @@ use tokio::sync::mpsc;
 
 use crate::actor::ActorMessage;
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput};
-use crate::api::client::{AnthropicClient, ToolDefinition};
+use crate::api::client::{LlmClient, ToolDefinition};
 use crate::models::role::Role;
 use crate::workflow::WorkflowGraph;
 
 pub struct ShangshulingAgent {
-    client: AnthropicClient,
+    client: LlmClient,
     model: String,
     cancel: Arc<AtomicBool>,
     peers: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,
@@ -21,7 +21,7 @@ pub struct ShangshulingAgent {
 
 impl ShangshulingAgent {
     pub fn new(
-        client: AnthropicClient,
+        client: LlmClient,
         model: &str,
         cancel: Arc<AtomicBool>,
         peers: HashMap<Role, mpsc::UnboundedSender<ActorMessage>>,

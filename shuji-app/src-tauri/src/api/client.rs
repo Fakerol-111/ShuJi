@@ -36,10 +36,10 @@ fn map_reqwest_error(url: &str, e: reqwest::Error) -> anyhow::Error {
 /// Auto-detects format based on the URL (anthropic.com → Anthropic, else → OpenAI).
 ///
 /// For tool-use agents, agents create a `Session` (from `session` module)
-/// that owns an `Arc<AnthropicClient>` reference.  Text-only calls use
+/// that owns an `Arc<LlmClient>` reference.  Text-only calls use
 /// `send_message()` directly.
 #[derive(Clone)]
-pub struct AnthropicClient {
+pub struct LlmClient {
     pub(crate) api_key: String,
     pub(crate) api_url: String,
     pub(crate) http_client: reqwest::Client,
@@ -66,7 +66,7 @@ pub struct ToolFunction {
     pub parameters: serde_json::Value,
 }
 
-impl AnthropicClient {
+impl LlmClient {
     pub fn new(api_key: String, api_url: String) -> Self {
         Self {
             api_key,
@@ -416,3 +416,7 @@ impl AnthropicClient {
             .await
     }
 }
+
+/// Deprecated alias for backward compatibility. Use `LlmClient` instead.
+#[deprecated(note = "Use `LlmClient` instead. This alias will be removed in a future release.")]
+pub type AnthropicClient = LlmClient;
