@@ -27,6 +27,7 @@ function mockDeptEvents(
     recentHumanActions: [],
     latestHumanSummary: null,
     roundMetrics: null,
+    runtimeState: null,
     clearLogs: vi.fn(),
     ...overrides,
   };

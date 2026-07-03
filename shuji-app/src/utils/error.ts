@@ -40,6 +40,23 @@ export function formatError(e: unknown): string {
 /** Error severity categories for UI treatment */
 export type ErrorSeverity = 'critical' | 'warning' | 'info';
 
+/**
+ * Layered error with separate user-facing and developer-facing detail.
+ */
+export interface LayeredError {
+  userMessage: string;
+  developerDetail: string;
+}
+
+/** Build a LayeredError from a raw error for UI display. */
+export function buildLayeredError(e: unknown): LayeredError {
+  const raw = typeof e === 'string' ? e : e instanceof Error ? e.message : String(e);
+  return {
+    userMessage: formatError(e),
+    developerDetail: raw,
+  };
+}
+
 /** Determine severity based on error content */
 export function classifyError(e: unknown): ErrorSeverity {
   const raw = typeof e === 'string' ? e : e instanceof Error ? e.message : String(e);

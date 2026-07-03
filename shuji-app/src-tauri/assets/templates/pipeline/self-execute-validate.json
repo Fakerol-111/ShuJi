@@ -1,0 +1,21 @@
+{
+  "plan_id": "plan-example-005",
+  "summary": "Self-execute validate_delivery",
+  "estimated_complexity": "low",
+  "created": "2026-07-03T12:00:00",
+  "steps": [
+    {
+      "step_id": "v1",
+      "description": "Run validate_delivery",
+      "action": "self_execute",
+      "action_params": {
+        "handler": "validate_delivery",
+        "run_lint": true,
+        "ctrt_id": null
+      },
+      "depends_on": [],
+      "on_failure": "wake_cabinet",
+      "retry": 1
+    }
+  ]
+}

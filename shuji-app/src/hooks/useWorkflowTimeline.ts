@@ -5,6 +5,7 @@ import type {
   DeptLogEntry,
   PlanInfo,
   PipelineRuntime,
+  RuntimeState,
   RuntimeUpdate,
   WorkflowGraph,
 } from '../types';
@@ -31,6 +32,7 @@ export function useWorkflowTimeline({
   const { t } = useTranslation();
   const [graph, setGraph] = useState<WorkflowGraph | null>(null);
   const [pipeline, setPipeline] = useState<PipelineRuntime | null>(null);
+  const [runtimeState, setRuntimeState] = useState<RuntimeState | null>(null);
 
   useEffect(() => {
     const load = () => {
@@ -50,6 +52,9 @@ export function useWorkflowTimeline({
         getPipelineStatus()
           .then(setPipeline)
           .catch(() => setPipeline(null));
+      }
+      if (payload.runtime_state) {
+        setRuntimeState(payload.runtime_state);
       }
     });
     return () => {
@@ -71,14 +76,14 @@ export function useWorkflowTimeline({
 
   const nextAction = useMemo(
     () =>
-      computeNextAction(activeDepts, pendingApprovals, pipeline, {
+      computeNextAction(activeDepts, pendingApprovals, pipeline, runtimeState, {
         waitingApproval: (docId) => t('timeline.waitingApproval', { doc: docId }),
         waitingInput: (stepId) => t('timeline.waitingInput', { step: stepId }),
         waitingApprovalGate: t('timeline.waitingApprovalGate'),
         deptWorking: (dept) => t('timeline.deptWorking', { dept }),
         pipelineRunning: t('timeline.pipelineRunning'),
       }),
-    [activeDepts, pendingApprovals, pipeline, t]
+    [activeDepts, pendingApprovals, pipeline, runtimeState, t]
   );
 
   const pipelineProgress = useMemo(() => {

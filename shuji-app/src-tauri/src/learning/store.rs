@@ -742,7 +742,7 @@ async fn atomic_write(path: &Path, content: &str) -> Result<(), String> {
             .and_then(|n| n.to_str())
             .unwrap_or("tmp")
             .to_string();
-        name.push_str(".");
+        name.push('.');
         name.push_str(&uuid::Uuid::new_v4().to_string());
         name.push_str(".tmp");
         path.with_file_name(name)

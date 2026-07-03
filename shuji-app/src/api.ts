@@ -239,6 +239,10 @@ export async function createDemoProject(): Promise<Project> {
   return invoke('create_demo_project');
 }
 
+export async function resetDemoProject(): Promise<Project> {
+  return invoke('reset_demo_project');
+}
+
 export async function runMockWorkflow(
   projectDir: string,
   scenario: string
@@ -276,6 +280,10 @@ export async function getWorkflowGraph(): Promise<WorkflowGraph | null> {
 
 export async function getPipelineStatus(): Promise<PipelineRuntime | null> {
   return invoke('get_pipeline_status');
+}
+
+export async function exportDiagnostics(): Promise<string> {
+  return invoke('export_diagnostics');
 }
 
 export async function listWorkflowArchives(): Promise<[string, string][]> {

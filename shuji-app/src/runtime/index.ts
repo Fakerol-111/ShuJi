@@ -1,2 +1,3 @@
 export { RuntimeProvider, useRuntime } from './RuntimeProvider';
-export type { RuntimeContextValue, RuntimeState } from './runtimeTypes';
+export type { RuntimeContextValue, RuntimeStateData } from './runtimeTypes';
+export type { RuntimeState } from '../types';

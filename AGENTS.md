@@ -109,9 +109,9 @@ PipelineEngine 调度的 9 部门(actor)
 
 ### 9 Actors + 2 Sub-agents
 
-Each actor is a `tokio::spawn` with an `mpsc::UnboundedReceiver` mailbox. Communication is document-centric: pipeline steps and internal `route_to` pass document IDs; receivers read documents to understand the task.
+Each actor is a `tokio::spawn` with an `mpsc::UnboundedReceiver` mailbox. Communication is document-centric: pipeline steps and internal `dispatch_to` pass document IDs; receivers read documents to understand the task.
 
-- **内阁 (Neige)**: Orchestrator. Submits `submit_pipeline_plan` to PipelineEngine (route_tool removed). Has soul system, runtime skill creation, pause/resume and must-approve gating (3 retries → auto-approve).
+- **内阁 (Neige)**: Orchestrator. Submits `submit_pipeline_plan` to PipelineEngine (`dispatch_to` replaces legacy `route_to`). Has soul system, runtime skill creation, pause/resume and must-approve gating (3 retries → auto-approve).
 - **中书令 (Zhongshuling)**: Designer. Self-managed 7 skills for design/analysis/diagnosis. Skills have `## 输出块` structured output templates.
 - **门下侍中 (Menxiashizhong)**: Reviewer. 2 skills: `review_overall`, `review_phase`. Skills have `## 输出块` structured output templates.
 - **尚书令 (Shangshuling)**: Executor. Loads execution chain from `WorkflowState`, routes to specific ministries.
@@ -163,7 +163,7 @@ All agents compose tool lists via `tool::registry` group functions — factory f
 | `execute_command_tool()` / `run_tests_tool()` | Shell commands | General / 工部 only |
 | `reauth_tool()` | request_reauth | 尚书令 |
 
-Tools return structured `ToolOutput { ok, operation, path, message, error_code }`. Dispatch via `execute_named_tool()` in `dispatch.rs` with gating logic (append_document/route_to checks approval status before proceeding), cache invalidation, and result size truncation.
+Tools return structured `ToolOutput { ok, operation, path, message, error_code }`. Dispatch via `execute_named_tool()` in `dispatch.rs` with gating logic (append_document/dispatch_to checks approval status before proceeding), cache invalidation, and result size truncation.
 
 ### Skill System (内阁: 12 skills)
 
@@ -264,11 +264,11 @@ Event-driven audit with multiple subsystems (`audit/mod.rs`):
 
 ### Document-Centric Architecture
 
-Departments communicate via documents under `.shuji/`, not via route_to semantics. YAML frontmatter format with auto-assigned IDs.
+Departments communicate via documents under `.shuji/`, not via `dispatch_to` semantics. YAML frontmatter format with auto-assigned IDs.
 
 **Document types**: dsgn, plan, pdsg, ddtl, revw, task, ctrt, rprt, anls, reqs, precepts.
 
-**朱批 (Approval System)**: plan/revw documents require emperor approval before downstream can proceed. `route_to` and `append_document` hard-gate against unapproved documents. `set_document_status` tool (approved/rejected) requires `emperor_note`.
+**朱批 (Approval System)**: plan/revw documents require emperor approval before downstream can proceed. `dispatch_to` and `append_document` hard-gate against unapproved documents. `set_document_status` tool (approved/rejected) requires `emperor_note`.
 
 ### Cancel Mechanism
 
@@ -316,7 +316,7 @@ Compaction:       context_config.json (per-role) > department built-ins > global
 - **Soul message drift**: `PersistedContext` stores `soul_prompt` separately, preserving position between base and skill prompts across save/load
 - **Windows CRLF**: `log_console!` uses `write!` with explicit `\n` instead of `eprintln!`
 - **Skill loop dedup**: Break loop if 内阁 outputs same `<skill>` tag twice
-- **Self-routing prevention**: Base prompt forbids `route_to(to="内阁")`
+- **Self-routing prevention**: Base prompt forbids `dispatch_to(to="内阁")`
 - **Must-approve re-prompt guard**: 3 consecutive tries without `<options>` → auto-approve and continue
 - **Compaction concurrency safety**: Active role tracking + `compacting_roles` in AppState prevents double-clicks; atomic tmp+rename writes
 - **Path security** (`resolve_scoped_path`): Rejects absolute paths and `..` traversal. Falls back to ancestor-walking + canonicalize. Catches symlink escape attacks.

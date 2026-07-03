@@ -70,7 +70,7 @@ pub fn looks_like_doc_id(s: &str) -> bool {
         && suffix.chars().all(|c| c.is_ascii_alphanumeric())
 }
 
-/// Split legacy route_to: subject field carries doc id, optional inline carries task text.
+/// Split legacy dispatch_to: subject field carries doc id, optional inline carries task text.
 pub fn split_route_task_and_doc_ids(subject: &str, inline: Option<&str>) -> (String, Vec<String>) {
     if looks_like_doc_id(subject) {
         let task = inline

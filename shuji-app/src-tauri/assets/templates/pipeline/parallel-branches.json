@@ -1,0 +1,35 @@
+{
+  "plan_id": "plan-example-004",
+  "summary": "Parallel branches followed by validation",
+  "estimated_complexity": "medium",
+  "created": "2026-07-03T12:00:00",
+  "steps": [
+    {
+      "step_id": "code",
+      "description": "Code the feature module A",
+      "action": "dispatch_to",
+      "action_params": { "target": "工部", "task": "Implement module A" },
+      "depends_on": [],
+      "on_failure": "wake_cabinet",
+      "retry": 1
+    },
+    {
+      "step_id": "test",
+      "description": "Write tests for the feature",
+      "action": "dispatch_to",
+      "action_params": { "target": "兵部", "task": "Write unit and integration tests" },
+      "depends_on": [],
+      "on_failure": "wake_cabinet",
+      "retry": 1
+    },
+    {
+      "step_id": "validate",
+      "description": "Run all tests and validate delivery",
+      "action": "self_execute",
+      "action_params": { "handler": "validate_delivery" },
+      "depends_on": ["code", "test"],
+      "on_failure": "wake_cabinet",
+      "retry": 1
+    }
+  ]
+}

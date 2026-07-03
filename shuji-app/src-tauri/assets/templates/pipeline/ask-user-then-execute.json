@@ -1,0 +1,26 @@
+{
+  "plan_id": "plan-example-003",
+  "summary": "Ask user before planning",
+  "estimated_complexity": "low",
+  "created": "2026-07-03T12:00:00",
+  "steps": [
+    {
+      "step_id": "clarify",
+      "description": "Ask user for requirements clarification",
+      "action": "ask_user",
+      "action_params": { "question": "Please specify the file name and expected behavior." },
+      "depends_on": [],
+      "on_failure": "wake_cabinet",
+      "retry": 0
+    },
+    {
+      "step_id": "implement",
+      "description": "Implement based on user input",
+      "action": "dispatch_to",
+      "action_params": { "target": "尚书令", "task": "Implement based on user requirements" },
+      "depends_on": ["clarify"],
+      "on_failure": "wake_cabinet",
+      "retry": 1
+    }
+  ]
+}

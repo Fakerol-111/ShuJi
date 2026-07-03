@@ -1,7 +1,13 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { onDeptLog, onDeptStep, onRuntimeUpdate, getActiveRoles } from '../api';
-import type { DeptLogEntry, DeptStepEntry, RoundMetrics, RuntimeUpdate } from '../types';
+import type {
+  DeptLogEntry,
+  DeptStepEntry,
+  RoundMetrics,
+  RuntimeUpdate,
+  RuntimeState,
+} from '../types';
 import {
   normalizeDeptLabel,
   normalizeDeptLogEntry,
@@ -27,6 +33,7 @@ const RuntimeContext = createContext<RuntimeContextValue>({
   recentHumanActions: [],
   latestHumanSummary: null,
   roundMetrics: null,
+  runtimeState: null,
   clearLogs: () => {},
 });
 
@@ -37,12 +44,14 @@ export function useRuntime() {
 function applyRuntimeUpdate(
   update: RuntimeUpdate,
   setActiveDepts: (roles: string[]) => void,
-  setRoundMetrics: (m: RoundMetrics | null) => void
+  setRoundMetrics: (m: RoundMetrics | null) => void,
+  setRuntimeState: (s: RuntimeState | null) => void
 ) {
   setActiveDepts(update.active_roles.map((r) => normalizeDeptLabel(r)));
   if (update.round_metrics) {
     setRoundMetrics(update.round_metrics);
   }
+  setRuntimeState(update.runtime_state ?? null);
 }
 
 export function RuntimeProvider({ children }: { children: ReactNode }) {
@@ -54,6 +63,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
   const [activeDepts, setActiveDepts] = useState<string[]>([]);
   const [deptSteps, setDeptSteps] = useState<Map<string, DeptStepEntry[]>>(new Map());
   const [roundMetrics, setRoundMetrics] = useState<RoundMetrics | null>(null);
+  const [runtimeState, setRuntimeState] = useState<RuntimeState | null>(null);
 
   const latestStepByDept = useMemo(() => selectLatestStepByDept(deptSteps), [deptSteps]);
   const recentHumanActions = useMemo(
@@ -121,7 +131,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unlisten = onRuntimeUpdate((payload) => {
-      applyRuntimeUpdate(payload, setActiveDepts, setRoundMetrics);
+      applyRuntimeUpdate(payload, setActiveDepts, setRoundMetrics, setRuntimeState);
     });
     return () => {
       unlisten.then((f) => f());
@@ -159,6 +169,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
         recentHumanActions,
         latestHumanSummary,
         roundMetrics,
+        runtimeState,
         clearLogs,
       }}
     >

@@ -102,6 +102,117 @@ fn no_stale_route_to_in_prompts() {
     );
 }
 
+/// Assert that no Rust source files contain active `route_to(` usage outside
+/// the explicitly allowlisted compatibility files.
+///
+/// This prevents the legacy route_to pattern from spreading back into normal
+/// agent orchestration code, pipeline steps, or new tool implementations.
+#[test]
+fn no_active_route_to_in_source_outside_allowlist() {
+    let root = project_root();
+    let allowlist = load_allowlist(&root);
+
+    // Extract file patterns from allowlist entries that contain "route_to"
+    let mut allowed_files: Vec<String> = Vec::new();
+    for entry in &allowlist {
+        if entry.contains("route_to") {
+            if let Some(file_marker) = entry.split(':').next() {
+                let file = file_marker.split(':').next().unwrap_or(file_marker);
+                if !allowed_files.contains(&file.to_string()) {
+                    allowed_files.push(file.to_string());
+                }
+            }
+        }
+    }
+
+    // Hardcoded allowlist for files that reference "route_to" only in comments
+    let comment_only_files = [
+        "actor/spawn/output.rs",
+        "commands/workflow/bootstrap.rs",
+        "api/control/wrap_up.rs",
+        "api/control/loop_runner.rs",
+        "api/session/mod.rs",
+        "api/control/routing.rs",
+        "api/control/tool_exec.rs",
+        "models/role.rs",
+        "pipeline/artifacts.rs",
+        "tool/audit_tools.rs",
+        "workflow/graph.rs",
+        "api/intent.rs",
+        "api/session/response.rs",
+    ];
+
+    let src_dir = root.join("shuji-app").join("src-tauri").join("src");
+    let mut violations = Vec::new();
+
+    if let Ok(entries) = walk_dir(&src_dir) {
+        for path in entries {
+            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+            if ext != "rs" {
+                continue;
+            }
+
+            let rel = path
+                .strip_prefix(&src_dir)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+
+            // Skip allowlisted files
+            if allowed_files.iter().any(|f| rel.contains(f)) {
+                continue;
+            }
+            if comment_only_files.iter().any(|f| rel == *f) {
+                continue;
+            }
+
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                for (line_num, line) in content.lines().enumerate() {
+                    let trimmed = line.trim();
+                    // Skip comments and doc comments
+                    if trimmed.starts_with("//")
+                        || trimmed.starts_with("///")
+                        || trimmed.starts_with("//!")
+                        || trimmed.starts_with("*")
+                    {
+                        continue;
+                    }
+                    if line.contains("route_to(") || line.contains("route_to ") {
+                        violations.push(format!("{}:{}", rel, line_num + 1));
+                    }
+                }
+            }
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "Found active route_to usage outside allowlist:\n  {}",
+        violations.join("\n  ")
+    );
+}
+
+/// Recursively collect all .rs files in a directory tree.
+fn walk_dir(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    let mut dirs = vec![dir.to_path_buf()];
+    while let Some(current) = dirs.pop() {
+        for entry in std::fs::read_dir(&current)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if name != "target" && name != "node_modules" {
+                    dirs.push(path);
+                }
+            } else {
+                files.push(path);
+            }
+        }
+    }
+    Ok(files)
+}
+
 /// Assert that no `deprecated` or `legacy` markers appear in source code
 /// outside explicitly allowlisted locations.
 #[test]
@@ -300,7 +411,7 @@ fn scan_mojibake_dir(dir: &Path, root: &Path, violations: &mut Vec<String>) {
 }
 
 fn scan_mojibake_file(path: &Path, root: &Path, violations: &mut Vec<String>) {
-    let Ok(content) = std::fs::read_to_string(&path) else {
+    let Ok(content) = std::fs::read_to_string(path) else {
         return;
     };
     let rel = path

@@ -37,7 +37,6 @@ cargo test --test audit_test             # Audit system: lineage, RefIndex, diff
 cargo test --test checkpoint_test        # Checkpoint save/load/find (8 tests)
 cargo test --test watchdog_behavior_test # Watchdog self-healing patterns
 cargo test --test workflow_demo_test     # E2E mock LLM: 内阁 → 工部尚书
-cargo test --test workflow_profile_test  # Workflow Profile: resolver, gate, chain, config, state
 cargo test --test workflow_mock_test     # Mock ActorHarness workflow (4 scenarios)
 cargo test --test pipeline_test          # Pipeline engine (validation, execution, resume, deadlock)
 cargo test --test validate_test          # validate_delivery end-to-end
@@ -52,7 +51,7 @@ cargo test --test expand_requirements_test  # Real LLM call (requires .env, skip
 
 # Frontend
 npm run lint                     # tsc --noEmit
-npm test                         # Vitest (36 test files, ~230 cases)
+npm test                         # Vitest (37 test files, ~263 cases)
 npm run format:check             # Prettier
 
 # Rust lint
@@ -61,7 +60,7 @@ cargo clippy --all-targets
 
 **Test pattern**: Async tools use `block_on()` wrapper (current-thread tokio). Async-only tests use `#[tokio::test]`. All tests use `tempfile::TempDir` via `common::create_test_project()` for isolation. Run with `--test-threads=1` to avoid state contention.
 
-**Total**: ~730 tests (Rust unit 213 + integration 288 + frontend Vitest 230 cases, per `scripts/count_tests.sh`).
+**Total**: ~777 tests (Rust unit 220 + integration 294 + frontend Vitest 263 cases, per `scripts/count_tests.sh`).
 
 **Pre-commit**: `cargo fmt --check && cargo clippy --all-targets && cargo test --lib && cargo test --tests -- --skip expand_requirements --test-threads=1 && cargo test --test pattern_guard_test`
 
@@ -385,6 +384,7 @@ shuji-app/
 │   ├── utils/                        # chat.ts, error.ts, approvalGate.ts, deptLog.ts, etc.
 │   ├── constants/                    # constants.ts, reasoning.ts, presets.ts
 │   ├── api.ts                        # Tauri invoke wrappers
+│   ├── api/                          # API module sub-splits (events.ts, events.test.ts)
 │   ├── types.ts                      # TypeScript type definitions (RoleName union, etc.)
 │   └── test/setup.ts                 # Vitest setup (jsdom, testing-library)
 └── src-tauri/src/
@@ -443,6 +443,7 @@ shuji-app/
     ├── playbook/                     # Watchdog playbook patterns
     ├── audit/                        # Audit subsystem: log.rs, ref_index.rs, document_line/ (4 files), checklist.rs, violation.rs, reauth.rs, diff.rs, lineage.rs, trace.rs, report.rs, timeline.rs, query.rs, doc_store.rs
     ├── config/                       # RuntimeConfig: types.rs (structs + load/merge), reasoning.rs, approval.rs, compaction.rs, esaa_contract.rs
+    ├── events.rs                     # Centralized Tauri event name constants + typed emit helpers
     ├── models/                       # role.rs, chat.rs, message.rs, project.rs, dept_step.rs
     ├── storage/                      # shuji_dir.rs, checkpoint.rs
     ├── logging/                      # logger.rs, mod.rs
@@ -481,3 +482,6 @@ Recent refactoring milestones:
 - **M9**: Clone message sharing optimization — agent entry helper, session accessor (`api/session/accessors.rs`), compaction
 - **M10**: Frontend component split — AuditPanel, DocPreview, WorkflowGraph into sub-component directories
 - **M11**: P0 god-file split follow-up — remaining session/pipeline/audit splits
+- **M12**: Mojibake cleanup — runtime prompt, comments, guard test
+- **M13**: Soul integrity — config-aware injection, safe compaction, guard tests
+- **M14**: Tauri event schema boundary — centralized `events.rs`, typed emit helpers, `api/events.ts`

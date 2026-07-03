@@ -84,7 +84,7 @@ function usage(overrides?: Partial<Record<string, unknown>>): Record<string, unk
 }
 
 function runtime(overrides?: Partial<Record<string, unknown>>): Record<string, unknown> {
-  return { active_roles: ['Neige'], trigger: 'pipeline', ...overrides };
+  return { active_roles: ['Neige'], trigger: 'pipeline', runtime_state: 'idle', ...overrides };
 }
 
 // ── Event name constants ──

@@ -2,6 +2,7 @@ import { getDeptMeta } from '../constants';
 import type {
   GraphNode,
   PipelineRuntime,
+  RuntimeState,
   TimelineNextAction,
   TimelineNode,
   TimelineNodeStatus,
@@ -59,6 +60,8 @@ export function buildTimelineNodes(
         status: mapPipelineStepStatus(step.step_id, pipeline, pendingApprovals),
         dept: target,
         docId: pipeline.artifacts[step.step_id],
+        failureReason:
+          pipeline.error_log.find((e) => e.startsWith(step.step_id + ':')) || undefined,
         kind: 'pipeline',
       };
     });
@@ -116,6 +119,7 @@ export function computeNextAction(
   activeDepts: string[],
   pendingApprovals: string[],
   pipeline: PipelineRuntime | null,
+  _runtimeState: RuntimeState | null,
   labels: NextActionLabels
 ): TimelineNextAction | null {
   if (pendingApprovals.length > 0) {

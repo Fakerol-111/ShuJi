@@ -1,0 +1,17 @@
+{
+  "plan_id": "plan-example-001",
+  "summary": "Simple execution through Chief Executor",
+  "estimated_complexity": "low",
+  "created": "2026-07-03T12:00:00",
+  "steps": [
+    {
+      "step_id": "s1",
+      "description": "Implement feature",
+      "action": "dispatch_to",
+      "action_params": { "target": "尚书令", "task": "Implement a new feature" },
+      "depends_on": [],
+      "on_failure": "wake_cabinet",
+      "retry": 1
+    }
+  ]
+}

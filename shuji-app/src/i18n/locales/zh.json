@@ -111,6 +111,8 @@
     "delete": "删除",
     "edit": "编辑",
     "settings": "设置",
+    "exportDiagnostics": "导出诊断",
+    "exporting": "导出中...",
     "copy": "复制",
     "export": "导出",
     "import": "导入",
@@ -191,6 +193,8 @@
   "settings": {
     "title": "枢机 · 设置",
     "backToProject": "返回项目",
+    "basic": "基础",
+    "advanced": "高级",
     "apiConfig": "服务配置",
     "contextWindow": "上下文窗口",
     "reasoning": "思考模式",
@@ -724,12 +728,15 @@
     "viewDocument": "查看文档",
     "confirmApprove": "确认准奏",
     "morePending": "份待批",
+    "pendingDoc": "待批文档",
+    "resuming": "恢复中...",
     "notSatisfiedHint": "若不满意审查结果：请使用「叫停诸司」暂停流程，从检查点恢复后重新下诏，而非封还。",
     "whyReview": "门下侍中已完成审查，需陛下确认方案与风险后再进入执行阶段。",
     "whyDesign": "中书令已完成方案设计，需陛下确认设计方向后再进入审查或执行。",
     "whyPlan": "Pipeline 计划已就绪，需陛下确认执行步骤后再调度各部门。",
     "whyDefault": "关键文档已就绪，需陛下朱批后流程方可继续。",
-    "rejectConsequence": "若不批准：请点击「叫停诸司」暂停流程，从检查点恢复后重新下诏调整需求。"
+    "rejectConsequence": "若不批准：请点击「叫停诸司」暂停流程，从检查点恢复后重新下诏调整需求。",
+    "rejectConsequenceSimple": "审查不满意？请叫停后从检查点重新下诏。"
   },
   "onboarding": {
     "skip": "跳过",

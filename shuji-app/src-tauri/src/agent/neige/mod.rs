@@ -2,6 +2,10 @@ use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
+pub(crate) mod decision;
+pub(crate) mod pipeline_plan;
+pub(crate) mod skill;
+
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput};
 use crate::agent::util::strip_skill_tag;
 use crate::api::client::{AnthropicClient, ToolDefinition};
@@ -105,21 +109,9 @@ impl NeigeAgent {
         crate::agent::runner::load_role_soul(working_dir, "Neige").await
     }
 
-    /// Load skill content. Checks `.shuji/skills/{name}.md` on disk only.
-    /// Runtime-created skills are still supported; compile-time skills removed.
-    /// Returns empty string if the skill is not found.
+    /// Load skill content from disk (delegates to skill module).
     pub async fn load_skill(name: &str, working_dir: &Path) -> String {
-        let disk_path = working_dir
-            .join(".shuji")
-            .join("skills")
-            .join(format!("{}.md", name));
-        if let Ok(content) = tokio::fs::read_to_string(&disk_path).await {
-            if !content.trim().is_empty() {
-                log_console!("[内阁] load skill from disk: {}", name);
-                return content;
-            }
-        }
-        String::new()
+        skill::load_skill(name, working_dir).await
     }
 
     /// Save raw session messages for pause/resume.
@@ -552,143 +544,14 @@ impl Agent for NeigeAgent {
     }
 }
 
-/// 从消息列表中提取最近一次 `submit_pipeline_plan` 的 plan_json。
+/// Extract plan_json from the most recent `submit_pipeline_plan` tool call.
 pub(crate) fn extract_plan_json_from_messages<'a, I>(messages: I) -> Option<String>
 where
     I: DoubleEndedIterator<Item = &'a serde_json::Value>,
 {
-    messages.rev().find_map(|m| {
-        m.get("tool_calls")
-            .and_then(|tc| tc.as_array())
-            .and_then(|calls| {
-                calls.iter().find(|c| {
-                    c.get("function")
-                        .and_then(|f| f.get("name"))
-                        .and_then(|n| n.as_str())
-                        == Some("submit_pipeline_plan")
-                })
-            })
-            .and_then(|call| {
-                let args_str = call
-                    .get("function")
-                    .and_then(|f| f.get("arguments"))
-                    .and_then(|a| a.as_str())?;
-                serde_json::from_str::<serde_json::Value>(args_str)
-                    .ok()
-                    .and_then(|v| {
-                        v.get("plan_json")
-                            .and_then(|pj| pj.as_str())
-                            .map(String::from)
-                    })
-            })
-    })
+    pipeline_plan::extract_plan_json_from_messages(messages)
 }
 
-/// 从 session 快照中提取最近一次 `request_decision` 工具的 options 数组。
 fn extract_decision_options(messages: &[serde_json::Value]) -> Vec<String> {
-    for msg in messages.iter().rev() {
-        let Some(calls) = msg.get("tool_calls").and_then(|tc| tc.as_array()) else {
-            continue;
-        };
-        for call in calls.iter().rev() {
-            if call
-                .get("function")
-                .and_then(|f| f.get("name"))
-                .and_then(|n| n.as_str())
-                != Some("request_decision")
-            {
-                continue;
-            }
-            let Some(args_str) = call
-                .get("function")
-                .and_then(|f| f.get("arguments"))
-                .and_then(|a| a.as_str())
-            else {
-                continue;
-            };
-            let Ok(args) = serde_json::from_str::<serde_json::Value>(args_str) else {
-                continue;
-            };
-            let Some(options) = args.get("options").and_then(|v| v.as_array()) else {
-                continue;
-            };
-            return options
-                .iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect();
-        }
-    }
-    vec![]
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{extract_decision_options, extract_plan_json_from_messages};
-
-    #[test]
-    fn extract_decision_options_from_tool_call() {
-        let messages = vec![serde_json::json!({
-            "role": "assistant",
-            "tool_calls": [{
-                "function": {
-                    "name": "request_decision",
-                    "arguments": r#"{"options":["选项A","选项B"]}"#
-                }
-            }]
-        })];
-        let opts = extract_decision_options(&messages);
-        assert_eq!(opts, vec!["选项A", "选项B"]);
-    }
-
-    #[test]
-    fn neige_does_not_replay_stale_pipeline_plan() {
-        let stale = serde_json::json!({
-            "role": "assistant",
-            "tool_calls": [{
-                "function": {
-                    "name": "submit_pipeline_plan",
-                    "arguments": r#"{"plan_json":"{\"plan_id\":\"old-plan\"}"}"#
-                }
-            }]
-        });
-        let summary_only = vec![serde_json::json!({
-            "role": "assistant",
-            "content": "任务已完成，总结如下..."
-        })];
-        // Only scan new messages (summary turn) — stale plan in history is skipped.
-        let plan = extract_plan_json_from_messages(summary_only.iter());
-        assert!(plan.is_none());
-
-        // Full history would incorrectly find stale plan if scanned entirely.
-        let mut all = vec![stale];
-        all.extend(summary_only);
-        let stale_found = extract_plan_json_from_messages(all.iter());
-        assert_eq!(stale_found.as_deref(), Some(r#"{"plan_id":"old-plan"}"#));
-    }
-
-    #[test]
-    fn neige_extracts_only_current_turn_pipeline_plan() {
-        let old = serde_json::json!({
-            "role": "assistant",
-            "tool_calls": [{
-                "function": {
-                    "name": "submit_pipeline_plan",
-                    "arguments": r#"{"plan_json":"{\"plan_id\":\"old\"}"}"#
-                }
-            }]
-        });
-        let new_msg = serde_json::json!({
-            "role": "assistant",
-            "tool_calls": [{
-                "function": {
-                    "name": "submit_pipeline_plan",
-                    "arguments": r#"{"plan_json":"{\"plan_id\":\"new-plan\"}"}"#
-                }
-            }]
-        });
-        let before_len = 1;
-        let all = [old, new_msg];
-        let plan = extract_plan_json_from_messages(all.iter().skip(before_len));
-        assert_eq!(plan.as_deref(), Some(r#"{"plan_id":"new-plan"}"#));
-    }
+    decision::extract_decision_options(messages)
 }
