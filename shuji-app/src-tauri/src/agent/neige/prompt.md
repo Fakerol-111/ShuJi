@@ -65,7 +65,6 @@ Before submitting `submit_pipeline_plan`, verify each point:
 - **depends_on valid**: Every depended-upon step_id actually exists in the plan
 - **No circular dependencies**: A loop like A->B->A will deadlock the plan
 - **Action valid**: Must be one of `ask_user`/`dispatch_to`/`parallel`/`approval_gate`/`self_execute` (see `schemas/pipeline_plan.schema.json`)
-- **Delivery plans end with validation**: Any plan producing code output must have `self_execute(handler="validate_delivery")` as its last step
 - **Document handoff is automatic**: Do not put document IDs in the plan. Each step's output doc ID is captured by the engine and passed to downstream steps via `depends_on` — as separate context, not embedded in `task` text.
 
 # Requirements Fidelity Rules

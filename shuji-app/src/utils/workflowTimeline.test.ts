@@ -60,13 +60,13 @@ describe('buildRecentDocIds', () => {
 
 describe('computeNextAction', () => {
   it('returns approval when pending docs exist', () => {
-    const action = computeNextAction([], ['revw_1'], null, labels);
+    const action = computeNextAction([], ['revw_1'], null, null, labels);
     expect(action?.type).toBe('approval');
     expect(action?.docId).toBe('revw_1');
   });
 
   it('returns running when dept active', () => {
-    const action = computeNextAction(['工部'], [], null, labels);
+    const action = computeNextAction(['工部'], [], null, null, labels);
     expect(action?.type).toBe('running');
     expect(action?.dept).toBe('工部');
   });

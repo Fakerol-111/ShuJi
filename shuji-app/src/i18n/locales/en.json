@@ -111,6 +111,8 @@
     "delete": "Delete",
     "edit": "Edit",
     "settings": "Settings",
+    "exportDiagnostics": "Export",
+    "exporting": "Exporting...",
     "copy": "Copy",
     "export": "Export",
     "import": "Import",
@@ -192,6 +194,8 @@
   "settings": {
     "title": "ShuJi · Settings",
     "backToProject": "Back to Project",
+    "basic": "Basic",
+    "advanced": "Advanced",
     "apiConfig": "API Configuration",
     "contextWindow": "Context Window",
     "reasoning": "Reasoning",
@@ -725,12 +729,15 @@
     "viewDocument": "View document",
     "confirmApprove": "Confirm approval",
     "morePending": "more pending",
+    "pendingDoc": "Pending doc",
+    "resuming": "Resuming...",
     "notSatisfiedHint": "If you disagree with the review: stop all departments, restore a checkpoint, and issue a new command — do not use reject.",
     "whyReview": "The reviewer has finished. Confirm the design and risks before execution.",
     "whyDesign": "The designer has finished. Confirm the design direction before review or execution.",
     "whyPlan": "The pipeline plan is ready. Confirm execution steps before dispatching departments.",
     "whyDefault": "A key document is ready. Approve it to continue the workflow.",
-    "rejectConsequence": "If you do not approve: click Stop all departments, restore a checkpoint, and issue a revised command."
+    "rejectConsequence": "If you do not approve: click Stop all departments, restore a checkpoint, and issue a revised command.",
+    "rejectConsequenceSimple": "Not satisfied? Restore a checkpoint and re-issue."
   },
   "onboarding": {
     "skip": "Skip",

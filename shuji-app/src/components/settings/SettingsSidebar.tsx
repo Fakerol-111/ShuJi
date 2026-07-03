@@ -108,41 +108,58 @@ function PaletteIcon() {
   );
 }
 
-const NAV_ITEMS: { key: SettingsCategory; icon: () => ReactNode; labelKey: string }[] = [
-  { key: 'service', icon: SlidersIcon, labelKey: 'settings.serviceConfig' },
-  { key: 'context', icon: FileTextIcon, labelKey: 'settings.contextWindow' },
-  { key: 'soul', icon: StarIcon, labelKey: 'settings.soulManagement' },
-  { key: 'externalEditor', icon: CodeIcon, labelKey: 'settings.externalEditor' },
-  { key: 'appearance', icon: PaletteIcon, labelKey: 'settings.appearance' },
+const NAV_ITEMS: {
+  key: SettingsCategory;
+  icon: () => ReactNode;
+  labelKey: string;
+  basic: boolean;
+}[] = [
+  { key: 'service', icon: SlidersIcon, labelKey: 'settings.serviceConfig', basic: true },
+  { key: 'appearance', icon: PaletteIcon, labelKey: 'settings.appearance', basic: true },
+  { key: 'context', icon: FileTextIcon, labelKey: 'settings.contextWindow', basic: false },
+  { key: 'soul', icon: StarIcon, labelKey: 'settings.soulManagement', basic: false },
+  { key: 'externalEditor', icon: CodeIcon, labelKey: 'settings.externalEditor', basic: false },
 ];
 
 export default function SettingsSidebar({ activeCategory, onSelect }: SettingsSidebarProps) {
   const { t } = useTranslation();
+  const basicItems = NAV_ITEMS.filter((i) => i.basic);
+  const advancedItems = NAV_ITEMS.filter((i) => !i.basic);
+
   return (
     <nav className="w-52 shrink-0 bg-surface-parchment border-r border-fold flex flex-col">
       <div className="h-9 px-4 border-b border-fold flex items-center font-display text-ui font-semibold text-ink-700">
         {t('common.settings')}
       </div>
-      <div className="p-2 space-y-0.5 flex-1">
-        {NAV_ITEMS.map((item) => {
-          const Icon = item.icon;
-          const active = activeCategory === item.key;
-          return (
-            <button
-              key={item.key}
-              onClick={() => onSelect(item.key)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg transition-colors text-left ${
-                active
-                  ? 'bg-ink-900 text-ink-50 shadow-sm'
-                  : 'text-ink-700 hover:text-ink-900 hover:bg-ink-100'
-              }`}
-            >
-              <Icon />
-              <span className="font-medium">{t(item.labelKey)}</span>
-            </button>
-          );
-        })}
+      <div className="p-2 space-y-0.5 flex-1 overflow-y-auto">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-400 px-3 pb-1 pt-2">
+          {t('settings.basic')}
+        </div>
+        {basicItems.map((item) => renderItem(item))}
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-400 px-3 pb-1 pt-4">
+          {t('settings.advanced')}
+        </div>
+        {advancedItems.map((item) => renderItem(item))}
       </div>
     </nav>
   );
+
+  function renderItem(item: (typeof NAV_ITEMS)[number]) {
+    const Icon = item.icon;
+    const active = activeCategory === item.key;
+    return (
+      <button
+        key={item.key}
+        onClick={() => onSelect(item.key)}
+        className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg transition-colors text-left ${
+          active
+            ? 'bg-ink-900 text-ink-50 shadow-sm'
+            : 'text-ink-700 hover:text-ink-900 hover:bg-ink-100'
+        }`}
+      >
+        <Icon />
+        <span className="font-medium">{t(item.labelKey)}</span>
+      </button>
+    );
+  }
 }

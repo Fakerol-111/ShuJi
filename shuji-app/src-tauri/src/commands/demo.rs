@@ -65,6 +65,13 @@ pub async fn create_demo_project(state: State<'_, AppState>) -> Result<Project, 
     crate::commands::project::create_project(state, name, goal, wd_str).await
 }
 
+/// Reset the demo project: wipe and re-create. Same as create_demo_project
+/// but does not require a fresh session. Returns the new project.
+#[tauri::command]
+pub async fn reset_demo_project(state: State<'_, AppState>) -> Result<Project, String> {
+    create_demo_project(state).await
+}
+
 /// Run a mock workflow without calling LLM API.
 /// Returns pre-recorded ChatMessage responses from the chosen scenario.
 #[tauri::command]

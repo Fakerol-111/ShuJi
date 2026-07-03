@@ -14,6 +14,9 @@ const STATUS_STYLES: Record<TimelineNode['status'], string> = {
   pending: 'bg-ink-100/40 border-ink-200 text-ink-500',
   failed: 'bg-vermillion/10 border-vermillion/40 text-vermillion',
   waiting: 'bg-vermillion/10 border-vermillion/40 text-vermillion animate-pulse',
+  retrying: 'bg-amber/10 border-amber/40 text-amber',
+  cancelled: 'bg-ink-100/40 border-ink-300 text-ink-500 line-through',
+  deadlocked: 'bg-vermillion/15 border-vermillion/60 text-vermillion',
 };
 
 const STATUS_DOT: Record<TimelineNode['status'], string> = {
@@ -22,6 +25,9 @@ const STATUS_DOT: Record<TimelineNode['status'], string> = {
   pending: 'bg-ink-300',
   failed: 'bg-vermillion',
   waiting: 'bg-vermillion animate-pulse',
+  retrying: 'bg-amber animate-pulse',
+  cancelled: 'bg-ink-400',
+  deadlocked: 'bg-vermillion',
 };
 
 export default function WorkflowTimeline({
@@ -70,6 +76,11 @@ export default function WorkflowTimeline({
               {deptLabel && <span className="truncate w-full opacity-75">{deptLabel}</span>}
               {node.docId && (
                 <span className="truncate w-full font-mono opacity-80">{node.docId}</span>
+              )}
+              {(node.status === 'failed' || node.status === 'deadlocked') && node.failureReason && (
+                <span className="truncate w-full text-[10px] opacity-80 mt-0.5">
+                  {node.failureReason}
+                </span>
               )}
             </button>
           </div>

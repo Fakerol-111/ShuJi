@@ -172,6 +172,21 @@ cargo test --manifest-path shuji-app/src-tauri/Cargo.toml --test audit_test test
 npm --prefix shuji-app test -- src/hooks/useChat.test.ts
 ```
 
+### 分层测试脚本
+
+通过 `scripts/` 下的分层脚本按需运行测试：
+
+| 层级 | Bash（Git Bash/WSL） | PowerShell（Windows） | 内容 |
+|------|---------------------|----------------------|------|
+| 快速 | `bash scripts/run_test_tier.sh fast` | `.\scripts\run_test_tier.ps1 fast` | lint + 单元 + 核心集成 ~30s |
+| 核心集成 | `bash scripts/run_test_tier.sh core-integration` | `.\scripts\run_test_tier.ps1 core-integration` | Pipeline / 文档 / Actor |
+| 安全 | `bash scripts/run_test_tier.sh security` | `.\scripts\run_test_tier.ps1 security` | 路径遍历 / 命令安全 |
+| 审计 | `bash scripts/run_test_tier.sh audit` | `.\scripts\run_test_tier.ps1 audit` | 审计链 / Checkpoint |
+| 工作流 | `bash scripts/run_test_tier.sh workflow` | `.\scripts\run_test_tier.ps1 workflow` | E2E Mock LLM |
+| 全量集成 | `bash scripts/run_full_integration.sh` | `.\scripts\run_full_integration.ps1` | 所有 Rust 集成测试 |
+
+**Windows 用户**：`.sh` 脚本需 Git Bash 或 WSL；`.ps1` 脚本可直接在 PowerShell 7+ 中运行（`pwsh`）。
+
 ## 代码风格
 
 - **Rust**：`cargo fmt`（4 空格），提交前清理 `clippy` 警告，优先 `Result<_, String>` / `anyhow::Result<_>`，避免 `unwrap()`

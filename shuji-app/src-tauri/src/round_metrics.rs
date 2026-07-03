@@ -104,6 +104,14 @@ pub fn current_role_name() -> Option<String> {
     })
 }
 
+/// Get the timestamp (millis) when the current round started, if any.
+pub fn round_started_at() -> Option<i64> {
+    ROUND
+        .lock()
+        .ok()
+        .and_then(|s| s.as_ref().map(|r| r.started_at))
+}
+
 // ── Active-role tracking (independent of snapshot-able state) ──
 
 static ACTIVE_ROLES: std::sync::LazyLock<Mutex<HashSet<String>>> =

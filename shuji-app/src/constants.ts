@@ -426,6 +426,19 @@ export function getDeptDisplayLabel(meta: DeptMeta, lang: 'en' | 'zh'): string {
 /** Display order for departments (matches backend Role enum order) */
 export const DEPT_ORDER = DEPT_META_LIST.map((d) => d.label);
 
+/** Beginner-mode stage labels mapping departments to workflow stages. */
+export const BEGINNER_STAGE_LABELS: Record<string, { label: string; labelEn: string }> = {
+  内阁: { label: '规划', labelEn: 'Planning' },
+  中书令: { label: '设计中', labelEn: 'Designing' },
+  门下侍中: { label: '审查中', labelEn: 'Reviewing' },
+  尚书令: { label: '执行调度', labelEn: 'Executing' },
+  吏部尚书: { label: '详细设计', labelEn: 'Detailing' },
+  兵部尚书: { label: '测试规划', labelEn: 'Test Planning' },
+  工部尚书: { label: '编码中', labelEn: 'Implementing' },
+  刑部尚书: { label: '验证中', labelEn: 'Validating' },
+  礼部尚书: { label: '审计中', labelEn: 'Auditing' },
+};
+
 /** 驾驶舱轨道分组 — 规划层 / 执行层 */
 export const DEPT_RAIL_GROUPS: {
   title: string;

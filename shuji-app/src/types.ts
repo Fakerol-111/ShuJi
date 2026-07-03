@@ -253,8 +253,28 @@ export interface RuntimeUpdate {
   active_roles: string[];
   round_metrics: RoundMetrics | null;
   pipeline: PipelineSnapshot | null;
+  runtime_state: RuntimeState;
   trigger: string;
+  last_activity_at: number | null;
+  elapsed_ms: number | null;
+  last_tool: string | null;
+  last_write: string | null;
 }
+
+export type RuntimeState =
+  | 'idle'
+  | 'planning'
+  | 'dispatching'
+  | 'running_department'
+  | 'awaiting_approval'
+  | 'awaiting_user_input'
+  | 'validating_delivery'
+  | 'retrying'
+  | 'cancelling'
+  | 'cancelled'
+  | 'failed'
+  | 'deadlocked'
+  | 'complete';
 
 // ── Department Inspector (九司卡片 + 部门观察器) ─────────────
 
@@ -284,6 +304,10 @@ export interface PipelineSnapshot {
   steps_done: number;
   steps_total: number;
   awaiting_approval: boolean;
+  awaiting_user_input: boolean;
+  failed: boolean;
+  deadlocked: boolean;
+  cancelled: boolean;
   plan_summary: string;
 }
 
@@ -488,7 +512,15 @@ export interface PipelineRuntime {
   error_log: string[];
 }
 
-export type TimelineNodeStatus = 'done' | 'active' | 'pending' | 'failed' | 'waiting';
+export type TimelineNodeStatus =
+  | 'done'
+  | 'active'
+  | 'pending'
+  | 'failed'
+  | 'waiting'
+  | 'retrying'
+  | 'cancelled'
+  | 'deadlocked';
 
 export interface TimelineNode {
   id: string;
@@ -497,6 +529,7 @@ export interface TimelineNode {
   status: TimelineNodeStatus;
   dept?: string;
   docId?: string;
+  failureReason?: string;
   kind: 'pipeline' | 'graph' | 'stage';
 }
 

@@ -9,9 +9,11 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "tsc --noEmit",
     "format": "prettier --write src/",
-    "format:check": "prettier --check src/"
+    "format:check": "prettier --check src/",
+    "test:fast": "npm run lint && npm test && npm run format:check"
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.19",

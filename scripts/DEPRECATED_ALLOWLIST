@@ -10,9 +10,11 @@ config/types.rs:char_threshold | serde alias for old config files | remove after
 tool/dispatch.rs:route_to | request_reauth fakes route_to operation | replace with explicit reauth operation
 tool/dispatch.rs:handle_route_to | validates route_to from request_reauth | remove with above
 
-# Pipeline backward-compat (must keep for old runtime.json files)
-pipeline/mod.rs:route_to | load_from migration alias | remove after one release
-pipeline/schema.rs:route_to | validation accepts old action name | remove after one release
+# Pattern guard: route_to source allowlist for the no_active_route_to_in_source_outside_allowlist test
+# Each entry: <file_pattern> — matches src/<file_pattern> relative to src-tauri/src/
+pipeline/mod.rs | load_from migration alias | remove after one release
+pipeline/schema.rs | validation accepts old action name | remove after one release
+tool/dispatch.rs | request_reauth fakes route_to operation | replace with explicit reauth operation
 
 # Backward-compat playbook aliases (must keep for validation subsystem)
 playbook/mod.rs:compat_playbook_for_event | legacy event name aliases | add WatchdogEvent variants, then remove

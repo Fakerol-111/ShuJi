@@ -41,6 +41,8 @@
 
 ## 快速开始
 
+[📖 首次运行指南](docs/FIRST_RUN.md) — 从零配置到完成第一个工作流（5 分钟）
+
 ### 环境要求
 
 - Node.js >= 18
@@ -164,6 +166,21 @@ flowchart TB
 | [LICENSE](LICENSE) | MIT 许可证 |
 
 后端核心路径有约 730 个自动化测试（Rust 单元/集成 + 前端 Vitest，具体以 `scripts/count_tests.sh` 输出为准），详见 [CONTRIBUTING.md#测试](CONTRIBUTING.md#测试)。
+
+### 测试层级
+
+通过分层测试脚本按需运行：
+
+| 层级 | 命令（Bash） | 命令（PowerShell） | 内容 |
+|------|-------------|-------------------|------|
+| 快速 | `bash scripts/run_test_tier.sh fast` | `.\scripts\run_test_tier.ps1 fast` | lint + 单元 + 核心集成 ~30s |
+| 核心集成 | `bash scripts/run_test_tier.sh core-integration` | `.\scripts\run_test_tier.ps1 core-integration` | Pipeline / 文档 / Actor |
+| 安全 | `bash scripts/run_test_tier.sh security` | `.\scripts\run_test_tier.ps1 security` | 路径遍历 / 命令安全 |
+| 审计 | `bash scripts/run_test_tier.sh audit` | `.\scripts\run_test_tier.ps1 audit` | 审计链 / Checkpoint |
+| 工作流 | `bash scripts/run_test_tier.sh workflow` | `.\scripts\run_test_tier.ps1 workflow` | E2E Mock LLM |
+| 全量集成 | `bash scripts/run_full_integration.sh` | `.\scripts\run_full_integration.ps1` | 所有 Rust 集成测试 |
+
+**Windows 用户**：`.sh` 脚本需 Git Bash 或 WSL；`.ps1` 脚本可直接在 PowerShell 7+ 中运行（`pwsh`）。
 
 ---
 

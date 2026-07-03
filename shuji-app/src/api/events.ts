@@ -123,7 +123,12 @@ export function isUsageUpdate(value: unknown): value is UsageUpdate {
 }
 
 export function isRuntimeUpdate(value: unknown): value is RuntimeUpdate {
-  return isRecord(value) && isArray(value.active_roles) && isString(value.trigger);
+  return (
+    isRecord(value) &&
+    isArray(value.active_roles) &&
+    isString(value.trigger) &&
+    isString(value.runtime_state)
+  );
 }
 
 // ── Checked listener ──────────────────────────────────────────────

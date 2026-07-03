@@ -1,13 +1,17 @@
 /// Translate raw technical errors into user-friendly English messages.
 pub fn friendly_error(e: impl std::fmt::Display) -> String {
     let raw = e.to_string();
-    let msg = raw.to_lowercase();
+    friendly_error_str(&raw)
+}
+
+fn friendly_error_str(msg: &str) -> String {
+    let lower = msg.to_lowercase();
 
     // Handle "API error (XXX): ..." format from session.rs
-    if msg.starts_with("api error") {
-        if let Some(paren) = msg.find('(') {
-            if let Some(close) = msg[paren..].find(')') {
-                let code = &msg[paren + 1..paren + close];
+    if lower.starts_with("api error") {
+        if let Some(paren) = lower.find('(') {
+            if let Some(close) = lower[paren..].find(')') {
+                let code = &lower[paren + 1..paren + close];
                 return match code {
                     "400" => "Invalid request parameters, please check your input".to_string(),
                     "401" => {
@@ -27,26 +31,28 @@ pub fn friendly_error(e: impl std::fmt::Display) -> String {
         }
     }
 
-    if msg.contains("connection refused")
-        || msg.contains("connect error")
-        || msg.contains("tcp connect")
+    if lower.contains("connection refused")
+        || lower.contains("connect error")
+        || lower.contains("tcp connect")
     {
         "Unable to connect to API server, please check network or API URL configuration".to_string()
-    } else if msg.contains("401") || msg.contains("unauthorized") || msg.contains("invalid api key")
+    } else if lower.contains("401")
+        || lower.contains("unauthorized")
+        || lower.contains("invalid api key")
     {
         "API key is invalid or expired, please reconfigure in settings".to_string()
-    } else if msg.contains("403") || msg.contains("forbidden") {
+    } else if lower.contains("403") || lower.contains("forbidden") {
         "API access denied, please check key permissions".to_string()
-    } else if msg.contains("429") || msg.contains("rate limit") {
+    } else if lower.contains("429") || lower.contains("rate limit") {
         "API request rate limited, please retry later".to_string()
-    } else if msg.contains("timeout") || msg.contains("timed out") {
+    } else if lower.contains("timeout") || lower.contains("timed out") {
         "API request timed out, please retry later or check network".to_string()
-    } else if msg.contains("500") || msg.contains("internal server error") {
+    } else if lower.contains("500") || lower.contains("internal server error") {
         "API server internal error, please retry later".to_string()
-    } else if msg.contains("502") || msg.contains("503") {
+    } else if lower.contains("502") || lower.contains("503") {
         "API service temporarily unavailable, please retry later".to_string()
     } else {
-        format!("System error: {}", msg)
+        format!("System error: {}", lower)
     }
 }
 

@@ -1,0 +1,44 @@
+{
+  "plan_id": "plan-example-002",
+  "summary": "Design -> Review -> Approval Gate -> Execution",
+  "estimated_complexity": "medium",
+  "created": "2026-07-03T12:00:00",
+  "steps": [
+    {
+      "step_id": "design",
+      "description": "Design the feature",
+      "action": "dispatch_to",
+      "action_params": { "target": "中书令", "task": "Design the feature" },
+      "depends_on": [],
+      "on_failure": "wake_cabinet",
+      "retry": 1
+    },
+    {
+      "step_id": "review",
+      "description": "Review the design",
+      "action": "dispatch_to",
+      "action_params": { "target": "门下侍中", "task": "Review the design" },
+      "depends_on": ["design"],
+      "on_failure": "wake_cabinet",
+      "retry": 1
+    },
+    {
+      "step_id": "approve",
+      "description": "Emperor approval of review",
+      "action": "approval_gate",
+      "action_params": {},
+      "depends_on": ["review"],
+      "on_failure": "wake_cabinet",
+      "retry": 0
+    },
+    {
+      "step_id": "execute",
+      "description": "Implement based on approved design",
+      "action": "dispatch_to",
+      "action_params": { "target": "尚书令", "task": "Implement based on approved design" },
+      "depends_on": ["approve"],
+      "on_failure": "wake_cabinet",
+      "retry": 1
+    }
+  ]
+}
