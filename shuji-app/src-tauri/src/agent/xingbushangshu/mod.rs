@@ -28,6 +28,7 @@ impl XingbuShangshuAgent {
         tools.push(crate::tool::documents::create_document_tool_def());
         tools.push(crate::tool::documents::append_document_tool_def());
         tools.extend(crate::tool::registry::run_tests_tool());
+        tools.extend(crate::tool::registry::check_compile_tool());
         tools.push(crate::tool::test_env::setup_test_env_tool_def());
         // route_tool 已移除 —— PipelineEngine 负责调度
         tools
@@ -64,22 +65,48 @@ impl Agent for XingbuShangshuAgent {
         .with_role(self.role().name())
         .with_debug_dir(input.working_dir.clone());
 
-        let thresholds = input.runtime_config.resolve_compact_thresholds(
-            self.role().name(),
-            input.context_window_config.get(self.role().name()),
-        );
+        // ── Explicit persisted context restoration ──
+        // Unlike the generic load_and_compact_context, this path trims verbose
+        // tool results and refreshes the soul — ensuring that interrupted test
+        // runs can resume with the prior session intact.
+        let has_persisted = working_dir
+            .join(".shuji/context")
+            .join(format!("{}.json", role_name))
+            .exists();
 
-        crate::agent::runner::load_and_compact_context(
-            &self.client,
-            &self.model,
-            &working_dir,
-            &role_name,
-            &input.task_description,
-            &mut session,
-            &thresholds,
-            false,
-        )
-        .await;
+        if has_persisted {
+            if let Some(mut ctx) =
+                crate::api::session::PersistedContext::load_from(&working_dir, &role_name).await
+            {
+                ctx.trim_tool_results(2000);
+                let latest_soul =
+                    crate::agent::runner::load_role_soul(&working_dir, &role_name).await;
+                ctx = ctx.with_refreshed_soul(&role_name, &latest_soul);
+                let mut msgs = ctx.to_messages();
+                // Append current task description as new user message
+                msgs.push(serde_json::json!({"role": "user", "content": input.task_description}));
+                let snap = crate::api::session::SessionSnapshot::from_messages(msgs);
+                session.restore(&snap);
+                log_console!("[刑部] restored persisted context from disk");
+            }
+        } else {
+            // First execution — use standard load_and_compact_context
+            let thresholds = input.runtime_config.resolve_compact_thresholds(
+                self.role().name(),
+                input.context_window_config.get(self.role().name()),
+            );
+            crate::agent::runner::load_and_compact_context(
+                &self.client,
+                &self.model,
+                &working_dir,
+                &role_name,
+                &input.task_description,
+                &mut session,
+                &thresholds,
+                false,
+            )
+            .await;
+        }
 
         let mut controller = crate::api::control::AgentController::new();
 

@@ -135,14 +135,178 @@ fn check_safe_command(cmd: &str) -> Result<(), &'static str> {
 
 // ── run_tests ─────────────────────────────────────────────────
 
+/// Extract compilation errors from cargo check / cargo build output.
+/// Returns a list of formatted error strings with file locations.
+/// Limited to 15 entries to avoid output explosion.
+fn extract_compile_errors(output: &str) -> Vec<String> {
+    let mut errors = Vec::new();
+    let mut current_error: Option<String> = None;
+    let mut current_location: Option<String> = None;
+
+    for line in output.lines() {
+        let trimmed = line.trim();
+        // Match "error[E0xxx]: message" or "error: message"
+        if trimmed.starts_with("error[") || trimmed.starts_with("error:") {
+            if let Some(ref err) = current_error {
+                let loc = current_location.as_deref().unwrap_or("unknown location");
+                errors.push(format!("- `{}` at {}", err, loc));
+            }
+            current_error = Some(trimmed.to_string());
+            current_location = None;
+        }
+        // Match "  --> src/path/file.rs:line:col"
+        else if trimmed.starts_with("--> ") {
+            current_location = Some(trimmed.trim_start_matches("--> ").to_string());
+        }
+    }
+    // Last error
+    if let Some(ref err) = current_error {
+        let loc = current_location.as_deref().unwrap_or("unknown location");
+        errors.push(format!("- `{}` at {}", err, loc));
+    }
+
+    // Cap at 15 entries
+    if errors.len() > 15 {
+        let total = errors.len();
+        errors.truncate(15);
+        errors.push(format!("... and {} more errors", total - 15));
+    }
+    errors
+}
+
+/// Smart truncation of stderr: prioritise error key lines over head truncation.
+///
+/// Extracts lines matching common error patterns (error[, error:, FAILED,
+/// AssertionError, panic, --> location markers, Python exception types).
+/// Falls back to head truncation when no key lines are found.
+fn smart_truncate_stderr(stderr: &str, max_chars: usize) -> String {
+    if stderr.len() <= max_chars {
+        return stderr.to_string();
+    }
+
+    let key_prefixes = [
+        "error[",
+        "error:",
+        "Error:",
+        "FAILED",
+        "... FAILED",
+        "AssertionError",
+        "panic:",
+        "thread '",
+        "  -->", // Rust location marker
+    ];
+    let error_keywords = [
+        "ImportError",
+        "ModuleNotFoundError",
+        "TypeError",
+        "ValueError",
+        "KeyError",
+        "AttributeError",
+    ];
+
+    let mut key_lines: Vec<String> = Vec::new();
+    for line in stderr.lines() {
+        let trimmed = line.trim();
+        let is_key = key_prefixes.iter().any(|p| trimmed.starts_with(p))
+            || error_keywords.iter().any(|k| trimmed.contains(k));
+        if is_key {
+            key_lines.push(line.to_string());
+        }
+    }
+
+    if key_lines.is_empty() {
+        // No key lines — fall back to head truncation
+        let cutoff = stderr.floor_char_boundary(max_chars);
+        return format!(
+            "{}...\n[Truncated: showing first {} chars, total {} chars]",
+            &stderr[..cutoff],
+            cutoff,
+            stderr.len()
+        );
+    }
+
+    let mut result = String::new();
+    result.push_str(&format!("### Key errors ({} found)\n\n", key_lines.len()));
+
+    let max_key_lines = 10;
+    for (idx, line) in key_lines.iter().take(max_key_lines).enumerate() {
+        if line.len() > 300 {
+            let cutoff = line.floor_char_boundary(300);
+            result.push_str(&format!("{}. {}...\n", idx + 1, &line[..cutoff]));
+        } else {
+            result.push_str(&format!("{}. {}\n", idx + 1, line));
+        }
+    }
+
+    if key_lines.len() > max_key_lines {
+        result.push_str(&format!(
+            "\n... and {} more errors omitted\n",
+            key_lines.len() - max_key_lines
+        ));
+    }
+
+    result.push_str(&format!(
+        "\n[Full stderr: {} chars, extracted {} key lines]",
+        stderr.len(),
+        key_lines.len()
+    ));
+
+    // Final safety truncation
+    if result.len() > max_chars {
+        let cutoff = result.floor_char_boundary(max_chars);
+        result.truncate(cutoff);
+        result.push_str("...");
+    }
+
+    result
+}
+
 /// Runs tests with auto-detected project type and structured output.
 /// Reduces LLM command-typing errors that trigger watchdog.
 pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> String {
     let scope = args["scope"].as_str().unwrap_or("all");
     let path = args["path"].as_str().filter(|s| !s.is_empty());
+    let test_name = args["test_name"].as_str().filter(|s| !s.is_empty());
 
     // Detect project type
     let project_type = detect_project_type(working_dir);
+    let (shell, shell_args) = get_shell();
+
+    // ── Rust: cargo check pre-flight ──
+    // Compilation errors and test failures require different fixes.
+    // Running cargo check first prevents wasting test iterations on syntax errors.
+    if project_type == "rust" {
+        let check_cmd = "cargo check 2>&1";
+        let check_timeout = std::time::Duration::from_secs(180);
+        match execute_with_timeout(shell, &shell_args, check_cmd, working_dir, check_timeout).await
+        {
+            Ok(o) => {
+                let check_stdout = String::from_utf8_lossy(&o.stdout);
+                let check_stderr = String::from_utf8_lossy(&o.stderr);
+                let combined = format!("{}\n{}", check_stdout, check_stderr);
+                if !o.status.success() {
+                    let errors = extract_compile_errors(&combined);
+                    return ToolOutput::success_raw(
+                        "run_tests",
+                        &format!(
+                            "## Compilation Failed\n\n\
+                            cargo check failed (exit={}). Fix compilation errors before running tests.\n\n\
+                            ### Errors ({} found)\n{}\n\n\
+                            **No tests were executed.** Fix the errors above, then call run_tests again.",
+                            o.status.code().unwrap_or(-1),
+                            errors.len(),
+                            errors.join("\n"),
+                        ),
+                    );
+                }
+            }
+            Err(e) => {
+                // cargo check timed out or failed to execute — skip pre-check, continue to tests
+                log_console!("[run_tests] cargo check skipped: {}", e);
+            }
+        }
+    }
+
     let mut cmd = match project_type.as_str() {
         "rust" => match scope {
             "unit" => "cargo test --lib".to_string(),
@@ -161,7 +325,7 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
                 "npm test".to_string()
             }
         }
-        "python" => pytest_cmd(scope),
+        "python" => pytest_cmd(scope, working_dir),
         _ => {
             return ToolOutput::success_raw(
                 "run_tests",
@@ -187,10 +351,30 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
         cmd.push_str(&format!(" -- {}", p));
     }
 
+    // Append test name filter if provided
+    if let Some(tn) = test_name {
+        // Validate test_name: only allow alphanumeric, underscore, ::, ., -
+        if !tn
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == ':' || c == '.' || c == '-')
+        {
+            return ToolOutput::error(
+                "run_tests",
+                "",
+                "invalid_test_name",
+                "test_name contains invalid characters. Only alphanumeric, _, ::, ., - are allowed.",
+            );
+        }
+        match project_type.as_str() {
+            "rust" => cmd.push_str(&format!(" {}", tn)),
+            "python" => cmd.push_str(&format!(" -k \"{}\"", tn)),
+            "node" => cmd.push_str(&format!(" -t \"{}\"", tn)),
+            _ => {}
+        }
+    }
+
     log_console!("[run_tests] executing: {}", cmd);
     let timeout = std::time::Duration::from_secs(300);
-
-    let (shell, shell_args) = get_shell();
 
     let output = match execute_with_timeout(shell, &shell_args, &cmd, working_dir, timeout).await {
         Ok(o) => o,
@@ -209,14 +393,28 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
     let total_count = parsed_total.unwrap_or(0);
 
     // Extract failed test names from output
-    let failed_tests: Vec<&str> = stdout
+    // Supports both Rust ("test test_name ... FAILED") and pytest ("FAILED tests/test_xxx.py::test_name")
+    let failed_tests: Vec<String> = stdout
         .lines()
-        .filter(|l| l.contains("FAILED") || l.contains("... FAILED"))
-        .map(|l| {
-            l.trim()
-                .trim_start_matches("test ")
-                .trim_end_matches(" ... FAILED")
-                .trim_end_matches(" FAILED")
+        .filter_map(|l| {
+            let trimmed = l.trim();
+            // Rust format: "test test_name ... FAILED"
+            if trimmed.contains("... FAILED") {
+                Some(
+                    trimmed
+                        .trim_start_matches("test ")
+                        .trim_end_matches(" ... FAILED")
+                        .to_string(),
+                )
+            // Pytest format: "FAILED tests/test_xxx.py::test_name"
+            } else if trimmed.starts_with("FAILED ") {
+                Some(trimmed.trim_start_matches("FAILED ").to_string())
+            // Generic "test_name FAILED"
+            } else if trimmed.ends_with(" FAILED") && trimmed.contains(" ") {
+                Some(trimmed.trim_end_matches(" FAILED").to_string())
+            } else {
+                None
+            }
         })
         .collect();
 
@@ -243,18 +441,8 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
     }
 
     if exit_code != 0 {
-        // Truncate stderr to avoid context overflow
-        let stderr_trimmed = if stderr.len() > 2000 {
-            let cutoff = stderr.floor_char_boundary(2000);
-            format!(
-                "{}...\n[Truncated: showing first {} chars, total {} chars]",
-                &stderr[..cutoff],
-                cutoff,
-                stderr.len()
-            )
-        } else {
-            stderr.to_string()
-        };
+        // Smart truncation: extract key error lines instead of simple head truncation
+        let stderr_trimmed = smart_truncate_stderr(&stderr, 3000);
         if !stderr_trimmed.is_empty() {
             report.push_str(&format!("\n### stderr Summary\n{}", stderr_trimmed));
         }
@@ -263,6 +451,23 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
     if exit_code == 0 && failed_tests.is_empty() {
         report.push_str("\nAll tests passed");
     }
+
+    // ── Machine-parseable JSON summary (for LLM structured reading) ──
+    let json_summary = serde_json::json!({
+        "exit_code": exit_code,
+        "passed": pass_count,
+        "failed": fail_count,
+        "total": total_count,
+        "failed_tests": failed_tests,
+        "project_type": project_type,
+        "scope": scope,
+        "command": cmd,
+        "compilation_check": if project_type == "rust" { "passed" } else { "n/a" },
+    });
+    report.push_str(&format!(
+        "\n\n```json\n{}\n```",
+        serde_json::to_string_pretty(&json_summary).unwrap_or_default()
+    ));
 
     ToolOutput::success_raw("run_tests", &report)
 }
@@ -381,9 +586,111 @@ pub fn run_tests_tool_def() -> crate::api::client::ToolDefinition {
                     "path": {
                         "type": "string",
                         "description": "Optional: specify a single test file path, e.g. tests/test_user.rs. Must match scope"
+                    },
+                    "test_name": {
+                        "type": "string",
+                        "description": "Optional: run a specific test by name (e.g. test_create_user). Much faster than running all tests. Rust: filter by test name; Python: -k pattern; Node: -t pattern"
                     }
                 },
                 "required": ["scope"]
+            }),
+        },
+    }
+}
+
+// ── check_compile ─────────────────────────────────────────────
+
+/// Check if the project compiles without running tests.
+/// Returns structured result: compilation passed/failed + error list.
+pub async fn tool_check_compile(working_dir: &Path, _args: &serde_json::Value) -> String {
+    let project_type = detect_project_type(working_dir);
+    let (shell, shell_args) = get_shell();
+
+    let (cmd, timeout) = match project_type.as_str() {
+        "rust" => (
+            "cargo check 2>&1".to_string(),
+            std::time::Duration::from_secs(180),
+        ),
+        "node" => {
+            if working_dir.join("node_modules/.bin/tsc").exists() {
+                (
+                    "npx tsc --noEmit 2>&1".to_string(),
+                    std::time::Duration::from_secs(120),
+                )
+            } else {
+                return ToolOutput::success_raw(
+                    "check_compile",
+                    "{\"skipped\": true, \"reason\": \"no TypeScript compiler found\"}",
+                );
+            }
+        }
+        "python" => {
+            let py = crate::tool::python_cmd::venv_python_or_system(working_dir);
+            if cfg!(windows) {
+                (format!("{} -m py_compile $(Get-ChildItem -Recurse -Filter *.py -Exclude .venv | ForEach-Object {{$_.FullName}}) 2>&1", py),
+                 std::time::Duration::from_secs(60))
+            } else {
+                (
+                    format!(
+                        "{} -m py_compile $(find . -name '*.py' -not -path './.venv/*') 2>&1",
+                        py
+                    ),
+                    std::time::Duration::from_secs(60),
+                )
+            }
+        }
+        _ => {
+            return ToolOutput::success_raw(
+                "check_compile",
+                &format!(
+                    "{{\"skipped\": true, \"reason\": \"unsupported project type: {}\"}}",
+                    project_type
+                ),
+            );
+        }
+    };
+
+    log_console!("[check_compile] executing: {}", cmd);
+    match execute_with_timeout(shell, &shell_args, &cmd, working_dir, timeout).await {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let combined = format!("{}\n{}", stdout, stderr);
+            let exit_code = output.status.code().unwrap_or(-1);
+
+            if exit_code == 0 {
+                ToolOutput::success_raw(
+                    "check_compile",
+                    &format!(
+                        "## Compilation Check\n\nProject type: {} | Command: `{}`\nExit code: {}\n\n✅ Compilation successful. You can now run tests.",
+                        project_type, cmd, exit_code,
+                    ),
+                )
+            } else {
+                let errors = extract_compile_errors(&combined);
+                ToolOutput::success_raw(
+                    "check_compile",
+                    &format!(
+                        "## Compilation Check\n\nProject type: {} | Command: `{}`\nExit code: {}\n\n❌ Compilation failed. Fix the errors below before running tests.\n\n### Errors ({} found)\n{}",
+                        project_type, cmd, exit_code, errors.len(), errors.join("\n"),
+                    ),
+                )
+            }
+        }
+        Err(e) => ToolOutput::error("check_compile", "", "exec_error", &e),
+    }
+}
+
+/// Tool definition for check_compile.
+pub fn check_compile_tool_def() -> crate::api::client::ToolDefinition {
+    crate::api::client::ToolDefinition {
+        tool_type: "function".into(),
+        function: crate::api::client::ToolFunction {
+            name: "check_compile".into(),
+            description: "Check if the project compiles without running tests. Rust: cargo check, Node: tsc --noEmit, Python: py_compile. Use this BEFORE run_tests to catch compilation errors early. Returns structured error list with file locations.".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {}
             }),
         },
     }

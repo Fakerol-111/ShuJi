@@ -8,7 +8,7 @@
 use std::path::Path;
 
 use crate::tool::command_ops::{execute_with_timeout, get_shell};
-use crate::tool::python_cmd::{python_command, venv_create_cmd};
+use crate::tool::python_cmd::{python_command, venv_create_cmd, venv_python_or_system};
 use crate::tool::ToolOutput;
 
 /// Set up test environment for the project.
@@ -110,9 +110,14 @@ pub async fn tool_setup_test_env(working_dir: &Path, args: &serde_json::Value) -
             let timeout = std::time::Duration::from_secs(300);
             match execute_with_timeout(shell, &shell_args, pip_install, working_dir, timeout).await
             {
-                Ok(o) if o.status.success() => {
-                    ToolOutput::success("setup_test_env", "", "python venv created + pip install")
-                }
+                Ok(o) if o.status.success() => ToolOutput::success(
+                    "setup_test_env",
+                    "",
+                    &format!(
+                        "python venv created + pip install. Tests will use: {}",
+                        venv_python_or_system(working_dir)
+                    ),
+                ),
                 Ok(_) => {
                     // Try with [dev] extra
                     let pip_install_dev = if cfg!(windows) {
@@ -132,7 +137,7 @@ pub async fn tool_setup_test_env(working_dir: &Path, args: &serde_json::Value) -
                         Ok(o) if o.status.success() => ToolOutput::success(
                             "setup_test_env",
                             "",
-                            "python venv created + pip install -e .[dev]",
+                            &format!("python venv created + pip install -e .[dev]. Tests will use: {}", venv_python_or_system(working_dir)),
                         ),
                         Ok(_) => ToolOutput::success(
                             "setup_test_env",

@@ -139,7 +139,15 @@ You are not guessing — you are reading the error message and pointing to likel
 | `create_document`   | Create quality report (type="rprt")                                      |
 | `append_document`   | Append report sections in chunks                                         |
 | `run_tests`         | Run tests (auto-detects Rust/Node/Python). Preferred test tool for the Ministry of Justice, replaces execute_command |
+| `check_compile`     | Check compilation without running tests. Use BEFORE run_tests to separate compile errors from test failures. |
 | ——Engine auto-dispatch—— | PipelineEngine handles step progression, automatically calls the next department |
+
+# Resuming After Interruption
+
+If you notice existing integration test files in `tests/integration/` that you wrote previously, do NOT recreate them. Instead:
+1. Read the existing test files to understand what was already done
+2. Continue from where you left off
+3. Only rewrite tests that are fundamentally wrong
 
 # Agent Contract
 

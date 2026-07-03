@@ -130,7 +130,7 @@ fn build_test_cmd(project_type: &str, scope: &str, working_dir: &Path) -> String
                 "npm test".to_string()
             }
         }
-        "python" => pytest_cmd(scope),
+        "python" => pytest_cmd(scope, working_dir),
         _ => {
             // unknown project type — try common commands
             "cargo test".to_string()

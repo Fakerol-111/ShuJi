@@ -95,9 +95,12 @@ Each batch follows this cycle:
 - Python: `python -m pytest tests/ -x -v`
 - Node.js: `npx jest tests/ --verbose`
 - Rust: `cargo test --lib` (all unit tests)
-- Run single test file (fast): `cargo test --test test_xxx` (Rust), `python -m pytest tests/test_xxx.py -x -v` (Python)
+- Run single test file (fast): `run_tests(scope="unit", path="tests/test_xxx.rs")`
+- Run single test by name (fastest for debugging): `run_tests(scope="unit", test_name="test_create_user")`
 
-**Key: Run single test files during debugging**, not the full suite. `cargo test --test test_xxx` only compiles and runs the specified file, saving significant time. Only after confirming a single test passes should you run `cargo test --lib` to verify no regressions.
+**Key: Use `test_name` during debugging** — it runs only the specified test, saving significant time. Only after confirming a single test passes should you run `run_tests(scope="unit")` to verify no regressions.
+
+For Rust projects, `run_tests` automatically runs `cargo check` first — compilation errors are reported separately from test failures. Fix compilation errors before retrying tests.
 
 Use `-x` (stop at first failure) to save tokens.
 
@@ -177,7 +180,8 @@ If the contract says `create_user(name: str, email: str) -> User`, your implemen
 | `append_document`   | Append content to report                                           |
 | `submit_plan`       | Split complex tasks into batches. Call once during planning.       |
 | `complete_task`     | Mark current batch as complete. System proceeds to next batch.     |
-| `run_tests`         | Run unit tests during development (TDD cycle). scope=unit runs unit tests. |
+| `run_tests`         | Run unit tests during development (TDD cycle). scope=unit runs unit tests. Use test_name to run a single test. |
+| `check_compile`     | Check compilation without running tests. Use BEFORE run_tests to catch syntax/type errors early. |
 | ——Engine auto-dispatch—— | After all batches complete, the engine proceeds automatically |
 
 ## Important Notes

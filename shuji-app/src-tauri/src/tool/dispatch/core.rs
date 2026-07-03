@@ -115,6 +115,7 @@ pub async fn execute_named_tool(
         "read_document" => documents::tool_read_document(working_dir, args).await,
         "search_text" => tool_search_text(working_dir, args).await,
         "run_tests" => tool_run_tests(working_dir, args).await,
+        "check_compile" => crate::tool::command_ops::tool_check_compile(working_dir, args).await,
         "run_lint" => crate::tool::lint_ops::tool_run_lint(working_dir, args).await,
         "setup_test_env" => crate::tool::test_env::tool_setup_test_env(working_dir, args).await,
         "execute_command" => tool_execute_command(working_dir, args, dept).await,

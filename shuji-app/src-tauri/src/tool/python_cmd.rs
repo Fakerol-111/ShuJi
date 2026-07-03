@@ -1,5 +1,6 @@
 //! Cross-platform Python interpreter detection for shell commands.
 
+use std::path::Path;
 use std::sync::OnceLock;
 
 static PYTHON_CMD: OnceLock<String> = OnceLock::new();
@@ -43,12 +44,34 @@ pub fn python_module_cmd(module: &str, args: &str) -> String {
     format!("{} -m {} {}", python_command(), module, args)
 }
 
+/// Detect the venv Python path if `.venv` exists in `working_dir`,
+/// otherwise fall back to the system Python.
+///
+/// This ensures `run_tests` and `pytest_cmd` use the same Python that
+/// `setup_test_env` installed dependencies into.
+pub fn venv_python_or_system(working_dir: &Path) -> String {
+    let venv_py = if cfg!(windows) {
+        working_dir.join(".venv").join("Scripts").join("python")
+    } else {
+        working_dir.join(".venv").join("bin").join("python")
+    };
+    if venv_py.exists() {
+        venv_py.to_string_lossy().to_string()
+    } else {
+        python_command()
+    }
+}
+
 /// Build a pytest command for the given test scope.
-pub fn pytest_cmd(scope: &str) -> String {
+///
+/// If `.venv` exists in `working_dir`, the venv Python is used so that
+/// dependencies installed by `setup_test_env` are available.
+pub fn pytest_cmd(scope: &str, working_dir: &Path) -> String {
+    let py = venv_python_or_system(working_dir);
     match scope {
-        "unit" => python_module_cmd("pytest", "tests/ -v"),
-        "integration" => python_module_cmd("pytest", "tests/integration/ -v"),
-        _ => python_module_cmd("pytest", "-v"),
+        "unit" => format!("{} -m pytest tests/ -v", py),
+        "integration" => format!("{} -m pytest tests/integration/ -v", py),
+        _ => format!("{} -m pytest -v", py),
     }
 }
 
@@ -70,9 +93,38 @@ mod tests {
 
     #[test]
     fn pytest_cmd_contains_pytest() {
-        let cmd = pytest_cmd("all");
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cmd = pytest_cmd("all", tmp.path());
         assert!(cmd.contains("pytest"));
         assert!(cmd.starts_with("python") || cmd.starts_with("py "));
+    }
+
+    #[test]
+    fn pytest_cmd_uses_venv_when_exists() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        // Without venv → system python
+        let cmd = pytest_cmd("all", tmp.path());
+        assert!(cmd.contains("pytest"));
+        assert!(!cmd.contains(".venv"));
+
+        // Simulate venv existence
+        let venv_bin = if cfg!(windows) {
+            tmp.path().join(".venv").join("Scripts")
+        } else {
+            tmp.path().join(".venv").join("bin")
+        };
+        std::fs::create_dir_all(&venv_bin).unwrap();
+        std::fs::write(venv_bin.join("python"), "").unwrap();
+        let cmd = pytest_cmd("all", tmp.path());
+        assert!(cmd.contains(".venv"), "should use venv python: {}", cmd);
+    }
+
+    #[test]
+    fn venv_python_or_system_falls_back_without_venv() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let py = venv_python_or_system(tmp.path());
+        assert!(!py.is_empty());
+        assert!(!py.contains(".venv"));
     }
 
     #[test]
