@@ -7,8 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { listen } from '@tauri-apps/api/event';
-import { getContextStats, getRoundMetrics, getTokenStats } from '../api';
+import { onUsageChanged, getContextStats, getRoundMetrics, getTokenStats } from '../api';
 import type { ContextStats, RoundMetrics, TokenUsage } from '../types';
 
 const COALESCE_MS = 80;
@@ -140,7 +139,7 @@ export function UsageStatsProvider({ children }: { children: ReactNode }) {
   }, [fetchAll]);
 
   useEffect(() => {
-    const unlisten = listen('usage-update', () => {
+    const unlisten = onUsageChanged(() => {
       scheduleRef.current?.();
     });
     return () => {

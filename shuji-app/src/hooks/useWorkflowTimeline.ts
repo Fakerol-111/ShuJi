@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
-import { getPipelineStatus, getWorkflowGraph } from '../api';
+import { getPipelineStatus, getWorkflowGraph, onProjectChanged, onRuntimeUpdate } from '../api';
 import type {
   DeptLogEntry,
   PlanInfo,
@@ -44,10 +43,10 @@ export function useWorkflowTimeline({
     };
     load();
     const timer = window.setInterval(load, POLL_MS);
-    const unlistenProject = listen('project-update', () => load());
-    const unlistenRuntime = listen<RuntimeUpdate>('runtime-update', (event) => {
-      const trigger = event.payload.trigger ?? '';
-      if (trigger.startsWith('pipeline') || event.payload.pipeline) {
+    const unlistenProject = onProjectChanged(() => load());
+    const unlistenRuntime = onRuntimeUpdate((payload: RuntimeUpdate) => {
+      const trigger = payload.trigger ?? '';
+      if (trigger.startsWith('pipeline') || payload.pipeline) {
         getPipelineStatus()
           .then(setPipeline)
           .catch(() => setPipeline(null));

@@ -7,17 +7,28 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn().mockResolvedValue(() => {}),
 }));
 
-vi.mock('../api', () => ({
-  readShujiDoc: vi.fn(),
-  setDocumentStatus: vi.fn(),
-  sendMessage: vi.fn(),
-  getDocumentDiff: vi.fn(),
-  getDocumentDiffs: vi.fn(),
-  readDocumentDiff: vi.fn(),
-  getDocumentLineage: vi.fn(),
-  getEditorConfig: vi.fn(),
-  openInExternalEditor: vi.fn(),
-}));
+vi.mock('../api', () => {
+  const mockDone = () => Promise.resolve(() => {});
+  return {
+    readShujiDoc: vi.fn(),
+    setDocumentStatus: vi.fn(),
+    sendMessage: vi.fn(),
+    getDocumentDiff: vi.fn(),
+    getDocumentDiffs: vi.fn(),
+    readDocumentDiff: vi.fn(),
+    getDocumentLineage: vi.fn(),
+    getEditorConfig: vi.fn(),
+    openInExternalEditor: vi.fn(),
+    onDocsMayHaveChanged: (handler: () => void) => {
+      // Store handler in a shared global for test access
+      const h = (globalThis as Record<string, unknown>).__docPreviewRefreshHandlers;
+      if (Array.isArray(h)) h.push(handler);
+      return [mockDone()];
+    },
+    onProjectUpdate: vi.fn().mockResolvedValue(mockDone()),
+    onProjectChanged: vi.fn().mockResolvedValue(mockDone()),
+  };
+});
 
 vi.mock('react-markdown', () => ({
   default: ({ children }: { children: string }) => <div data-testid="markdown">{children}</div>,
@@ -39,6 +50,7 @@ function shujiDoc(status: string = 'draft') {
 describe('DocPreview', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (globalThis as Record<string, unknown>).__docPreviewRefreshHandlers = [];
     mockedApi.readShujiDoc.mockResolvedValue(shujiDoc());
     mockedApi.getDocumentDiffs.mockResolvedValue([
       { filename: 'doc-001_modify_2026.patch', event: 'modify', ts: '2026-01-02T00:00:00Z' },
@@ -180,10 +192,11 @@ describe('DocPreview', () => {
       ...shujiDoc(),
       content: shujiDoc().content.replace('审查报告', '更新后的审查报告'),
     });
-    const { listen } = await import('@tauri-apps/api/event');
-    const handler = vi.mocked(listen).mock.calls[0]?.[1] as (() => void) | undefined;
+    const refreshHandlers = (globalThis as Record<string, unknown>)
+      .__docPreviewRefreshHandlers as Array<() => void>;
+    const handler = refreshHandlers[refreshHandlers.length - 1];
     expect(handler).toBeTruthy();
-    handler!();
+    handler();
     await waitFor(() => {
       expect(screen.getByText(/更新后的审查报告/)).toBeTruthy();
       expect(screen.queryByText('开卷中…')).toBeFalsy();

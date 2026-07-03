@@ -30,6 +30,7 @@ pub mod agent; // Agent trait + 通用执行框架 (runner) + 9 部门 + 2 子 a
 pub mod api; // LLM API 层：双格式 HTTP client、会话管理、AgentController、上下文压缩
 pub mod audit; // 审计系统：事件日志、引用索引、文档谱系、diff 追踪、合规检查单
 pub mod config; // 配置系统：RuntimeConfig (TOML)、优先级合并、阈值解析
+pub mod events; // Tauri 事件名称常量与类型化 emit 辅助函数
 pub mod learning; // 角色化学习记忆：soul 读写、注入、结构化索引
 pub mod metrics; // 运行指标收集与查询
 pub mod models; // 数据模型：Role、ChatMessage、Project 等
@@ -82,7 +83,6 @@ pub type FastTxMap =
 
 use commands::project::AppState;
 use config::RuntimeConfig;
-use tauri::Emitter;
 
 /// Tauri 应用主入口函数。
 ///
@@ -118,7 +118,7 @@ pub fn run() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 while let Some(update) = usage_rx.recv().await {
-                    let _ = handle.emit("usage-update", &update);
+                    let _ = crate::events::emit_usage_update(&handle, &update);
                 }
             });
 
@@ -128,7 +128,7 @@ pub fn run() {
             let runtime_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 while let Some(update) = runtime_rx.recv().await {
-                    let _ = runtime_handle.emit("runtime-update", &update);
+                    let _ = crate::events::emit_runtime_update(&runtime_handle, &update);
                 }
             });
             Ok(())

@@ -18,6 +18,30 @@ vi.mock('../hooks/useDeptEvents', async (importOriginal) => {
   };
 });
 
+vi.mock('../api', () => {
+  const mockResolved = () => Promise.resolve(() => {});
+  return {
+    onProjectUpdate: vi.fn().mockResolvedValue(mockResolved()),
+    onProjectChanged: vi.fn().mockResolvedValue(mockResolved()),
+    onDeptLog: vi.fn().mockResolvedValue(mockResolved()),
+    onDeptStep: vi.fn().mockResolvedValue(mockResolved()),
+    onRuntimeUpdate: vi.fn().mockResolvedValue(mockResolved()),
+    onUsageChanged: vi.fn().mockResolvedValue(mockResolved()),
+    onChatMessage: vi.fn().mockResolvedValue(mockResolved()),
+    onChatDelta: vi.fn().mockResolvedValue(mockResolved()),
+    onChatComplete: vi.fn().mockResolvedValue(mockResolved()),
+    onPlanUpdate: vi.fn().mockResolvedValue(mockResolved()),
+    cancelProcessing: vi.fn().mockResolvedValue(undefined),
+    getActiveRoles: vi.fn().mockResolvedValue([]),
+    getContextStats: vi.fn().mockResolvedValue({}),
+    getRoundMetrics: vi.fn().mockResolvedValue(null),
+    getTokenStats: vi.fn().mockResolvedValue({}),
+    getWorkflowGraph: vi.fn().mockResolvedValue(null),
+    getPipelineStatus: vi.fn().mockResolvedValue(null),
+    sendMessage: vi.fn().mockResolvedValue('ok'),
+  };
+});
+
 vi.mock('../hooks/useProject', () => ({
   useProject: () => ({
     project: null,

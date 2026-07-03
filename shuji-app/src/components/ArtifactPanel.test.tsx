@@ -23,6 +23,9 @@ vi.mock('../api', () => ({
     custom_command: null,
     reuse_window: true,
   }),
+  onDocsMayHaveChanged: () => [Promise.resolve(() => {})],
+  onProjectUpdate: vi.fn().mockResolvedValue(() => {}),
+  onProjectChanged: vi.fn().mockResolvedValue(() => {}),
 }));
 
 vi.mock('react-markdown', () => ({

@@ -13,6 +13,7 @@ vi.mock('../api', () => ({
   getEditorConfig: vi.fn(),
   openInExternalEditor: vi.fn(),
   openProjectInExternalEditor: vi.fn(),
+  onDocsMayHaveChanged: () => [Promise.resolve(() => {})],
 }));
 
 import * as api from '../api';

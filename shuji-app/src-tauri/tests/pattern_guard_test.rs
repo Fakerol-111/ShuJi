@@ -228,8 +228,7 @@ const MOJIBAKE_MARKERS: &[&str] = &[
 
 /// Files that are explicitly allowed to contain mojibake markers
 /// (the test itself, the cleanup plan).
-const MOJIBAKE_ALLOWLIST_SUFFIXES: &[&str] =
-    &["deprecated_guard_test.rs", "mojibake-cleanup-plan.md"];
+const MOJIBAKE_ALLOWLIST_SUFFIXES: &[&str] = &["pattern_guard_test.rs", "mojibake-cleanup-plan.md"];
 
 /// Assert that no known mojibake markers appear outside the allowlist.
 #[test]
