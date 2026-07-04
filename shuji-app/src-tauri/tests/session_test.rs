@@ -2,11 +2,11 @@
 //!
 //! 运行: cargo test --test session_test -- --nocapture
 //!
-//! 注意：这些测试需要mock AnthropicClient，因为我们不想真正调用API
+//! 注意：这些测试需要mock LlmClient，因为我们不想真正调用API
 
 mod common;
 
-// 由于Session依赖真实的AnthropicClient，这些测试主要验证逻辑而非实际API调用
+// 由于Session依赖真实的LlmClient，这些测试主要验证逻辑而非实际API调用
 // 实际的截断处理测试需要集成测试或mock框架
 
 #[test]

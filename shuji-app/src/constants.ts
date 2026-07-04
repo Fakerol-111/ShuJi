@@ -493,6 +493,57 @@ export function fontSizeDescription(tier: FontSizeTier, lang: string): string {
   return lang === 'en' ? tier.descriptionEn : tier.description;
 }
 
+// ── Role name ↔ English key bidirectional mapping ───────────
+
+/**
+ * Type-safe bidirectional mapping between Chinese RoleName (used in ChatMessage.role)
+ * and English role keys (used in backend API responses, config files, etc.).
+ *
+ * This is the single source of truth for role name translation in the frontend.
+ * All components should use these helpers instead of ad-hoc string matching.
+ */
+
+/** Chinese RoleName → English key (e.g., "内阁" → "neige") */
+export const ROLE_NAME_TO_KEY: Record<string, string> = Object.fromEntries(
+  DEPT_META_LIST.map((d) => [d.label, d.key])
+);
+
+/** English key → Chinese RoleName (e.g., "neige" → "内阁") */
+export const KEY_TO_ROLE_NAME: Record<string, string> = Object.fromEntries(
+  DEPT_META_LIST.map((d) => [d.key, d.label])
+);
+
+/**
+ * Convert a Chinese RoleName to the corresponding English backend key.
+ * Returns undefined for special roles ("皇帝", "系统") that have no backend counterpart.
+ */
+export function roleNameToKey(roleName: string): string | undefined {
+  return ROLE_NAME_TO_KEY[roleName];
+}
+
+/**
+ * Convert an English backend key to the Chinese RoleName for display.
+ * Handles case-insensitive input (e.g., "Neige" → "内阁").
+ */
+export function keyToRoleName(key: string): string | undefined {
+  const lower = key.toLowerCase();
+  return KEY_TO_ROLE_NAME[lower];
+}
+
+/**
+ * Get the display name for any role string, handling both Chinese and English inputs.
+ * Falls back to the original string if no mapping is found.
+ */
+export function toRoleDisplayName(role: string): string {
+  // Already Chinese — return as-is
+  if (ROLE_NAME_TO_KEY[role]) return role;
+  // English key — convert to Chinese
+  const chinese = keyToRoleName(role);
+  if (chinese) return chinese;
+  // Unknown — return original
+  return role;
+}
+
 // ── Legacy RoleInfo (used by SetupPage) ──────────────────
 
 export interface RoleInfo {

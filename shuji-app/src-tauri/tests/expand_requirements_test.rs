@@ -33,7 +33,7 @@ fn project_dir() -> PathBuf {
         .join("test_workspace")
 }
 
-fn setup_client() -> (Arc<shuji_app_lib::api::client::AnthropicClient>, String) {
+fn setup_client() -> (Arc<shuji_app_lib::api::client::LlmClient>, String) {
     let api_key = std::env::var("NEIGE_API_KEY")
         .or_else(|_| std::env::var("DEFAULT_API_KEY"))
         .expect("缺少 API key");
@@ -41,9 +41,7 @@ fn setup_client() -> (Arc<shuji_app_lib::api::client::AnthropicClient>, String) 
         .unwrap_or_else(|_| "https://api.deepseek.com/chat/completions".into());
     let model = std::env::var("DEFAULT_MODEL").unwrap_or_else(|_| "deepseek-v4-flash".into());
     (
-        Arc::new(shuji_app_lib::api::client::AnthropicClient::new(
-            api_key, api_url,
-        )),
+        Arc::new(shuji_app_lib::api::client::LlmClient::new(api_key, api_url)),
         model,
     )
 }

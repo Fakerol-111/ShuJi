@@ -1,0 +1,51 @@
+{
+  "name": "Todo CLI Demo",
+  "version": 2,
+  "steps": [
+    {
+      "agent": "neige",
+      "mock_response": {
+        "content": "收到任务，开始规划。这是一个简单的 Todo CLI 应用，使用 workflow_demo 路径直接路由到工部。",
+        "tool_calls": [
+          {
+            "name": "submit_pipeline_plan",
+            "arguments": "{\"plan_id\":\"plan-todo-001\",\"summary\":\"Todo CLI: 实现一个简单的命令行待办事项管理工具\",\"estimated_complexity\":\"low\",\"steps\":[{\"step_id\":\"init\",\"description\":\"初始化项目\",\"action\":\"self_execute\",\"action_params\":{\"handler\":\"noop\"},\"depends_on\":[],\"require_approval\":false,\"on_failure\":\"wake_cabinet\",\"retry\":1},{\"step_id\":\"gongbu\",\"description\":\"工部编码实现 Todo CLI\",\"action\":\"route_to\",\"action_params\":{\"target\":\"尚书令\",\"task\":\"实现一个 Todo CLI，支持 add/list/done/delete 命令，数据存储在 JSON 文件中\"},\"depends_on\":[\"init\"],\"require_approval\":false,\"on_failure\":\"wake_cabinet\",\"retry\":1},{\"step_id\":\"validate\",\"description\":\"自动验证交付物\",\"action\":\"self_execute\",\"action_params\":{\"handler\":\"validate_delivery\",\"run_lint\":false},\"depends_on\":[\"gongbu\"],\"require_approval\":false,\"on_failure\":\"wake_cabinet\",\"retry\":1}]}"
+          }
+        ]
+      },
+      "expect_files": [".shuji/pipeline/runtime.json"],
+      "expect_audit_events": ["create_document"]
+    },
+    {
+      "agent": "gongbu",
+      "mock_response": {
+        "content": "开始编码实现 Todo CLI。创建主文件和测试文件。",
+        "tool_calls": [
+          {
+            "name": "create_file",
+            "arguments": "{\"path\":\"src/main.rs\",\"content\":\"use std::collections::HashMap;\\nuse std::fs;\\nuse std::env;\\n\\nfn main() {\\n    let args: Vec<String> = env::args().collect();\\n    if args.len() < 2 {\\n        eprintln!(\\\"Usage: todo <add|list|done|delete> [args]\\\" );\\n        return;\\n    }\\n    let cmd = &args[1];\\n    let file = \\\"todos.json\\\";\\n    let mut todos: HashMap<String, bool> = load(file);\\n    match cmd.as_str() {\\n        \\\"add\\\" => {\\n            let task = args.get(2).expect(\\\"Task name required\\\");\\n            todos.insert(task.clone(), false);\\n            save(file, &todos);\\n            println!(\\\"Added: {}\\\", task);\\n        }\\n        \\\"list\\\" => {\\n            for (k, v) in &todos {\\n                println!(\\\"[{}] {}\\\", if *v { \\\"x\\\" } else { \\\" \\\" }, k);\\n            }\\n        }\\n        \\\"done\\\" => {\\n            let task = args.get(2).expect(\\\"Task name required\\\");\\n            todos.insert(task.clone(), true);\\n            save(file, &todos);\\n            println!(\\\"Done: {}\\\", task);\\n        }\\n        \\\"delete\\\" => {\\n            let task = args.get(2).expect(\\\"Task name required\\\");\\n            todos.remove(task);\\n            save(file, &todos);\\n            println!(\\\"Deleted: {}\\\", task);\\n        }\\n        _ => eprintln!(\\\"Unknown command: {}\\\", cmd),\\n    }\\n}\\n\\nfn load(file: &str) -> HashMap<String, bool> {\\n    match fs::read_to_string(file) {\\n        Ok(s) => serde_json::from_str(&s).unwrap_or_default(),\\n        Err(_) => HashMap::new(),\\n    }\\n}\\n\\nfn save(file: &str, todos: &HashMap<String, bool>) {\\n    let s = serde_json::to_string_pretty(todos).unwrap();\\n    fs::write(file, s).unwrap();\\n}\"}"
+          },
+          {
+            "name": "create_file",
+            "arguments": "{\"path\":\"tests/todo_test.rs\",\"content\":\"#[test]\\nfn test_add_and_list() {\\n    // Integration test placeholder\\n    assert!(true);\\n}\"}"
+          }
+        ]
+      },
+      "expect_files": ["src/main.rs", "tests/todo_test.rs"]
+    },
+    {
+      "agent": "xingbu",
+      "mock_response": {
+        "content": "运行测试验证交付物质量。",
+        "tool_calls": [
+          {
+            "name": "run_tests",
+            "arguments": "{\"scope\":\"all\"}"
+          }
+        ]
+      },
+      "expect_audit_events": ["validate_delivery"]
+    }
+  ],
+  "expected_final_status": "complete"
+}

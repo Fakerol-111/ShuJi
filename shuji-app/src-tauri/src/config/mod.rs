@@ -12,7 +12,7 @@ pub use reasoning::{
 };
 pub use types::{
     ActorConfig, ApiConfig, CheckpointConfig, ContextCompactionConfig, EsaaConfig, MaxTokensConfig,
-    RuntimeConfig, StreamingConfig, ToolIterationsConfig, WatchdogConfig,
+    RetryConfig, RuntimeConfig, StreamingConfig, ToolIterationsConfig, WatchdogConfig,
 };
 
 // Re-export the standalone function

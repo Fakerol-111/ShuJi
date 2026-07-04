@@ -26,10 +26,15 @@ pub struct RoleContract {
 
 impl AgentContracts {
     /// Load contracts from `.shuji/esaa/AGENT_CONTRACT.yaml`.
-    /// Returns empty contracts if the file doesn't exist or is unparseable.
+    /// Returns empty contracts if the file doesn't exist (normal — built-in
+    /// defaults still apply via `effective_for_role`). Only logs an error when
+    /// the file exists but cannot be read or parsed.
     pub fn load(shuji_dir: &Path) -> Self {
         match Self::try_load(shuji_dir) {
-            Ok(c) => c,
+            Ok(Some(c)) => c,
+            Ok(None) => Self {
+                roles: HashMap::new(),
+            },
             Err(e) => {
                 log_console!("[esaa] AGENT_CONTRACT.yaml load failed: {}", e);
                 Self {
@@ -39,12 +44,22 @@ impl AgentContracts {
         }
     }
 
-    /// Try to load contracts, returning an error on parse failure.
-    pub fn try_load(shuji_dir: &Path) -> Result<Self, String> {
+    /// Try to load contracts.
+    ///
+    /// Returns `Ok(None)` when the file does not exist (normal case — the
+    /// project has not customised its agent contract). Returns `Ok(Some(_))`
+    /// on successful load. Returns `Err` only when the file exists but cannot
+    /// be read or parsed.
+    pub fn try_load(shuji_dir: &Path) -> Result<Option<Self>, String> {
         let path = shuji_dir.join("esaa").join("AGENT_CONTRACT.yaml");
-        let content = std::fs::read_to_string(&path)
-            .map_err(|e| format!("读取 AGENT_CONTRACT.yaml 失败: {}", e))?;
-        serde_yaml::from_str(&content).map_err(|e| format!("解析 AGENT_CONTRACT.yaml 失败: {}", e))
+        let content = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(format!("读取 AGENT_CONTRACT.yaml 失败: {}", e)),
+        };
+        let contracts = serde_yaml::from_str(&content)
+            .map_err(|e| format!("解析 AGENT_CONTRACT.yaml 失败: {}", e))?;
+        Ok(Some(contracts))
     }
 
     /// Resolve role name to contract key (supports Role::from_name aliases + sub-agents).
@@ -443,14 +458,20 @@ impl ContractBoundaryChecker {
                     return;
                 }
             };
-            *contracts = match AgentContracts::try_load(&self.shuji_dir) {
-                Ok(c) => c,
+            match AgentContracts::try_load(&self.shuji_dir) {
+                Ok(Some(c)) => {
+                    *contracts = c;
+                    *last = Instant::now();
+                }
+                Ok(None) => {
+                    // File doesn't exist — keep current contracts, update last check time
+                    *last = Instant::now();
+                }
                 Err(e) => {
                     log_console!("[esaa] reload failed, keeping previous contracts: {}", e);
-                    return;
+                    // Don't update last — retry on next call
                 }
-            };
-            *last = Instant::now();
+            }
         }
     }
 
@@ -641,6 +662,40 @@ roles:
         let effective = contracts.effective_for_role("中书令").unwrap();
         assert!(!effective.is_tool_allowed("create_file"));
         assert!(effective.is_tool_allowed("read_document"));
+    }
+
+    #[test]
+    fn test_load_missing_file_returns_empty_silently() {
+        // When AGENT_CONTRACT.yaml does not exist, try_load should return
+        // Ok(None) (not Err), and load should return empty contracts without
+        // logging an error.
+        let dir = tempfile::tempdir().unwrap();
+        // Intentionally do NOT create .shuji/esaa/AGENT_CONTRACT.yaml
+        let shuji_dir = dir.path().join(".shuji");
+
+        // try_load returns Ok(None) for missing file
+        assert!(AgentContracts::try_load(&shuji_dir).unwrap().is_none());
+
+        // load returns empty contracts (no panic, no error)
+        let contracts = AgentContracts::load(&shuji_dir);
+        assert!(contracts.roles.is_empty());
+
+        // Built-in defaults still apply via effective_for_role
+        let effective = contracts.effective_for_role("工部尚书").unwrap();
+        assert!(effective.is_tool_allowed("create_file"));
+    }
+
+    #[test]
+    fn test_load_corrupt_file_returns_error() {
+        // When the file exists but is unparseable, try_load should return Err.
+        let dir = tempfile::tempdir().unwrap();
+        let esaa_dir = dir.path().join(".shuji").join("esaa");
+        std::fs::create_dir_all(&esaa_dir).unwrap();
+        std::fs::write(esaa_dir.join("AGENT_CONTRACT.yaml"), "{{{invalid yaml").unwrap();
+
+        let result = AgentContracts::try_load(&dir.path().join(".shuji"));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("解析"));
     }
 
     #[test]

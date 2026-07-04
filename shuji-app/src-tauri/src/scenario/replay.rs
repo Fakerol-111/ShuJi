@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use super::{Scenario, ScenarioStep};
+use super::Scenario;
 
 /// Replay a scenario against a project directory.
 /// Phase 1: validates the scenario and checks expected files exist.

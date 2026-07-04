@@ -17,6 +17,7 @@ mod length_retry;
 mod logging;
 mod request;
 mod response;
+mod retry_strategy;
 mod stream;
 mod token_usage;
 mod types;
@@ -171,15 +172,21 @@ impl Session {
                     }
 
                     api_retries += 1;
-                    if api_retries < max_api_retries {
+                    if let Some(backoff) = retry_strategy::should_retry_with_backoff(
+                        &e,
+                        api_retries - 1,
+                        max_api_retries,
+                        &self.config.api.retry,
+                    ) {
                         log_console!(
-                            "[{}] API request failed (retry {}/{}), retrying in 2s: {}",
+                            "[{}] API request failed (retry {}/{}), retrying in {:?}: {}",
                             self.role,
                             api_retries,
                             max_api_retries,
+                            backoff,
                             e
                         );
-                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                        tokio::time::sleep(backoff).await;
                         continue;
                     }
                     return Err(e);
