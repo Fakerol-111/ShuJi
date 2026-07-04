@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { BrowserRouter } from 'react-router-dom';
 import ProjectDashboard from '../pages/ProjectDashboard';
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -38,21 +39,14 @@ vi.mock('../api', () => {
     getTokenStats: vi.fn().mockResolvedValue({}),
     getWorkflowGraph: vi.fn().mockResolvedValue(null),
     getPipelineStatus: vi.fn().mockResolvedValue(null),
+    getPendingApprovals: vi.fn().mockResolvedValue([]),
     sendMessage: vi.fn().mockResolvedValue('ok'),
+    getConfig: vi.fn().mockResolvedValue({ roles: { default: { api_key: 'test' } } }),
+    loadProject: vi.fn().mockResolvedValue(null),
+    getRecentDirs: vi.fn().mockResolvedValue([]),
+    getChatHistory: vi.fn().mockResolvedValue([]),
   };
 });
-
-vi.mock('../hooks/useProject', () => ({
-  useProject: () => ({
-    project: null,
-    setProject: vi.fn(),
-    recentDirs: [],
-    setRecentDirs: vi.fn(),
-    error: null,
-    setError: vi.fn(),
-    loadProjectIntoState: vi.fn(),
-  }),
-}));
 
 vi.mock('../hooks/useChat', () => ({
   useChat: () => ({
@@ -77,50 +71,64 @@ vi.mock('../hooks/useChat', () => ({
 vi.mock('../hooks/useDocumentTabs', () => ({
   useDocumentTabs: () => ({
     tabs: [],
-    activeTab: null,
-    openDoc: vi.fn(),
+    activeIndex: 0,
+    activeDoc: null,
+    hasTabs: false,
+    openTab: vi.fn(),
     closeTab: vi.fn(),
-    setActiveTab: vi.fn(),
+    handleDocSelect: vi.fn(),
+    setActiveIndex: vi.fn(),
   }),
 }));
 
 vi.mock('../hooks/useDemoFlow', () => ({
   useDemoFlow: () => ({
-    demoStep: null,
-    advanceDemo: vi.fn(),
-    resetDemo: vi.fn(),
-  }),
-}));
-
-vi.mock('../hooks/usePendingApprovals', () => ({
-  usePendingApprovals: () => ({
-    pendingApprovals: [],
-    pipeline: null,
-    gateContext: {
-      active: false,
-      docId: null,
-      docType: '',
-      stepId: null,
-      stepLabel: null,
-      stepAction: null,
-      nextStepLabel: null,
-      planSummary: null,
-    },
+    showDemoTour: false,
+    setShowDemoTour: vi.fn(),
+    demoCreating: false,
+    mockScenario: null,
+    handleDemoProject: vi.fn(),
   }),
 }));
 
 vi.mock('../hooks/useProjectPicker', () => ({
   useProjectPicker: () => ({
-    pickerOpen: false,
-    setPickerOpen: vi.fn(),
+    showPicker: false,
+    pickerPath: '',
+    pickerError: '',
+    pickerLoading: false,
+    setPickerPath: vi.fn(),
+    onBrowse: vi.fn(),
+    onLoad: vi.fn(),
+    setShowPicker: vi.fn(),
     openPicker: vi.fn(),
-    handlePick: vi.fn(),
+  }),
+}));
+
+vi.mock('../hooks/useDashboardUI', () => ({
+  useDashboardUI: () => ({
+    activity: 'files' as const,
+    onActivity: vi.fn(),
+    experienceLevel: 'advanced' as const,
+    onExperienceLevelChange: vi.fn(),
+    beginnerMode: false,
+    artifactOpen: false,
+    setArtifactOpen: vi.fn(),
+    settingsOpen: false,
+    setSettingsOpen: vi.fn(),
+    showProjectOnboarding: false,
+    setShowProjectOnboarding: vi.fn(),
+    openArtifact: vi.fn(),
   }),
 }));
 
 describe('ProjectDashboard', () => {
   it('renders without project (picker / empty state smoke)', () => {
-    render(<ProjectDashboard />);
+    render(
+      <BrowserRouter>
+        <ProjectDashboard />
+      </BrowserRouter>
+    );
     expect(screen.getByText(/打开项目/)).toBeTruthy();
   });
 });

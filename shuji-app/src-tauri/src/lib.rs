@@ -201,6 +201,7 @@ pub fn run() {
             commands::settings::approval::set_approval_config,
             commands::settings::reasoning::get_reasoning_config,
             commands::settings::reasoning::set_reasoning_config,
+            commands::settings::diagnostics::export_effective_config,
             commands::shuji_docs::list_shuji_tree,
             commands::shuji_docs::read_shuji_doc,
             commands::shuji_docs::get_document_diff,

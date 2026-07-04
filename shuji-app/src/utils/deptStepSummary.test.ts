@@ -138,3 +138,19 @@ describe('deriveLatestStepByDept', () => {
     expect(latest.get('内阁')?.kind.type).toBe('tool_call');
   });
 });
+
+describe('waiting heartbeat', () => {
+  it('summarizes waiting event with elapsed seconds', () => {
+    const entry = step('内阁', { type: 'waiting', elapsed_secs: 6 });
+    const result = summarizeDeptStep(entry, 'zh');
+    expect(result).toContain('6s');
+    expect(result).toContain('思考');
+  });
+
+  it('summarizes waiting event in English', () => {
+    const entry = step('内阁', { type: 'waiting', elapsed_secs: 9 });
+    const result = summarizeDeptStep(entry, 'en');
+    expect(result).toContain('9s');
+    expect(result).toContain('thinking');
+  });
+});

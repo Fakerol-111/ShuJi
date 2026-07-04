@@ -1,9 +1,23 @@
 /**
  * Frontend error formatting — wraps raw errors into user-friendly messages.
+ * Supports structured ShujiError from backend (with `code` field for i18n).
  * Use in catch blocks instead of `String(e)` or `e.message`.
  */
 
 import i18n from '../i18n/config';
+
+/** Map backend error codes to i18n keys */
+const CODE_TO_I18N: Record<string, string> = {
+  api_key_invalid: 'error.apiKeyInvalid',
+  api_forbidden: 'error.apiForbidden',
+  api_rate_limited: 'error.rateLimited',
+  api_timeout: 'error.timeout',
+  api_connection_failed: 'error.connectionFailed',
+  api_server_error: 'error.serverError',
+  api_service_unavailable: 'error.serviceUnavailable',
+  api_bad_request: 'error.badRequest',
+  api_not_found: 'error.notFound',
+};
 
 /** Common API error messages mapped from keywords */
 const API_ERROR_MAP: Array<[RegExp, string]> = [
@@ -19,8 +33,35 @@ const API_ERROR_MAP: Array<[RegExp, string]> = [
   [/api error \(unknown\)/i, 'error.unknownApiError'],
 ];
 
+/** Check if error is a structured ShujiError from backend */
+function tryStructuredError(e: unknown): string | null {
+  if (typeof e === 'object' && e !== null) {
+    const obj = e as Record<string, unknown>;
+    // Check for { type: 'Structured', data: { code: '...', detail: '...' } }
+    if (obj.type === 'Structured' && typeof obj.data === 'object' && obj.data !== null) {
+      const data = obj.data as Record<string, unknown>;
+      if (typeof data.code === 'string') {
+        const i18nKey = CODE_TO_I18N[data.code];
+        if (i18nKey) return i18n.t(i18nKey);
+        // Unknown code — fallback with detail if available
+        if (typeof data.detail === 'string') return data.detail;
+      }
+    }
+    // Also handle plain { code: '...', detail: '...' } without type tag
+    if (typeof obj.code === 'string') {
+      const i18nKey = CODE_TO_I18N[obj.code];
+      if (i18nKey) return i18n.t(i18nKey);
+    }
+  }
+  return null;
+}
+
 /** Map a raw error (string or Error) to a user-friendly message */
 export function formatError(e: unknown): string {
+  // Try structured error first
+  const structured = tryStructuredError(e);
+  if (structured) return structured;
+
   const raw = typeof e === 'string' ? e : e instanceof Error ? e.message : String(e);
   const msg = raw.trim();
   if (!msg) return i18n.t('error.unknownError');
