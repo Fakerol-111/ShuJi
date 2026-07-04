@@ -70,7 +70,10 @@ mod tests {
         };
         let tmp = tempfile::TempDir::new()?;
         let result = replay_scenario(&scenario, tmp.path()).await;
-        assert!(result.is_ok());
+        // Empty scenario is invalid per validate_scenario, so expect Err
+        assert!(result.is_err());
+        let errs = result.unwrap_err();
+        assert!(errs.contains(&"场景步骤为空".to_string()));
         Ok(())
     }
 
