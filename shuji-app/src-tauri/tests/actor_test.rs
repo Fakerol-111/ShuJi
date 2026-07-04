@@ -5,7 +5,7 @@
 use shuji_app_lib::actor::{ActorMessage, FastMessage};
 use shuji_app_lib::agent::gongbushangshu::GongbuShangshuAgent;
 use shuji_app_lib::agent::r#trait::{Agent, AgentInput, LoopDecision};
-use shuji_app_lib::api::client::AnthropicClient;
+use shuji_app_lib::api::client::LlmClient;
 use shuji_app_lib::api::control::RouteMsgType;
 use shuji_app_lib::config::RuntimeConfig;
 use shuji_app_lib::models::message::Message;
@@ -340,7 +340,7 @@ async fn test_cancel_flag_stops_agent_execution() {
     let queue = MockQueue::new(vec![mock_api_text("创建了一个文件 task_001.md")]);
     queue.mount(&mock_server).await;
 
-    let client = AnthropicClient::new(api_key, api_url);
+    let client = LlmClient::new(api_key, api_url);
     let cancel = Arc::new(AtomicBool::new(false));
     let runtime_config = Arc::new(RuntimeConfig::default());
     let agent = GongbuShangshuAgent::new(client, "test-model", cancel.clone());
@@ -440,7 +440,7 @@ async fn test_route_to_cross_actor() {
     )]);
     queue.mount(&mock_server).await;
 
-    let neige_client = AnthropicClient::new(api_key.clone(), api_url.clone());
+    let neige_client = LlmClient::new(api_key.clone(), api_url.clone());
     let cancel = Arc::new(AtomicBool::new(false));
     let runtime_config = Arc::new(RuntimeConfig::default());
 
@@ -490,7 +490,7 @@ async fn test_route_to_cross_actor() {
         ))]);
         gongbu_queue.mount(&mock_server).await;
 
-        let gongbu_client = AnthropicClient::new(api_key, api_url);
+        let gongbu_client = LlmClient::new(api_key, api_url);
         let gongbu = GongbuShangshuAgent::new(gongbu_client, "test-model", cancel);
 
         let gongbu_input = AgentInput {

@@ -7,6 +7,11 @@ import {
   getDeptMeta,
   ALL_ROLES,
   ROLE_CONTEXT_DEFAULTS,
+  ROLE_NAME_TO_KEY,
+  KEY_TO_ROLE_NAME,
+  roleNameToKey,
+  keyToRoleName,
+  toRoleDisplayName,
 } from './constants';
 
 describe('DEPT_META_LIST', () => {
@@ -118,5 +123,75 @@ describe('ROLE_CONTEXT_DEFAULTS', () => {
     for (const config of Object.values(ROLE_CONTEXT_DEFAULTS)) {
       expect(config.token_threshold).toBe(750_000);
     }
+  });
+});
+
+// ── Role name ↔ English key mapping tests ──────────────────
+
+describe('ROLE_NAME_TO_KEY', () => {
+  it('maps all 9 Chinese labels to English keys', () => {
+    expect(ROLE_NAME_TO_KEY['内阁']).toBe('neige');
+    expect(ROLE_NAME_TO_KEY['中书令']).toBe('zhongshuling');
+    expect(ROLE_NAME_TO_KEY['门下侍中']).toBe('menxiashizhong');
+    expect(ROLE_NAME_TO_KEY['尚书令']).toBe('shangshuling');
+    expect(ROLE_NAME_TO_KEY['吏部尚书']).toBe('libushangshu');
+    expect(ROLE_NAME_TO_KEY['礼部尚书']).toBe('liburshangshu');
+    expect(ROLE_NAME_TO_KEY['兵部尚书']).toBe('bingbushangshu');
+    expect(ROLE_NAME_TO_KEY['刑部尚书']).toBe('xingbushangshu');
+    expect(ROLE_NAME_TO_KEY['工部尚书']).toBe('gongbushangshu');
+  });
+});
+
+describe('KEY_TO_ROLE_NAME', () => {
+  it('maps all 9 English keys to Chinese labels', () => {
+    expect(KEY_TO_ROLE_NAME['neige']).toBe('内阁');
+    expect(KEY_TO_ROLE_NAME['zhongshuling']).toBe('中书令');
+    expect(KEY_TO_ROLE_NAME['gongbushangshu']).toBe('工部尚书');
+  });
+});
+
+describe('roleNameToKey', () => {
+  it('converts Chinese role names to English keys', () => {
+    expect(roleNameToKey('内阁')).toBe('neige');
+    expect(roleNameToKey('工部尚书')).toBe('gongbushangshu');
+  });
+
+  it('returns undefined for special roles', () => {
+    expect(roleNameToKey('皇帝')).toBeUndefined();
+    expect(roleNameToKey('系统')).toBeUndefined();
+  });
+});
+
+describe('keyToRoleName', () => {
+  it('converts English keys to Chinese labels', () => {
+    expect(keyToRoleName('neige')).toBe('内阁');
+    expect(keyToRoleName('gongbushangshu')).toBe('工部尚书');
+  });
+
+  it('handles case-insensitive input', () => {
+    expect(keyToRoleName('Neige')).toBe('内阁');
+    expect(keyToRoleName('GONGBUSHANGSHU')).toBe('工部尚书');
+  });
+
+  it('returns undefined for unknown keys', () => {
+    expect(keyToRoleName('unknown')).toBeUndefined();
+  });
+});
+
+describe('toRoleDisplayName', () => {
+  it('returns Chinese name as-is', () => {
+    expect(toRoleDisplayName('内阁')).toBe('内阁');
+    expect(toRoleDisplayName('工部尚书')).toBe('工部尚书');
+  });
+
+  it('converts English key to Chinese', () => {
+    expect(toRoleDisplayName('neige')).toBe('内阁');
+    expect(toRoleDisplayName('Neige')).toBe('内阁');
+  });
+
+  it('returns original for unknown roles', () => {
+    expect(toRoleDisplayName('皇帝')).toBe('皇帝');
+    expect(toRoleDisplayName('系统')).toBe('系统');
+    expect(toRoleDisplayName('unknown')).toBe('unknown');
   });
 });

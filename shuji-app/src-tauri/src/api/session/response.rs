@@ -183,3 +183,470 @@ impl super::Session {
         parsed.into_step_result()
     }
 }
+
+// ── Fuzz tests ────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod fuzz_tests {
+    use super::*;
+    use crate::api::client::LlmClient;
+    use crate::config::RuntimeConfig;
+    use std::sync::Arc;
+
+    fn test_session() -> super::super::Session {
+        let client = Arc::new(LlmClient::new(
+            "test-key".into(),
+            "https://api.test.com/chat/completions".into(),
+        ));
+        let config = Arc::new(RuntimeConfig::default());
+        super::super::Session::new(
+            "test system prompt",
+            &[],
+            "test-model",
+            &[],
+            &client,
+            &config,
+        )
+        .with_role("test")
+    }
+
+    // ── Normal cases ──────────────────────────────────────────────
+
+    #[test]
+    fn fuzz_normal_text_response() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "Hello, world!"
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert!(parsed.calls.is_empty());
+        assert_eq!(parsed.assistant_text, "Hello, world!");
+    }
+
+    #[test]
+    fn fuzz_normal_tool_call() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "Creating file...",
+            "tool_calls": [{
+                "id": "call_001",
+                "type": "function",
+                "function": {
+                    "name": "create_file",
+                    "arguments": "{\"path\":\"main.rs\",\"content\":\"fn main() {}\"}"
+                }
+            }]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert_eq!(parsed.calls.len(), 1);
+        assert_eq!(parsed.calls[0].name, "create_file");
+    }
+
+    #[test]
+    fn fuzz_multiple_tool_calls() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {"id": "c1", "type": "function", "function": {"name": "read_file", "arguments": "{\"path\":\"a.rs\"}"}},
+                {"id": "c2", "type": "function", "function": {"name": "read_file", "arguments": "{\"path\":\"b.rs\"}"}},
+                {"id": "c3", "type": "function", "function": {"name": "list_dir", "arguments": "{\"path\":\"src\"}"}}
+            ]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert_eq!(parsed.calls.len(), 3);
+    }
+
+    // ── Truncated JSON arguments ──────────────────────────────────
+
+    #[test]
+    fn fuzz_truncated_json_arguments() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": "call_001",
+                "type": "function",
+                "function": {
+                    "name": "create_file",
+                    "arguments": "{\"path\":\"main.rs\",\"content\":\"fn ma"
+                }
+            }]
+        });
+        let parsed = session.parse_assistant(&msg, true);
+        assert!(parsed.calls.is_empty());
+    }
+
+    #[test]
+    fn fuzz_partial_json_with_some_valid_calls() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {"id": "c1", "type": "function", "function": {"name": "read_file", "arguments": "{\"path\":\"a.rs\"}"}},
+                {"id": "c2", "type": "function", "function": {"name": "create_file", "arguments": "{\"path\":\"main.rs\",\"content\":\"fn ma"}}
+            ]
+        });
+        let parsed = session.parse_assistant(&msg, true);
+        assert_eq!(parsed.calls.len(), 1);
+        assert_eq!(parsed.calls[0].id, "c1");
+    }
+
+    // ── Null and missing fields ───────────────────────────────────
+
+    #[test]
+    fn fuzz_null_arguments() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": "call_001",
+                "type": "function",
+                "function": {"name": "create_file", "arguments": null}
+            }]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert!(parsed.calls.is_empty());
+    }
+
+    #[test]
+    fn fuzz_missing_function_name() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": "call_001",
+                "type": "function",
+                "function": {"arguments": "{\"path\":\"test.rs\"}"}
+            }]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert_eq!(parsed.calls.len(), 1);
+        assert_eq!(parsed.calls[0].name, "");
+    }
+
+    #[test]
+    fn fuzz_missing_tool_call_id() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "type": "function",
+                "function": {"name": "read_file", "arguments": "{\"path\":\"test.rs\"}"}
+            }]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert_eq!(parsed.calls.len(), 1);
+        assert_eq!(parsed.calls[0].id, "");
+    }
+
+    #[test]
+    fn fuzz_null_content() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": null,
+            "tool_calls": []
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert!(parsed.calls.is_empty());
+        assert_eq!(parsed.assistant_text, "");
+    }
+
+    #[test]
+    fn fuzz_missing_content_field() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "tool_calls": [{
+                "id": "c1",
+                "type": "function",
+                "function": {"name": "read_file", "arguments": "{\"path\":\"a.rs\"}"}
+            }]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert_eq!(parsed.calls.len(), 1);
+        assert_eq!(parsed.assistant_text, "");
+    }
+
+    // ── Non-string/non-object arguments ───────────────────────────
+
+    #[test]
+    fn fuzz_arguments_as_number() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": "c1",
+                "type": "function",
+                "function": {"name": "test", "arguments": 42}
+            }]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert!(parsed.calls.is_empty());
+    }
+
+    #[test]
+    fn fuzz_arguments_as_array() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": "c1",
+                "type": "function",
+                "function": {"name": "test", "arguments": [1, 2, 3]}
+            }]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert!(parsed.calls.is_empty());
+    }
+
+    #[test]
+    fn fuzz_arguments_as_boolean() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": "c1",
+                "type": "function",
+                "function": {"name": "test", "arguments": true}
+            }]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert!(parsed.calls.is_empty());
+    }
+
+    #[test]
+    fn fuzz_arguments_as_object() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": "c1",
+                "type": "function",
+                "function": {"name": "test", "arguments": {"path": "test.rs"}}
+            }]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert_eq!(parsed.calls.len(), 1);
+    }
+
+    // ── Empty and degenerate inputs ───────────────────────────────
+
+    #[test]
+    fn fuzz_empty_tool_calls_array() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "No tools needed",
+            "tool_calls": []
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert!(parsed.calls.is_empty());
+        assert_eq!(parsed.assistant_text, "No tools needed");
+    }
+
+    #[test]
+    fn fuzz_no_tool_calls_field() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "Just text"
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert!(parsed.calls.is_empty());
+    }
+
+    #[test]
+    fn fuzz_empty_message() {
+        let session = test_session();
+        let msg = serde_json::json!({});
+        let parsed = session.parse_assistant(&msg, false);
+        assert!(parsed.calls.is_empty());
+        assert_eq!(parsed.assistant_text, "");
+    }
+
+    #[test]
+    fn fuzz_all_calls_broken_falls_back_to_text() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "I tried but failed",
+            "tool_calls": [
+                {"id": "c1", "type": "function", "function": {"name": "test", "arguments": "broken"}},
+                {"id": "c2", "type": "function", "function": {"name": "test", "arguments": "{invalid}"}},
+                {"id": "c3", "type": "function", "function": {"name": "test", "arguments": "\"unclosed"}}
+            ]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert!(parsed.calls.is_empty());
+        assert_eq!(parsed.assistant_text, "I tried but failed");
+    }
+
+    // ── Adversarial inputs ────────────────────────────────────────
+
+    #[test]
+    fn fuzz_extremely_long_arguments() {
+        let session = test_session();
+        let long_content = "x".repeat(100_000);
+        let args = format!("{{\"path\":\"test.rs\",\"content\":\"{}\"}}", long_content);
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": "c1",
+                "type": "function",
+                "function": {"name": "create_file", "arguments": args}
+            }]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert_eq!(parsed.calls.len(), 1);
+        let content = parsed.calls[0].args["content"].as_str().unwrap();
+        assert_eq!(content.len(), 100_000);
+    }
+
+    #[test]
+    fn fuzz_unicode_in_arguments() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": "c1",
+                "type": "function",
+                "function": {"name": "create_file", "arguments": "{\"path\":\"测试.rs\",\"content\":\"你好世界 🌍\"}"}
+            }]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert_eq!(parsed.calls.len(), 1);
+        let path = parsed.calls[0].args["path"].as_str().unwrap();
+        assert_eq!(path, "测试.rs");
+    }
+
+    #[test]
+    fn fuzz_deeply_nested_json_arguments() {
+        let session = test_session();
+        let mut args = "{\"path\":\"test.rs\"}".to_string();
+        for i in 0..50 {
+            args = format!("{{\"level{}\":{}}}", i, args);
+        }
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": "c1",
+                "type": "function",
+                "function": {"name": "test", "arguments": args}
+            }]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert_eq!(parsed.calls.len(), 1);
+    }
+
+    #[test]
+    fn fuzz_arguments_with_escaped_quotes() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": "c1",
+                "type": "function",
+                "function": {"name": "create_file", "arguments": "{\"path\":\"test.rs\",\"content\":\"fn main() { println!(\\\"hello\\\"); }\"}"}
+            }]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert_eq!(parsed.calls.len(), 1);
+    }
+
+    // ── Message structure edge cases ──────────────────────────────
+
+    #[test]
+    fn fuzz_tool_calls_as_non_array() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "test",
+            "tool_calls": "not_an_array"
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert!(parsed.calls.is_empty());
+        assert_eq!(parsed.assistant_text, "test");
+    }
+
+    #[test]
+    fn fuzz_content_as_number() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": 42
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert_eq!(parsed.assistant_text, "");
+    }
+
+    #[test]
+    fn fuzz_tool_call_without_function_field() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{"id": "c1", "type": "function"}]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        // Should not panic — call may be kept with empty name/null args or skipped
+        let _ = parsed.calls.len();
+    }
+
+    #[test]
+    fn fuzz_mixed_valid_invalid_null() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "Mixed results",
+            "tool_calls": [
+                {"id": "c1", "type": "function", "function": {"name": "read_file", "arguments": "{\"path\":\"a.rs\"}"}},
+                {"id": "c2", "type": "function", "function": {"name": "bad_tool", "arguments": null}},
+                {"id": "c3", "type": "function", "function": {"name": "read_file", "arguments": "{\"path\":\"b.rs\"}"}},
+                {"id": "c4", "type": "function", "function": {"name": "broken", "arguments": "{invalid json}"}},
+                {"id": "c5", "type": "function", "function": {"name": "read_file", "arguments": "{\"path\":\"c.rs\"}"}}
+            ]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert_eq!(parsed.calls.len(), 3);
+        let ids: Vec<&str> = parsed.calls.iter().map(|c| c.id.as_str()).collect();
+        assert!(ids.contains(&"c1"));
+        assert!(ids.contains(&"c3"));
+        assert!(ids.contains(&"c5"));
+    }
+
+    #[test]
+    fn fuzz_filtered_msg_contains_only_valid_calls() {
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {"id": "c1", "type": "function", "function": {"name": "read_file", "arguments": "{\"path\":\"a.rs\"}"}},
+                {"id": "c2", "type": "function", "function": {"name": "bad", "arguments": "broken"}}
+            ]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert_eq!(parsed.calls.len(), 1);
+        let filtered_tcs = parsed.filtered_msg["tool_calls"].as_array().unwrap();
+        assert_eq!(filtered_tcs.len(), 1);
+        assert_eq!(filtered_tcs[0]["id"].as_str().unwrap(), "c1");
+    }
+}

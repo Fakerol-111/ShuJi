@@ -13,7 +13,7 @@ use std::pin::Pin;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use shuji_app_lib::api::client::{AnthropicClient, ToolDefinition, ToolFunction};
+use shuji_app_lib::api::client::{LlmClient, ToolDefinition, ToolFunction};
 use shuji_app_lib::api::control::AgentController;
 use shuji_app_lib::api::session::Session;
 use shuji_app_lib::config::RuntimeConfig;
@@ -22,7 +22,7 @@ use common::{mock_api_text, mock_api_tool, MockQueue};
 
 /// 构建一个指向 mock HTTP server 的 Session。
 fn make_session(api_url: &str, tools: &[ToolDefinition], config: &Arc<RuntimeConfig>) -> Session {
-    let client = Arc::new(AnthropicClient::new(
+    let client = Arc::new(LlmClient::new(
         "test-key".to_string(),
         format!("{}/chat/completions", api_url),
     ));

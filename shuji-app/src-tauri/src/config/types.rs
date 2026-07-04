@@ -62,6 +62,30 @@ pub struct ApiConfig {
     /// LLM 流式响应（工具 agent）。默认关闭，失败时回退 step()。
     #[serde(default)]
     pub streaming: StreamingConfig,
+
+    /// 重试退避策略配置
+    #[serde(default)]
+    pub retry: RetryConfig,
+}
+
+/// 重试退避策略配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RetryConfig {
+    /// 初始退避延迟（毫秒）
+    #[serde(default = "default_retry_initial_backoff_ms")]
+    pub initial_backoff_ms: u64,
+
+    /// 最大退避延迟（毫秒），防止过长等待
+    #[serde(default = "default_retry_max_backoff_ms")]
+    pub max_backoff_ms: u64,
+
+    /// 退避乘数（指数因子）
+    #[serde(default = "default_retry_backoff_multiplier")]
+    pub backoff_multiplier: f64,
+
+    /// 是否添加随机抖动（防止重试风暴）
+    #[serde(default = "default_retry_jitter")]
+    pub jitter: bool,
 }
 
 /// Agent 流式输出配置
@@ -271,6 +295,19 @@ fn default_length_max_retries() -> u32 {
     5
 }
 
+fn default_retry_initial_backoff_ms() -> u64 {
+    1000
+}
+fn default_retry_max_backoff_ms() -> u64 {
+    30000
+}
+fn default_retry_backoff_multiplier() -> f64 {
+    2.0
+}
+fn default_retry_jitter() -> bool {
+    true
+}
+
 fn default_write_file_tokens() -> u32 {
     0
 } // keep unlimited for code generation
@@ -340,6 +377,18 @@ impl Default for ApiConfig {
             max_tokens: MaxTokensConfig::default(),
             reasoning: ReasoningConfig::default(),
             streaming: StreamingConfig::default(),
+            retry: RetryConfig::default(),
+        }
+    }
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            initial_backoff_ms: default_retry_initial_backoff_ms(),
+            max_backoff_ms: default_retry_max_backoff_ms(),
+            backoff_multiplier: default_retry_backoff_multiplier(),
+            jitter: default_retry_jitter(),
         }
     }
 }
@@ -503,6 +552,20 @@ impl RuntimeConfig {
         }
         if other.api.streaming.enabled {
             self.api.streaming.enabled = other.api.streaming.enabled;
+        }
+
+        // Retry config
+        if other.api.retry.initial_backoff_ms != default_retry_initial_backoff_ms() {
+            self.api.retry.initial_backoff_ms = other.api.retry.initial_backoff_ms;
+        }
+        if other.api.retry.max_backoff_ms != default_retry_max_backoff_ms() {
+            self.api.retry.max_backoff_ms = other.api.retry.max_backoff_ms;
+        }
+        if other.api.retry.backoff_multiplier != default_retry_backoff_multiplier() {
+            self.api.retry.backoff_multiplier = other.api.retry.backoff_multiplier;
+        }
+        if other.api.retry.jitter != default_retry_jitter() {
+            self.api.retry.jitter = other.api.retry.jitter;
         }
 
         // Tool iterations

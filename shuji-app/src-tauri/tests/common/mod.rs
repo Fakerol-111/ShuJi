@@ -40,7 +40,7 @@ pub fn create_test_project(name: &str) -> tempfile::TempDir {
     temp
 }
 
-/// Create a mock AnthropicClient for testing (returns predefined responses).
+/// Create a mock LlmClient for testing (returns predefined responses).
 pub struct MockClient {
     pub responses: Arc<std::sync::Mutex<Vec<serde_json::Value>>>,
 }

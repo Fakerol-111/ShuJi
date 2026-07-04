@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 import { classifyError, swallowError } from '../utils/error';
 import { useDeptEvents } from '../hooks/useDeptEvents';
 import { useProject } from '../hooks/useProject';
@@ -7,6 +7,7 @@ import { useDocumentTabs } from '../hooks/useDocumentTabs';
 import { useDemoFlow } from '../hooks/useDemoFlow';
 import { usePendingApprovals } from '../hooks/usePendingApprovals';
 import { useProjectPicker } from '../hooks/useProjectPicker';
+import { useDashboardUI } from '../hooks/useDashboardUI';
 import DashboardLayout from '../components/DashboardLayout';
 import AgentStreamPanel from '../components/AgentStreamPanel';
 import ArtifactPanel from '../components/ArtifactPanel';
@@ -23,14 +24,7 @@ import { docIdToPath } from '../utils/docPath';
 import { approveDocumentAndResume } from '../utils/approveDocument';
 import { cancelProcessing, onProjectUpdate } from '../api';
 import type { Project } from '../types';
-import {
-  loadUiPrefs,
-  saveUiPrefs,
-  getExperienceLevel,
-  isProjectOnboardingDone,
-  type ExperienceLevel,
-  type ActivitySelection,
-} from '../utils/uiPrefs';
+import { isProjectOnboardingDone } from '../utils/uiPrefs';
 import ProjectOnboarding from '../components/ProjectOnboarding';
 import { GlossaryTerm } from '../components/GlossaryTerm';
 
@@ -49,7 +43,6 @@ export default function ProjectDashboard() {
   const session = loadSession();
   const { activeDepts } = useDeptEvents();
   const activeDeptsArr = Array.from(activeDepts);
-  const initialUiPrefs = loadUiPrefs();
 
   const {
     project,
@@ -104,17 +97,21 @@ export default function ProjectDashboard() {
     );
   const picker = useProjectPicker(loadProjectIntoState, setRecentDirs);
 
-  const [activity, setActivity] = useState<ActivitySelection>(initialUiPrefs.lastActivity ?? null);
-  const [uiMode, setUiMode] = useState<'focus' | 'review' | 'inspect'>(
-    initialUiPrefs.lastUiMode || 'focus'
-  );
-  const [experienceLevel, setExperienceLevel] = useState<ExperienceLevel>(
-    () => initialUiPrefs.experienceLevel ?? getExperienceLevel()
-  );
-  const [artifactOpen, setArtifactOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [showProjectOnboarding, setShowProjectOnboarding] = useState(false);
-  const beginnerMode = experienceLevel === 'beginner';
+  // Centralized UI state (activity, uiMode, experienceLevel, panels, keyboard shortcuts)
+  const {
+    activity,
+    onActivity: handleActivity,
+    experienceLevel,
+    onExperienceLevelChange: handleExperienceLevelChange,
+    beginnerMode,
+    artifactOpen,
+    setArtifactOpen,
+    settingsOpen,
+    setSettingsOpen,
+    showProjectOnboarding,
+    setShowProjectOnboarding,
+    openArtifact,
+  } = useDashboardUI(hasTabs, pendingApprovals, openTab, docIdToPath);
 
   // When a document is selected from the sidebar (file tree), auto-open the artifact panel
   const handleDocSelectAndOpenPanel = useCallback(
@@ -124,25 +121,6 @@ export default function ProjectDashboard() {
     },
     [handleDocSelect, setArtifactOpen]
   );
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'b' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        setActivity((prev) => (prev === 'files' ? null : 'files'));
-      }
-      if (e.key === '\\' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        setArtifactOpen((prev) => !prev);
-      }
-      if (e.key === 'Escape' && artifactOpen && uiMode !== 'review') {
-        setArtifactOpen(false);
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [artifactOpen, uiMode, setActivity]);
 
   useEffect(() => {
     try {
@@ -165,26 +143,6 @@ export default function ProjectDashboard() {
     setShowProjectOnboarding(true);
   }, [project?.id, showDemoTour]);
 
-  const handleExperienceLevelChange = useCallback(
-    (level: ExperienceLevel) => {
-      setExperienceLevel(level);
-      saveUiPrefs({ experienceLevel: level });
-      if (
-        level === 'beginner' &&
-        activity &&
-        (activity === 'stats' ||
-          activity === 'context' ||
-          activity === 'archives' ||
-          activity === 'audit' ||
-          activity === 'graph')
-      ) {
-        setActivity(null);
-        setUiMode('focus');
-      }
-    },
-    [activity]
-  );
-
   const error = projError || chatError;
   const clearError = useCallback(() => {
     setProjError('');
@@ -195,45 +153,6 @@ export default function ProjectDashboard() {
     const timer = setTimeout(clearError, 8000);
     return () => clearTimeout(timer);
   }, [error, clearError]);
-
-  const handleActivity = useCallback(
-    (a: ActivitySelection) => {
-      if (a === null || a === activity) {
-        setActivity(null);
-        setUiMode('focus');
-      } else if (a === 'graph') {
-        setActivity(a);
-        setUiMode('inspect');
-      } else {
-        setActivity(a);
-        setUiMode('inspect');
-      }
-      saveUiPrefs({
-        lastUiMode: a === null || a === activity ? 'focus' : 'inspect',
-        lastActivity: a === null || a === activity ? null : a,
-      });
-    },
-    [activity]
-  );
-
-  const openArtifact = useCallback(
-    (path?: string) => {
-      if (path) openTab(path);
-      setArtifactOpen(true);
-    },
-    [openTab]
-  );
-
-  useEffect(() => {
-    if (hasTabs) setArtifactOpen(true);
-  }, [hasTabs]);
-
-  useEffect(() => {
-    if (pendingApprovals.length === 0) return;
-    setUiMode('review');
-    setArtifactOpen(true);
-    openTab(docIdToPath(pendingApprovals[0]));
-  }, [pendingApprovals, openTab]);
 
   const handleApproveDoc = useCallback(async (docId: string, comment?: string) => {
     await approveDocumentAndResume(docId, comment);

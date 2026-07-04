@@ -3,6 +3,8 @@
 //! Phase 1: data structures, loader, and validation.
 //! Phase 2: integration with PipelineEngine for automated replay.
 
+pub mod replay;
+
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};

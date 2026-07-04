@@ -127,11 +127,125 @@ impl Role {
             Role::GongbuShangshu => "You are the Minister of Works (工部尚书), responsible for coding implementation.",
         }
     }
+
+    /// 返回角色的中文显示名（如 "内阁"、"中书令"），用于前端 UI 展示。
+    pub fn chinese_name(&self) -> &'static str {
+        match self {
+            Role::Zhongshuling => "中书令",
+            Role::MenxiaShizhong => "门下侍中",
+            Role::Neige => "内阁",
+            Role::Shangshuling => "尚书令",
+            Role::LiBuShangshu => "吏部尚书",
+            Role::LiBuRShangshu => "礼部尚书",
+            Role::BingbuShangshu => "兵部尚书",
+            Role::XingbuShangshu => "刑部尚书",
+            Role::GongbuShangshu => "工部尚书",
+        }
+    }
+
+    /// 返回角色的组合显示名（如 "内阁 (Neige)"），用于日志和审计中
+    /// 同时展示中英文名称，方便阅读和检索。
+    pub fn display_name(&self) -> String {
+        format!("{} ({})", self.chinese_name(), self.name())
+    }
+
+    /// 返回所有角色的列表，按组织架构顺序排列。
+    /// 用于需要遍历所有角色的场景（如初始化 actor 系统、生成配置模板等）。
+    pub fn all() -> &'static [Role] {
+        &[
+            Role::Neige,
+            Role::Zhongshuling,
+            Role::MenxiaShizhong,
+            Role::Shangshuling,
+            Role::LiBuShangshu,
+            Role::BingbuShangshu,
+            Role::GongbuShangshu,
+            Role::XingbuShangshu,
+            Role::LiBuRShangshu,
+        ]
+    }
 }
 
 /// Display 实现等同于 `name()`，用于 `println!/format!("{}", role)`。
 impl fmt::Display for Role {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn chinese_name_returns_correct_values() {
+        assert_eq!(Role::Neige.chinese_name(), "内阁");
+        assert_eq!(Role::Zhongshuling.chinese_name(), "中书令");
+        assert_eq!(Role::MenxiaShizhong.chinese_name(), "门下侍中");
+        assert_eq!(Role::Shangshuling.chinese_name(), "尚书令");
+        assert_eq!(Role::LiBuShangshu.chinese_name(), "吏部尚书");
+        assert_eq!(Role::LiBuRShangshu.chinese_name(), "礼部尚书");
+        assert_eq!(Role::BingbuShangshu.chinese_name(), "兵部尚书");
+        assert_eq!(Role::XingbuShangshu.chinese_name(), "刑部尚书");
+        assert_eq!(Role::GongbuShangshu.chinese_name(), "工部尚书");
+    }
+
+    #[test]
+    fn display_name_combines_chinese_and_english() {
+        assert_eq!(Role::Neige.display_name(), "内阁 (Neige)");
+        assert_eq!(Role::Zhongshuling.display_name(), "中书令 (Zhongshuling)");
+        assert_eq!(
+            Role::LiBuRShangshu.display_name(),
+            "礼部尚书 (Liburshangshu)"
+        );
+    }
+
+    #[test]
+    fn from_name_handles_chinese_aliases() {
+        assert_eq!(Role::from_name("内阁"), Some(Role::Neige));
+        assert_eq!(Role::from_name("中书令"), Some(Role::Zhongshuling));
+        assert_eq!(Role::from_name("门下侍中"), Some(Role::MenxiaShizhong));
+        assert_eq!(Role::from_name("尚书令"), Some(Role::Shangshuling));
+        assert_eq!(Role::from_name("吏部"), Some(Role::LiBuShangshu));
+        assert_eq!(Role::from_name("礼部"), Some(Role::LiBuRShangshu));
+        assert_eq!(Role::from_name("兵部"), Some(Role::BingbuShangshu));
+        assert_eq!(Role::from_name("刑部"), Some(Role::XingbuShangshu));
+        assert_eq!(Role::from_name("工部"), Some(Role::GongbuShangshu));
+    }
+
+    #[test]
+    fn from_name_case_insensitive() {
+        assert_eq!(Role::from_name("neige"), Some(Role::Neige));
+        assert_eq!(Role::from_name("NEIGE"), Some(Role::Neige));
+        assert_eq!(Role::from_name("Neige"), Some(Role::Neige));
+    }
+
+    #[test]
+    fn from_name_rejects_unknown() {
+        assert_eq!(Role::from_name("unknown"), None);
+        assert_eq!(Role::from_name(""), None);
+    }
+
+    #[test]
+    fn all_returns_nine_roles_in_org_order() {
+        let roles = Role::all();
+        assert_eq!(roles.len(), 9);
+        assert_eq!(roles[0], Role::Neige);
+        // Neige first, then three 省, then six 部
+        assert!(roles.contains(&Role::Zhongshuling));
+        assert!(roles.contains(&Role::GongbuShangshu));
+    }
+
+    #[test]
+    fn name_and_chinese_name_are_consistent() {
+        // Every role should have a non-empty name and chinese_name
+        for role in Role::all() {
+            assert!(!role.name().is_empty(), "{:?} has empty name", role);
+            assert!(
+                !role.chinese_name().is_empty(),
+                "{:?} has empty chinese_name",
+                role
+            );
+        }
     }
 }
