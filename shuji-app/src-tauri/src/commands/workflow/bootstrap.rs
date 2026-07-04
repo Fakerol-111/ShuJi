@@ -34,8 +34,6 @@ use crate::commands::settings::AppConfig;
 use crate::models::chat::ChatMessage;
 use crate::models::dept_step::{DeptStepEntry, DeptStepSender};
 use crate::models::role::Role;
-use crate::util::lock::lock_or_recover;
-
 // ============================================================================
 // ContextStats — 前端上下文面板用统计信息
 // ============================================================================
@@ -229,9 +227,8 @@ pub async fn start_actor_system(
     actor_system_slot: Arc<tokio::sync::Mutex<Option<ActorSystem>>>,
 ) -> ActorSystem {
     // ── Step 1: 初始化 CancelMap（每个角色一个 AtomicBool） ──
-    let cancel_map: crate::CancelMap = Arc::new(std::sync::Mutex::new(HashMap::new()));
-
-    // 全部 9 个角色（尚书令虽延迟构造，但在这里预先纳入）
+    // 预先为全部 9 个角色创建取消标志，构建完整 HashMap 后一次性 Arc 包装。
+    // 初始化后 cancel_map 只读，flag 通过 AtomicBool 无锁修改。
     let all_roles = vec![
         Role::Neige,
         Role::Zhongshuling,
@@ -243,6 +240,11 @@ pub async fn start_actor_system(
         Role::XingbuShangshu,
         Role::LiBuRShangshu,
     ];
+    let mut cancel_map_inner: HashMap<Role, Arc<AtomicBool>> = HashMap::new();
+    for role in &all_roles {
+        cancel_map_inner.insert(*role, Arc::new(AtomicBool::new(false)));
+    }
+    let cancel_map: crate::CancelMap = Arc::new(cancel_map_inner);
 
     // ── Step 2: 创建 fast channel（快速中断通道） ──
     // 容量 16：足够容纳连续多次 Interrupt 信号，又不至于无限增长。
@@ -274,14 +276,15 @@ pub async fn start_actor_system(
         Vec::new();
 
     for (role, mut agent) in agents {
-        // 为每个角色创建独立的取消标志，注册到 cancel_map
-        let actor_flag = Arc::new(AtomicBool::new(false));
-        agent.set_interrupt_flag(actor_flag.clone());
-        if let Ok(mut cm) = lock_or_recover(&cancel_map) {
-            cm.insert(role, actor_flag);
-        } else {
-            log_console!("[bootstrap] cancel_map lock failed, skip inserting {}. actor will not support cancel-agents", role.name());
-        }
+        // 从预建的 cancel_map 中获取该角色的取消标志
+        let actor_flag = cancel_map.get(&role).cloned().unwrap_or_else(|| {
+            log_console!(
+                "[bootstrap] no cancel flag pre-registered for {}, creating default",
+                role.name()
+            );
+            Arc::new(AtomicBool::new(false))
+        });
+        agent.set_interrupt_flag(actor_flag);
 
         // 创建该角色的 mailbox: (tx → senders 表, rx → contexts 表)
         let (tx, rx) = mpsc::unbounded_channel();
@@ -329,20 +332,21 @@ pub async fn start_actor_system(
     // 将尚书令加入 contexts 表（与其他部门同样的注册流程）
     {
         let (mut agent, rx) = shangshuling_agent;
-        let actor_flag = Arc::new(AtomicBool::new(false));
-        agent.set_interrupt_flag(actor_flag.clone());
-        if let Ok(mut cm) = lock_or_recover(&cancel_map) {
-            cm.insert(Role::Shangshuling, actor_flag);
-        } else {
-            log_console!("[bootstrap] cancel_map lock failed, skip inserting Shangshuling");
-        }
+        let actor_flag = cancel_map
+            .get(&Role::Shangshuling)
+            .cloned()
+            .unwrap_or_else(|| {
+                log_console!("[bootstrap] no cancel flag for Shangshuling, creating default");
+                Arc::new(AtomicBool::new(false))
+            });
+        agent.set_interrupt_flag(actor_flag);
         contexts.push((Role::Shangshuling, agent, rx));
     }
 
     // ── Step 7: 为每个角色组装 ActorContext 并 spawn ──
     let all_senders = senders.clone();
 
-    let system = ActorSystem {
+    let mut system = ActorSystem {
         senders: all_senders.clone(),
         fast_txs: (*fast_txs).clone(),
         emperor_tx: emperor_tx.clone(),
@@ -350,6 +354,7 @@ pub async fn start_actor_system(
         dept_step_tx: dept_step_tx.clone(),
         cancel_map: cancel_map.clone(),
         cancel: cancel.clone(),
+        task_handles: HashMap::new(),
         workflow_graph: workflow_graph.clone(),
     };
 
@@ -375,23 +380,13 @@ pub async fn start_actor_system(
             }
         }
 
-        let actor_flag = match lock_or_recover(&cancel_map) {
-            Ok(map) => map.get(&role).cloned().unwrap_or_else(|| {
-                log_console!(
-                    "[bootstrap] no cancel flag registered for {}, creating default",
-                    role.name()
-                );
-                Arc::new(AtomicBool::new(false))
-            }),
-            Err(e) => {
-                log_console!(
-                    "[bootstrap] cancel_map lock failed for {}: {}",
-                    role.name(),
-                    e
-                );
-                Arc::new(AtomicBool::new(false))
-            }
-        };
+        let actor_flag = cancel_map.get(&role).cloned().unwrap_or_else(|| {
+            log_console!(
+                "[bootstrap] no cancel flag for {}, creating default",
+                role.name()
+            );
+            Arc::new(AtomicBool::new(false))
+        });
         // 每个角色的日志写入 .shuji/logs/{role}/ 目录
         let logger = crate::logging::logger::Logger::new(&working_dir.join(".shuji"));
         let is_neige = role == Role::Neige;
@@ -441,7 +436,8 @@ pub async fn start_actor_system(
 
         // spawn: 每个 actor 在自己的 tokio task 中独立运行
         // run_actor 是一个无限循环，监听 mailbox + fast channel，直到取消
-        tokio::spawn(crate::actor::run_actor(ctx));
+        let handle = tokio::spawn(crate::actor::run_actor(ctx));
+        system.task_handles.insert(role, handle);
     }
 
     system

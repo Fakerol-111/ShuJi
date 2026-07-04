@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::actor::ActorMessage;
 use crate::config::RuntimeConfig;
@@ -53,7 +53,7 @@ impl PipelineEngineContext {
         Self {
             actor_txs,
             fast_txs: Arc::new(HashMap::new()),
-            cancel_map: Arc::new(Mutex::new(HashMap::<Role, Arc<AtomicBool>>::new())),
+            cancel_map: Arc::new(HashMap::<Role, Arc<AtomicBool>>::new()),
             cancel: Arc::new(AtomicBool::new(false)),
             project_dir,
             workflow_graph: None,

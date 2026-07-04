@@ -363,12 +363,10 @@ pub async fn cancel_processing(state: State<'_, AppState>) -> Result<(), String>
     if let Some(sys) = state.actor_system.lock().await.as_ref() {
         state.pipeline_supervisor.abort_current(sys).await;
         log_console!("[commands] cancel_processing: pipeline supervisor aborted");
-        if let Ok(map) = sys.cancel_map.lock() {
-            for flag in map.values() {
-                flag.store(true, std::sync::atomic::Ordering::SeqCst);
-            }
-            log_console!("[commands] cancel_processing: all per-actor flags set");
+        for flag in sys.cancel_map.values() {
+            flag.store(true, std::sync::atomic::Ordering::SeqCst);
         }
+        log_console!("[commands] cancel_processing: all per-actor flags set");
         for tx in sys.fast_txs.values() {
             let _ = tx.try_send(FastMessage::Interrupt);
         }
@@ -377,6 +375,16 @@ pub async fn cancel_processing(state: State<'_, AppState>) -> Result<(), String>
             let _ = tx.send(crate::actor::ActorMessage::interrupt());
         }
         log_console!("[commands] cancel_processing: Interrupt sent to all actors");
+
+        // 协作式取消后等待短暂时间，如果仍有 actor 活跃则强制 abort
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let any_active = sys.task_handles.values().any(|h| !h.is_finished());
+        if any_active {
+            log_console!(
+                "[commands] cancel_processing: cooperative cancel timed out, force-aborting actors"
+            );
+            sys.abort_all_actors();
+        }
     }
     Ok(())
 }

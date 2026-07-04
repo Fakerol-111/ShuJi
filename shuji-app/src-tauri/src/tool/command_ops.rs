@@ -7,10 +7,20 @@ use crate::tool::python_cmd::pytest_cmd;
 use crate::tool::ToolOutput;
 
 /// Get the current platform's shell command.
-/// Windows -> powershell; others -> bash (fallback to sh)
+/// Windows: prefer pwsh 7+ (better UTF-8), fallback to powershell 5.1
+/// Others: prefer bash, fallback to sh
 pub(crate) fn get_shell() -> (&'static str, Vec<&'static str>) {
     if cfg!(windows) {
-        ("powershell", vec!["-Command"])
+        // 优先 pwsh 7+（更好的 UTF-8 支持和跨平台兼容性）
+        if std::process::Command::new("pwsh")
+            .arg("--version")
+            .output()
+            .is_ok()
+        {
+            return ("pwsh", vec!["-NoProfile", "-Command"]);
+        }
+        // 回退到 Windows PowerShell 5.1
+        ("powershell", vec!["-NoProfile", "-Command"])
     } else if std::process::Command::new("bash")
         .arg("--version")
         .output()
@@ -50,7 +60,17 @@ pub async fn tool_execute_command(
 
     let timeout = std::time::Duration::from_secs(120);
     let (shell, shell_args) = get_shell();
-    match execute_with_timeout(shell, &shell_args, cmd, working_dir, timeout).await {
+
+    // Windows: 注入 UTF-8 编码设置以确保中文输出正确
+    #[cfg(windows)]
+    let cmd = format!(
+        "$OutputEncoding = [System.Text.Encoding]::UTF8; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; {}",
+        cmd
+    );
+    #[cfg(not(windows))]
+    let cmd = cmd.to_string();
+
+    match execute_with_timeout(shell, &shell_args, &cmd, working_dir, timeout).await {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);

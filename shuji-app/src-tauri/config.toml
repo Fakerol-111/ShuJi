@@ -19,10 +19,26 @@ enabled = true
 # 思考预算 token 数（0 = 使用模型默认值，仅 Anthropic extended thinking 有效）
 budget_tokens = 0
 
+[api.generation]
+# LLM 生成参数（temperature, top_p, frequency_penalty）
+temperature = 0.1
+top_p = 0.9
+frequency_penalty = 0.1
+
+# seed = 0 时不发送该字段（并非所有 API 都支持）
+seed = 0
+
+# per-role 生成参数覆盖（可选）
+# [api.generation.role_overrides.zhongshuling]
+# temperature = 0.3  # 设计允许更多创造性
+# [api.generation.role_overrides.gongbushangshu]
+# temperature = 0.0  # 编码需要确定性
+
 [api.streaming]
-# 工具 agent 真流式（OpenAI 兼容 API）。默认关闭；失败时自动回退非流式 step()。
+# 工具 agent 真流式（OpenAI 兼容 API）。默认开启。
 # Anthropic API 暂不支持，始终使用 step()。
-enabled = false
+# 如果流式遇到兼容性问题，可关闭回退到非流式。
+enabled = true
 
 [api.max_tokens]
 # 设为 0 表示不发送 max_tokens，让模型/服务端自行使用可用上限。

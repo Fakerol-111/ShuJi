@@ -1,5 +1,7 @@
 // 存量 clippy warning 允许项 — 逐文件消解（已全部消解完毕）
 
+use tauri::Manager;
+
 // ============================================================================
 // 宏定义
 // ============================================================================
@@ -64,10 +66,11 @@ use tokio::sync::Mutex;
 
 /// 取消标志映射表 — 共享类型别名，用于 agent 和 tool 之间传递取消信号。
 ///
-/// 结构：`Map<Role, Arc<AtomicBool>>`
+/// 结构：`Arc<HashMap<Role, Arc<AtomicBool>>>`
+/// - 初始化后只读（key 集合固定为 9 个角色），flag 通过 AtomicBool 无锁修改
 /// - 内阁通过 `cancel_agent` 工具将一个部门的 flag 置为 true 来中断其执行
 /// - 各部门在 `AgentController.run()` 的每次迭代开始时检查自己的 flag
-pub type CancelMap = Arc<std::sync::Mutex<HashMap<crate::models::role::Role, Arc<AtomicBool>>>>;
+pub type CancelMap = Arc<HashMap<crate::models::role::Role, Arc<AtomicBool>>>;
 
 /// 快速消息发送器映射表 — 用于内阁向特定部门发送即时控制消息。
 ///
@@ -233,6 +236,36 @@ pub fn run() {
             commands::editor::open_in_external_editor,
             commands::editor::open_project_in_external_editor,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                log_console!("[app] exit requested, shutting down actors...");
+                if let Some(state) = app_handle.try_state::<AppState>() {
+                    // 1. 设置全局取消标志
+                    state
+                        .cancel_flag
+                        .store(true, std::sync::atomic::Ordering::SeqCst);
+
+                    // 2. 通过 tokio runtime 执行异步清理
+                    let rt = tauri::async_runtime::handle();
+                    rt.block_on(async {
+                        if let Some(sys) = state.actor_system.lock().await.as_ref() {
+                            // 协作式取消：设置所有 per-actor flag + 发送 Interrupt
+                            for flag in sys.cancel_map.values() {
+                                flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                            }
+                            for tx in sys.fast_txs.values() {
+                                let _ = tx.try_send(crate::actor::FastMessage::Interrupt);
+                            }
+                            // 等待短暂时间让 actor 完成当前操作
+                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                            // 强制 abort
+                            sys.abort_all_actors();
+                        }
+                    });
+                }
+                log_console!("[app] shutdown complete");
+            }
+        });
 }

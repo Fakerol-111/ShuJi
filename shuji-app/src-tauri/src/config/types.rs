@@ -1,5 +1,6 @@
 //! Core runtime configuration types, defaults, loading, and merging.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;
 
@@ -36,6 +37,56 @@ pub struct RuntimeConfig {
     pub budget: BudgetConfig,
 }
 
+/// LLM 生成参数配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenerationConfig {
+    #[serde(default = "default_temperature")]
+    pub temperature: f64,
+    #[serde(default = "default_top_p")]
+    pub top_p: f64,
+    #[serde(default = "default_frequency_penalty")]
+    pub frequency_penalty: f64,
+    /// seed = 0 时不发送该字段（并非所有 API 都支持）
+    #[serde(default)]
+    pub seed: u64,
+    /// per-role 覆盖
+    #[serde(default)]
+    pub role_overrides: HashMap<String, RoleGenerationOverride>,
+}
+
+/// 单角色的生成参数覆盖
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RoleGenerationOverride {
+    #[serde(default)]
+    pub temperature: Option<f64>,
+    #[serde(default)]
+    pub top_p: Option<f64>,
+    #[serde(default)]
+    pub frequency_penalty: Option<f64>,
+}
+
+fn default_temperature() -> f64 {
+    0.1
+}
+fn default_top_p() -> f64 {
+    0.9
+}
+fn default_frequency_penalty() -> f64 {
+    0.1
+}
+
+impl Default for GenerationConfig {
+    fn default() -> Self {
+        Self {
+            temperature: default_temperature(),
+            top_p: default_top_p(),
+            frequency_penalty: default_frequency_penalty(),
+            seed: 0,
+            role_overrides: HashMap::new(),
+        }
+    }
+}
+
 /// API 相关配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiConfig {
@@ -66,6 +117,10 @@ pub struct ApiConfig {
     /// 重试退避策略配置
     #[serde(default)]
     pub retry: RetryConfig,
+
+    /// LLM 生成参数配置（temperature, top_p, frequency_penalty, seed）
+    #[serde(default)]
+    pub generation: GenerationConfig,
 }
 
 /// 重试退避策略配置
@@ -91,8 +146,12 @@ pub struct RetryConfig {
 /// Agent 流式输出配置
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StreamingConfig {
-    #[serde(default)]
+    #[serde(default = "default_streaming_enabled")]
     pub enabled: bool,
+}
+
+fn default_streaming_enabled() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -378,6 +437,7 @@ impl Default for ApiConfig {
             reasoning: ReasoningConfig::default(),
             streaming: StreamingConfig::default(),
             retry: RetryConfig::default(),
+            generation: GenerationConfig::default(),
         }
     }
 }

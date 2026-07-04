@@ -309,6 +309,11 @@ pub struct ActorSystem {
     /// 全局取消标志（前端"停止"按钮触发）
     pub cancel: Arc<AtomicBool>,
 
+    /// Actor 任务句柄 — 用于强制 abort。
+    /// 当协作式取消（cancel_flag + FastMessage::Interrupt）无效时，
+    /// 可通过 `abort_all_actors()` 强制终止。
+    pub task_handles: HashMap<Role, tokio::task::JoinHandle<()>>,
+
     /// 文移图 — 共享引用，send_message 归档和 actor 写入都通过同一个 Arc。
     pub workflow_graph: Arc<tokio::sync::Mutex<crate::workflow::WorkflowGraph>>,
 }
@@ -321,6 +326,7 @@ pub struct ActorSystemParts {
     pub dept_step_tx: Option<DeptStepSender>,
     pub cancel_map: crate::CancelMap,
     pub cancel: Arc<AtomicBool>,
+    pub task_handles: HashMap<Role, tokio::task::JoinHandle<()>>,
     pub workflow_graph: Arc<tokio::sync::Mutex<crate::workflow::WorkflowGraph>>,
 }
 
@@ -335,6 +341,7 @@ impl ActorSystem {
             dept_step_tx,
             cancel_map,
             cancel,
+            task_handles,
             workflow_graph,
         } = parts;
 
@@ -346,11 +353,13 @@ impl ActorSystem {
             dept_step_tx,
             cancel_map,
             cancel,
+            task_handles,
             workflow_graph,
         }
     }
 
     /// Duplicate channel handles for sharing with pipeline supervisor / AppState slot.
+    /// 注意：task_handles 不克隆——仅原始 ActorSystem 持有 abort 权限。
     pub fn duplicate_handles(&self) -> Self {
         Self {
             senders: self.senders.clone(),
@@ -360,7 +369,17 @@ impl ActorSystem {
             dept_step_tx: self.dept_step_tx.clone(),
             cancel_map: self.cancel_map.clone(),
             cancel: self.cancel.clone(),
+            task_handles: HashMap::new(),
             workflow_graph: self.workflow_graph.clone(),
+        }
+    }
+
+    /// 强制终止所有 actor 任务。
+    /// 调用后 ActorSystem 不再可用。
+    pub fn abort_all_actors(&self) {
+        for (role, handle) in &self.task_handles {
+            handle.abort();
+            log_console!("[actor] {}: aborted", role.name());
         }
     }
 
@@ -388,11 +407,9 @@ impl ActorSystem {
 /// ```
 impl Drop for ActorSystem {
     fn drop(&mut self) {
-        // 第一层：设置所有 per-actor 取消标志
-        if let Ok(map) = self.cancel_map.lock() {
-            for flag in map.values() {
-                flag.store(true, Ordering::SeqCst);
-            }
+        // 第一层：设置所有 per-actor 取消标志（无锁遍历）
+        for flag in self.cancel_map.values() {
+            flag.store(true, Ordering::SeqCst);
         }
 
         // 第二层：通过 fast mailbox 向所有 actor 发送中断
@@ -403,6 +420,12 @@ impl Drop for ActorSystem {
         // 第三层：通过常规 mailbox 向所有 actor 发送中断（兜底）
         for tx in self.senders.values() {
             let _ = tx.send(ActorMessage::interrupt());
+        }
+
+        // 第四层：强制 abort 所有 actor 任务
+        for (role, handle) in &self.task_handles {
+            handle.abort();
+            log_console!("[actor] {}: aborted on drop", role.name());
         }
 
         log_console!(

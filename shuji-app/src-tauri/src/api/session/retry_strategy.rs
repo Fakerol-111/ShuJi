@@ -6,6 +6,8 @@
 
 use std::time::Duration;
 
+use rand::Rng;
+
 use crate::config::RetryConfig;
 
 /// HTTP status codes that are retryable (server errors + rate limit).
@@ -24,13 +26,8 @@ pub fn calculate_backoff(retry_count: u32, config: &RetryConfig) -> Duration {
     delay_ms = delay_ms.min(max_ms);
 
     if config.jitter {
-        // Add 0-25% jitter using a simple thread-local pseudo-random source.
-        // We use std::time for deterministic-enough jitter without pulling in rand.
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.subsec_nanos())
-            .unwrap_or(0);
-        let jitter_factor = 1.0 + ((nanos % 25) as f64 / 100.0);
+        // Add 0-25% random jitter using thread-local RNG to prevent thundering herd.
+        let jitter_factor = 1.0 + rand::thread_rng().gen_range(0.0..0.25);
         delay_ms *= jitter_factor;
         delay_ms = delay_ms.min(max_ms);
     }
