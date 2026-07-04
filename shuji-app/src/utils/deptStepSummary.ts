@@ -189,6 +189,10 @@ export function summarizeDeptStepKind(
       return l === 'zh' ? `${deptLabel}正在输出…` : `${deptLabel} is responding…`;
     case 'reasoning_delta':
       return l === 'zh' ? `${deptLabel}正在思考…` : `${deptLabel} is thinking…`;
+    case 'waiting':
+      return l === 'zh'
+        ? `${deptLabel}正在思考… (${kind.elapsed_secs}s)`
+        : `${deptLabel} is thinking… (${kind.elapsed_secs}s)`;
     case 'tool_result': {
       const result = summarizeToolResult(dept, kind.tool, kind.ok, kind.summary, lang);
       if (result) return result;

@@ -1,6 +1,7 @@
 pub mod checkpoint;
 pub mod demo;
 pub mod editor;
+pub mod error_code;
 pub mod friendly_error;
 pub mod metrics;
 pub mod pricing;

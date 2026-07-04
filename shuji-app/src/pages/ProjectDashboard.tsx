@@ -1,11 +1,9 @@
 import { useEffect, useCallback } from 'react';
 import { classifyError, swallowError } from '../utils/error';
 import { useDeptEvents } from '../hooks/useDeptEvents';
-import { useProject } from '../hooks/useProject';
 import { useChat } from '../hooks/useChat';
 import { useDocumentTabs } from '../hooks/useDocumentTabs';
 import { useDemoFlow } from '../hooks/useDemoFlow';
-import { usePendingApprovals } from '../hooks/usePendingApprovals';
 import { useProjectPicker } from '../hooks/useProjectPicker';
 import { useDashboardUI } from '../hooks/useDashboardUI';
 import DashboardLayout from '../components/DashboardLayout';
@@ -22,11 +20,12 @@ import WorkflowGraphView from '../components/WorkflowGraph';
 import { Button } from '../components/ui/Button';
 import { docIdToPath } from '../utils/docPath';
 import { approveDocumentAndResume } from '../utils/approveDocument';
-import { cancelProcessing, onProjectUpdate } from '../api';
-import type { Project } from '../types';
+import { cancelProcessing } from '../api';
 import { isProjectOnboardingDone } from '../utils/uiPrefs';
 import ProjectOnboarding from '../components/ProjectOnboarding';
 import { GlossaryTerm } from '../components/GlossaryTerm';
+import { ProjectProvider, useProjectContext } from '../runtime/ProjectContext';
+import { ApprovalProvider, useApprovalContext } from '../runtime/ApprovalContext';
 
 const STORAGE_KEY = 'shuji_chat';
 
@@ -40,19 +39,30 @@ function loadSession() {
 }
 
 export default function ProjectDashboard() {
+  return (
+    <ProjectProvider>
+      <ApprovalProvider>
+        <DashboardContent />
+      </ApprovalProvider>
+    </ProjectProvider>
+  );
+}
+
+function DashboardContent() {
   const session = loadSession();
   const { activeDepts } = useDeptEvents();
   const activeDeptsArr = Array.from(activeDepts);
 
   const {
     project,
-    setProject,
     recentDirs,
     setRecentDirs,
     error: projError,
     setError: setProjError,
     loadProjectIntoState,
-  } = useProject();
+  } = useProjectContext();
+
+  const { pendingApprovals, gateContext } = useApprovalContext();
 
   const {
     messages,
@@ -83,7 +93,6 @@ export default function ProjectDashboard() {
     setActiveIndex,
   } = useDocumentTabs();
 
-  const { pendingApprovals, gateContext } = usePendingApprovals(project);
   const { showDemoTour, setShowDemoTour, demoCreating, mockScenario, handleDemoProject } =
     useDemoFlow(
       project,
@@ -113,7 +122,6 @@ export default function ProjectDashboard() {
     openArtifact,
   } = useDashboardUI(hasTabs, pendingApprovals, openTab, docIdToPath);
 
-  // When a document is selected from the sidebar (file tree), auto-open the artifact panel
   const handleDocSelectAndOpenPanel = useCallback(
     (path: string) => {
       handleDocSelect(path);
@@ -127,15 +135,6 @@ export default function ProjectDashboard() {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ msgs: messages, discuss: discussMsgs }));
     } catch {}
   }, [messages, discussMsgs]);
-
-  useEffect(() => {
-    const unlisten = onProjectUpdate((payload: Project) => {
-      setProject(payload);
-    });
-    return () => {
-      unlisten.then((f) => f());
-    };
-  }, [setProject]);
 
   useEffect(() => {
     if (!project || showDemoTour) return;
@@ -187,7 +186,6 @@ export default function ProjectDashboard() {
         onDocSelect={handleDocSelectAndOpenPanel}
         onShowDiff={(path) => openTab(path, 'diff')}
         pendingApprovalsCount={pendingApprovals.length}
-        beginnerMode={beginnerMode}
         approvalBanner={
           gateContext.active ? (
             <ApprovalBanner

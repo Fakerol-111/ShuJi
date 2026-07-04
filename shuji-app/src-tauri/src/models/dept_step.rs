@@ -88,6 +88,12 @@ pub enum DeptStepKind {
     /// 流式输出中的推理增量。
     #[serde(rename = "reasoning_delta")]
     ReasoningDelta { delta: String },
+
+    /// LLM 正在思考中（等待 API 响应）的心跳事件。
+    /// 非流式模式下，step() 调用期间前端无反馈，此事件用于避免 UI 假死感。
+    /// 携带已等待秒数，前端可显示 "正在思考... (5s)"。
+    #[serde(rename = "waiting")]
+    Waiting { elapsed_secs: u32 },
 }
 
 /// 部门步骤事件的发送端类型别名。

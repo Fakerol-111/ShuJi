@@ -107,7 +107,28 @@ impl super::AgentController {
                     })
                     .await?
             } else {
-                session.step().await?
+                // ── P2.1: Heartbeat during non-streaming step() ──────────
+                // Non-streaming mode has no UI feedback during the API
+                // round-trip. Use tokio::select! to race step() against a
+                // 3s interval timer — each timer tick emits a `Waiting`
+                // heartbeat so the frontend can show "思考中... (Ns)".
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(3));
+                interval.tick().await; // consume first immediate tick
+                let mut elapsed: u32 = 0;
+
+                loop {
+                    tokio::select! {
+                        result = session.step() => {
+                            break result?;
+                        }
+                        _ = interval.tick() => {
+                            elapsed += 3;
+                            if let Some(ref emit) = self.step_emit {
+                                emit(DeptStepKind::Waiting { elapsed_secs: elapsed });
+                            }
+                        }
+                    }
+                }
             };
 
             // ── Suspension point B: API just returned, don't process if cancelled ──
