@@ -1,59 +1,30 @@
-/// Translate raw technical errors into user-friendly English messages.
+//! 通用错误友好化处理 — 委托给 `error_code` 模块进行结构化分类。
+//!
+//! `friendly_error()` 返回 JSON 字符串，前端可 `JSON.parse` 后：
+//! - 用 `data.code` 查 i18n key `error.api.<code>` 做翻译
+//! - 用 `data.message` 直接展示
+//! - 用 `data.detail` 调试原始错误
+
+use crate::commands::error_code::{friendly_error_code, ShujiError};
+
+/// 将任意错误转换为 JSON 字符串返回给前端。
+///
+/// 返回格式：
+/// - 结构化：`{"type":"Structured","data":{"code":"api_key_invalid","message":"...","detail":"..."}}`
+/// - 兜底：`{"type":"Plain","data":"System error: ..."}`
 pub fn friendly_error(e: impl std::fmt::Display) -> String {
-    let raw = e.to_string();
-    friendly_error_str(&raw)
+    friendly_error_code(e).to_json_string()
 }
 
-fn friendly_error_str(msg: &str) -> String {
-    let lower = msg.to_lowercase();
+/// 仅返回人类可读消息文本（不包含 JSON 包装）— 适用于不需要结构化 code 的场景。
+#[allow(dead_code)]
+pub fn friendly_error_message(e: impl std::fmt::Display) -> String {
+    friendly_error_code(e).message().to_string()
+}
 
-    // Handle "API error (XXX): ..." format from session.rs
-    if lower.starts_with("api error") {
-        if let Some(paren) = lower.find('(') {
-            if let Some(close) = lower[paren..].find(')') {
-                let code = &lower[paren + 1..paren + close];
-                return match code {
-                    "400" => "Invalid request parameters, please check your input".to_string(),
-                    "401" => {
-                        "API key is invalid or expired, please reconfigure in settings".to_string()
-                    }
-                    "403" => "API access denied, please check key permissions".to_string(),
-                    "404" => "API endpoint not found, please check the API URL".to_string(),
-                    "408" => "API request timed out, please retry later".to_string(),
-                    "429" => "API request rate limited, please retry later".to_string(),
-                    "500" => "API server internal error, please retry later".to_string(),
-                    "502" | "503" => {
-                        "API service temporarily unavailable, please retry later".to_string()
-                    }
-                    _ => format!("API error ({}): please retry later", code),
-                };
-            }
-        }
-    }
-
-    if lower.contains("connection refused")
-        || lower.contains("connect error")
-        || lower.contains("tcp connect")
-    {
-        "Unable to connect to API server, please check network or API URL configuration".to_string()
-    } else if lower.contains("401")
-        || lower.contains("unauthorized")
-        || lower.contains("invalid api key")
-    {
-        "API key is invalid or expired, please reconfigure in settings".to_string()
-    } else if lower.contains("403") || lower.contains("forbidden") {
-        "API access denied, please check key permissions".to_string()
-    } else if lower.contains("429") || lower.contains("rate limit") {
-        "API request rate limited, please retry later".to_string()
-    } else if lower.contains("timeout") || lower.contains("timed out") {
-        "API request timed out, please retry later or check network".to_string()
-    } else if lower.contains("500") || lower.contains("internal server error") {
-        "API server internal error, please retry later".to_string()
-    } else if lower.contains("502") || lower.contains("503") {
-        "API service temporarily unavailable, please retry later".to_string()
-    } else {
-        format!("System error: {}", lower)
-    }
+/// 从人类可读文本直接构造 `ShujiError::Plain`，用于非分类性错误（如 "no open project"）。
+pub fn friendly_error_plain(msg: impl Into<String>) -> String {
+    ShujiError::Plain(msg.into()).to_json_string()
 }
 
 #[cfg(test)]
@@ -64,8 +35,8 @@ mod tests {
     fn test_api_401() {
         let msg = friendly_error("API error (401): invalid key");
         assert!(
-            msg.contains("key"),
-            "expected key-related msg, got: {}",
+            msg.contains("api_key_invalid"),
+            "expected structured code, got: {}",
             msg
         );
     }
@@ -74,8 +45,8 @@ mod tests {
     fn test_api_429() {
         let msg = friendly_error("API error (429): rate limit exceeded");
         assert!(
-            msg.contains("rate limited"),
-            "expected rate-limit msg, got: {}",
+            msg.contains("api_rate_limited"),
+            "expected rate-limited code, got: {}",
             msg
         );
     }
@@ -84,8 +55,8 @@ mod tests {
     fn test_api_500() {
         let msg = friendly_error("API error (500): internal error");
         assert!(
-            msg.contains("internal error"),
-            "expected internal error msg, got: {}",
+            msg.contains("api_server_error"),
+            "expected server-error code, got: {}",
             msg
         );
     }
@@ -94,8 +65,8 @@ mod tests {
     fn test_connection_refused() {
         let msg = friendly_error("connection refused: tcp connect error");
         assert!(
-            msg.contains("connect"),
-            "expected connection msg, got: {}",
+            msg.contains("api_connection_failed"),
+            "expected connection-failed code, got: {}",
             msg
         );
     }
@@ -104,8 +75,8 @@ mod tests {
     fn test_timeout() {
         let msg = friendly_error("request timed out after 30s");
         assert!(
-            msg.contains("timed out"),
-            "expected timeout msg, got: {}",
+            msg.contains("api_timeout"),
+            "expected timeout code, got: {}",
             msg
         );
     }
@@ -124,8 +95,8 @@ mod tests {
     fn test_unauthorized_without_code() {
         let msg = friendly_error("401 Unauthorized");
         assert!(
-            msg.contains("key"),
-            "expected key-related msg, got: {}",
+            msg.contains("api_key_invalid"),
+            "expected key-invalid code, got: {}",
             msg
         );
     }
@@ -134,9 +105,32 @@ mod tests {
     fn test_service_unavailable() {
         let msg = friendly_error("503 Service Unavailable");
         assert!(
-            msg.contains("unavailable"),
-            "expected unavailable msg, got: {}",
+            msg.contains("api_service_unavailable"),
+            "expected unavailable code, got: {}",
             msg
         );
+    }
+
+    #[test]
+    fn test_returns_valid_json() {
+        let msg = friendly_error("API error (401): invalid key");
+        let parsed: serde_json::Value = serde_json::from_str(&msg).expect("should be valid JSON");
+        assert_eq!(parsed["type"], "Structured");
+        assert_eq!(parsed["data"]["code"], "api_key_invalid");
+        assert!(parsed["data"]["message"].is_string());
+    }
+
+    #[test]
+    fn test_friendly_error_message() {
+        let msg = friendly_error_message("API error (429): rate limit");
+        assert!(msg.contains("rate limited"));
+    }
+
+    #[test]
+    fn test_friendly_error_plain() {
+        let msg = friendly_error_plain("no open project");
+        let parsed: serde_json::Value = serde_json::from_str(&msg).expect("should be valid JSON");
+        assert_eq!(parsed["type"], "Plain");
+        assert_eq!(parsed["data"], "no open project");
     }
 }

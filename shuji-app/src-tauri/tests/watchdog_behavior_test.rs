@@ -129,6 +129,7 @@ async fn test_watchdog_same_tool_triggers_intervention() {
         let mut c = RuntimeConfig::default();
         c.checkpoint.interval_secs = 0;
         c.api.max_retries = 0;
+        c.api.streaming.enabled = false;
         c.api.timeout_secs = 30;
         c.watchdog.same_tool_warning_count = 3;
         c.watchdog.max_consecutive_errors = 10;
@@ -198,6 +199,7 @@ async fn test_watchdog_consecutive_errors_stops_agent() {
         let mut c = RuntimeConfig::default();
         c.checkpoint.interval_secs = 0;
         c.api.max_retries = 0;
+        c.api.streaming.enabled = false;
         c.api.timeout_secs = 30;
         c.watchdog.max_consecutive_errors = 3;
         c
@@ -260,6 +262,7 @@ async fn test_watchdog_read_without_write_triggers_playbook() {
         let mut c = RuntimeConfig::default();
         c.checkpoint.interval_secs = 0;
         c.api.max_retries = 0;
+        c.api.streaming.enabled = false;
         c.api.timeout_secs = 30;
         c.watchdog.read_without_write_warning = 2;
         c.watchdog.max_consecutive_errors = 10;
@@ -315,6 +318,7 @@ async fn test_watchdog_delete_create_cycle_triggers_intervention() {
         let mut c = RuntimeConfig::default();
         c.checkpoint.interval_secs = 0;
         c.api.max_retries = 0;
+        c.api.streaming.enabled = false;
         c.api.timeout_secs = 30;
         c.watchdog.delete_create_warning_count = 2;
         c.watchdog.max_consecutive_errors = 10;

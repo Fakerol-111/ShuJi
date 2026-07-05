@@ -1,6 +1,6 @@
 //! Model preset system (derive_cheap_strong, apply, get/set).
 
-use crate::commands::friendly_error::friendly_error;
+use crate::commands::friendly_error::{friendly_error, friendly_error_plain};
 
 use super::api_config::{update_cache, AppConfig, RoleEndpoint};
 use super::paths::api_config_path;
@@ -100,7 +100,7 @@ pub async fn get_model_preset() -> Result<String, String> {
 #[tauri::command]
 pub async fn set_model_preset(preset: String) -> Result<(), String> {
     if !["economy", "balanced", "quality", "custom"].contains(&preset.as_str()) {
-        return Err(friendly_error(format!(
+        return Err(friendly_error_plain(format!(
             "invalid preset: {}. Options: economy, balanced, quality",
             preset
         )));

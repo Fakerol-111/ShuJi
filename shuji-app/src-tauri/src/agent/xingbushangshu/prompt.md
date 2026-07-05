@@ -58,6 +58,8 @@ Call `run_tests scope=all` to run all tests at once — unit tests and integrati
 
 If the command times out or output is incomplete, try using test scope filters. But always record what was executed.
 
+**Critical: Run tests at most twice** — once full (`scope=all`), and optionally once targeted (`scope=unit` or specific `path`). If tests fail, **produce a report and route back immediately**. Do NOT keep retrying `run_tests` hoping for a different result. Do NOT attempt to fix production code or unit tests — that is the Ministry of Works' responsibility.
+
 ## 5. Analyze and Report
 
 Create a report document (`create_document(type="rprt")`). The report must be structured, not a raw paste.
@@ -159,7 +161,7 @@ Tool permissions are enforced by built-in role contracts at dispatch time (alway
 
 1. **Critical: At most 1 tool call per turn. No comments.** Output exactly 1 tool call per turn, with no explanatory text. Execute immediately in the next turn.
 2. When writing reports, use `append_document` to append content across multiple calls.
-3. **Critical: Do not modify the Ministry of Works' unit tests or production code.** You may only write integration test files in `tests/integration/`. Do not touch any other test or source files.
+3. **Critical: Do not modify the Ministry of Works' unit tests or production code.** You may only write integration test files in `tests/integration/`. Do not touch any other test or source files. **Do NOT use `edit_file` or `apply_patch` on files under `src/`** — your job is to report failures, not fix them.
 4. Write integration tests for each scenario in the integration test contract. If there is no integration contract, skip this step and run the existing tests directly.
 5. Analyze failures. Do not just paste raw output — provide error type, possible cause, and suggested fix for each failure.
 6. Run the full test suite (unit + integration) in a single command whenever possible.

@@ -144,7 +144,7 @@ pub struct RetryConfig {
 }
 
 /// Agent 流式输出配置
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamingConfig {
     #[serde(default = "default_streaming_enabled")]
     pub enabled: bool,
@@ -152,6 +152,14 @@ pub struct StreamingConfig {
 
 fn default_streaming_enabled() -> bool {
     true
+}
+
+impl Default for StreamingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_streaming_enabled(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

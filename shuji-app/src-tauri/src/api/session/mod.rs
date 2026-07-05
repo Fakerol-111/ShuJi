@@ -142,8 +142,30 @@ impl Session {
         let mut api_retries = 0u32;
         let max_api_retries = self.config.api.max_retries;
         let mut reasoning_stripped = false;
+        // Hard limit on total inner-loop iterations to prevent excessive
+        // retries when the API alternates between different error types
+        // (e.g. 429 → length → 429 → length …).  Each retry type has its
+        // own counter, but without a combined ceiling the loop could spin
+        // up to 1 + 1 + max_api_retries + max_length_retries times, which
+        // with high config values wastes tokens and stalls the agent.
+        let max_total_retries = max_api_retries + max_length_retries + 2;
+        let mut total_retries = 0u32;
 
         loop {
+            if total_retries >= max_total_retries {
+                log_console!(
+                    "[{}] step: total retry limit ({}) reached, giving up",
+                    self.role,
+                    max_total_retries
+                );
+                return Err(anyhow::anyhow!(
+                    "step() exceeded total retry limit ({}) — last api_retries={}, length_retries={}",
+                    max_total_retries,
+                    api_retries,
+                    length_retries
+                ));
+            }
+
             let body = self.build_step_body();
 
             log_console!(
@@ -168,6 +190,7 @@ impl Session {
                         );
                         reasoning_stripped = true;
                         self.set_reasoning(false);
+                        total_retries += 1;
                         continue;
                     }
 
@@ -187,6 +210,7 @@ impl Session {
                             e
                         );
                         tokio::time::sleep(backoff).await;
+                        total_retries += 1;
                         continue;
                     }
                     return Err(e);
@@ -221,6 +245,7 @@ impl Session {
                         length_retries: new_count,
                     } => {
                         length_retries = new_count;
+                        total_retries += 1;
                         continue;
                     }
                     crate::api::session::length_retry::LengthRetryAction::Proceed => {

@@ -287,13 +287,22 @@ impl super::AgentController {
                         // is_write feeds WatchdogState::observe_after_result for
                         // write/read tracking. is_read was already computed above
                         // for route detection.
+                        //
+                        // `assign_task` is classified as a write because it
+                        // represents progress (dispatching work to a subordinate
+                        // department). Without this, the Shangshuling — whose
+                        // role is to dispatch and review — would trigger
+                        // read-without-write false positives endlessly.
                         let is_write = matches!(
                             tc.name.as_str(),
                             "create_file"
+                                | "edit_file"
+                                | "apply_patch"
                                 | "modify_file"
                                 | "append_file"
                                 | "delete_file"
                                 | "rename_file"
+                                | "assign_task"
                         );
 
                         // ── Watchdog post-result observation ────────────────
@@ -316,6 +325,7 @@ impl super::AgentController {
                         let total_errors = after.total_errors;
                         let delete_cycle_count = after.delete_cycle_count;
                         let read_without_write = after.read_without_write;
+                        let run_tests_fail_count = after.run_tests_fail_count;
 
                         // ── Progress note (uses same_tool_count from observe_before_tool) ──
                         let progress_note = wd
@@ -407,19 +417,46 @@ impl super::AgentController {
                                 );
                             }
 
-                            // ── Test stalemate detection ──
+                            // ── Test stalemate detection (dedicated counter) ──
+                            // Uses run_tests_fail_count which only resets on
+                            // run_tests success — NOT on other tool successes.
+                            // This catches the pattern where the agent alternates
+                            // run_tests(fail) → read_file(ok) → run_tests(fail)
+                            // which would otherwise reset err_count to 0.
                             if tc.name == "run_tests"
-                                && err_count >= config.watchdog.test_stalemate_threshold
+                                && run_tests_fail_count >= config.watchdog.test_stalemate_threshold
                             {
                                 append_watchdog_intervention(
                                     &mut tool_content,
                                     WatchdogEvent::TestRedLoop,
-                                    &WatchdogHintContext::new(err_count),
+                                    &WatchdogHintContext::new(run_tests_fail_count),
                                 );
                                 log_console!(
-                                    "[control] WATCHDOG: test-red playbook injected (consecutive={})",
-                                    err_count
+                                    "[control] WATCHDOG: test-red playbook injected (run_tests_fail_count={})",
+                                    run_tests_fail_count
                                 );
+                            }
+
+                            // ── Force-stop on repeated run_tests failures ──
+                            // Independent of the general error-map force-stop,
+                            // because err_count resets on any tool success but
+                            // run_tests_fail_count only resets on run_tests success.
+                            if tc.name == "run_tests"
+                                && run_tests_fail_count >= config.watchdog.max_consecutive_errors
+                            {
+                                last_text = format!(
+                                    "run_tests failed {} times (not necessarily consecutive due to intervening reads). \
+                                     Terminating to prevent test stalemate. Produce a failure report now.",
+                                    run_tests_fail_count
+                                );
+                                session.feed_tool_result(&tc.id, &tc.name, &tool_content);
+                                feed_cancelled_remaining_tools(
+                                    session,
+                                    &calls,
+                                    idx + 1,
+                                    "Cancelled: test stalemate, terminating",
+                                );
+                                return Ok(RunResult::Stopped(last_text));
                             }
 
                             // ── P0-2: Force-stop on per-tool or total error threshold ──

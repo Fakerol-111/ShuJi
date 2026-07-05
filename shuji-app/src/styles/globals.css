@@ -24,6 +24,11 @@
 
   --color-jade: #2d5a3f;
   --color-jade-light: #edf5f0;
+  --color-jade-bright: #5cc88a;
+
+  --color-gold-bright: #f0c040;
+
+  --color-vermillion-bright: #ff6b6b;
 
   /* ── Cockpit layout ── */
   --cockpit-rail-width: clamp(220px, 20vw, 280px);

@@ -146,12 +146,31 @@ async fn tool_assign_task(args: &serde_json::Value, ctx: &ToolContext) -> String
                 let _ = g.save_to(&ctx.working_dir).await;
             }
 
+            // ── Truncate long outputs to prevent context bloat ──
+            // Subordinate department outputs can be very long (e.g. full test
+            // output, code listings, error logs). Including the full output
+            // in the tool result causes the Shangshuling's context to balloon
+            // to 60k+ tokens over multiple assign_task calls. We truncate to
+            // a reasonable limit and append a notice if truncated.
+            const MAX_RESULT_CHARS: usize = 4000;
+            let truncated_output = if output.len() > MAX_RESULT_CHARS {
+                let truncated = output.chars().take(MAX_RESULT_CHARS).collect::<String>();
+                format!(
+                    "{}\n\n[... output truncated, {}/{} chars shown ...]",
+                    truncated,
+                    MAX_RESULT_CHARS,
+                    output.len()
+                )
+            } else {
+                output
+            };
+
             serde_json::json!({
                 "ok": true,
                 "operation": "assign_task",
                 "department": target_name,
                 "message": format!("{} task completed", target_name),
-                "result": output
+                "result": truncated_output
             })
             .to_string()
         }

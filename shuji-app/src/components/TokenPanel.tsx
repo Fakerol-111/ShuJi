@@ -100,6 +100,10 @@ export default function TokenPanel() {
             .map(([role, usage]) => {
               const pct = (usage.total_tokens / maxTotal) * 100;
               const cost = usage[costKey as keyof TokenUsage] as number | null | undefined;
+              const cached = usage.cached_prompt_tokens ?? 0;
+              const uncached = usage.uncached_prompt_tokens ?? 0;
+              const cacheRate =
+                cached + uncached > 0 ? Math.round((cached / (cached + uncached)) * 100) : null;
               return (
                 <div key={role}>
                   <div className="flex justify-between text-[11px] mb-1">
@@ -125,12 +129,26 @@ export default function TokenPanel() {
                       }}
                     />
                   </div>
-                  <div className="flex justify-between text-[9px] text-ink-400 mt-0.5">
-                    <span>{t('token.callCount', { count: usage.call_count })}</span>
-                    <span>
-                      {t('token.cacheHit')} {(usage.cached_prompt_tokens ?? 0).toLocaleString()} |{' '}
-                      {t('token.cacheMiss')} {(usage.uncached_prompt_tokens ?? 0).toLocaleString()}{' '}
-                      | {t('token.output')} {usage.completion_tokens.toLocaleString()}
+                  <div className="flex justify-between text-[9px] text-ink-500 mt-0.5">
+                    <span className="text-ink-400">
+                      {t('token.callCount', { count: usage.call_count })}
+                    </span>
+                    <span className="flex items-center gap-1 flex-wrap justify-end">
+                      <span className="text-jade/80">{t('token.cacheHit')}</span>
+                      <span className="text-jade font-semibold">{cached.toLocaleString()}</span>
+                      {cacheRate !== null && (
+                        <span className="text-jade font-bold bg-jade/10 px-1 rounded-sm">
+                          {cacheRate}%
+                        </span>
+                      )}{' '}
+                      <span className="text-ink-400">|</span>
+                      <span className="text-ink-500">{t('token.cacheMiss')}</span>
+                      <span className="text-ink-500">{uncached.toLocaleString()}</span>
+                      <span className="text-ink-400">|</span>
+                      <span className="text-ink-500">{t('token.output')}</span>
+                      <span className="text-ink-600">
+                        {usage.completion_tokens.toLocaleString()}
+                      </span>
                     </span>
                   </div>
                 </div>

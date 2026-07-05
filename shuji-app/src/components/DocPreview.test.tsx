@@ -7,6 +7,34 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn().mockResolvedValue(() => {}),
 }));
 
+// ── Mock useApprovalContext 使准奏操作传播到 mock API ──────
+let mockApproveDoc: ((docId: string, comment?: string) => Promise<void>) | undefined;
+
+vi.mock('../runtime/ApprovalContext', async () => {
+  const actual = await vi.importActual<typeof import('../runtime/ApprovalContext')>(
+    '../runtime/ApprovalContext'
+  );
+  return {
+    ...actual,
+    useApprovalContext: () => ({
+      pendingApprovals: [] as string[],
+      gateContext: {
+        active: false as const,
+        docId: null,
+        docType: '',
+        stepId: null,
+        stepLabel: null,
+        stepAction: null,
+        nextStepLabel: null,
+        planSummary: null,
+      },
+      pipeline: null,
+      approvingDocId: null,
+      approveDoc: mockApproveDoc ?? (async () => {}),
+    }),
+  };
+});
+
 vi.mock('../api', () => {
   const mockDone = () => Promise.resolve(() => {});
   return {
@@ -121,6 +149,11 @@ describe('DocPreview', () => {
     mockedApi.setDocumentStatus.mockResolvedValue('ok');
     mockedApi.sendMessage.mockResolvedValue('ok');
     const user = userEvent.setup();
+    mockApproveDoc = async (_docId, comment) => {
+      await mockedApi.setDocumentStatus('doc-001', 'approved', comment || undefined);
+      const msg = comment ? `朕已御批。 ${comment}` : '朕已御批。';
+      await mockedApi.sendMessage(msg);
+    };
 
     render(<DocPreview projectDir="/test" docPath=".shuji/reviews/doc-001.md" />);
     await waitFor(() => {
@@ -135,6 +168,11 @@ describe('DocPreview', () => {
     mockedApi.setDocumentStatus.mockResolvedValue('ok');
     mockedApi.sendMessage.mockResolvedValue('ok');
     const user = userEvent.setup();
+    mockApproveDoc = async (_docId, comment) => {
+      await mockedApi.setDocumentStatus('doc-001', 'approved', comment || undefined);
+      const msg = comment ? `朕已御批。 ${comment}` : '朕已御批。';
+      await mockedApi.sendMessage(msg);
+    };
 
     render(<DocPreview projectDir="/test" docPath=".shuji/reviews/doc-001.md" />);
     await waitFor(() => {
