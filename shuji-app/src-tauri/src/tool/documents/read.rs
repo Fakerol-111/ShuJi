@@ -75,20 +75,23 @@ pub async fn tool_read_document(working_dir: &Path, args: &serde_json::Value) ->
         );
     }
 
-    if let Some(cached) = crate::tool::cache_lookup(working_dir, &full) {
-        return cached;
-    }
-
-    let content = match tokio::fs::read_to_string(&full).await {
-        Ok(c) => {
-            if let Ok(meta) = tokio::fs::metadata(&full).await {
-                if let Ok(mtime) = meta.modified() {
-                    crate::tool::cache_insert(working_dir, full.clone(), mtime, c.clone());
+    // Check cache first; if hit, use cached content to skip file I/O.
+    // The cached content is raw file text — it still needs to go through
+    // the normal formatting below (parse_doc, extract_section, ToolOutput).
+    let content = if let Some(cached) = crate::tool::cache_lookup(working_dir, &full) {
+        cached
+    } else {
+        match tokio::fs::read_to_string(&full).await {
+            Ok(c) => {
+                if let Ok(meta) = tokio::fs::metadata(&full).await {
+                    if let Ok(mtime) = meta.modified() {
+                        crate::tool::cache_insert(working_dir, full.clone(), mtime, c.clone());
+                    }
                 }
+                c
             }
-            c
+            Err(e) => return ToolOutput::error("read_document", &id, "read_error", &e.to_string()),
         }
-        Err(e) => return ToolOutput::error("read_document", &id, "read_error", &e.to_string()),
     };
 
     let (meta, body) = match parse_doc(&content) {

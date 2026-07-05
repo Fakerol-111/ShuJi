@@ -141,34 +141,55 @@ pub async fn tool_read_file(working_dir: &Path, args: &serde_json::Value) -> Str
         Err(e) => return ToolOutput::error("read_file", path, "path_error", &e),
     };
     let is_full_read = offset == 0 && limit == u64::MAX;
-    if is_full_read {
+    // Check cache first; if hit, use cached content to skip file I/O.
+    // The cached content is raw file text — it still needs to go through
+    // the normal formatting below (line splitting, excerpt, ToolOutput).
+    let content = if is_full_read {
         if let Some(cached) = cache_lookup(working_dir, &full) {
-            return cached;
-        }
-    }
-    let content = match tokio::fs::read_to_string(&full).await {
-        Ok(c) => {
-            if let Ok(meta) = tokio::fs::metadata(&full).await {
-                if let Ok(mtime) = meta.modified() {
-                    cache_insert(working_dir, full.clone(), mtime, c.clone());
+            cached
+        } else {
+            match tokio::fs::read_to_string(&full).await {
+                Ok(c) => {
+                    if let Ok(meta) = tokio::fs::metadata(&full).await {
+                        if let Ok(mtime) = meta.modified() {
+                            cache_insert(working_dir, full.clone(), mtime, c.clone());
+                        }
+                    }
+                    c
+                }
+                Err(e) => {
+                    return ToolOutput::error("read_file", path, "read_error", &e.to_string())
                 }
             }
-            c
         }
-        Err(e) => return ToolOutput::error("read_file", path, "read_error", &e.to_string()),
+    } else {
+        // Chunked reads bypass cache (the full content is cached above)
+        match tokio::fs::read_to_string(&full).await {
+            Ok(c) => c,
+            Err(e) => return ToolOutput::error("read_file", path, "read_error", &e.to_string()),
+        }
     };
     let lines: Vec<&str> = content.lines().collect();
     let total = lines.len();
     let is_chunked = offset > 0 || limit < u64::MAX;
     if !is_chunked && total > 200 {
-        return ToolOutput::error(
+        // Instead of returning a bare error, return the first 200 lines
+        // as a preview. This prevents agents from getting stuck in a
+        // read → too_large → retry loop when they don't use offset/limit.
+        let preview_end = 200.min(total);
+        let excerpt: Vec<String> = lines[0..preview_end]
+            .iter()
+            .enumerate()
+            .map(|(i, line)| format!("{:>4}| {}", i + 1, line))
+            .collect();
+        let meta = format!(
+            "{} ({} lines total, showing 1-{}. Use offset={} to read the next chunk.)",
+            path, total, preview_end, preview_end,
+        );
+        return ToolOutput::read_file(
             "read_file",
             path,
-            "too_large",
-            &format!(
-                "File too large ({} lines total). Use offset and limit parameters to read in chunks.",
-                total
-            ),
+            &format!("{}\n{}", meta, excerpt.join("\n")),
         );
     }
     let start = (offset as usize).min(total);

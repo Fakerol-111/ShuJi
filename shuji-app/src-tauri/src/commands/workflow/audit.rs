@@ -2,7 +2,7 @@ use std::path::Path;
 
 use tauri::State;
 
-use crate::commands::friendly_error::friendly_error;
+use crate::commands::friendly_error::friendly_error_plain;
 use crate::commands::project::AppState;
 
 /// Get the document lineage tree for a given doc ID.
@@ -15,7 +15,7 @@ pub async fn get_document_lineage(
         let project_opt = state.current_project.lock().await;
         let p = project_opt
             .as_ref()
-            .ok_or_else(|| friendly_error("没有加载项目"))?;
+            .ok_or_else(|| friendly_error_plain("没有加载项目"))?;
         p.working_dir.clone()
     };
     Ok(crate::audit::build_lineage(Path::new(&working_dir), &doc_id).await)
@@ -30,7 +30,7 @@ pub async fn get_audit_timeline(
         let project_opt = state.current_project.lock().await;
         let p = project_opt
             .as_ref()
-            .ok_or_else(|| friendly_error("没有加载项目"))?;
+            .ok_or_else(|| friendly_error_plain("没有加载项目"))?;
         p.working_dir.clone()
     };
     Ok(crate::audit::build_timeline(Path::new(&working_dir)).await)
@@ -43,7 +43,7 @@ pub async fn generate_delivery_report(state: State<'_, AppState>) -> Result<Stri
         let project_opt = state.current_project.lock().await;
         let p = project_opt
             .as_ref()
-            .ok_or_else(|| friendly_error("没有加载项目"))?;
+            .ok_or_else(|| friendly_error_plain("没有加载项目"))?;
         p.working_dir.clone()
     };
     Ok(crate::audit::generate_report(Path::new(&working_dir)).await)
@@ -67,7 +67,7 @@ pub async fn get_document_diffs(
         let project_opt = state.current_project.lock().await;
         let p = project_opt
             .as_ref()
-            .ok_or_else(|| friendly_error("没有加载项目"))?;
+            .ok_or_else(|| friendly_error_plain("没有加载项目"))?;
         p.working_dir.clone()
     };
     let diff_dir = Path::new(&working_dir)
@@ -118,7 +118,7 @@ pub async fn read_document_diff(
         let project_opt = state.current_project.lock().await;
         let p = project_opt
             .as_ref()
-            .ok_or_else(|| friendly_error("没有加载项目"))?;
+            .ok_or_else(|| friendly_error_plain("没有加载项目"))?;
         p.working_dir.clone()
     };
     let path = Path::new(&working_dir)
@@ -146,7 +146,7 @@ pub async fn set_document_status(
         let project_opt = state.current_project.lock().await;
         let p = project_opt
             .as_ref()
-            .ok_or_else(|| friendly_error("没有加载项目"))?;
+            .ok_or_else(|| friendly_error_plain("没有加载项目"))?;
         p.working_dir.clone()
     };
 
@@ -193,7 +193,7 @@ pub async fn trace_document(
         let project_opt = state.current_project.lock().await;
         let p = project_opt
             .as_ref()
-            .ok_or_else(|| friendly_error("没有加载项目"))?;
+            .ok_or_else(|| friendly_error_plain("没有加载项目"))?;
         p.working_dir.clone()
     };
     Ok(crate::audit::trace_document(Path::new(&working_dir), &doc_id).await)
@@ -209,7 +209,7 @@ pub async fn query_documents(
         let project_opt = state.current_project.lock().await;
         let p = project_opt
             .as_ref()
-            .ok_or_else(|| friendly_error("没有加载项目"))?;
+            .ok_or_else(|| friendly_error_plain("没有加载项目"))?;
         p.working_dir.clone()
     };
     Ok(crate::audit::query_documents(Path::new(&working_dir), &filter).await)
@@ -225,7 +225,7 @@ pub async fn get_document_line_run(
         let project_opt = state.current_project.lock().await;
         let p = project_opt
             .as_ref()
-            .ok_or_else(|| friendly_error("没有加载项目"))?;
+            .ok_or_else(|| friendly_error_plain("没有加载项目"))?;
         p.working_dir.clone()
     };
     Ok(crate::audit::build_document_line(Path::new(&working_dir), run_id.as_deref()).await)
@@ -241,7 +241,7 @@ pub async fn get_document_line_for_doc(
         let project_opt = state.current_project.lock().await;
         let p = project_opt
             .as_ref()
-            .ok_or_else(|| friendly_error("没有加载项目"))?;
+            .ok_or_else(|| friendly_error_plain("没有加载项目"))?;
         p.working_dir.clone()
     };
     Ok(crate::audit::build_document_line_for_doc(Path::new(&working_dir), &doc_id).await)
@@ -254,7 +254,7 @@ pub async fn list_document_line_runs(state: State<'_, AppState>) -> Result<Vec<S
         let project_opt = state.current_project.lock().await;
         let p = project_opt
             .as_ref()
-            .ok_or_else(|| friendly_error("没有加载项目"))?;
+            .ok_or_else(|| friendly_error_plain("没有加载项目"))?;
         p.working_dir.clone()
     };
     Ok(crate::audit::list_document_line_runs(Path::new(&working_dir)).await)
@@ -270,7 +270,7 @@ pub async fn analyze_document_impact(
         let project_opt = state.current_project.lock().await;
         let p = project_opt
             .as_ref()
-            .ok_or_else(|| friendly_error("没有加载项目"))?;
+            .ok_or_else(|| friendly_error_plain("没有加载项目"))?;
         p.working_dir.clone()
     };
     Ok(crate::audit::analyze_impact(Path::new(&working_dir), &doc_id).await)
@@ -285,7 +285,7 @@ pub async fn verify_audit_trail(
         let project_opt = state.current_project.lock().await;
         let p = project_opt
             .as_ref()
-            .ok_or_else(|| friendly_error("没有加载项目"))?;
+            .ok_or_else(|| friendly_error_plain("没有加载项目"))?;
         p.working_dir.clone()
     };
     crate::audit::verify_audit_trail(Path::new(&working_dir)).await

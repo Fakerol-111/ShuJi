@@ -15,14 +15,33 @@ use crate::api::reasoning;
 impl super::Session {
     /// Build the JSON body shared by `step()` and `step_stream()`.
     pub(super) fn build_step_body(&self) -> serde_json::Value {
+        // 从配置获取生成参数
+        let gen = &self.config.api.generation;
+        let role_override = gen
+            .role_overrides
+            .get(&self.role)
+            .cloned()
+            .unwrap_or_default();
+
+        let temperature = role_override.temperature.unwrap_or(gen.temperature);
+        let top_p = role_override.top_p.unwrap_or(gen.top_p);
+        let frequency_penalty = role_override
+            .frequency_penalty
+            .unwrap_or(gen.frequency_penalty);
+
         let mut body = serde_json::json!({
             "model": self.model(),
             "messages": self.messages_ref(),
-            "temperature": 0.1,
-            "top_p": 0.9,
-            "frequency_penalty": 0.1,
-            "seed": 42,
+            "temperature": temperature,
+            "top_p": top_p,
+            "frequency_penalty": frequency_penalty,
         });
+
+        // seed = 0 时不发送该字段（并非所有 API 都支持）
+        if gen.seed > 0 {
+            body["seed"] = serde_json::json!(gen.seed);
+        }
+
         if let Some(max_tokens) = self.max_tokens() {
             body["max_tokens"] = serde_json::json!(max_tokens);
         }

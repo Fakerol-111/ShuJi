@@ -55,12 +55,10 @@ async fn tool_submit_pipeline_plan(args: &serde_json::Value, _ctx: &ToolContext)
 async fn tool_cancel_agent(args: &serde_json::Value, ctx: &ToolContext) -> String {
     let target = args["to"].as_str().unwrap_or("");
     if let Some(role) = Role::from_name(target) {
-        // Set cancel flag
+        // Set cancel flag (无锁直接查找)
         if let Some(ref map) = ctx.cancel_map {
-            if let Ok(guard) = map.lock() {
-                if let Some(flag) = guard.get(&role) {
-                    flag.store(true, Ordering::SeqCst);
-                }
+            if let Some(flag) = map.get(&role) {
+                flag.store(true, Ordering::SeqCst);
             }
         }
         // Send fast interrupt to immediately stop tool execution
@@ -188,11 +186,9 @@ async fn tool_update_soul(args: &serde_json::Value, ctx: &ToolContext) -> String
 
 /// Extract 内阁's cancel flag from the ToolContext's cancel_map.
 fn neige_cancel_flag(ctx: &ToolContext) -> Option<Arc<AtomicBool>> {
-    ctx.cancel_map.as_ref().and_then(|m| {
-        m.lock()
-            .ok()
-            .and_then(|guard| guard.get(&Role::Neige).cloned())
-    })
+    ctx.cancel_map
+        .as_ref()
+        .and_then(|m| m.get(&Role::Neige).cloned())
 }
 
 async fn tool_expand_requirements(args: &serde_json::Value, ctx: &ToolContext) -> String {

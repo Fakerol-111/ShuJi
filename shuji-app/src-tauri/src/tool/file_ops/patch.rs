@@ -10,6 +10,42 @@ pub async fn tool_delete_file(working_dir: &Path, args: &serde_json::Value) -> S
     if path.is_empty() {
         return ToolOutput::error("delete_file", "", "empty_path", "File path is empty");
     }
+    // ── Blacklist: never allow deleting build artifacts or system files ──
+    // Agents (especially Gongbushangshu) have been observed deleting .rmeta
+    // files in target/debug/deps/ when debugging compilation issues. This
+    // corrupts cargo's build cache and causes subsequent cargo check/test
+    // runs to fail with exit code 1 but no parseable error messages.
+    let blacklist_prefixes = [
+        "target/",
+        "target\\",
+        ".git/",
+        ".git\\",
+        "node_modules/",
+        "node_modules\\",
+    ];
+    let normalized = path.replace('\\', "/");
+    for prefix in &blacklist_prefixes {
+        if normalized.starts_with(prefix) || normalized.starts_with(&prefix.replace('/', "\\")) {
+            return ToolOutput::error(
+                "delete_file",
+                path,
+                "protected_path",
+                &format!(
+                    "Cannot delete files in '{}' — this is a build/VCS artifact directory. Deleting files here corrupts the build cache. Use 'cargo clean' instead.",
+                    prefix.trim_end_matches('/')
+                ),
+            );
+        }
+    }
+    // Also block Cargo.lock — it's not a source file
+    if normalized == "Cargo.lock" || normalized == "cargo.lock" {
+        return ToolOutput::error(
+            "delete_file",
+            path,
+            "protected_path",
+            "Cargo.lock is a dependency lock file, not source code. Do not delete it.",
+        );
+    }
     let full = match resolve_scoped_path(working_dir, path).await {
         Ok(p) => p,
         Err(e) => return ToolOutput::error("delete_file", path, "path_error", &e),

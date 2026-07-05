@@ -105,8 +105,9 @@ fn mock_actor_system(harness: &MockActorHarness) -> ActorSystem {
         emperor_tx,
         dept_log_tx,
         dept_step_tx: None,
-        cancel_map: Arc::new(std::sync::Mutex::new(HashMap::new())),
+        cancel_map: Arc::new(HashMap::new()),
         cancel: Arc::new(AtomicBool::new(false)),
+        task_handles: HashMap::new(),
         workflow_graph: graph,
     })
 }

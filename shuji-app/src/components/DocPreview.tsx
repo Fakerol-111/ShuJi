@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { setDocumentStatus as apiSetStatus, sendMessage, openInExternalEditor } from '../api';
+import { openInExternalEditor } from '../api';
 import { formatError } from '../utils/error';
 import { useEditorConfig } from '../hooks/useEditorConfig';
 import { openInEditorLabel, openLineInEditorLabel } from '../utils/editorLabel';
@@ -16,6 +16,7 @@ import DiffView from './doc-preview/DiffView';
 import CodePreview from './doc-preview/CodePreview';
 import FrontmatterMetadata from './doc-preview/FrontmatterMetadata';
 import LineageView from './doc-preview/LineageView';
+import { useApprovalContext } from '../runtime/ApprovalContext';
 
 interface DocPreviewProps {
   projectDir: string;
@@ -26,6 +27,7 @@ interface DocPreviewProps {
 export default function DocPreview({ projectDir, docPath, initialTab }: DocPreviewProps) {
   const { t } = useTranslation();
   const editorConfig = useEditorConfig();
+  const { approvingDocId, approveDoc } = useApprovalContext();
   const openInEditorText = useMemo(() => openInEditorLabel(editorConfig, t), [editorConfig, t]);
   const openLineInEditorText = useMemo(
     () => openLineInEditorLabel(editorConfig, t),
@@ -77,17 +79,13 @@ export default function DocPreview({ projectDir, docPath, initialTab }: DocPrevi
   };
 
   const handleApproval = async () => {
+    if (!docId) return;
+    // Use global approveDoc — it has a lock + optimistic update.
+    // This prevents double-approval from the top banner or artifact panel.
     setApproving(true);
     setApprovalError('');
     try {
-      await apiSetStatus(docId, 'approved', comment || undefined);
-      try {
-        await sendMessage(`朕已御批。${comment ? ' ' + comment : ''}`);
-      } catch (e) {
-        setApprovalError(t('docPreview.approvalNotifyFailed', { error: formatError(e) }));
-        await loadDoc(true);
-        return;
-      }
+      await approveDoc(docId, comment || undefined);
       await loadDoc(true);
     } catch (e) {
       setApprovalError(formatError(e));
@@ -139,7 +137,7 @@ export default function DocPreview({ projectDir, docPath, initialTab }: DocPrevi
       <div className="doc-preview-body flex-1 min-h-0 min-w-0 overflow-auto px-4 py-4 lg:px-6 lg:py-5">
         {docStatus === 'in_review' && (
           <ApprovalBanner
-            approving={approving}
+            approving={approving || (!!approvingDocId && approvingDocId !== docId)}
             approvalError={approvalError}
             comment={comment}
             onCommentChange={setComment}

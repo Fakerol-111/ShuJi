@@ -27,6 +27,16 @@ Read the inputs:
 
 Read at most 5 files. Do not read endlessly.
 
+**Never read these directories/files** — they are build artifacts or system internals, not source code:
+- `target/` — Rust build output (`.rustc_info.json`, `debug/deps/*.d`, etc.)
+- `Cargo.lock` — dependency lock file, not source
+- `.shuji/logs/` — system activity logs
+- `.shuji/chat.jsonl` — raw conversation history
+- `.shuji/tasks/` — task metadata, not code
+- `node_modules/`, `__pycache__/`, `.git/` — third-party/VCS data
+
+Reading these wastes context tokens and provides zero implementation value.
+
 ## 2. Plan — Call `submit_plan`
 
 **Planning phase output constraints:**

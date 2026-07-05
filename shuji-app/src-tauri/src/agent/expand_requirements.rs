@@ -32,7 +32,9 @@ pub async fn run(
     let prompt = format!("??????????? task ?????? {} ?????", task_id);
     let msgs = vec![Message::user(&prompt)];
 
-    let config = Arc::new(crate::config::RuntimeConfig::default());
+    let config = Arc::new(crate::config::RuntimeConfig::load_or_default(
+        &crate::config::RuntimeConfig::config_toml_path(),
+    ));
 
     let mut session =
         crate::api::session::Session::new(PROMPT, &msgs, model, &tools, client, &config)

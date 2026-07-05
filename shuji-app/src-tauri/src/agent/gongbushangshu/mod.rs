@@ -58,6 +58,11 @@ pub struct GongbuShangshuAgent {
     cancel: Arc<AtomicBool>,
     plan: Arc<Mutex<Option<PlanState>>>,
     last_stopped: AtomicBool,
+    /// Set by submit_plan/complete_task to signal an *intentional* force-stop.
+    /// after_execute checks this FIRST — if true, the agent continues to the
+    /// next batch. This is distinct from `last_stopped` which covers
+    /// watchdog/reactive force-stops that should terminate the loop.
+    plan_force_stop: AtomicBool,
 }
 
 impl GongbuShangshuAgent {
@@ -68,6 +73,7 @@ impl GongbuShangshuAgent {
             cancel,
             plan: Arc::new(Mutex::new(None)),
             last_stopped: AtomicBool::new(false),
+            plan_force_stop: AtomicBool::new(false),
         }
     }
 
@@ -240,6 +246,8 @@ impl Agent for GongbuShangshuAgent {
             crate::api::intent::build_default_checkers(esaa_enabled, &working_dir);
         let dept = role_name.clone();
         let plan_ref = self.plan.clone();
+        let plan_force_stop = Arc::new(AtomicBool::new(false));
+        let plan_force_stop_clone = plan_force_stop.clone();
         let wd = working_dir.clone();
         let force_stop = Arc::new(AtomicBool::new(false));
         let force_stop_clone = force_stop.clone();
@@ -247,6 +255,7 @@ impl Agent for GongbuShangshuAgent {
             let name = name.to_owned();
             let args = args.clone();
             let plan_ref = plan_ref.clone();
+            let plan_force_stop_clone = plan_force_stop_clone.clone();
             let force_stop_clone = force_stop_clone.clone();
             let wd = wd.clone();
             let checkers = checkers.clone();
@@ -283,6 +292,7 @@ impl Agent for GongbuShangshuAgent {
                         };
                         *guard = Some(PlanState::from_batches(batches));
                         force_stop_clone.store(true, Ordering::SeqCst);
+                        plan_force_stop_clone.store(true, Ordering::SeqCst);
                         log_console!(
                             "[工部] submit_plan: {} batches — force-stopping controller",
                             count
@@ -304,10 +314,12 @@ impl Agent for GongbuShangshuAgent {
                                 let all_done = plan.advance();
                                 if all_done {
                                     force_stop_clone.store(true, Ordering::SeqCst);
+                                    plan_force_stop_clone.store(true, Ordering::SeqCst);
                                     log_console!("[工部] complete_task: all batches done");
                                     r#"{"ok":true,"message":"All batches completed. Create a report and route back to 尚书令."}"#.to_string()
                                 } else {
                                     force_stop_clone.store(true, Ordering::SeqCst);
+                                    plan_force_stop_clone.store(true, Ordering::SeqCst);
                                     log_console!("[工部] complete_task: batch {}/{} done — force-stopping",
                                         plan.current, plan.batches.len());
                                     serde_json::json!({"ok":true,"message":format!("Batch {} completed, advanced to batch {}. Waiting for system to inject next batch context.", plan.current, plan.current + 1)}).to_string()
@@ -346,6 +358,11 @@ impl Agent for GongbuShangshuAgent {
         if stopped {
             self.last_stopped.store(true, Ordering::SeqCst);
         }
+        // Sync the local plan_force_stop flag to the struct field so
+        // after_execute can read it.
+        if plan_force_stop.load(Ordering::SeqCst) {
+            self.plan_force_stop.store(true, Ordering::SeqCst);
+        }
         let result = run_result.into_text();
 
         // Persist for continuation within the batch (borrow messages directly)
@@ -361,9 +378,33 @@ impl Agent for GongbuShangshuAgent {
     }
 
     fn after_execute(&self, _output: &AgentOutput) -> LoopDecision {
+        // ── Three-tier decision ───────────────────────────────────
+        //
+        // 1. plan_force_stop: set by submit_plan / complete_task to signal
+        //    an *intentional* stop. Always Continue so the actor mailbox
+        //    re-invokes execute() with the next batch context.
+        //
+        // 2. last_stopped: set by watchdog / test-stalemate / other reactive
+        //    force-stops. Always Done to prevent infinite re-loop.
+        //
+        // 3. Normal (neither flag set): check plan state — Continue if the
+        //    plan exists but is not yet complete.
+
+        // Tier 1: intentional plan force-stop → Continue
+        if self.plan_force_stop.swap(false, Ordering::SeqCst) {
+            self.last_stopped.store(false, Ordering::SeqCst); // clear any stale flag
+            return LoopDecision::Continue(
+                "Please continue with the current batch task. Call complete_task when done."
+                    .to_string(),
+            );
+        }
+
+        // Tier 2: reactive force-stop → Done
         if self.last_stopped.swap(false, Ordering::SeqCst) {
             return LoopDecision::Done;
         }
+
+        // Tier 3: normal — check plan state
         let plan_guard = match lock_or_recover(&self.plan) {
             Ok(g) => g,
             Err(_) => return LoopDecision::Done,
@@ -387,6 +428,7 @@ impl Agent for GongbuShangshuAgent {
         };
         *guard = None;
         self.last_stopped.store(false, Ordering::SeqCst);
+        self.plan_force_stop.store(false, Ordering::SeqCst);
         log_console!("[工部] plan cleared for new task");
     }
 
@@ -426,6 +468,8 @@ mod tests {
 
     #[test]
     fn gongbu_stopped_does_not_continue_batch() {
+        // Reactive force-stop (watchdog/test-stalemate) → Done, even if
+        // plan is not complete.
         let cancel = Arc::new(AtomicBool::new(false));
         let client = LlmClient::new(String::new(), String::new());
         let agent = GongbuShangshuAgent::new(client, "test", cancel);
@@ -446,5 +490,36 @@ mod tests {
 
         let decision = agent.after_execute(&AgentOutput::new(String::new()));
         assert!(matches!(decision, LoopDecision::Done));
+    }
+
+    #[test]
+    fn gongbu_plan_force_stop_continues() {
+        // Intentional force-stop (submit_plan/complete_task) → Continue,
+        // even if last_stopped is also set (force_stop triggers Stopped).
+        let cancel = Arc::new(AtomicBool::new(false));
+        let client = LlmClient::new(String::new(), String::new());
+        let agent = GongbuShangshuAgent::new(client, "test", cancel);
+
+        {
+            let mut guard = agent.plan.lock().unwrap();
+            *guard = Some(PlanState {
+                batches: vec![PlanBatch {
+                    name: "b1".into(),
+                    goal: "g1".into(),
+                }],
+                current: 0,
+                complete: false,
+                fresh_batch: false,
+            });
+        }
+        // Simulate what happens after submit_plan: both flags are set
+        agent.plan_force_stop.store(true, Ordering::SeqCst);
+        agent.last_stopped.store(true, Ordering::SeqCst);
+
+        let decision = agent.after_execute(&AgentOutput::new(String::new()));
+        assert!(
+            matches!(decision, LoopDecision::Continue(_)),
+            "plan_force_stop should trigger Continue even when last_stopped is true"
+        );
     }
 }

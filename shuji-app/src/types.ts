@@ -295,7 +295,8 @@ export type DeptStepKind =
   | { type: 'tool_result'; tool: string; ok: boolean; summary: string }
   | { type: 'text'; content: string }
   | { type: 'text_delta'; delta: string }
-  | { type: 'reasoning_delta'; delta: string };
+  | { type: 'reasoning_delta'; delta: string }
+  | { type: 'waiting'; elapsed_secs: number };
 
 /** Lightweight pipeline progress from `runtime-update`. */
 export interface PipelineSnapshot {

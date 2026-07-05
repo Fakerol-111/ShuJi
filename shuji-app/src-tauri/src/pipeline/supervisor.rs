@@ -130,10 +130,8 @@ impl PipelineSupervisor {
     /// Abort any in-flight pipeline (sets global cancel on ActorSystem).
     pub async fn abort_current(&self, system: &ActorSystem) {
         system.cancel.store(true, Ordering::SeqCst);
-        if let Ok(map) = system.cancel_map.lock() {
-            for flag in map.values() {
-                flag.store(true, Ordering::SeqCst);
-            }
+        for flag in system.cancel_map.values() {
+            flag.store(true, Ordering::SeqCst);
         }
         for tx in system.fast_txs.values() {
             let _ = tx.try_send(crate::actor::FastMessage::Interrupt);
@@ -172,10 +170,8 @@ impl PipelineSupervisor {
         self.mark_plan_started(&plan_id);
 
         system.cancel.store(false, Ordering::SeqCst);
-        if let Ok(map) = system.cancel_map.lock() {
-            for flag in map.values() {
-                flag.store(false, Ordering::SeqCst);
-            }
+        for flag in system.cancel_map.values() {
+            flag.store(false, Ordering::SeqCst);
         }
 
         let context = PipelineEngineContext::from_actor_system(
@@ -312,6 +308,16 @@ impl PipelineSupervisor {
                 }
             }
             running.store(false, Ordering::SeqCst);
+            // 管道到达终态时停止前端计时器（排除暂停等待审批/用户输入的情况）
+            if matches!(
+                result,
+                PipelineResult::Complete { .. }
+                    | PipelineResult::Aborted { .. }
+                    | PipelineResult::Deadlock { .. }
+                    | PipelineResult::StepFailed { .. }
+            ) {
+                crate::round_metrics::reset_round();
+            }
         });
 
         *self.task.lock().await = Some(handle);

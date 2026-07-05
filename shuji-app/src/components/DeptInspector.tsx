@@ -280,6 +280,16 @@ function StepCard({ entry, humanMode }: { entry: DeptStepEntry; humanMode: boole
         </div>
       );
     }
+    case 'waiting': {
+      return (
+        <div className="text-caption text-ink-400 px-2 py-0.5 flex items-center gap-1.5">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-jade/60 animate-pulse" />
+          <span>
+            {t('inspector.thinking')} ({kind.elapsed_secs}s)
+          </span>
+        </div>
+      );
+    }
     default:
       return null;
   }

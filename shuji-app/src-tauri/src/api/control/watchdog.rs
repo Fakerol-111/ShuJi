@@ -33,6 +33,11 @@ pub(super) struct AfterToolObs {
     pub delete_cycle_count: Option<u32>,
     /// Updated read-without-write counter (exposed for playbook-injection checks).
     pub read_without_write: u32,
+    /// Dedicated run_tests failure counter that only resets on run_tests success.
+    /// Unlike err_count (which clears on ANY tool success), this counter
+    /// persists across intervening read_file / search_text calls so the
+    /// watchdog can detect true test stalemate patterns.
+    pub run_tests_fail_count: u32,
 }
 
 /// Why the watchdog requested a force-stop on consecutive errors.
@@ -57,6 +62,11 @@ pub(super) struct WatchdogState {
     delete_seen: HashMap<String, u32>,
     delete_create_cycles: HashMap<String, u32>,
     tool_error_map: HashMap<String, u32>,
+    /// Dedicated counter for run_tests failures. Only increments when
+    /// run_tests returns an error, only resets when run_tests succeeds.
+    /// This survives intervening successful read_file/search_text calls
+    /// that would otherwise clear `tool_error_map`.
+    run_tests_fail_count: u32,
 }
 
 impl Default for WatchdogState {
@@ -76,6 +86,7 @@ impl WatchdogState {
             delete_seen: HashMap::new(),
             delete_create_cycles: HashMap::new(),
             tool_error_map: HashMap::new(),
+            run_tests_fail_count: 0,
         }
     }
 
@@ -178,6 +189,19 @@ impl WatchdogState {
                     || result.contains("unknown tool")
             });
 
+        // ── Dedicated run_tests failure counter ───────────────────────────
+        // This counter only resets when run_tests itself succeeds, NOT when
+        // other tools succeed. This prevents the agent from indefinitely
+        // alternating run_tests(fail) → read_file(ok) → run_tests(fail)
+        // without triggering the stalemate detection.
+        if tool_name == "run_tests" {
+            if is_error {
+                self.run_tests_fail_count += 1;
+            } else {
+                self.run_tests_fail_count = 0;
+            }
+        }
+
         let (err_count, total_errors) = if is_error {
             let prev = self.tool_error_map.get(tool_name).copied().unwrap_or(0);
             let err_count = prev + 1;
@@ -195,6 +219,7 @@ impl WatchdogState {
             total_errors,
             delete_cycle_count,
             read_without_write: self.read_without_write,
+            run_tests_fail_count: self.run_tests_fail_count,
         }
     }
 

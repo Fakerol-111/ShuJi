@@ -53,11 +53,11 @@ export default function DutyBar({ projectDir }: DutyBarProps) {
     <div className="shrink-0 min-w-0 overflow-hidden">
       <div className="h-7 bg-ink-900 border-t border-ink-800 flex items-center px-2 text-caption gap-0">
         <div className="flex items-center gap-1 min-w-0 flex-1 overflow-x-auto">
-          <span className="text-gold/60 text-caption font-serif font-semibold tracking-wider mr-0.5 shrink-0">
+          <span className="text-gold-bright text-caption font-serif font-semibold tracking-wider mr-0.5 shrink-0">
             {t('duty.title')}
           </span>
           {deptArray.length === 0 ? (
-            <span className="text-ink-500 italic text-caption">{t('activityBar.allQuiet')}</span>
+            <span className="text-ink-400 italic text-caption">{t('activityBar.allQuiet')}</span>
           ) : (
             deptArray.map((dept) => {
               const meta = getDeptMeta(dept);
@@ -78,9 +78,9 @@ export default function DutyBar({ projectDir }: DutyBarProps) {
                     className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0"
                     style={{ backgroundColor: color }}
                   />
-                  <span className="text-ink-200 font-medium shrink-0">{label}</span>
+                  <span className="text-ink-100 font-medium shrink-0">{label}</span>
                   {action && (
-                    <span className="text-ink-400 truncate ml-0.5 max-w-[120px]">{action}</span>
+                    <span className="text-ink-300 truncate ml-0.5 max-w-[120px]">{action}</span>
                   )}
                 </span>
               );
@@ -88,11 +88,11 @@ export default function DutyBar({ projectDir }: DutyBarProps) {
           )}
         </div>
 
-        <div className="ml-auto flex items-center gap-2 text-caption font-mono text-ink-500 shrink-0">
+        <div className="ml-auto flex items-center gap-2 text-caption font-mono shrink-0">
           {!hasActive && runMetrics && (
             <>
               <span className="text-ink-400 hidden sm:inline">{t('duty.lastRun')}</span>
-              <span className="text-ink-300 truncate max-w-[100px]" title={runMetrics.plan_id}>
+              <span className="text-ink-100 truncate max-w-[100px]" title={runMetrics.plan_id}>
                 {runMetrics.status}
               </span>
             </>
@@ -105,14 +105,14 @@ export default function DutyBar({ projectDir }: DutyBarProps) {
           )}
           {hasActive && roundStarted > 0 && (
             <>
-              <span className="text-gold/60">{t('duty.output')}</span>
-              <span className="text-ink-300">{formatToken(roundCompletion)}</span>
+              <span className="text-gold-bright">{t('duty.output')}</span>
+              <span className="text-ink-100">{formatToken(roundCompletion)}</span>
             </>
           )}
           {tokenCost !== null && (
             <>
               <span className="text-ink-700">|</span>
-              <span className="text-gold font-semibold">
+              <span className="text-gold-bright font-bold">
                 ≈ {currency === 'cny' ? '¥' : '$'}
                 {tokenCost}
               </span>
@@ -122,7 +122,7 @@ export default function DutyBar({ projectDir }: DutyBarProps) {
 
         <button
           onClick={() => setTokenExpanded((v) => !v)}
-          className="ml-2 pl-2 border-l border-ink-800 flex items-center gap-1 text-caption text-ink-500 hover:text-ink-300 font-mono shrink-0"
+          className="ml-2 pl-2 border-l border-ink-800 flex items-center gap-1 text-caption text-ink-400 hover:text-gold-bright font-mono shrink-0"
           title={t('duty.tokens')}
         >
           <span>{tokenExpanded ? '▾' : '▸'}</span>
@@ -131,7 +131,7 @@ export default function DutyBar({ projectDir }: DutyBarProps) {
 
         <button
           onClick={() => setLogsExpanded((v) => !v)}
-          className="ml-2 pl-2 border-l border-ink-800 flex items-center gap-1 text-caption text-ink-500 hover:text-ink-300 font-mono shrink-0"
+          className="ml-2 pl-2 border-l border-ink-800 flex items-center gap-1 text-caption text-ink-400 hover:text-gold-bright font-mono shrink-0"
         >
           <span>{logsExpanded ? '▾' : '▸'}</span>
           {t('duty.logs')}
@@ -140,20 +140,25 @@ export default function DutyBar({ projectDir }: DutyBarProps) {
 
       {tokenExpanded && (
         <div className="max-h-32 overflow-y-auto bg-ink-950 px-3 py-1.5 border-t border-ink-800">
-          <div className="flex items-center gap-3 text-caption font-mono text-ink-500 flex-wrap">
-            <span className="text-jade/80">{t('duty.cacheHit')}</span>
-            <span className="text-ink-300">{formatToken(tokenCached)}</span>
+          <div className="flex items-center gap-3 text-caption font-mono flex-wrap">
+            <span className="text-jade-bright">{t('duty.cacheHit')}</span>
+            <span className="text-ink-100">{formatToken(tokenCached)}</span>
+            {tokenPrompt > 0 && (
+              <span className="text-jade-bright">
+                ({Math.round((tokenCached / tokenPrompt) * 100)}%)
+              </span>
+            )}
             <span className="text-ink-700">|</span>
             <span className="text-ink-400">{t('token.cacheMiss')}</span>
-            <span className="text-ink-300">{formatToken(tokenPrompt - tokenCached)}</span>
+            <span className="text-ink-200">{formatToken(tokenPrompt - tokenCached)}</span>
             <span className="text-ink-700">|</span>
-            <span className="text-gold/60">{t('duty.output')}</span>
-            <span className="text-ink-300">{formatToken(tokenCompletion)}</span>
+            <span className="text-gold-bright">{t('duty.output')}</span>
+            <span className="text-ink-100">{formatToken(tokenCompletion)}</span>
             {runMetrics && (
               <>
                 <span className="text-ink-700">|</span>
                 <span className="text-ink-400">{t('duty.runId')}</span>
-                <span className="text-ink-300 truncate max-w-[120px]" title={runMetrics.run_id}>
+                <span className="text-ink-200 truncate max-w-[120px]" title={runMetrics.run_id}>
                   {runMetrics.run_id.slice(0, 8)}
                 </span>
               </>
@@ -161,13 +166,13 @@ export default function DutyBar({ projectDir }: DutyBarProps) {
             {tokenCost !== null && (
               <>
                 <span className="text-ink-700">|</span>
-                <span className="text-gold font-semibold">
+                <span className="text-gold-bright font-bold">
                   ≈ {currency === 'cny' ? '¥' : '$'}
                   {tokenCost}
                 </span>
                 <button
                   onClick={() => setCurrency(currency === 'usd' ? 'cny' : 'usd')}
-                  className="text-caption text-ink-500 hover:text-ink-300 ml-0.5"
+                  className="text-caption text-ink-400 hover:text-gold-bright ml-0.5"
                   title="切换货币"
                 >
                   {currency === 'usd' ? 'CNY' : 'USD'}

@@ -7,10 +7,20 @@ use crate::tool::python_cmd::pytest_cmd;
 use crate::tool::ToolOutput;
 
 /// Get the current platform's shell command.
-/// Windows -> powershell; others -> bash (fallback to sh)
+/// Windows: prefer pwsh 7+ (better UTF-8), fallback to powershell 5.1
+/// Others: prefer bash, fallback to sh
 pub(crate) fn get_shell() -> (&'static str, Vec<&'static str>) {
     if cfg!(windows) {
-        ("powershell", vec!["-Command"])
+        // 优先 pwsh 7+（更好的 UTF-8 支持和跨平台兼容性）
+        if std::process::Command::new("pwsh")
+            .arg("--version")
+            .output()
+            .is_ok()
+        {
+            return ("pwsh", vec!["-NoProfile", "-Command"]);
+        }
+        // 回退到 Windows PowerShell 5.1
+        ("powershell", vec!["-NoProfile", "-Command"])
     } else if std::process::Command::new("bash")
         .arg("--version")
         .output()
@@ -50,7 +60,17 @@ pub async fn tool_execute_command(
 
     let timeout = std::time::Duration::from_secs(120);
     let (shell, shell_args) = get_shell();
-    match execute_with_timeout(shell, &shell_args, cmd, working_dir, timeout).await {
+
+    // Windows: 注入 UTF-8 编码设置以确保中文输出正确
+    #[cfg(windows)]
+    let cmd = format!(
+        "$OutputEncoding = [System.Text.Encoding]::UTF8; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; {}",
+        cmd
+    );
+    #[cfg(not(windows))]
+    let cmd = cmd.to_string();
+
+    match execute_with_timeout(shell, &shell_args, &cmd, working_dir, timeout).await {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -127,6 +147,44 @@ pub async fn execute_with_timeout(
     }
 }
 
+/// Inject UTF-8 encoding setup for Windows PowerShell.
+///
+/// On Windows with non-UTF8 system locales (e.g. Chinese GBK), `cargo` output
+/// is encoded in the system's ANSI code page. `String::from_utf8_lossy` then
+/// garbles the output, causing error parsers like `extract_compile_errors` to
+/// fail silently (returning "Errors (0 found)" even when errors exist).
+///
+/// This function prepends the same UTF-8 encoding setup that `execute_command`
+/// uses, ensuring consistent encoding across all command-executing tools.
+pub(crate) fn inject_utf8_encoding(cmd: &str) -> String {
+    if cfg!(windows) {
+        format!(
+            "$OutputEncoding = [System.Text.Encoding]::UTF8; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; {}",
+            cmd
+        )
+    } else {
+        cmd.to_string()
+    }
+}
+
+/// Build a cargo command with RUSTFLAGS to suppress noise warnings.
+///
+/// During TDD red phase (stubs with `unimplemented!()`) and incremental
+/// development, Rust produces many `dead_code` and `unused_variable` warnings.
+/// These are not errors but can confuse the agent into thinking compilation
+/// failed — leading to destructive "debugging" like deleting source files.
+/// This function wraps the cargo command with RUSTFLAGS to suppress them,
+/// ensuring the agent only sees actual compilation errors.
+fn rust_cargo_cmd(subcommand: &str) -> String {
+    let flags =
+        "-A dead_code -A unused_variables -A unused_imports -A unused_mut -A unused_assignments";
+    if cfg!(windows) {
+        format!("$env:RUSTFLAGS=\"{}\"; cargo {}", flags, subcommand)
+    } else {
+        format!("RUSTFLAGS=\"{}\" cargo {}", flags, subcommand)
+    }
+}
+
 /// Check if a command is safe to execute.
 /// Blocks dangerous system commands and path escape patterns.
 fn check_safe_command(cmd: &str) -> Result<(), &'static str> {
@@ -135,17 +193,29 @@ fn check_safe_command(cmd: &str) -> Result<(), &'static str> {
 
 // ── run_tests ─────────────────────────────────────────────────
 
-/// Extract compilation errors from cargo check / cargo build output.
-/// Returns a list of formatted error strings with file locations.
-/// Limited to 15 entries to avoid output explosion.
-fn extract_compile_errors(output: &str) -> Vec<String> {
+/// Result of classifying compilation output into errors and warnings.
+struct CompileResult {
+    /// Formatted error strings with file locations (e.g. "- `error[E0xxx]: msg` at src/file.rs:line:col")
+    errors: Vec<String>,
+    /// Number of warnings detected (content suppressed to avoid confusing the agent).
+    warning_count: usize,
+}
+
+/// Classify cargo output into errors and warnings.
+///
+/// Only `error[...]` and `error:` lines are extracted as full error entries.
+/// `warning:` lines are counted but their content is NOT included in the output,
+/// because warnings are not errors and exposing them can cause the agent to
+/// attempt unnecessary "fixes" (e.g. adding `#[allow(dead_code)]`) that waste
+/// iterations and sometimes corrupt the codebase.
+fn classify_compile_output(output: &str) -> CompileResult {
     let mut errors = Vec::new();
+    let mut warning_count = 0usize;
     let mut current_error: Option<String> = None;
     let mut current_location: Option<String> = None;
 
     for line in output.lines() {
         let trimmed = line.trim();
-        // Match "error[E0xxx]: message" or "error: message"
         if trimmed.starts_with("error[") || trimmed.starts_with("error:") {
             if let Some(ref err) = current_error {
                 let loc = current_location.as_deref().unwrap_or("unknown location");
@@ -153,25 +223,85 @@ fn extract_compile_errors(output: &str) -> Vec<String> {
             }
             current_error = Some(trimmed.to_string());
             current_location = None;
-        }
-        // Match "  --> src/path/file.rs:line:col"
-        else if trimmed.starts_with("--> ") {
+        } else if trimmed.starts_with("warning:") || trimmed.starts_with("warning[") {
+            warning_count += 1;
+        } else if trimmed.starts_with("--> ") {
             current_location = Some(trimmed.trim_start_matches("--> ").to_string());
         }
     }
-    // Last error
     if let Some(ref err) = current_error {
         let loc = current_location.as_deref().unwrap_or("unknown location");
         errors.push(format!("- `{}` at {}", err, loc));
     }
 
-    // Cap at 15 entries
     if errors.len() > 15 {
         let total = errors.len();
         errors.truncate(15);
         errors.push(format!("... and {} more errors", total - 15));
     }
-    errors
+
+    CompileResult {
+        errors,
+        warning_count,
+    }
+}
+
+/// Append context-aware hints to a tool output report based on detected patterns.
+///
+/// These hints are **dynamically generated** from the actual command output,
+/// not static prompt text. They help the agent understand common situations
+/// without requiring language-specific knowledge in the system prompt.
+///
+/// Design principle (ACI): the tool output should be self-explanatory.
+/// The agent should not need external context to interpret what happened.
+fn append_context_hints(
+    report: &mut String,
+    project_type: &str,
+    combined_output: &str,
+    exit_code: i32,
+    fail_count: usize,
+) {
+    let mut hints: Vec<String> = Vec::new();
+
+    // Detect unimplemented!() / todo!() / NotImplementedError — TDD red phase
+    if combined_output.contains("not implemented")
+        || combined_output.contains("not yet implemented")
+        || combined_output.contains("NotImplementedError")
+    {
+        hints.push(
+            "A `unimplemented!()` / `todo!()` / `NotImplementedError` occurred — this is expected during TDD red phase. Write the real implementation to fix it.".to_string(),
+        );
+    }
+
+    if project_type == "rust" {
+        // Compilation passed but tests failed — the agent should focus on logic, not syntax
+        if exit_code != 0
+            && fail_count > 0
+            && !combined_output.contains("error[")
+            && !combined_output.contains("error:")
+        {
+            hints.push(
+                "Compilation passed. Test assertions failed — fix the logic in your implementation, not the syntax.".to_string(),
+            );
+        }
+    }
+
+    if project_type == "python" {
+        if combined_output.contains("ModuleNotFoundError")
+            || combined_output.contains("ImportError")
+        {
+            hints.push(
+                "An import error occurred — check if the module exists and the project environment is set up (run setup_test_env).".to_string(),
+            );
+        }
+    }
+
+    if !hints.is_empty() {
+        report.push_str("\n### Hints\n");
+        for hint in &hints {
+            report.push_str(&format!("- {}\n", hint));
+        }
+    }
 }
 
 /// Smart truncation of stderr: prioritise error key lines over head truncation.
@@ -276,26 +406,37 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
     // Compilation errors and test failures require different fixes.
     // Running cargo check first prevents wasting test iterations on syntax errors.
     if project_type == "rust" {
-        let check_cmd = "cargo check 2>&1";
+        let check_cmd = inject_utf8_encoding(&rust_cargo_cmd("check 2>&1"));
         let check_timeout = std::time::Duration::from_secs(180);
-        match execute_with_timeout(shell, &shell_args, check_cmd, working_dir, check_timeout).await
+        match execute_with_timeout(shell, &shell_args, &check_cmd, working_dir, check_timeout).await
         {
             Ok(o) => {
                 let check_stdout = String::from_utf8_lossy(&o.stdout);
                 let check_stderr = String::from_utf8_lossy(&o.stderr);
                 let combined = format!("{}\n{}", check_stdout, check_stderr);
                 if !o.status.success() {
-                    let errors = extract_compile_errors(&combined);
-                    return ToolOutput::success_raw(
+                    let compiled = classify_compile_output(&combined);
+                    let warning_note = if compiled.warning_count > 0 {
+                        format!(
+                            "\n\n({} warnings suppressed — warnings are not errors, focus on fixing the errors above.)",
+                            compiled.warning_count
+                        )
+                    } else {
+                        String::new()
+                    };
+                    return ToolOutput::error(
                         "run_tests",
+                        "",
+                        "compile_error",
                         &format!(
                             "## Compilation Failed\n\n\
                             cargo check failed (exit={}). Fix compilation errors before running tests.\n\n\
-                            ### Errors ({} found)\n{}\n\n\
+                            ### Errors ({} found)\n{}{}\n\n\
                             **No tests were executed.** Fix the errors above, then call run_tests again.",
                             o.status.code().unwrap_or(-1),
-                            errors.len(),
-                            errors.join("\n"),
+                            compiled.errors.len(),
+                            compiled.errors.join("\n"),
+                            warning_note,
                         ),
                     );
                 }
@@ -309,9 +450,9 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
 
     let mut cmd = match project_type.as_str() {
         "rust" => match scope {
-            "unit" => "cargo test --lib".to_string(),
-            "integration" => "cargo test --tests".to_string(),
-            _ => "cargo test".to_string(),
+            "unit" => rust_cargo_cmd("test --lib"),
+            "integration" => rust_cargo_cmd("test --tests"),
+            _ => rust_cargo_cmd("test"),
         },
         "node" => {
             // Use project's test script or common runners
@@ -374,6 +515,7 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
     }
 
     log_console!("[run_tests] executing: {}", cmd);
+    let cmd = inject_utf8_encoding(&cmd);
     let timeout = std::time::Duration::from_secs(300);
 
     let output = match execute_with_timeout(shell, &shell_args, &cmd, working_dir, timeout).await {
@@ -452,6 +594,16 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
         report.push_str("\nAll tests passed");
     }
 
+    // ── Context-aware hints (dynamically generated, not static prompt) ──
+    let combined_output = format!("{}\n{}", stdout, stderr);
+    append_context_hints(
+        &mut report,
+        &project_type,
+        &combined_output,
+        exit_code,
+        fail_count,
+    );
+
     // ── Machine-parseable JSON summary (for LLM structured reading) ──
     let json_summary = serde_json::json!({
         "exit_code": exit_code,
@@ -469,7 +621,13 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
         serde_json::to_string_pretty(&json_summary).unwrap_or_default()
     ));
 
-    ToolOutput::success_raw("run_tests", &report)
+    // Return ok:false when tests fail so the watchdog can detect repeated
+    // test failures and trigger the test-stalemate playbook / force-stop.
+    if exit_code != 0 || fail_count > 0 {
+        ToolOutput::error("run_tests", "", "test_failure", &report)
+    } else {
+        ToolOutput::success_raw("run_tests", &report)
+    }
 }
 
 /// Detect project type by checking for key files.
@@ -608,7 +766,7 @@ pub async fn tool_check_compile(working_dir: &Path, _args: &serde_json::Value) -
 
     let (cmd, timeout) = match project_type.as_str() {
         "rust" => (
-            "cargo check 2>&1".to_string(),
+            rust_cargo_cmd("check 2>&1"),
             std::time::Duration::from_secs(180),
         ),
         "node" => {
@@ -650,6 +808,7 @@ pub async fn tool_check_compile(working_dir: &Path, _args: &serde_json::Value) -
         }
     };
 
+    let cmd = inject_utf8_encoding(&cmd);
     log_console!("[check_compile] executing: {}", cmd);
     match execute_with_timeout(shell, &shell_args, &cmd, working_dir, timeout).await {
         Ok(output) => {
@@ -667,12 +826,22 @@ pub async fn tool_check_compile(working_dir: &Path, _args: &serde_json::Value) -
                     ),
                 )
             } else {
-                let errors = extract_compile_errors(&combined);
-                ToolOutput::success_raw(
+                let compiled = classify_compile_output(&combined);
+                let warning_note = if compiled.warning_count > 0 {
+                    format!(
+                        "\n\n({} warnings suppressed — warnings are not errors, focus on fixing the errors above.)",
+                        compiled.warning_count
+                    )
+                } else {
+                    String::new()
+                };
+                ToolOutput::error(
                     "check_compile",
+                    "",
+                    "compile_error",
                     &format!(
-                        "## Compilation Check\n\nProject type: {} | Command: `{}`\nExit code: {}\n\n❌ Compilation failed. Fix the errors below before running tests.\n\n### Errors ({} found)\n{}",
-                        project_type, cmd, exit_code, errors.len(), errors.join("\n"),
+                        "## Compilation Check\n\nProject type: {} | Command: `{}`\nExit code: {}\n\n❌ Compilation failed. Fix the errors below before running tests.\n\n### Errors ({} found)\n{}{}",
+                        project_type, cmd, exit_code, compiled.errors.len(), compiled.errors.join("\n"), warning_note,
                     ),
                 )
             }

@@ -5,7 +5,7 @@ use tauri::State;
 
 use crate::api::client::LlmClient;
 use crate::api::session::PersistedContext;
-use crate::commands::friendly_error::friendly_error;
+use crate::commands::friendly_error::{friendly_error, friendly_error_plain};
 use crate::commands::project::AppState;
 use crate::commands::settings::ContextWindowConfig;
 use crate::commands::workflow::bootstrap::ContextStats;
@@ -21,7 +21,7 @@ pub async fn get_context_stats(
         None => return Ok(HashMap::new()),
     };
     let config = rwlock_read_or_recover(&state.runtime_config)
-        .map_err(|e| friendly_error(format!("runtime_config read error: {}", e)))?
+        .map_err(|e| friendly_error_plain(format!("runtime_config read error: {}", e)))?
         .clone();
 
     let role_overrides: HashMap<String, crate::config::RoleContextConfig> = {
@@ -110,11 +110,11 @@ pub async fn compact_context(state: State<'_, AppState>, role: String) -> Result
         .lock()
         .await
         .clone()
-        .ok_or_else(|| friendly_error("no open project"))?;
+        .ok_or_else(|| friendly_error_plain("no open project"))?;
     let working_dir = std::path::Path::new(&dir);
 
     if crate::round_metrics::is_active(&role) {
-        return Err(friendly_error(format!(
+        return Err(friendly_error_plain(format!(
             "role {} is currently executing, please wait for completion before compacting",
             role
         )));
@@ -123,7 +123,7 @@ pub async fn compact_context(state: State<'_, AppState>, role: String) -> Result
     {
         let mut compacting = state.compacting_roles.lock().await;
         if !compacting.insert(role.clone()) {
-            return Err(friendly_error(format!(
+            return Err(friendly_error_plain(format!(
                 "role {} is already being compacted, please do not repeat the operation",
                 role
             )));
@@ -153,10 +153,10 @@ async fn compact_impl(
 
     let mut ctx = PersistedContext::load_from(working_dir, role)
         .await
-        .ok_or_else(|| friendly_error(format!("no context file found for role {}", role)))?;
+        .ok_or_else(|| friendly_error_plain(format!("no context file found for role {}", role)))?;
 
     let thresholds = rwlock_read_or_recover(&state.runtime_config)
-        .map_err(|e| friendly_error(format!("runtime_config read error: {}", e)))?
+        .map_err(|e| friendly_error_plain(format!("runtime_config read error: {}", e)))?
         .resolve_compact_thresholds(role, role_overrides.get(role));
 
     let total_tokens = crate::api::token_count::count_messages_tokens(&ctx.context_messages);
@@ -173,13 +173,13 @@ async fn compact_impl(
     let ep = config.for_role(role);
 
     if ep.api_key.is_empty() {
-        return Err(friendly_error(format!(
+        return Err(friendly_error_plain(format!(
             "role {} has no API key configured, please configure in settings",
             role
         )));
     }
     if ep.api_url.is_empty() {
-        return Err(friendly_error(format!(
+        return Err(friendly_error_plain(format!(
             "role {} has no API URL configured",
             role
         )));
@@ -214,7 +214,7 @@ async fn compact_impl(
             role, total_tokens, thresholds.keep_recent_count,
         ))
     } else {
-        Err(friendly_error(format!(
+        Err(friendly_error_plain(format!(
             "Compaction failed for role {} -- API call did not return a valid summary. Please check API config and retry",
             role
         )))
