@@ -19,7 +19,6 @@ import WorkflowGraphView from '../components/WorkflowGraph';
 
 import { Button } from '../components/ui/Button';
 import { docIdToPath } from '../utils/docPath';
-import { approveDocumentAndResume } from '../utils/approveDocument';
 import { cancelProcessing } from '../api';
 import { isProjectOnboardingDone } from '../utils/uiPrefs';
 import ProjectOnboarding from '../components/ProjectOnboarding';
@@ -62,7 +61,7 @@ function DashboardContent() {
     loadProjectIntoState,
   } = useProjectContext();
 
-  const { pendingApprovals, gateContext } = useApprovalContext();
+  const { pendingApprovals, gateContext, approvingDocId, approveDoc } = useApprovalContext();
 
   const {
     messages,
@@ -153,9 +152,13 @@ function DashboardContent() {
     return () => clearTimeout(timer);
   }, [error, clearError]);
 
-  const handleApproveDoc = useCallback(async (docId: string, comment?: string) => {
-    await approveDocumentAndResume(docId, comment);
-  }, []);
+  // Use global approveDoc from ApprovalContext — it has a lock + optimistic update
+  const handleApproveDoc = useCallback(
+    async (docId: string, comment?: string) => {
+      await approveDoc(docId, comment);
+    },
+    [approveDoc]
+  );
 
   const handlePendingApproval = useCallback(
     (docPath: string) => {
@@ -195,6 +198,7 @@ function DashboardContent() {
               onStop={() =>
                 cancelProcessing().catch(swallowError('ProjectDashboard.cancelProcessing'))
               }
+              resuming={!!approvingDocId}
             />
           ) : undefined
         }

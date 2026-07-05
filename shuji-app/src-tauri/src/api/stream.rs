@@ -155,6 +155,9 @@ pub struct StreamedAssistantMessage {
     pub reasoning_content: String,
     pub tool_calls: Vec<serde_json::Value>,
     pub finish_reason: String,
+    /// Token usage from the final SSE chunk (if `stream_options.include_usage` was set).
+    /// Format: `{"prompt_tokens": N, "completion_tokens": M, "total_tokens": T, ...}`
+    pub usage: Option<serde_json::Value>,
 }
 
 #[derive(Default)]
@@ -222,6 +225,15 @@ pub(crate) fn apply_openai_agent_sse_data(
     let Ok(json) = serde_json::from_str::<serde_json::Value>(trimmed) else {
         return Vec::new();
     };
+    // Capture usage from the final chunk (OpenAI sends it in a standalone chunk
+    // with empty choices array when stream_options.include_usage is true).
+    // This must be checked BEFORE the choices extraction, because the usage
+    // chunk has an empty choices array.
+    if let Some(usage) = json.get("usage") {
+        if !usage.is_null() {
+            message.usage = Some(usage.clone());
+        }
+    }
     let choice = match json["choices"].as_array().and_then(|a| a.first()) {
         Some(c) => c,
         None => return Vec::new(),
@@ -337,5 +349,51 @@ mod tests {
         let calls = partials_to_tool_calls(partials);
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0]["function"]["name"], "read_file");
+    }
+
+    #[test]
+    fn agent_stream_extracts_usage_from_final_chunk() {
+        let mut msg = StreamedAssistantMessage::default();
+        let mut partials = std::collections::HashMap::new();
+
+        // Normal content chunk
+        apply_openai_agent_sse_data(
+            r#"{"choices":[{"delta":{"content":"hello"},"finish_reason":null}]}"#,
+            &mut msg,
+            &mut partials,
+        );
+
+        // Final usage chunk (OpenAI sends this with empty choices array
+        // when stream_options.include_usage is true)
+        apply_openai_agent_sse_data(
+            r#"{"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":50,"total_tokens":150,"prompt_tokens_details":{"cached_tokens":20}}}"#,
+            &mut msg,
+            &mut partials,
+        );
+
+        assert_eq!(msg.content, "hello");
+        assert!(msg.usage.is_some());
+        let usage = msg.usage.unwrap();
+        assert_eq!(usage["prompt_tokens"].as_u64(), Some(100));
+        assert_eq!(usage["completion_tokens"].as_u64(), Some(50));
+        assert_eq!(usage["total_tokens"].as_u64(), Some(150));
+        assert_eq!(
+            usage["prompt_tokens_details"]["cached_tokens"].as_u64(),
+            Some(20)
+        );
+    }
+
+    #[test]
+    fn agent_stream_no_usage_when_not_provided() {
+        let mut msg = StreamedAssistantMessage::default();
+        let mut partials = std::collections::HashMap::new();
+
+        apply_openai_agent_sse_data(
+            r#"{"choices":[{"delta":{"content":"hi"},"finish_reason":"stop"}]}"#,
+            &mut msg,
+            &mut partials,
+        );
+
+        assert!(msg.usage.is_none());
     }
 }

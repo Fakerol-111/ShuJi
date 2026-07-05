@@ -342,7 +342,9 @@ async fn test_cancel_flag_stops_agent_execution() {
 
     let client = LlmClient::new(api_key, api_url);
     let cancel = Arc::new(AtomicBool::new(false));
-    let runtime_config = Arc::new(RuntimeConfig::default());
+    let mut cfg = RuntimeConfig::default();
+    cfg.api.streaming.enabled = false; // wiremock 不支持 SSE 流式响应
+    let runtime_config = Arc::new(cfg);
     let agent = GongbuShangshuAgent::new(client, "test-model", cancel.clone());
 
     let input = AgentInput {
@@ -442,7 +444,9 @@ async fn test_route_to_cross_actor() {
 
     let neige_client = LlmClient::new(api_key.clone(), api_url.clone());
     let cancel = Arc::new(AtomicBool::new(false));
-    let runtime_config = Arc::new(RuntimeConfig::default());
+    let mut cfg = RuntimeConfig::default();
+    cfg.api.streaming.enabled = false; // wiremock 不支持 SSE 流式响应
+    let runtime_config = Arc::new(cfg);
 
     let neige = shuji_app_lib::agent::neige::NeigeAgent::new(
         neige_client,

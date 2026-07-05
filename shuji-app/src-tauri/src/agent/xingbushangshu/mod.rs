@@ -1,4 +1,4 @@
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use crate::agent::r#trait::{Agent, AgentInput, AgentOutput};
@@ -9,6 +9,11 @@ pub struct XingbuShangshuAgent {
     client: LlmClient,
     model: String,
     cancel: Arc<AtomicBool>,
+    /// Flag set by `reset_plan()` to indicate the persisted context
+    /// should be cleared before the next `execute()` call.
+    /// This prevents stale context from a previous task polluting
+    /// the session when the Shangshuling dispatches a different task.
+    needs_context_reset: Arc<AtomicBool>,
 }
 
 impl XingbuShangshuAgent {
@@ -17,13 +22,25 @@ impl XingbuShangshuAgent {
             client,
             model: model.to_string(),
             cancel,
+            needs_context_reset: Arc::new(AtomicBool::new(false)),
         }
     }
 
     fn tools() -> Vec<ToolDefinition> {
         let mut tools = crate::tool::registry::code_inspect_tools();
         // list_dir_tree is already included in code_inspect_tools
-        tools.extend(crate::tool::registry::file_write_tools_for_code());
+        // ── Restricted write tools ──────────────────────────────
+        // The Ministry of Justice may only create and edit integration
+        // test files in tests/integration/. delete_file and rename_file
+        // are removed because they are the most destructive and have
+        // been misused to delete/recreate src/lib.rs (production code).
+        // The prompt already prohibits modifying production code, but
+        // removing the tools enforces it at the tool level.
+        tools.push(crate::tool::create_file_tool_def(
+            "Create integration test files in tests/integration/ only",
+        ));
+        tools.push(crate::tool::edit_file_tool_def());
+        tools.push(crate::tool::apply_patch_tool_def());
         // Documents for report writing only
         tools.push(crate::tool::documents::create_document_tool_def());
         tools.push(crate::tool::documents::append_document_tool_def());
@@ -69,10 +86,20 @@ impl Agent for XingbuShangshuAgent {
         // Unlike the generic load_and_compact_context, this path trims verbose
         // tool results and refreshes the soul — ensuring that interrupted test
         // runs can resume with the prior session intact.
-        let has_persisted = working_dir
+        //
+        // However, if `reset_plan()` was called (new task from Shangshuling),
+        // we clear the persisted context first to prevent stale history from
+        // a previous task polluting the session.
+        let ctx_path = working_dir
             .join(".shuji/context")
-            .join(format!("{}.json", role_name))
-            .exists();
+            .join(format!("{}.json", role_name));
+
+        if self.needs_context_reset.swap(false, Ordering::SeqCst) {
+            let _ = tokio::fs::remove_file(&ctx_path).await;
+            log_console!("[刑部] cleared persisted context for new task");
+        }
+
+        let has_persisted = ctx_path.exists();
 
         if has_persisted {
             if let Some(mut ctx) =
@@ -178,5 +205,14 @@ impl Agent for XingbuShangshuAgent {
         crate::agent::runner::attach_run_documents(&mut output, &mut controller, &working_dir)
             .await;
         Ok(output)
+    }
+
+    fn reset_plan(&self) {
+        // Flag the persisted context for deletion on the next execute() call.
+        // This is called by the actor mailbox when a new Task message arrives,
+        // ensuring that stale context from a previous task does not pollute
+        // the session for a different task.
+        self.needs_context_reset.store(true, Ordering::SeqCst);
+        log_console!("[刑部] context reset flagged for new task");
     }
 }

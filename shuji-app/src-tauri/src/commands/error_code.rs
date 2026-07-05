@@ -2,25 +2,49 @@
 //!
 //! The `ShujiError` enum serializes to JSON so the frontend can distinguish
 //! structured errors (with a `code` field) from plain text fallbacks.
+//!
+//! `friendly_error()` in `friendly_error.rs` delegates to
+//! `friendly_error_code()` here, so this module is the single source of truth
+//! for error classification.
 
 use serde::Serialize;
 
-/// 结构化错误 — 前端可直接用 `code` 做 i18n 映射。
+/// 结构化错误 — 前端可直接用 `code` 做 i18n 映射，`message` 做展示。
 ///
 /// 序列化格式：
-/// - `Structured`: `{"type":"Structured","data":{"code":"api_key_invalid","detail":"..."}}`
+/// - `Structured`: `{"type":"Structured","data":{"code":"api_key_invalid","message":"...","detail":"..."}}`
 /// - `Plain`: `{"type":"Plain","data":"System error: ..."}`
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", content = "data")]
 pub enum ShujiError {
-    /// 结构化错误 — 前端根据 `code` 查 i18n key `error.api.<code>`
+    /// 结构化错误 — 前端根据 `code` 查 i18n key `error.api.<code>`，
+    /// `message` 为可直接展示的人类可读文本。
     Structured {
         code: String,
+        message: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         detail: Option<String>,
     },
-    /// 兜底：纯文本错误
+    /// 兜底：纯文本错误（无法分类的错误）
     Plain(String),
+}
+
+impl ShujiError {
+    /// 返回人类可读的消息文本（不论 Structured 还是 Plain）。
+    #[allow(dead_code)]
+    pub fn message(&self) -> &str {
+        match self {
+            ShujiError::Structured { message, .. } => message,
+            ShujiError::Plain(msg) => msg,
+        }
+    }
+
+    /// 序列化为 JSON 字符串，供 Tauri command 返回给前端。
+    pub fn to_json_string(&self) -> String {
+        serde_json::to_string(self).unwrap_or_else(|_| {
+            r#"{"type":"Plain","data":"Internal error serialization failed"}"#.to_string()
+        })
+    }
 }
 
 /// 错误码常量 — 与前端 i18n key `error.api.<code>` 对应。
@@ -36,9 +60,43 @@ pub mod codes {
     pub const API_NOT_FOUND: &str = "api_not_found";
 }
 
+/// 从 HTTP 状态码到人类可读消息的映射。
+fn http_status_message(code: &str) -> Option<&'static str> {
+    Some(match code {
+        "400" => "Invalid request parameters, please check your input",
+        "401" => "API key is invalid or expired, please reconfigure in settings",
+        "403" => "API access denied, please check key permissions",
+        "404" => "API endpoint not found, please check the API URL",
+        "408" => "API request timed out, please retry later",
+        "429" => "API request rate limited, please retry later",
+        "500" => "API server internal error, please retry later",
+        "502" | "503" => "API service temporarily unavailable, please retry later",
+        _ => return None,
+    })
+}
+
+/// 从错误码常量到人类可读消息的映射。
+fn code_message(code: &str) -> &'static str {
+    match code {
+        codes::API_KEY_INVALID => "API key is invalid or expired, please reconfigure in settings",
+        codes::API_FORBIDDEN => "API access denied, please check key permissions",
+        codes::API_RATE_LIMITED => "API request rate limited, please retry later",
+        codes::API_TIMEOUT => "API request timed out, please retry later or check network",
+        codes::API_CONNECTION_FAILED => {
+            "Unable to connect to API server, please check network or API URL configuration"
+        }
+        codes::API_SERVER_ERROR => "API server internal error, please retry later",
+        codes::API_SERVICE_UNAVAILABLE => "API service temporarily unavailable, please retry later",
+        codes::API_BAD_REQUEST => "Invalid request parameters, please check your input",
+        codes::API_NOT_FOUND => "API endpoint not found, please check the API URL",
+        _ => "Unknown error",
+    }
+}
+
 /// 从任意错误生成结构化 `ShujiError`。
 ///
-/// 优先匹配已知错误模式返回 `Structured`，无法匹配时返回 `Plain`。
+/// 优先匹配已知错误模式返回 `Structured`（含 `code` + `message` + `detail`），
+/// 无法匹配时返回 `Plain`。
 pub fn friendly_error_code(e: impl std::fmt::Display) -> ShujiError {
     let raw = e.to_string();
     let lower = raw.to_lowercase();
@@ -62,6 +120,9 @@ pub fn friendly_error_code(e: impl std::fmt::Display) -> ShujiError {
                 if let Some(c) = mapped {
                     return ShujiError::Structured {
                         code: c.to_string(),
+                        message: http_status_message(code)
+                            .unwrap_or("Unknown API error")
+                            .to_string(),
                         detail: Some(raw),
                     };
                 }
@@ -101,6 +162,7 @@ pub fn friendly_error_code(e: impl std::fmt::Display) -> ShujiError {
     match code {
         Some(c) => ShujiError::Structured {
             code: c.to_string(),
+            message: code_message(c).to_string(),
             detail: Some(raw),
         },
         None => ShujiError::Plain(format!("System error: {}", lower)),
@@ -183,6 +245,7 @@ mod tests {
         let json = serde_json::to_string(&err).unwrap();
         assert!(json.contains("\"type\":\"Structured\""));
         assert!(json.contains("\"code\":\"api_service_unavailable\""));
+        assert!(json.contains("\"message\""));
     }
 
     #[test]
@@ -190,5 +253,30 @@ mod tests {
         let err = friendly_error_code("weird stuff");
         let json = serde_json::to_string(&err).unwrap();
         assert!(json.contains("\"type\":\"Plain\""));
+    }
+
+    #[test]
+    fn test_structured_has_message() {
+        let err = friendly_error_code("API error (401): invalid key");
+        match err {
+            ShujiError::Structured { message, .. } => {
+                assert!(message.contains("API key"));
+            }
+            _ => panic!("expected Structured"),
+        }
+    }
+
+    #[test]
+    fn test_message_method() {
+        let err = friendly_error_code("API error (429): rate limit");
+        assert!(err.message().contains("rate limited"));
+    }
+
+    #[test]
+    fn test_to_json_string() {
+        let err = friendly_error_code("API error (500): server error");
+        let json = err.to_json_string();
+        assert!(json.contains("\"type\":\"Structured\""));
+        assert!(json.contains("\"code\":\"api_server_error\""));
     }
 }

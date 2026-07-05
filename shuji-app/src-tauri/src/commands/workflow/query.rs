@@ -2,7 +2,7 @@ use std::path::Path;
 
 use tauri::State;
 
-use crate::commands::friendly_error::friendly_error;
+use crate::commands::friendly_error::{friendly_error, friendly_error_plain};
 use crate::commands::project::AppState;
 use crate::models::chat::ChatMessage;
 use crate::models::project::ProjectSnapshot;
@@ -13,7 +13,7 @@ pub async fn get_snapshot(state: State<'_, AppState>) -> Result<ProjectSnapshot,
     let project_opt = state.current_project.lock().await;
     let project = project_opt
         .as_ref()
-        .ok_or_else(|| friendly_error("没有加载项目"))?;
+        .ok_or_else(|| friendly_error_plain("没有加载项目"))?;
     Ok(project.snapshot())
 }
 
@@ -26,7 +26,7 @@ pub async fn read_document(
     let project_opt = state.current_project.lock().await;
     let working_dir = project_opt
         .as_ref()
-        .ok_or_else(|| friendly_error("没有加载项目"))?
+        .ok_or_else(|| friendly_error_plain("没有加载项目"))?
         .working_dir
         .clone();
     drop(project_opt);
@@ -45,7 +45,7 @@ pub async fn list_documents(
     let project_opt = state.current_project.lock().await;
     let working_dir = project_opt
         .as_ref()
-        .ok_or_else(|| friendly_error("没有加载项目"))?
+        .ok_or_else(|| friendly_error_plain("没有加载项目"))?
         .working_dir
         .clone();
     drop(project_opt);
@@ -61,7 +61,7 @@ pub async fn list_log_files(state: State<'_, AppState>) -> Result<Vec<String>, S
     let project_opt = state.current_project.lock().await;
     let working_dir = project_opt
         .as_ref()
-        .ok_or_else(|| friendly_error("没有加载项目"))?
+        .ok_or_else(|| friendly_error_plain("没有加载项目"))?
         .working_dir
         .clone();
     drop(project_opt);
@@ -77,7 +77,7 @@ pub async fn read_log_file(
     let project_opt = state.current_project.lock().await;
     let working_dir = project_opt
         .as_ref()
-        .ok_or_else(|| friendly_error("没有加载项目"))?
+        .ok_or_else(|| friendly_error_plain("没有加载项目"))?
         .working_dir
         .clone();
     drop(project_opt);
@@ -142,7 +142,7 @@ pub async fn get_tool_logs(
         let project_opt = state.current_project.lock().await;
         project_opt
             .as_ref()
-            .ok_or_else(|| friendly_error("没有加载项目"))?
+            .ok_or_else(|| friendly_error_plain("没有加载项目"))?
             .working_dir
             .clone()
     };
@@ -197,7 +197,7 @@ pub async fn get_pending_approvals(state: State<'_, AppState>) -> Result<Vec<Str
         let project_opt = state.current_project.lock().await;
         project_opt
             .as_ref()
-            .ok_or_else(|| friendly_error("没有加载项目"))?
+            .ok_or_else(|| friendly_error_plain("没有加载项目"))?
             .working_dir
             .clone()
     };

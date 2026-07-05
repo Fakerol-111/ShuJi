@@ -22,6 +22,8 @@ impl super::Session {
 
         let mut body = self.build_step_body();
         body["stream"] = serde_json::json!(true);
+        // Request token usage in the final stream chunk (OpenAI-compatible)
+        body["stream_options"] = serde_json::json!({"include_usage": true});
 
         log_console!(
             "[{}] step_stream: sending {} messages",
@@ -80,14 +82,6 @@ impl super::Session {
                 }
             };
 
-        if streamed.finish_reason == "length" {
-            log_console!(
-                "[{}] step_stream truncated (length), fallback step()",
-                self.role()
-            );
-            return self.step().await;
-        }
-
         if !streamed.reasoning_content.is_empty() {
             log_console!(
                 "[{}] reasoning(stream): {} chars",
@@ -96,7 +90,45 @@ impl super::Session {
             );
         }
 
+        // ── Record token usage from stream ────────────────────────────
+        // The usage block arrives in the final SSE chunk when
+        // stream_options.include_usage is true. Some providers may not
+        // send it, so we guard with Option.
+        //
+        // This runs BEFORE the finish_reason=length fallback so that
+        // tokens consumed by a truncated stream response are still
+        // recorded (the subsequent step() retry will record its own tokens).
+        if let Some(ref usage) = streamed.usage {
+            let prompt = usage["prompt_tokens"].as_u64().unwrap_or(0);
+            let cached = usage["prompt_tokens_details"]["cached_tokens"]
+                .as_u64()
+                .unwrap_or(0);
+            let completion = usage["completion_tokens"].as_u64().unwrap_or(0);
+            log_console!(
+                "[{}] tokens(stream): prompt={} cached={} completion={} total={}",
+                self.role(),
+                prompt,
+                cached,
+                completion,
+                prompt + completion
+            );
+            if !self.role().is_empty() {
+                crate::token_tracker::record(self.role(), prompt, cached, completion, self.model());
+            }
+        } else {
+            log_console!("[{}] step_stream: no usage in stream response", self.role());
+        }
+
+        if streamed.finish_reason == "length" {
+            log_console!(
+                "[{}] step_stream truncated (length), fallback step()",
+                self.role()
+            );
+            return self.step().await;
+        }
+
         let msg = serde_json::json!({
+            "role": "assistant",
             "content": streamed.content,
             "reasoning_content": streamed.reasoning_content,
             "tool_calls": streamed.tool_calls,

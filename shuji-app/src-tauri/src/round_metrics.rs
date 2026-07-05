@@ -90,6 +90,14 @@ pub fn tick_iteration(role: &str) {
     }
 }
 
+/// Reset the round state to None — stops the frontend elapsed timer.
+pub fn reset_round() {
+    if let Ok(mut state) = ROUND.lock() {
+        *state = None;
+    }
+    crate::runtime_notify::notify("round_reset");
+}
+
 /// Snapshot the current round state.
 pub fn snapshot() -> Option<RoundMetricState> {
     ROUND.lock().ok().and_then(|s| s.clone())

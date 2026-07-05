@@ -46,6 +46,10 @@ impl PipelineEngine {
             let step_start = std::time::Instant::now();
             self.runtime.current_step = Some(next.clone());
             self.set_status(&next, StepStatus::InProgress);
+            // Save state BEFORE executing the step so that a crash/interruption
+            // during execution leaves a trace on disk (current_step=s4, status=InProgress)
+            // rather than stale data from the previous step.
+            self.save().await.ok();
 
             let step = self.get_step(&next).cloned();
             let step = match step {

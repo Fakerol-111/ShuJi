@@ -154,6 +154,19 @@ pub async fn tool_set_document_status(working_dir: &Path, args: &serde_json::Val
         );
     }
 
+    // ── Idempotency: already approved ──────────────────────────────
+    // If the document is already approved, return success immediately
+    // without re-writing the file, re-sending messages, or re-checkpointing.
+    // This prevents double-approval side effects when the user clicks
+    // approve from multiple UIs (top banner + artifact panel + doc preview).
+    if meta.status == "approved" {
+        return ToolOutput::success(
+            "set_document_status",
+            id,
+            &format!("Document {} was already approved (idempotent)", id),
+        );
+    }
+
     let emperor_note = args["emperor_note"].as_str().unwrap_or("");
     let ts = now_iso();
 

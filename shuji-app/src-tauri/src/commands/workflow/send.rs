@@ -18,7 +18,7 @@ use crate::agent::r#trait::{Agent, AgentInput};
 use crate::api::client::LlmClient;
 use crate::api::control::RouteMsgType;
 use crate::api::stream::ChatDeltaEvent;
-use crate::commands::friendly_error::friendly_error;
+use crate::commands::friendly_error::{friendly_error, friendly_error_plain};
 use crate::commands::project::AppState;
 use crate::commands::workflow::bootstrap::ensure_actor_system;
 use crate::models::chat::ChatMessage;
@@ -69,7 +69,7 @@ pub async fn send_message(
         let project_opt = state.current_project.lock().await;
         let p = project_opt
             .as_ref()
-            .ok_or_else(|| friendly_error("no open project"))?;
+            .ok_or_else(|| friendly_error_plain("no open project"))?;
         p.working_dir.clone()
     };
 
@@ -81,7 +81,7 @@ pub async fn send_message(
     let sys_lock = state.actor_system.lock().await;
     let system = sys_lock
         .as_ref()
-        .ok_or_else(|| friendly_error("actor system not initialized"))?;
+        .ok_or_else(|| friendly_error_plain("actor system not initialized"))?;
 
     let has_paused_runtime = PlanRuntime::load_from(project_dir).await.is_some();
 
@@ -112,7 +112,7 @@ pub async fn send_message(
     let sys_lock = state.actor_system.lock().await;
     let system = sys_lock
         .as_ref()
-        .ok_or_else(|| friendly_error("actor system not initialized"))?;
+        .ok_or_else(|| friendly_error_plain("actor system not initialized"))?;
 
     {
         let mut graph = system.workflow_graph.lock().await;
@@ -149,7 +149,7 @@ pub async fn discuss_with_cabinet(
         let project_opt = state.current_project.lock().await;
         let p = match project_opt.as_ref() {
             Some(p) => p,
-            None => return Err(friendly_error("no open project")),
+            None => return Err(friendly_error_plain("no open project")),
         };
         (
             p.working_dir.clone(),
@@ -204,7 +204,7 @@ pub async fn discuss_with_cabinet(
         state
             .discuss_cancel
             .store(false, std::sync::atomic::Ordering::SeqCst);
-        friendly_error(e.to_string())
+        friendly_error(e)
     })?;
     state
         .discuss_cancel
@@ -220,7 +220,7 @@ async fn build_discuss_stream_context(
     let project_opt = state.current_project.lock().await;
     let p = project_opt
         .as_ref()
-        .ok_or_else(|| friendly_error("no open project"))?;
+        .ok_or_else(|| friendly_error_plain("no open project"))?;
 
     let working_dir = std::path::PathBuf::from(&p.working_dir);
     let project_context = format!(
@@ -335,12 +335,12 @@ pub async fn discuss_stream(
         return Ok(());
     }
 
-    let text = stream_result.map_err(|e| friendly_error(e.to_string()))?;
+    let text = stream_result.map_err(friendly_error)?;
     let final_content = if text.is_empty() { full_text } else { text };
 
     let mut msg = ChatMessage::new("内阁", &final_content);
     msg.id = message_id;
-    crate::events::emit_chat_complete(&app, &msg).map_err(|e| friendly_error(e.to_string()))?;
+    crate::events::emit_chat_complete(&app, &msg).map_err(friendly_error)?;
 
     Ok(())
 }
@@ -386,5 +386,7 @@ pub async fn cancel_processing(state: State<'_, AppState>) -> Result<(), String>
             sys.abort_all_actors();
         }
     }
+    // 停止前端计时器：重置 round metrics 的 started_at
+    crate::round_metrics::reset_round();
     Ok(())
 }

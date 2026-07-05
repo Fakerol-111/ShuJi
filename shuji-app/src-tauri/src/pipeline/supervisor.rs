@@ -308,6 +308,16 @@ impl PipelineSupervisor {
                 }
             }
             running.store(false, Ordering::SeqCst);
+            // 管道到达终态时停止前端计时器（排除暂停等待审批/用户输入的情况）
+            if matches!(
+                result,
+                PipelineResult::Complete { .. }
+                    | PipelineResult::Aborted { .. }
+                    | PipelineResult::Deadlock { .. }
+                    | PipelineResult::StepFailed { .. }
+            ) {
+                crate::round_metrics::reset_round();
+            }
         });
 
         *self.task.lock().await = Some(handle);

@@ -2,7 +2,7 @@ use std::path::{Component, Path, PathBuf};
 
 use serde::Serialize;
 
-use crate::commands::friendly_error::friendly_error;
+use crate::commands::friendly_error::{friendly_error, friendly_error_plain};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DocumentDiff {
@@ -52,10 +52,10 @@ pub async fn read_shuji_doc(project_dir: String, path: String) -> Result<ShujiDo
         .await
         .map_err(friendly_error)?;
     if !target_canon.starts_with(&root_canon) {
-        return Err(friendly_error("path out of bounds"));
+        return Err(friendly_error_plain("path out of bounds"));
     }
     if target_canon.is_dir() {
-        return Err(friendly_error("cannot read a directory"));
+        return Err(friendly_error_plain("cannot read a directory"));
     }
 
     let content = tokio::fs::read_to_string(&target_canon)

@@ -17,18 +17,22 @@ fn bucket<'a>(cache: &'a mut ReadCache, working_dir: &Path) -> &'a mut ProjectRe
     cache.entry(working_dir.to_path_buf()).or_default()
 }
 
-/// Look up a cached read result. Returns `Some(result)` if the file's mtime
-/// hasn't changed since the cache entry was created.
+/// Look up a cached read result. Returns `Some(raw_content)` if the file's
+/// mtime hasn't changed since the cache entry was created.
+///
+/// **Important**: The returned value is the **raw file content**, NOT a
+/// JSON-wrapped ToolOutput. Callers must still format the result through
+/// `ToolOutput::read_file(...)` or similar before returning it as a tool
+/// result. Returning the raw content directly would break `is_error()`
+/// detection (the JSON parser would fail and fall back to keyword matching,
+/// causing false positives if the content contains words like "error").
 pub fn cache_lookup(working_dir: &Path, path: &Path) -> Option<String> {
     let mut cache = READ_CACHE.lock().ok()?;
     let proj = bucket(&mut cache, working_dir);
     if let Some((cached_mtime, cached_result)) = proj.get(path) {
         if let Ok(current_mtime) = std::fs::metadata(path).and_then(|m| m.modified()) {
             if current_mtime == *cached_mtime {
-                return Some(format!(
-                    "{}[cache hit: content unchanged (cached: true)]",
-                    cached_result
-                ));
+                return Some(cached_result.clone());
             }
         }
     }
