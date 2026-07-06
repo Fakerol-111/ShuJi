@@ -30,13 +30,35 @@ pub(super) struct ParsedAssistant {
     /// Text content from the assistant message (for `StepResult::ToolCalls.text`
     /// or `StepResult::Text` fallback).
     pub assistant_text: String,
+    /// Number of tool calls that were broken/invalid (missing id, empty name,
+    /// broken JSON arguments, etc.).
+    pub broken_count: usize,
+    /// Names of broken tool calls (useful for recovery hints).
+    pub broken_names: Vec<String>,
 }
 
 impl ParsedAssistant {
-    /// Convert into a `StepResult`. Returns `Text` if all tool calls were
-    /// broken (calls empty), otherwise `ToolCalls`.
+    /// Convert into a `StepResult`.
+    ///
+    /// - `calls` non-empty, `broken_count` == 0 → `ToolCalls` (all valid)
+    /// - `calls` non-empty, `broken_count` > 0 → `ToolCalls` (partial recovery:
+    ///   valid calls are included, broken ones skipped — the caller should
+    ///   inject a recovery hint about the missing broken calls)
+    /// - `calls` empty, `broken_count` > 0 → `InvalidToolCalls` (all broken)
+    /// - `calls` empty, `broken_count` == 0 → `Text` (pure text response)
     pub fn into_step_result(self) -> StepResult {
-        if self.calls.is_empty() {
+        if self.calls.is_empty() && self.broken_count > 0 {
+            let reason = format!(
+                "All {} tool calls were invalid: {:?}",
+                self.broken_count, self.broken_names
+            );
+            StepResult::InvalidToolCalls {
+                assistant_text: self.assistant_text,
+                broken_count: self.broken_count,
+                broken_names: self.broken_names,
+                reason,
+            }
+        } else if self.calls.is_empty() {
             StepResult::Text(self.assistant_text)
         } else {
             StepResult::ToolCalls {
@@ -74,6 +96,8 @@ impl super::Session {
                 calls: Vec::new(),
                 filtered_msg: msg.clone(),
                 assistant_text,
+                broken_count: 0,
+                broken_names: Vec::new(),
             };
         };
 
@@ -82,14 +106,46 @@ impl super::Session {
                 calls: Vec::new(),
                 filtered_msg: msg.clone(),
                 assistant_text,
+                broken_count: 0,
+                broken_names: Vec::new(),
             };
         }
 
         let role = self.role();
         let mut calls = Vec::new();
+        let mut broken_count = 0;
+        let mut broken_names = Vec::new();
+        let suffix = if is_truncated { " (truncated)" } else { "" };
+
         for tc in tcs {
             let id = tc["id"].as_str().unwrap_or("").to_string();
             let name = tc["function"]["name"].as_str().unwrap_or("").to_string();
+
+            // ── P0.3: Strong validation — reject empty id/name ──────────
+            if id.is_empty() {
+                broken_count += 1;
+                let display_name = if name.is_empty() { "<unnamed>" } else { &name };
+                broken_names.push(display_name.to_string());
+                log_console!(
+                    "[{}] skipping tool call {} due to empty tool_call_id{}",
+                    role,
+                    display_name,
+                    suffix
+                );
+                continue;
+            }
+            if name.is_empty() {
+                broken_count += 1;
+                broken_names.push(format!("id={}", id));
+                log_console!(
+                    "[{}] skipping tool call id={} due to empty function.name{}",
+                    role,
+                    id,
+                    suffix
+                );
+                continue;
+            }
+
             let args: serde_json::Value = match &tc["function"]["arguments"] {
                 serde_json::Value::String(s) => match serde_json::from_str(s) {
                     Ok(v) => v,
@@ -118,7 +174,8 @@ impl super::Session {
             };
 
             if args.is_null() {
-                let suffix = if is_truncated { " (truncated)" } else { "" };
+                broken_count += 1;
+                broken_names.push(name.clone());
                 log_console!(
                     "[{}] skipping tool call {} due to broken arguments{}",
                     role,
@@ -150,8 +207,18 @@ impl super::Session {
         // If all calls had broken arguments, log the fallback.
         if calls.is_empty() {
             log_console!(
-                "[{}] all tool calls had broken arguments — falling back to text",
-                role
+                "[{}] all {} tool calls were invalid — returning InvalidToolCalls: {:?}",
+                role,
+                broken_count,
+                broken_names
+            );
+        } else if broken_count > 0 {
+            log_console!(
+                "[{}] {} valid, {} broken tool calls (broken: {:?})",
+                role,
+                calls.len(),
+                broken_count,
+                broken_names
             );
         }
 
@@ -166,6 +233,8 @@ impl super::Session {
             calls,
             filtered_msg: filtered,
             assistant_text,
+            broken_count,
+            broken_names,
         }
     }
 
@@ -328,8 +397,10 @@ mod fuzz_tests {
             }]
         });
         let parsed = session.parse_assistant(&msg, false);
-        assert_eq!(parsed.calls.len(), 1);
-        assert_eq!(parsed.calls[0].name, "");
+        // P0.3: empty name → broken, not accepted
+        assert!(parsed.calls.is_empty());
+        assert_eq!(parsed.broken_count, 1);
+        assert!(parsed.broken_names[0].contains("call_001"));
     }
 
     #[test]
@@ -344,8 +415,9 @@ mod fuzz_tests {
             }]
         });
         let parsed = session.parse_assistant(&msg, false);
-        assert_eq!(parsed.calls.len(), 1);
-        assert_eq!(parsed.calls[0].id, "");
+        // P0.3: empty id → broken, not accepted
+        assert!(parsed.calls.is_empty());
+        assert_eq!(parsed.broken_count, 1);
     }
 
     #[test]
@@ -491,8 +563,111 @@ mod fuzz_tests {
             ]
         });
         let parsed = session.parse_assistant(&msg, false);
+        // P0.2: All broken → calls empty, broken_count > 0
         assert!(parsed.calls.is_empty());
+        assert_eq!(parsed.broken_count, 3);
         assert_eq!(parsed.assistant_text, "I tried but failed");
+
+        // P0.2: into_step_result must produce InvalidToolCalls, NOT Text
+        let result = parsed.into_step_result();
+        match result {
+            StepResult::InvalidToolCalls { broken_count, .. } => {
+                assert_eq!(broken_count, 3);
+            }
+            other => panic!("Expected InvalidToolCalls, got {:?}", other),
+        }
+    }
+
+    // ── P0.2/P0.3: Regression tests ─────────────────────────────────
+
+    #[test]
+    fn fuzz_all_broken_returns_invalid_tool_calls_not_done() {
+        // All tool calls have broken arguments → must NOT become StepResult::Text.
+        // The controller uses this to distinguish "model gave up" from
+        // "model tried to call tools but the format was broken".
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "Let me create the file...",
+            "tool_calls": [
+                {"id": "c1", "type": "function", "function": {"name": "create_file", "arguments": "{broken_json}"}},
+                {"id": "c2", "type": "function", "function": {"name": "read_file", "arguments": "not_json_either"}}
+            ]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        let result = parsed.into_step_result();
+        match result {
+            StepResult::InvalidToolCalls {
+                broken_count,
+                broken_names,
+                assistant_text,
+                ..
+            } => {
+                assert_eq!(broken_count, 2);
+                assert_eq!(broken_names.len(), 2);
+                assert_eq!(assistant_text, "Let me create the file...");
+            }
+            other => panic!("Expected InvalidToolCalls, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn fuzz_empty_id_is_broken() {
+        // P0.3: empty tool_call_id must be rejected
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": "",
+                "type": "function",
+                "function": {"name": "read_file", "arguments": "{\"path\":\"test.rs\"}"}
+            }]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert!(parsed.calls.is_empty());
+        assert_eq!(parsed.broken_count, 1);
+        let result = parsed.into_step_result();
+        match result {
+            StepResult::InvalidToolCalls { broken_count, .. } => assert_eq!(broken_count, 1),
+            other => panic!("Expected InvalidToolCalls, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn fuzz_empty_name_is_broken() {
+        // P0.3: empty function.name must be rejected
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": "call_001",
+                "type": "function",
+                "function": {"arguments": "{\"path\":\"test.rs\"}"}
+            }]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert!(parsed.calls.is_empty());
+        assert_eq!(parsed.broken_count, 1);
+    }
+
+    #[test]
+    fn fuzz_mixed_valid_and_empty_id() {
+        // P0.3: valid tool calls survive even when some have empty ids
+        let session = test_session();
+        let msg = serde_json::json!({
+            "role": "assistant",
+            "content": "Mixed",
+            "tool_calls": [
+                {"id": "valid_1", "type": "function", "function": {"name": "read_file", "arguments": "{\"path\":\"a.rs\"}"}},
+                {"id": "", "type": "function", "function": {"name": "read_file", "arguments": "{\"path\":\"b.rs\"}"}}
+            ]
+        });
+        let parsed = session.parse_assistant(&msg, false);
+        assert_eq!(parsed.calls.len(), 1);
+        assert_eq!(parsed.broken_count, 1);
+        assert_eq!(parsed.calls[0].id, "valid_1");
     }
 
     // ── Adversarial inputs ────────────────────────────────────────

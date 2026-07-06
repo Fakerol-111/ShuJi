@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tokio::io::AsyncReadExt;
 
@@ -35,6 +35,10 @@ pub(crate) fn get_shell() -> (&'static str, Vec<&'static str>) {
 // ── execute_command ───────────────────────────────────────────
 
 /// Execute a shell command with timeout and safety checks.
+/// Returns structured JSON via `ToolOutput::command()` — all paths
+/// (success, non-zero exit, timeout, blocked, empty) produce consistent
+/// `ok/error_code/exit_code/stdout/stderr/timed_out` fields so the model,
+/// UI, and watchdog share the same failure semantics.
 pub async fn tool_execute_command(
     working_dir: &Path,
     args: &serde_json::Value,
@@ -75,19 +79,30 @@ pub async fn tool_execute_command(
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
             let exit_code = output.status.code().unwrap_or(-1);
-            if exit_code == 0 {
-                format!(
-                    "Command executed successfully (exit={}):\n{}",
-                    exit_code, stdout
-                )
-            } else {
-                format!(
-                    "Command execution failed (exit={}):\nstdout:\n{}\nstderr:\n{}",
-                    exit_code, stdout, stderr
-                )
-            }
+
+            // ── P1.1: Structured JSON output ──────────────────────────────
+            ToolOutput::command(
+                "execute_command",
+                exit_code,
+                &stdout,
+                &stderr,
+                false,  // timed_out
+                10_000, // max_stdout_chars
+                5_000,  // max_stderr_chars
+            )
         }
-        Err(timeout_msg) => timeout_msg,
+        Err(timeout_msg) => {
+            // Timeout: build a structured result with timed_out=true
+            ToolOutput::command(
+                "execute_command",
+                -1, // exit_code: process was killed
+                "", // stdout: empty on timeout
+                &timeout_msg,
+                true, // timed_out
+                10_000,
+                5_000,
+            )
+        }
     }
 }
 
@@ -246,6 +261,132 @@ fn classify_compile_output(output: &str) -> CompileResult {
     }
 }
 
+/// ── P2.1: Subproject resolution for workspace/monorepo support ─────
+///
+/// Resolve a `subproject` parameter to an absolute path.
+///
+/// Validates the path is a subdirectory of `working_dir` (the project root)
+/// using `resolve_scoped_path`. Returns `None` when no subproject is given
+/// (use the original working_dir).
+fn resolve_subproject(
+    working_dir: &Path,
+    subproject: Option<&str>,
+) -> Result<Option<PathBuf>, String> {
+    match subproject {
+        None | Some("") => Ok(None),
+        Some(sub) => {
+            let path = working_dir.join(sub);
+            // Canonicalize to detect path traversal attempts
+            let canonical = path
+                .canonicalize()
+                .map_err(|e| format!("subproject '{}' does not exist: {}", sub, e))?;
+            // Verify it's within the project root
+            let root = working_dir
+                .canonicalize()
+                .map_err(|_| "project root does not exist".to_string())?;
+            if !canonical.starts_with(&root) {
+                return Err(format!(
+                    "subproject '{}' escapes the project root directory",
+                    sub
+                ));
+            }
+            Ok(Some(canonical))
+        }
+    }
+}
+
+/// Candidate subproject for auto-detection context.
+struct ProjectCandidate {
+    path: PathBuf,
+    project_type: String,
+    relative: String,
+}
+
+/// List candidate projects that could be test targets.
+///
+/// Checks common subdirectories in addition to the current working_dir:
+/// - working_dir itself
+/// - working_dir/shuji-app/ (frontend)
+/// - working_dir/shuji-app/src-tauri/ (Rust backend)
+/// - working_dir/src/ (flat Rust project)
+/// - working_dir/tests/ (flat test dir)
+///
+/// Returns at most the first 6 candidates, sorted by depth (shallowest first).
+/// When multiple candidates are found, returns them so the caller can ask the
+/// agent to specify `subproject`.
+fn detect_subproject_candidates(working_dir: &Path) -> Vec<ProjectCandidate> {
+    let mut candidates = Vec::new();
+
+    // Always include working_dir itself
+    let pt = detect_project_type(working_dir);
+    if pt != "unknown" {
+        let rel = ".".to_string();
+        candidates.push(ProjectCandidate {
+            path: working_dir.to_path_buf(),
+            project_type: pt,
+            relative: rel,
+        });
+    }
+
+    // Common subproject paths in ShuJi-style monorepos
+    let common_subdirs = [
+        "shuji-app",
+        "shuji-app/src-tauri",
+        "src",
+        "src-tauri",
+        "frontend",
+        "backend",
+        "server",
+        "client",
+        "web",
+        "api",
+    ];
+
+    for sub in &common_subdirs {
+        let candidate = working_dir.join(sub);
+        if candidate.exists() && candidate.is_dir() {
+            let pt = detect_project_type(&candidate);
+            if pt != "unknown" {
+                // Avoid duplicates: same canonical path as an existing candidate
+                let canon = candidate.canonicalize().ok();
+                if candidates
+                    .iter()
+                    .any(|c| c.path.canonicalize().ok() == canon)
+                {
+                    continue;
+                }
+                candidates.push(ProjectCandidate {
+                    path: candidate,
+                    project_type: pt,
+                    relative: sub.to_string(),
+                });
+            }
+        }
+    }
+
+    // Sort by depth (shallowest first) and limit to 6
+    candidates.sort_by_key(|a| a.relative.matches('/').count());
+    candidates.truncate(6);
+    candidates
+}
+
+/// Build the structured error message when multiple candidate projects are
+/// detected and no `subproject` was specified.
+fn ambiguous_project_message(candidates: &[ProjectCandidate]) -> String {
+    let mut msg = String::from(
+        "## Ambiguous project: multiple project types detected.\n\n\
+         Specify `subproject` in your run_tests call to choose one:\n\n",
+    );
+    for (i, c) in candidates.iter().enumerate() {
+        msg.push_str(&format!(
+            "{}. `{}` — `{}` project\n",
+            i + 1,
+            c.relative,
+            c.project_type
+        ));
+    }
+    msg
+}
 /// Append context-aware hints to a tool output report based on detected patterns.
 ///
 /// These hints are **dynamically generated** from the actual command output,
@@ -393,13 +534,88 @@ fn smart_truncate_stderr(stderr: &str, max_chars: usize) -> String {
 
 /// Runs tests with auto-detected project type and structured output.
 /// Reduces LLM command-typing errors that trigger watchdog.
+///
+/// Supports `subproject` and `project_type` parameters for monorepo/workspace
+/// projects (P2.1). When neither is given and multiple project types are
+/// detected, returns an `ambiguous_project` error with candidate list.
 pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> String {
     let scope = args["scope"].as_str().unwrap_or("all");
     let path = args["path"].as_str().filter(|s| !s.is_empty());
     let test_name = args["test_name"].as_str().filter(|s| !s.is_empty());
+    let subproject = args["subproject"].as_str().filter(|s| !s.is_empty());
+    let project_type_hint = args["project_type"].as_str().filter(|s| !s.is_empty());
 
-    // Detect project type
-    let project_type = detect_project_type(working_dir);
+    // ── P2.1: Resolve subproject path ────────────────────────────────
+    let target_dir = match resolve_subproject(working_dir, subproject) {
+        Ok(Some(path)) => path,
+        Ok(None) => working_dir.to_path_buf(),
+        Err(e) => {
+            return ToolOutput::error("run_tests", "", "invalid_subproject", &e);
+        }
+    };
+
+    // Detect project type (with optional override)
+    let project_type = match project_type_hint {
+        Some(hint) => hint.to_string(),
+        None => detect_project_type(&target_dir),
+    };
+
+    // ── P2.1: Ambiguous project detection ────────────────────────────
+    // When running from the project root without a subproject specified,
+    // check if there are multiple candidate projects. If so, return an
+    // error asking the agent to specify `subproject`.
+    if subproject.is_none() && project_type_hint.is_none() {
+        let candidates = detect_subproject_candidates(working_dir);
+        if candidates.len() > 1 {
+            // Only flag as ambiguous if the root is NOT the obvious sole target.
+            // E.g. if root is "unknown" type but shuji-app/ is "node", it's ambiguous.
+            let root_pt = detect_project_type(working_dir);
+            if root_pt == "unknown" || candidates.len() > 2 {
+                return ToolOutput::error(
+                    "run_tests",
+                    "",
+                    "ambiguous_project",
+                    &ambiguous_project_message(&candidates),
+                );
+            }
+        }
+    }
+
+    // ── Unknown project type after resolution ────────────────────────
+    if project_type == "unknown" {
+        let hint = if subproject.is_some() {
+            format!(
+                "No known project type found at '{}' (Cargo.toml / package.json / pyproject.toml).",
+                subproject.unwrap_or("")
+            )
+        } else {
+            "Unable to detect known project type (Cargo.toml / package.json / pyproject.toml)."
+                .to_string()
+        };
+        return ToolOutput::success_raw(
+            "run_tests",
+            &format!(
+                "{}. Cannot determine test command. Use execute_command for custom commands.",
+                hint
+            ),
+        );
+    }
+
+    // Project type validation: if user specified a project_type, verify it matches
+    if let Some(hint) = project_type_hint {
+        let actual = detect_project_type(&target_dir);
+        if actual != "unknown" && actual != hint {
+            let msg = format!(
+                "project_type='{}' but detected '{}' at '{}'. \
+                 Fix the project_type parameter or omit it for auto-detection.",
+                hint,
+                actual,
+                subproject.unwrap_or(".")
+            );
+            return ToolOutput::error("run_tests", "", "project_type_mismatch", &msg);
+        }
+    }
+
     let (shell, shell_args) = get_shell();
 
     // ── Rust: cargo check pre-flight ──
@@ -408,7 +624,7 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
     if project_type == "rust" {
         let check_cmd = inject_utf8_encoding(&rust_cargo_cmd("check 2>&1"));
         let check_timeout = std::time::Duration::from_secs(180);
-        match execute_with_timeout(shell, &shell_args, &check_cmd, working_dir, check_timeout).await
+        match execute_with_timeout(shell, &shell_args, &check_cmd, &target_dir, check_timeout).await
         {
             Ok(o) => {
                 let check_stdout = String::from_utf8_lossy(&o.stdout);
@@ -456,8 +672,8 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
         },
         "node" => {
             // Use project's test script or common runners
-            let has_vitest = working_dir.join("node_modules/.bin/vitest").exists();
-            let has_jest = working_dir.join("node_modules/.bin/jest").exists();
+            let has_vitest = target_dir.join("node_modules/.bin/vitest").exists();
+            let has_jest = target_dir.join("node_modules/.bin/jest").exists();
             if has_vitest {
                 format!("npx vitest run{}", scope_suffix(scope))
             } else if has_jest {
@@ -466,7 +682,7 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
                 "npm test".to_string()
             }
         }
-        "python" => pytest_cmd(scope, working_dir),
+        "python" => pytest_cmd(scope, &target_dir),
         _ => {
             return ToolOutput::success_raw(
                 "run_tests",
@@ -518,7 +734,7 @@ pub async fn tool_run_tests(working_dir: &Path, args: &serde_json::Value) -> Str
     let cmd = inject_utf8_encoding(&cmd);
     let timeout = std::time::Duration::from_secs(300);
 
-    let output = match execute_with_timeout(shell, &shell_args, &cmd, working_dir, timeout).await {
+    let output = match execute_with_timeout(shell, &shell_args, &cmd, &target_dir, timeout).await {
         Ok(o) => o,
         Err(e) => return ToolOutput::error("run_tests", "", "exec_error", &e),
     };
@@ -748,6 +964,15 @@ pub fn run_tests_tool_def() -> crate::api::client::ToolDefinition {
                     "test_name": {
                         "type": "string",
                         "description": "Optional: run a specific test by name (e.g. test_create_user). Much faster than running all tests. Rust: filter by test name; Python: -k pattern; Node: -t pattern"
+                    },
+                    "subproject": {
+                        "type": "string",
+                        "description": "Optional: subproject path relative to project root, e.g. 'shuji-app/src-tauri' for Rust unit tests, 'shuji-app' for frontend tests. Must be a subdirectory of the project. When omitted, auto-detects from the working directory."
+                    },
+                    "project_type": {
+                        "type": "string",
+                        "enum": ["rust", "node", "python"],
+                        "description": "Optional: force project type. Useful when auto-detection is ambiguous (e.g. monorepo with both Cargo.toml and package.json). When omitted, auto-detects from the target directory."
                     }
                 },
                 "required": ["scope"]

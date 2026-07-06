@@ -140,6 +140,68 @@ impl super::AgentController {
                 return Ok(stopped);
             }
             match step_result {
+                crate::api::session::StepResult::InvalidToolCalls {
+                    assistant_text,
+                    broken_count,
+                    broken_names,
+                    reason,
+                } => {
+                    // ── P0.2: InvalidToolCalls must NOT return Done ───────
+                    // Inject a recovery prompt and continue the loop.
+                    // The LLM intended to call tools but the calls were broken.
+                    // We give it up to 3 retries before stopping.
+                    if !assistant_text.is_empty() {
+                        last_text.push_str(&assistant_text);
+                    }
+
+                    log_console!(
+                        "[control] InvalidToolCalls: {} broken (names={:?}), reason={}",
+                        broken_count,
+                        broken_names,
+                        reason
+                    );
+
+                    // Track consecutive invalid tool calls
+                    let invalid_count = wd.track_invalid_tool_calls(broken_count);
+
+                    if let Some(ref emit) = self.step_emit {
+                        emit(DeptStepKind::Text {
+                            content: format!(
+                                "[Invalid tool calls: {} broken — {:?}]",
+                                broken_count, broken_names
+                            ),
+                        });
+                    }
+
+                    // ── Recovery prompt ──────────────────────────────────
+                    // Inject a system message instructing the LLM to retry,
+                    // because the current session state (assistant message)
+                    // has no tool_calls and the LLM needs fresh instructions.
+                    let recovery = format!(
+                        "[System] The previous assistant message had {} invalid tool call(s) (names: {:?}). \
+                         Reason: {}. \
+                         Please retry with a single valid tool call. \
+                         Make sure every tool call has a non-empty `id`, a valid `function.name`, \
+                         and valid JSON `function.arguments`.",
+                        broken_count, broken_names, reason
+                    );
+
+                    if invalid_count >= 3 {
+                        let stop_msg = format!(
+                            "Invalid tool calls occurred {} consecutive times. Stopping. \
+                             Last reason: {}",
+                            invalid_count, reason
+                        );
+                        log_console!(
+                            "[control] InvalidToolCalls: stopping after {} consecutive",
+                            invalid_count
+                        );
+                        return Ok(RunResult::Stopped(stop_msg));
+                    }
+
+                    session.inject(&recovery);
+                }
+
                 crate::api::session::StepResult::Text(text) => {
                     if let Some(ref emit) = self.step_emit {
                         emit(DeptStepKind::Text {

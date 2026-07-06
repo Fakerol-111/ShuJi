@@ -54,6 +54,13 @@ impl super::AgentController {
 
         let final_text = match session.step().await? {
             StepResult::Text(t) => t,
+            StepResult::InvalidToolCalls { assistant_text, .. } => {
+                // During wrap-up, InvalidToolCalls is still a failure mode,
+                // but we treat it as text to avoid getting stuck in
+                // a wrap-up loop. The associated text (if any) is preserved.
+                log_console!("[control] wrap-up received InvalidToolCalls — falling back to text");
+                assistant_text
+            }
             StepResult::ToolCalls { calls, text } => {
                 let combined = text;
                 // Execute first tool call — check if it's a route_to.

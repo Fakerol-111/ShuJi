@@ -13,6 +13,31 @@ pub struct ToolOutput {
     pub message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_code: Option<String>,
+    // ── P1.1: Command execution fields ────────────────────────────────
+    /// Exit code of the executed command (command tools only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
+    /// Stdout content (command tools only, truncated).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stdout: Option<String>,
+    /// Stderr content (command tools only, truncated).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stderr: Option<String>,
+    /// Whether the command timed out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timed_out: Option<bool>,
+    /// Truncation info for stdout/stderr.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub truncated: Option<TruncationInfo>,
+}
+
+/// Information about whether stdout/stderr were truncated.
+#[derive(Debug, Serialize)]
+pub struct TruncationInfo {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stdout: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stderr: Option<bool>,
 }
 
 impl ToolOutput {
@@ -23,6 +48,11 @@ impl ToolOutput {
             path: None,
             message: None,
             error_code: None,
+            exit_code: None,
+            stdout: None,
+            stderr: None,
+            timed_out: None,
+            truncated: None,
         }
     }
 
@@ -61,6 +91,10 @@ impl ToolOutput {
     }
     /// Check if a tool output string represents an error.
     /// Parses JSON `ok` field; falls back to keyword detection for non-JSON output.
+    ///
+    /// ── P1.2: Single entry point for all error classification.
+    /// The watchdog, tool_exec::emit_tool_result, and UI all call this
+    /// same function so error judgments are consistent everywhere.
     pub fn is_error(raw: &str) -> bool {
         serde_json::from_str::<serde_json::Value>(raw)
             .ok()
@@ -71,6 +105,8 @@ impl ToolOutput {
                 lower.contains("failed")
                     || lower.contains("error")
                     || lower.contains("unknown tool")
+                    || lower.contains("timed out")
+                    || lower.contains("timeout")
             })
     }
 
@@ -120,5 +156,192 @@ impl ToolOutput {
             format!("{{\"ok\":false,\"operation\":\"{}\",\"path\":\"{}\",\"error_code\":\"{}\",\"message\":\"{}\"}}",
                 operation, path, code, message)
         })
+    }
+
+    /// ── P1.1: Build a structured command execution result ─────────────
+    ///
+    /// Captures exit code, stdout, stderr, timeout flag, and truncation info
+    /// so the model, UI, and watchdog see the same structured fields.
+    pub fn command(
+        operation: &str,
+        exit_code: i32,
+        stdout: &str,
+        stderr: &str,
+        timed_out: bool,
+        max_stdout_chars: usize,
+        max_stderr_chars: usize,
+    ) -> String {
+        let ok = exit_code == 0;
+        let (stdout_truncated, display_stdout) = Self::truncate_if_needed(stdout, max_stdout_chars);
+        let (stderr_truncated, display_stderr) = Self::truncate_if_needed(stderr, max_stderr_chars);
+
+        let message = if ok {
+            format!(
+                "Command executed successfully (exit={}). stdout: {} bytes",
+                exit_code,
+                stdout.len()
+            )
+        } else if timed_out {
+            format!(
+                "Command timed out (exit={}). stdout: {} bytes, stderr: {} bytes",
+                exit_code,
+                stdout.len(),
+                stderr.len()
+            )
+        } else {
+            format!(
+                "Command failed (exit={}). stdout: {} bytes, stderr: {} bytes",
+                exit_code,
+                stdout.len(),
+                stderr.len()
+            )
+        };
+
+        let error_code = if ok {
+            None
+        } else if timed_out {
+            Some("timeout".to_string())
+        } else {
+            Some("non_zero_exit".to_string())
+        };
+
+        let truncated = if stdout_truncated || stderr_truncated {
+            Some(TruncationInfo {
+                stdout: if stdout_truncated { Some(true) } else { None },
+                stderr: if stderr_truncated { Some(true) } else { None },
+            })
+        } else {
+            None
+        };
+
+        let o = Self {
+            ok,
+            operation: operation.to_string(),
+            path: None,
+            message: Some(message.clone()),
+            error_code: error_code.clone(),
+            exit_code: Some(exit_code),
+            stdout: Some(display_stdout),
+            stderr: if display_stderr.is_empty() && ok {
+                None
+            } else {
+                Some(display_stderr)
+            },
+            timed_out: if timed_out { Some(true) } else { None },
+            truncated,
+        };
+        serde_json::to_string(&o).unwrap_or_else(|_| {
+            if ok {
+                format!(
+                    "{{\"ok\":true,\"operation\":\"{}\",\"message\":\"{}\"}}",
+                    operation, message
+                )
+            } else {
+                format!(
+                    "{{\"ok\":false,\"operation\":\"{}\",\"error_code\":\"{}\",\"message\":\"{}\"}}",
+                    operation,
+                    error_code.unwrap_or_else(|| "unknown".to_string()),
+                    message
+                )
+            }
+        })
+    }
+
+    fn truncate_if_needed(s: &str, max_chars: usize) -> (bool, String) {
+        if s.len() <= max_chars {
+            (false, s.to_string())
+        } else {
+            let cutoff = s.floor_char_boundary(max_chars);
+            (
+                true,
+                format!(
+                    "{}...\n[Truncated: {} chars, showing first {}]",
+                    &s[..cutoff],
+                    s.len(),
+                    cutoff
+                ),
+            )
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── P1.1: command() structured output tests ────────────────────
+
+    #[test]
+    fn test_command_success() {
+        let result =
+            ToolOutput::command("execute_command", 0, "hello\nworld", "", false, 1000, 1000);
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["operation"], "execute_command");
+        assert_eq!(v["exit_code"], 0);
+        assert_eq!(v["stdout"], "hello\nworld");
+        assert!(v.get("stderr").is_none() || v["stderr"].as_str().unwrap_or("").is_empty());
+        assert!(v.get("timed_out").is_none());
+        assert!(v.get("truncated").is_none());
+    }
+
+    #[test]
+    fn test_command_non_zero_exit() {
+        let result = ToolOutput::command(
+            "execute_command",
+            1,
+            "stdout data",
+            "error msg",
+            false,
+            1000,
+            1000,
+        );
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v["ok"], false);
+        assert_eq!(v["error_code"], "non_zero_exit");
+        assert_eq!(v["exit_code"], 1);
+        assert_eq!(v["stderr"], "error msg");
+    }
+
+    #[test]
+    fn test_command_timeout() {
+        let result = ToolOutput::command("execute_command", -1, "", "timed out", true, 1000, 1000);
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v["ok"], false);
+        assert_eq!(v["error_code"], "timeout");
+        assert_eq!(v["timed_out"], true);
+    }
+
+    #[test]
+    fn test_command_stdout_truncation() {
+        let long_stdout = "a".repeat(500);
+        let result = ToolOutput::command("execute_command", 0, &long_stdout, "", false, 100, 1000);
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v["ok"], true);
+        let displayed = v["stdout"].as_str().unwrap();
+        assert!(displayed.len() < 500);
+        assert!(displayed.contains("[Truncated:"));
+    }
+
+    #[test]
+    fn test_is_error_timeout_text() {
+        // P1.2: timeout text should be detected as error by is_error
+        assert!(ToolOutput::is_error("Command timed out"));
+        assert!(ToolOutput::is_error("timeout"));
+        assert!(ToolOutput::is_error("Task failed with error"));
+    }
+
+    #[test]
+    fn test_is_error_json_ok() {
+        // JSON with ok:true should NOT be detected as error
+        let result = ToolOutput::success("test", "file.rs", "all good");
+        assert!(!ToolOutput::is_error(&result));
+    }
+
+    #[test]
+    fn test_is_error_json_not_ok() {
+        // JSON with ok:false SHOULD be detected as error
+        let result = ToolOutput::error("test", "", "some_error", "something broke");
+        assert!(ToolOutput::is_error(&result));
     }
 }

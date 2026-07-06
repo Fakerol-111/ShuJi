@@ -67,6 +67,11 @@ pub(super) struct WatchdogState {
     /// This survives intervening successful read_file/search_text calls
     /// that would otherwise clear `tool_error_map`.
     run_tests_fail_count: u32,
+    /// ── P0.2: Consecutive invalid tool call counter ──────────────────────
+    /// Tracks consecutive `InvalidToolCalls` episodes. Resets on any
+    /// successful tool call, so only truly consecutive invalids trigger
+    /// the force-stop (3 consecutive → `RunResult::Stopped`).
+    consecutive_invalid_tool_calls: u32,
 }
 
 impl Default for WatchdogState {
@@ -87,6 +92,7 @@ impl WatchdogState {
             delete_create_cycles: HashMap::new(),
             tool_error_map: HashMap::new(),
             run_tests_fail_count: 0,
+            consecutive_invalid_tool_calls: 0,
         }
     }
 
@@ -209,7 +215,9 @@ impl WatchdogState {
             self.tool_error_map.insert(tool_name.to_string(), err_count);
             (err_count, total_before + 1)
         } else {
+            // Any successful tool call resets both error map and invalid-tool-call counter.
             self.tool_error_map.clear();
+            self.consecutive_invalid_tool_calls = 0;
             (0, 0)
         };
 
@@ -298,6 +306,17 @@ impl WatchdogState {
         } else {
             Some(format!("\n\n[progress] {}", notes.join(", ")))
         }
+    }
+
+    /// ── P0.2: Track consecutive invalid tool call episodes ──────────
+    ///
+    /// Called when the loop receives `StepResult::InvalidToolCalls`.
+    /// Increments the counter and returns it so the caller can decide
+    /// whether to force-stop (>= 3). The counter is reset to 0 by
+    /// `observe_after_result` on any successful tool execution.
+    pub(super) fn track_invalid_tool_calls(&mut self, _broken_count: usize) -> u32 {
+        self.consecutive_invalid_tool_calls += 1;
+        self.consecutive_invalid_tool_calls
     }
 
     /// Snapshot of (tool → error count) for building the force-stop message.
