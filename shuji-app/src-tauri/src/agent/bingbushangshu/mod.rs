@@ -23,6 +23,8 @@ impl BingbuShangshuAgent {
     fn tools() -> Vec<ToolDefinition> {
         let mut tools = crate::tool::registry::doc_inspect_tools();
         tools.extend(crate::tool::registry::document_tools());
+        // 兵部可以创建测试桩文件（仅 tests/ 路径）
+        tools.extend(crate::tool::registry::test_stub_tools());
         // route_tool 已移除 —— PipelineEngine 负责调度
         tools
     }

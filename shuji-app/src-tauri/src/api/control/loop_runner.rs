@@ -479,6 +479,28 @@ impl super::AgentController {
                                 );
                             }
 
+                            // ── P2: Same-fingerprint repeat → suggest degradation ──
+                            // When the same failure fingerprint appears ≥2 times,
+                            // inject a targeted hint suggesting a different diagnostic
+                            // approach instead of repeating the same failing command.
+                            let fingerprint_repeat = after.fingerprint_repeat_count;
+                            if fingerprint_repeat >= 2 {
+                                let hint = format!(
+                                    "[playbook: same-failure] Same failure pattern detected {}x (fingerprint: {}) \
+                                     — try a different diagnostic approach: use a more targeted test name, \
+                                     check compilation separately, or run `rustc --explain` for the error code. \
+                                     Do NOT repeat the same failing command.",
+                                    fingerprint_repeat,
+                                    wd.last_fingerprint()
+                                );
+                                tool_content.push_str(&format!("\n\n[Intervention] {}", hint));
+                                log_console!(
+                                    "[control] same-fingerprint repeat detected ({}x, fingerprint={})",
+                                    fingerprint_repeat,
+                                    wd.last_fingerprint()
+                                );
+                            }
+
                             // ── Test stalemate detection (dedicated counter) ──
                             // Uses run_tests_fail_count which only resets on
                             // run_tests success — NOT on other tool successes.

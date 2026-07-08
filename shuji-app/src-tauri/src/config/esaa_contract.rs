@@ -225,7 +225,19 @@ pub fn builtin_contract_for(role_key: &str) -> RoleContract {
             ..RoleContract::default_empty()
         },
         "zhongshuling" | "menxiashizhong" | "libushangshu" => design_doc(),
-        "bingbushangshu" => design_doc(),
+        "bingbushangshu" => RoleContract {
+            forbidden_tools: concat_forbidden(&[
+                // 兵部可以创建/编辑测试桩文件，但不能删/改名/执行/审批/管线
+                &["delete_file", "rename_file", "modify_file", "append_file"],
+                EXEC_TOOLS,
+                APPROVAL_TOOLS,
+                PIPELINE_PLAN_TOOLS,
+                GONGBU_PLAN_TOOLS,
+                DESIGN_FORBIDDEN,
+            ]),
+            allowed_paths: Some(vec!["tests/**".into()]),
+            ..RoleContract::default_empty()
+        },
         "shangshuling" => RoleContract {
             forbidden_tools: concat_forbidden(&[
                 FILE_WRITE_TOOLS,
@@ -303,6 +315,20 @@ pub fn check_dispatch_tool_gate(dept: &str, tool: &str) -> Result<(), String> {
         Ok(())
     } else {
         Err(format_tool_denial(dept, tool))
+    }
+}
+
+/// Dispatch-layer path permission gate (always on, even when ESAA is disabled).
+/// Checks if the department has path restrictions for file operations.
+pub fn check_dispatch_path_gate(dept: &str, path: &str) -> Result<(), String> {
+    let contracts = builtin_agent_contracts();
+    let Some(contract) = contracts.effective_for_role(dept) else {
+        return Ok(());
+    };
+    if contract.is_path_allowed(path) {
+        Ok(())
+    } else {
+        Err(format!("路径不允许。请写入允许的路径范围。"))
     }
 }
 

@@ -29,6 +29,19 @@ pub struct ToolOutput {
     /// Truncation info for stdout/stderr.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub truncated: Option<TruncationInfo>,
+    /// ── P2: Structured failure model fields ──────────────────────────
+    /// Diagnostic quality grade for test/command failures.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub diagnostic_grade: Option<String>,
+    /// Stable fingerprint for deduplicating repeated failures.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_fingerprint: Option<String>,
+    /// Whether the agent should modify code in response to this error.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub should_modify_code: Option<bool>,
+    /// Suggested next diagnostic commands for the agent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggested_next: Option<Vec<String>>,
 }
 
 /// Information about whether stdout/stderr were truncated.
@@ -53,6 +66,10 @@ impl ToolOutput {
             stderr: None,
             timed_out: None,
             truncated: None,
+            diagnostic_grade: None,
+            failure_fingerprint: None,
+            should_modify_code: None,
+            suggested_next: None,
         }
     }
 
@@ -158,6 +175,41 @@ impl ToolOutput {
         })
     }
 
+    /// Error with structured diagnostic fields for the unified failure model.
+    ///
+    /// Includes `diagnostic_grade`, `failure_fingerprint`, `should_modify_code`,
+    /// and `suggested_next` so agents and watchdog can make informed decisions
+    /// without parsing the message text.
+    pub fn diagnostic_error(
+        operation: &str,
+        path: &str,
+        code: &str,
+        message: &str,
+        diagnostic_grade: &str,
+        failure_fingerprint: &str,
+        should_modify_code: bool,
+        suggested_next: Vec<String>,
+    ) -> String {
+        let mut o = Self::new(false, operation);
+        o.path = Some(path.to_string());
+        o.error_code = Some(code.to_string());
+        o.message = Some(message.to_string());
+        o.diagnostic_grade = Some(diagnostic_grade.to_string());
+        o.failure_fingerprint = Some(failure_fingerprint.to_string());
+        o.should_modify_code = Some(should_modify_code);
+        o.suggested_next = if suggested_next.is_empty() {
+            None
+        } else {
+            Some(suggested_next)
+        };
+        serde_json::to_string(&o).unwrap_or_else(|_| {
+            format!(
+                "{{\"ok\":false,\"operation\":\"{}\",\"path\":\"{}\",\"error_code\":\"{}\",\"message\":\"{}\"}}",
+                operation, path, code, message
+            )
+        })
+    }
+
     /// ── P1.1: Build a structured command execution result ─────────────
     ///
     /// Captures exit code, stdout, stderr, timeout flag, and truncation info
@@ -214,6 +266,14 @@ impl ToolOutput {
             None
         };
 
+        let diagnostic_grade = if ok {
+            None
+        } else if exit_code == -1 && timed_out {
+            Some("timeout".to_string())
+        } else {
+            Some("raw_excerpt".to_string())
+        };
+
         let o = Self {
             ok,
             operation: operation.to_string(),
@@ -229,6 +289,10 @@ impl ToolOutput {
             },
             timed_out: if timed_out { Some(true) } else { None },
             truncated,
+            diagnostic_grade,
+            failure_fingerprint: None,
+            should_modify_code: None,
+            suggested_next: None,
         };
         serde_json::to_string(&o).unwrap_or_else(|_| {
             if ok {
@@ -343,5 +407,28 @@ mod tests {
         // JSON with ok:false SHOULD be detected as error
         let result = ToolOutput::error("test", "", "some_error", "something broke");
         assert!(ToolOutput::is_error(&result));
+    }
+
+    // ── P2: diagnostic_grade in command output ─────────────────────
+
+    #[test]
+    fn test_command_diagnostic_grade_on_failure() {
+        let result = ToolOutput::command("execute_command", 1, "", "error", false, 1000, 1000);
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v["diagnostic_grade"], "raw_excerpt");
+    }
+
+    #[test]
+    fn test_command_diagnostic_grade_on_timeout() {
+        let result = ToolOutput::command("execute_command", -1, "", "timeout", true, 1000, 1000);
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v["diagnostic_grade"], "timeout");
+    }
+
+    #[test]
+    fn test_command_diagnostic_grade_on_success() {
+        let result = ToolOutput::command("execute_command", 0, "ok", "", false, 1000, 1000);
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert!(v.get("diagnostic_grade").is_none());
     }
 }

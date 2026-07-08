@@ -68,6 +68,18 @@ pub fn file_write_tools() -> Vec<ToolDefinition> {
     ]
 }
 
+/// Test stub write tools (Ministry of War): create_file + edit_file + apply_patch for test stubs only.
+/// The tool descriptions emphasize that these are for test stubs, not production code.
+pub fn test_stub_tools() -> Vec<ToolDefinition> {
+    vec![
+        crate::tool::create_file_tool_def(
+            "Create test stub file in tests/ (skeleton signatures only, no implementation)",
+        ),
+        crate::tool::edit_file_tool_def(),
+        crate::tool::apply_patch_tool_def(),
+    ]
+}
+
 /// Document tools: create, modify, append (no find — that's in inspect).
 pub fn document_tools() -> Vec<ToolDefinition> {
     vec![
@@ -91,6 +103,25 @@ pub fn run_tests_tool() -> Vec<ToolDefinition> {
 /// Check compilation tool (Gongbushangshu/Xingbushangshu — compile check without running tests).
 pub fn check_compile_tool() -> Vec<ToolDefinition> {
     vec![crate::tool::command_ops::check_compile_tool_def()]
+}
+
+/// Allowlisted Rust diagnostic commands for safe low-level diagnostic access.
+///
+/// These commands are safe to execute via `execute_command` for diagnostic
+/// purposes. They are read-only or compile-only — none modify source code.
+pub fn rust_diagnostic_commands() -> Vec<&'static str> {
+    vec![
+        "cargo check",
+        "cargo check --tests",
+        "cargo test",
+        "cargo test --lib",
+        "cargo test --tests",
+        "cargo test --no-run",
+        "cargo test --lib --no-run",
+        "cargo test --tests --no-run",
+        "cargo clippy",
+        "rustc --explain",
+    ]
 }
 
 /// Log summarization tool.

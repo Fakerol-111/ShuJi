@@ -100,13 +100,55 @@ pub async fn init_checklist(working_dir: &Path, category: &str) -> String {
                 note: String::new(),
             },
         ],
-        _ => vec![ChecklistItem {
-            id: "gen-001".into(),
-            description: format!("Audit category: {}", category),
-            category: category.into(),
-            status: "pending".into(),
-            note: String::new(),
-        }],
+        _ => {
+            // General audit - include role boundary checks
+            let mut items = vec![ChecklistItem {
+                id: "gen-001".into(),
+                description: format!("Audit category: {}", category),
+                category: category.into(),
+                status: "pending".into(),
+                note: String::new(),
+            }];
+            // Role boundary enforcement checks (always included)
+            items.push(ChecklistItem {
+                id: "ROLE_BOUNDARY_001".into(),
+                description: "Test departments (兵部/刑部) must not deliver production implementation in reports".into(),
+                category: category.into(),
+                status: "pending".into(),
+                note: String::new(),
+            });
+            items.push(ChecklistItem {
+                id: "ROLE_BOUNDARY_002".into(),
+                description: "Validation departments (刑部) must not modify src/ production code"
+                    .into(),
+                category: category.into(),
+                status: "pending".into(),
+                note: String::new(),
+            });
+            items.push(ChecklistItem {
+                id: "ROLE_BOUNDARY_003".into(),
+                description: "Implementation departments (工部) must not modify approved test contracts (ctrt)".into(),
+                category: category.into(),
+                status: "pending".into(),
+                note: String::new(),
+            });
+            items.push(ChecklistItem {
+                id: "RUST_UNSAFE_001".into(),
+                description: "Unsafe blocks must have invariant documentation and audit trail"
+                    .into(),
+                category: category.into(),
+                status: "pending".into(),
+                note: String::new(),
+            });
+            items.push(ChecklistItem {
+                id: "TEST_EVIDENCE_001".into(),
+                description: "Delivery report must contain the last test command and result".into(),
+                category: category.into(),
+                status: "pending".into(),
+                note: String::new(),
+            });
+            items
+        }
     };
     let count = items.len();
     let checklist = Checklist { items };
