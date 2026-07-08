@@ -23,12 +23,16 @@ Upon receiving a development task, follow this process:
 - The pipeline plan's dispatch_to target can only be "Chief Executor"
 - Do not use the six ministries (Ministry of Personnel/Ministry of War/Ministry of Works/Ministry of Justice/Ministry of Rites) as dispatch_to targets
 
-**Execution phase flow**:
-- New feature -> Chief Architect -> Gate Reviewer -> Chief Executor (executor dispatches: Personnel -> War -> Works -> Justice -> Rites)
-- Bug fix -> Chief Architect (diagnosis) -> Chief Executor (executor dispatches: Works -> Justice)
-- Refactor -> Chief Architect -> Gate Reviewer -> Chief Executor (executor dispatches: Works -> Justice)
-- Simple change -> Chief Executor (executor dispatches: Works -> Justice)
-- Design-first -> Chief Architect -> Gate Reviewer -> approval_gate (wait for Emperor to approve revw) -> Chief Executor
+**Execution phase flow (choose by complexity)**:
+
+- **Simple change** (1-3 files, zero deps): Chief Executor (executor dispatches: Works -> Justice)
+- **Medium task** (new business logic, multiple files): Chief Architect -> Gate Reviewer -> approval_gate -> Chief Executor (executor dispatches: War -> Works -> Justice -> Rites)
+  - Note: War produces contracts first, Works consumes them. Do NOT skip War for medium tasks.
+- **Complex/high-risk task** (multi-module, unsafe, concurrent): Chief Architect -> Gate Reviewer -> Personnel (detailed design) -> War (contracts) -> Rites (risk gate) -> Chief Executor (executor dispatches: Works -> Justice) -> Rites (audit) -> Chief Executor (triage or wrap-up)
+
+**Bug fix flow**: Chief Architect (diagnosis) -> Chief Executor (executor dispatches: Works -> Justice)
+**Refactor flow**: Chief Architect -> Gate Reviewer -> Chief Executor (executor dispatches: Works -> Justice)
+**Design-first flow**: Chief Architect -> Gate Reviewer -> approval_gate (wait for Emperor to approve revw) -> Chief Executor
 
 ## submit_pipeline_plan JSON Format
 

@@ -31,6 +31,17 @@ pub async fn execute_named_tool(
     if let Err(reason) = crate::config::esaa_contract::check_dispatch_tool_gate(dept, name) {
         return crate::tool::output::ToolOutput::error(name, "", "ROLE_GATE", &reason);
     }
+    // Path permission check for file write operations
+    if let Some(path) = get_file_path_from_args(name, args) {
+        if let Err(reason) = crate::config::esaa_contract::check_dispatch_path_gate(dept, &path) {
+            return crate::tool::output::ToolOutput::error(
+                name,
+                &path,
+                "PATH_GATE",
+                &format!("部门「{dept}」无权限写入路径 {path}。{reason}"),
+            );
+        }
+    }
     tool_log::log_tool_call(dept, name, args, working_dir).await;
     let raw_result = match name {
         "read_file" => {
@@ -217,4 +228,16 @@ pub fn request_decision_tool_def() -> crate::api::client::ToolDefinition {
 
 pub async fn tool_request_decision(args: &serde_json::Value) -> String {
     super::tool_defs::tool_request_decision(args).await
+}
+
+/// Extract file path from tool arguments for path permission checking.
+/// Only file write tools have a `path` parameter.
+fn get_file_path_from_args(name: &str, args: &serde_json::Value) -> Option<String> {
+    match name {
+        "create_file" | "modify_file" | "append_file" | "delete_file" | "rename_file"
+        | "edit_file" | "apply_patch" | "read_file" => {
+            args.get("path")?.as_str().map(|s| s.to_string())
+        }
+        _ => None,
+    }
 }

@@ -227,8 +227,8 @@ pub async fn refresh_deepseek(working_dir: &Path) -> Result<PricingConfig, Strin
                 display_name: "DeepSeek V4 Flash".to_string(),
                 usd: ModelPrices {
                     cache_hit_input_per_m: values[0],
-                    input_per_m: values[2],
-                    output_per_m: values[4],
+                    input_per_m: values[1],
+                    output_per_m: values[2],
                 },
                 cny: None,
             },
@@ -236,8 +236,8 @@ pub async fn refresh_deepseek(working_dir: &Path) -> Result<PricingConfig, Strin
                 model_pattern: "deepseek-v4-pro".to_string(),
                 display_name: "DeepSeek V4 Pro".to_string(),
                 usd: ModelPrices {
-                    cache_hit_input_per_m: values[1],
-                    input_per_m: values[3],
+                    cache_hit_input_per_m: values[3],
+                    input_per_m: values[4],
                     output_per_m: values[5],
                 },
                 cny: None,
@@ -257,8 +257,8 @@ pub async fn refresh_deepseek(working_dir: &Path) -> Result<PricingConfig, Strin
                 display_name: "DeepSeek Chat".to_string(),
                 usd: ModelPrices {
                     cache_hit_input_per_m: values[0],
-                    input_per_m: values[2],
-                    output_per_m: values[4],
+                    input_per_m: values[1],
+                    output_per_m: values[2],
                 },
                 cny: None,
             },
@@ -267,8 +267,8 @@ pub async fn refresh_deepseek(working_dir: &Path) -> Result<PricingConfig, Strin
                 display_name: "DeepSeek (fallback)".to_string(),
                 usd: ModelPrices {
                     cache_hit_input_per_m: values[0],
-                    input_per_m: values[2],
-                    output_per_m: values[4],
+                    input_per_m: values[1],
+                    output_per_m: values[2],
                 },
                 cny: None,
             },

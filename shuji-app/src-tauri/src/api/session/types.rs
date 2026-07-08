@@ -13,6 +13,7 @@ pub struct ToolCallInfo {
 }
 
 /// Outcome of one Session::step().
+#[derive(Debug)]
 pub enum StepResult {
     Text(String),
     ToolCalls {
@@ -20,6 +21,20 @@ pub enum StepResult {
         /// Text content from the assistant message that also contained tool_calls.
         /// The actor layer uses this to display text alongside tool execution results.
         text: String,
+    },
+    /// The LLM intended to call tools, but all tool calls were invalid
+    /// (broken JSON arguments, empty id, empty name, or unknown tool name).
+    /// The controller must NOT treat this as `Done` — it must enter a
+    /// recovery path (inject a recovery prompt and retry).
+    InvalidToolCalls {
+        /// Text content from the assistant message (if any).
+        assistant_text: String,
+        /// Number of tool calls that were broken/invalid.
+        broken_count: usize,
+        /// Names of the broken tool calls (for diagnosis / recovery hint).
+        broken_names: Vec<String>,
+        /// Human-readable reason for the failure.
+        reason: String,
     },
 }
 

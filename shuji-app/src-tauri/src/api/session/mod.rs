@@ -136,7 +136,25 @@ impl Session {
     /// - If the LLM returns **text** → `StepResult::Text(content)`
     /// - If the LLM returns **tool calls** → appends the assistant
     ///   message to the internal history, returns `StepResult::ToolCalls(list)`
+    ///
+    /// ## Provider compatibility
+    ///
+    /// Tool-based sessions (non-empty `tools`) currently support only
+    /// OpenAI-compatible providers. If the configured URL points to
+    /// Anthropic (`api.anthropic.com`), this method returns an error
+    /// with code `TOOL_SESSION_PROVIDER_UNSUPPORTED` rather than
+    /// entering a misleading retry loop.
     pub async fn step(&mut self) -> anyhow::Result<StepResult> {
+        // ── P0.1: Explicit provider check for tool sessions ─────────────
+        if !self.tools.is_empty() && self.provider == LlmProvider::Anthropic {
+            return Err(anyhow::anyhow!(
+                "[TOOL_SESSION_PROVIDER_UNSUPPORTED] Tool-based sessions do not support \
+                 Anthropic-compatible providers. Current URL: {} \
+                 Configure an OpenAI-compatible provider (e.g. DeepSeek, OpenAI) for tool agents.",
+                self.client.api_url
+            ));
+        }
+
         let mut length_retries = 0u32;
         let max_length_retries = self.config.api.length_max_retries;
         let mut api_retries = 0u32;
@@ -213,7 +231,8 @@ impl Session {
                         total_retries += 1;
                         continue;
                     }
-                    return Err(e);
+                    // ── P2.2: Classify non-retryable error before returning ──
+                    return Err(classify_api_error(&e, self.role(), &self.client.api_url));
                 }
             };
             let msg = &data["choices"][0]["message"];
@@ -302,5 +321,104 @@ impl Session {
     /// Restore a previous message history.
     pub fn restore(&mut self, snap: &SessionSnapshot) {
         self.messages = snap.messages.clone();
+    }
+}
+
+// ── P2.2: API error classification ──────────────────────────────
+
+/// Classify a non-retryable API error into a human-readable diagnostic
+/// prefixed with an error code for easier debugging.
+///
+/// Error codes:
+/// - `BAD_REQUEST` — 400/401/403/422 (config/auth/validation errors)
+/// - `PROVIDER_UNSUPPORTED` — tool session + unsupported provider
+/// - `NETWORK_TIMEOUT` — network-level timeout
+/// - `RATE_LIMITED` — 429 rate limit
+/// - `SERVER_ERROR` — 5xx server error
+/// - `INVALID_RESPONSE_SHAPE` — parsing issues or unexpected response format
+fn classify_api_error(err: &anyhow::Error, role: &str, api_url: &str) -> anyhow::Error {
+    let err_str = err.to_string();
+
+    // Check for provider-unsupported markers
+    if err_str.contains("TOOL_SESSION_PROVIDER_UNSUPPORTED") {
+        return anyhow::anyhow!(
+            "[{}] [PROVIDER_UNSUPPORTED] {} — Role={}, URL={}",
+            role,
+            err_str,
+            role,
+            api_url
+        );
+    }
+
+    // Classify by status code
+    if let Some(code) = retry_strategy::extract_status_code(err) {
+        let category = match code {
+            400 | 401 | 403 | 422 => "BAD_REQUEST",
+            429 => "RATE_LIMITED",
+            500..=599 => "SERVER_ERROR",
+            _ => "UNKNOWN",
+        };
+        return anyhow::anyhow!("[{}] [{}_{}] {}", role, category, code, err_str);
+    }
+
+    // Network/timeout classification
+    let lower = err_str.to_lowercase();
+    if lower.contains("timed out") || lower.contains("timeout") {
+        return anyhow::anyhow!("[{}] [NETWORK_TIMEOUT] {}", role, err_str);
+    }
+
+    // Fallback: invalid response shape or unknown error
+    if lower.contains("parse") || lower.contains("expected") || lower.contains("invalid") {
+        return anyhow::anyhow!("[{}] [INVALID_RESPONSE_SHAPE] {}", role, err_str);
+    }
+
+    anyhow::anyhow!("[{}] [UNKNOWN] {}", role, err_str)
+}
+
+#[cfg(test)]
+mod classify_error_tests {
+    use super::*;
+
+    #[test]
+    fn test_classify_bad_request() {
+        let err = anyhow::anyhow!("API error (400): Bad request");
+        let classified = classify_api_error(&err, "test_role", "https://api.test.com");
+        let msg = classified.to_string();
+        assert!(msg.contains("[BAD_REQUEST_400]"), "Got: {}", msg);
+    }
+
+    #[test]
+    fn test_classify_unauthorized() {
+        let err = anyhow::anyhow!("API error (401): Unauthorized");
+        let classified = classify_api_error(&err, "test", "https://api.test.com");
+        assert!(classified.to_string().contains("[BAD_REQUEST_401]"));
+    }
+
+    #[test]
+    fn test_classify_rate_limited() {
+        let err = anyhow::anyhow!("API error (429): Rate limit");
+        let classified = classify_api_error(&err, "test", "https://api.test.com");
+        assert!(classified.to_string().contains("[RATE_LIMITED_429]"));
+    }
+
+    #[test]
+    fn test_classify_server_error() {
+        let err = anyhow::anyhow!("API error (503): Service unavailable");
+        let classified = classify_api_error(&err, "test", "https://api.test.com");
+        assert!(classified.to_string().contains("[SERVER_ERROR_503]"));
+    }
+
+    #[test]
+    fn test_classify_network_timeout() {
+        let err = anyhow::anyhow!("connection timed out after 30s");
+        let classified = classify_api_error(&err, "test", "https://api.test.com");
+        assert!(classified.to_string().contains("[NETWORK_TIMEOUT]"));
+    }
+
+    #[test]
+    fn test_classify_provider_unsupported() {
+        let err = anyhow::anyhow!("[TOOL_SESSION_PROVIDER_UNSUPPORTED] Anthropic not supported");
+        let classified = classify_api_error(&err, "test", "https://api.anthropic.com");
+        assert!(classified.to_string().contains("[PROVIDER_UNSUPPORTED]"));
     }
 }

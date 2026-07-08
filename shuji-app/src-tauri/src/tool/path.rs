@@ -196,6 +196,7 @@ const ALLOWED_COMMAND_PREFIXES: &[&str] = &[
     "cargo build",
     "cargo --version",
     "rustc --version",
+    "rustc --explain",
     "npm test",
     "npm run lint",
     "npm run format:check",

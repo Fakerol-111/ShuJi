@@ -38,6 +38,9 @@ pub(super) struct AfterToolObs {
     /// persists across intervening read_file / search_text calls so the
     /// watchdog can detect true test stalemate patterns.
     pub run_tests_fail_count: u32,
+    /// ── P2: Fingerprint tracking ────────────────────────────────────
+    /// Number of times the same failure fingerprint has been seen.
+    pub fingerprint_repeat_count: u32,
 }
 
 /// Why the watchdog requested a force-stop on consecutive errors.
@@ -67,6 +70,21 @@ pub(super) struct WatchdogState {
     /// This survives intervening successful read_file/search_text calls
     /// that would otherwise clear `tool_error_map`.
     run_tests_fail_count: u32,
+    /// ── P0.2: Consecutive invalid tool call counter ──────────────────────
+    /// Tracks consecutive `InvalidToolCalls` episodes. Resets on any
+    /// successful tool call, so only truly consecutive invalids trigger
+    /// the force-stop (3 consecutive → `RunResult::Stopped`).
+    consecutive_invalid_tool_calls: u32,
+    /// ── P2: Fingerprint tracking ────────────────────────────────────
+    /// Map of failure_fingerprint → consecutive count.
+    /// Used to detect repeated same-root-cause failures across different
+    /// tool calls (e.g., same E0283 appears in both run_tests and check_compile).
+    /// Resets when any tool succeeds.
+    fingerprint_counts: HashMap<String, u32>,
+    /// The most recent failure fingerprint (for progress_note).
+    last_fingerprint: String,
+    /// Consecutive count for the last fingerprint.
+    last_fingerprint_count: u32,
 }
 
 impl Default for WatchdogState {
@@ -87,6 +105,10 @@ impl WatchdogState {
             delete_create_cycles: HashMap::new(),
             tool_error_map: HashMap::new(),
             run_tests_fail_count: 0,
+            consecutive_invalid_tool_calls: 0,
+            fingerprint_counts: HashMap::new(),
+            last_fingerprint: String::new(),
+            last_fingerprint_count: 0,
         }
     }
 
@@ -179,8 +201,9 @@ impl WatchdogState {
         // ── Error tracking ────────────────────────────────────────────────
         // An error is either an explicit `ok: false` in the result JSON, or
         // a fallback heuristic on the result string (matches original logic).
-        let is_error = serde_json::from_str::<serde_json::Value>(result)
-            .ok()
+        let parsed_result = serde_json::from_str::<serde_json::Value>(result).ok();
+        let is_error = parsed_result
+            .as_ref()
             .and_then(|v| v.get("ok").and_then(|o| o.as_bool()))
             .map(|ok| !ok)
             .unwrap_or_else(|| {
@@ -189,27 +212,67 @@ impl WatchdogState {
                     || result.contains("unknown tool")
             });
 
+        // Extract error_code for environment error detection
+        let error_code = parsed_result
+            .as_ref()
+            .and_then(|v| v.get("error_code").and_then(|e| e.as_str()))
+            .unwrap_or("");
+        let is_environment_error = error_code == "environment_error";
+
+        // ── P2: Extract failure_fingerprint from result ─────────────────
+        let fingerprint = parsed_result
+            .as_ref()
+            .and_then(|v| v.get("failure_fingerprint").and_then(|f| f.as_str()))
+            .unwrap_or("")
+            .to_string();
+        let fingerprint_repeat = if !fingerprint.is_empty() && is_error && !is_environment_error {
+            let prev = self
+                .fingerprint_counts
+                .get(&fingerprint)
+                .copied()
+                .unwrap_or(0);
+            let count = prev + 1;
+            self.fingerprint_counts.insert(fingerprint.clone(), count);
+            self.last_fingerprint = fingerprint.clone();
+            self.last_fingerprint_count = count;
+            count
+        } else {
+            self.last_fingerprint_count
+        };
+
         // ── Dedicated run_tests failure counter ───────────────────────────
         // This counter only resets when run_tests itself succeeds, NOT when
         // other tools succeed. This prevents the agent from indefinitely
         // alternating run_tests(fail) → read_file(ok) → run_tests(fail)
         // without triggering the stalemate detection.
+        // Environment errors (permission/lock/IO) do NOT increment the counter
+        // because they are not code issues — the agent should not try to fix code.
         if tool_name == "run_tests" {
-            if is_error {
+            if is_error && !is_environment_error {
                 self.run_tests_fail_count += 1;
-            } else {
+            } else if !is_error {
                 self.run_tests_fail_count = 0;
             }
         }
 
-        let (err_count, total_errors) = if is_error {
+        let (err_count, total_errors) = if is_error && !is_environment_error {
             let prev = self.tool_error_map.get(tool_name).copied().unwrap_or(0);
             let err_count = prev + 1;
             let total_before: u32 = self.tool_error_map.values().sum();
             self.tool_error_map.insert(tool_name.to_string(), err_count);
             (err_count, total_before + 1)
-        } else {
+        } else if !is_error {
+            // Any successful tool call resets both error map and invalid-tool-call counter.
+            // Also clears fingerprint tracking — a success breaks the failure cycle.
             self.tool_error_map.clear();
+            self.consecutive_invalid_tool_calls = 0;
+            self.fingerprint_counts.clear();
+            self.last_fingerprint_count = 0;
+            (0, 0)
+        } else {
+            // Environment error: transparent to the error map — don't increment,
+            // don't clear. The agent should not be penalized for environment issues.
+            // Also don't track fingerprints for environment errors.
             (0, 0)
         };
 
@@ -220,6 +283,7 @@ impl WatchdogState {
             delete_cycle_count,
             read_without_write: self.read_without_write,
             run_tests_fail_count: self.run_tests_fail_count,
+            fingerprint_repeat_count: fingerprint_repeat,
         }
     }
 
@@ -293,11 +357,33 @@ impl WatchdogState {
         if self.read_without_write >= cfg.read_without_write_warning + 3 && self.write_count == 0 {
             notes.push(format!("{} reads without write", self.read_without_write));
         }
+        if self.last_fingerprint_count >= 2 {
+            notes.push(format!(
+                "same error repeated {} times (fingerprint: {})",
+                self.last_fingerprint_count, self.last_fingerprint
+            ));
+        }
         if notes.is_empty() {
             None
         } else {
             Some(format!("\n\n[progress] {}", notes.join(", ")))
         }
+    }
+
+    /// ── P0.2: Track consecutive invalid tool call episodes ──────────
+    ///
+    /// Called when the loop receives `StepResult::InvalidToolCalls`.
+    /// Increments the counter and returns it so the caller can decide
+    /// whether to force-stop (>= 3). The counter is reset to 0 by
+    /// `observe_after_result` on any successful tool execution.
+    pub(super) fn track_invalid_tool_calls(&mut self, _broken_count: usize) -> u32 {
+        self.consecutive_invalid_tool_calls += 1;
+        self.consecutive_invalid_tool_calls
+    }
+
+    /// Get the most recent failure fingerprint string.
+    pub(super) fn last_fingerprint(&self) -> &str {
+        &self.last_fingerprint
     }
 
     /// Snapshot of (tool → error count) for building the force-stop message.

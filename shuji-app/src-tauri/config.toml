@@ -3,12 +3,16 @@
 
 [api]
 # API 请求超时时间（秒）
-timeout_secs = 180
+# 稳定化阶段：从 180s 缩短到 90s，加快失败反馈
+timeout_secs = 90
 
-# API 请求最大重试次数
-max_retries = 10
+# API 请求最大重试次数（仅对 429/5xx/网络错误）
+# 稳定化阶段：从 10 次减少到 3 次
+# 400/401/403/422 不进入重试
+max_retries = 3
 
-# 截断响应最大重试次数
+# 截断响应最大重试次数（finish_reason=length）
+# 保持 5 次：截断是 token 预算问题，需要较多尝试
 length_max_retries = 5
 
 [api.reasoning]

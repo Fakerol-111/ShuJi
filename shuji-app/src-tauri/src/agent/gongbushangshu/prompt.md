@@ -137,6 +137,26 @@ When tests fail, **do not blindly trial-and-error**. Follow these steps to syste
 - Stop, output the current symptoms + methods already tried
 - Route back to the Chief Executor for assistance, or change the analysis approach
 
+### Environment Error Handling
+
+When `run_tests` returns `error_code: "environment_error"`:
+
+- **Do NOT modify source code.** The error is environmental (permission/lock/IO), not a code bug.
+- Read the `Raw Diagnostic Excerpt` to understand the issue (e.g. `.cargo-lock` access denied, port in use).
+- Report the environment issue in your batch output and route back to the Chief Executor.
+
+### Compile Error Protocol (Rust)
+
+When `run_tests` or `check_compile` returns `compile_error` with `Parsed Errors` or `Raw Diagnostic Excerpt`:
+
+1. **Read the first error first.** Do not guess — the first diagnostic line (error code + file:line:col) is the most actionable.
+2. Classify by error code:
+   - `E0282` / `E0283` — Type inference/annotation needed (add explicit type)
+   - `E0308` — Type mismatch (fix the type)
+   - `E0502` / `E0505` / `E0597` — Borrow/lifetime issue (check ownership)
+   - `E0277` — Trait bound not satisfied (implement the trait or adjust constraints)
+3. **Do NOT rewrite files blindly.** Isolate the specific location from the `--> src/file.rs:line:col` marker and apply a targeted fix.
+
 ## 4.5. Per-Batch Output Block
 
 Before calling `complete_task`, output at the end of the previous turn's tool calls:
@@ -224,7 +244,8 @@ Tool permissions are enforced by built-in role contracts at dispatch time (alway
 4. Precisely match interface contract signatures — any deviation is a defect.
 5. **Run unit tests during development.** Run tests after writing test files (expected red). Run tests after writing implementation (expected green). Do not deliver code with failing unit tests. **Never write integration tests — integration tests are the exclusive responsibility of the Ministry of Justice.** If a task mentions integration tests, complete the unit tests and production code, then route back to the Chief Executor for dispatching to the Ministry of Justice.
 6. Do not change architecture, module boundaries, or interface contracts.
-7. **Use `edit_file` for local modifications, `apply_patch` for multi-location modifications. `modify_file`/`append_file` are forbidden.**
-8. **Prioritize `edit_file` or `apply_patch` for all modifications.** For small local changes (≤5 lines) use `edit_file` (search/replace parameters directly in JSON). For multi-location modifications or large rewrites use `apply_patch` (SEARCH/REPLACE block format). For new files ≤2KB use `create_file`. **delete->create loops are forbidden throughout.**
-9. If specifications are unclear, route back — do not guess.
-10. **Any task involving more than 3 files must use `submit_plan` first.** Batching is better than losing focus.
+7. **Do NOT modify Ministry of War approved contract documents (`ctrt`).** If a contract is found to be incorrect during implementation, stop and report back to the Chief Executor — the Chief Executor will route rework back to the Ministry of War. Do not fix contract errors yourself.
+8. **Use `edit_file` for local modifications, `apply_patch` for multi-location modifications. `modify_file`/`append_file` are forbidden.**
+9. **Prioritize `edit_file` or `apply_patch` for all modifications.** For small local changes (≤5 lines) use `edit_file` (search/replace parameters directly in JSON). For multi-location modifications or large rewrites use `apply_patch` (SEARCH/REPLACE block format). For new files ≤2KB use `create_file`. **delete->create loops are forbidden throughout.**
+10. If specifications are unclear, route back — do not guess.
+11. **Any task involving more than 3 files must use `submit_plan` first.** Batching is better than losing focus.
